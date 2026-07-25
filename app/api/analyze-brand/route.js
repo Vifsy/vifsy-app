@@ -2,6 +2,10 @@ import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 import { assertPublicHttpUrl } from "../../../lib/security.js";
 import {
+  createWebsiteSecurityBlockedError,
+  getWebsiteSecurityCustomerMessage,
+} from "../../../lib/websiteSecurity.js";
+import {
   inferContentLanguageFromWebsiteSignals,
   normalizeSingleContentLanguage,
 } from "../../../lib/contentLanguage.js";
@@ -1054,6 +1058,19 @@ async function fetchWebsiteHtml(websiteUrl) {
     });
 
     if (!response.ok) {
+      if (response.status === 403) {
+        let blockedBody = "";
+        try {
+          blockedBody = (await response.text()).slice(0, 20000);
+        } catch {
+          blockedBody = "";
+        }
+        throw createWebsiteSecurityBlockedError({
+          response,
+          body: blockedBody,
+          url: safeWebsiteUrl,
+        });
+      }
       throw new Error(`Website returned ${response.status}`);
     }
 
@@ -1180,12 +1197,18 @@ async function saveBrandProfile({
       website_product_source_url: websiteProductMode?.available
   ? websiteProductMode?.source_url || websiteUrl || ""
   : "",
+      website_access_status: websiteUrl ? "accessible" : "not_checked",
+      website_security_provider: null,
+      website_security_confidence: null,
+      website_access_status_code: websiteUrl ? 200 : null,
+      website_access_message: null,
+      website_access_checked_at: websiteUrl ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", brandProfileId)
     .eq("user_id", userId)
    .select(
-  "id, business_name, website_url, brand_description, industry, target_audience, content_market, country_code, content_language, campaign_calendar_year, campaign_calendar_generated_at, campaign_calendar_refreshed_at, website_product_mode_available, website_product_mode_checked_at, website_product_mode_reason, website_product_source_url"
+  "id, business_name, website_url, brand_description, industry, target_audience, content_market, country_code, content_language, campaign_calendar_year, campaign_calendar_generated_at, campaign_calendar_refreshed_at, website_product_mode_available, website_product_mode_checked_at, website_product_mode_reason, website_product_source_url, website_access_status, website_security_provider, website_security_confidence, website_access_status_code, website_access_message, website_access_checked_at"
 )
     .single();
 
@@ -1942,6 +1965,10 @@ Rules:
 }
 
 export async function POST(request) {
+  let supabase = null;
+  let user = null;
+  let brandProfileId = "";
+
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -1970,7 +1997,7 @@ export async function POST(request) {
       );
     }
 
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: {
         headers: {
           Authorization: authorizationHeader,
@@ -1979,9 +2006,10 @@ export async function POST(request) {
     });
 
     const {
-      data: { user },
+      data: { user: authenticatedUser },
       error: userError,
     } = await supabase.auth.getUser();
+    user = authenticatedUser;
 
     if (userError || !user) {
       return Response.json(
@@ -1995,7 +2023,7 @@ export async function POST(request) {
 
     const body = await request.json();
 
-    const brandProfileId = String(body?.brandProfileId || "").trim();
+    brandProfileId = String(body?.brandProfileId || "").trim();
     const businessName = String(body?.businessName || "").trim();
     const websiteUrl = normalizeWebsiteUrl(body?.websiteUrl);
     const brandDescription = String(body?.brandDescription || "").trim();
@@ -2190,10 +2218,37 @@ contentLanguage: finalContentLanguage,
       stack: error?.stack,
     });
 
+    if (supabase && user?.id && brandProfileId && error?.code === "WEBSITE_SECURITY_BLOCKED") {
+      const customerMessage = getWebsiteSecurityCustomerMessage(error);
+      try {
+        await supabase
+          .from("brand_profiles")
+          .update({
+            website_access_status: "security_blocked",
+            website_security_provider: error.provider || "unknown",
+            website_security_confidence: error.confidence || "low",
+            website_access_status_code: Number(error.status || 403),
+            website_access_message: customerMessage,
+            website_access_checked_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", brandProfileId)
+          .eq("user_id", user.id);
+      } catch (statusError) {
+        console.error("Could not save website security block status:", {
+          brandProfileId,
+          message: statusError?.message,
+        });
+      }
+    }
+
     return Response.json(
       {
         ok: false,
-        error: error.message || "Could not analyze brand.",
+        error:
+          error?.code === "WEBSITE_SECURITY_BLOCKED"
+            ? getWebsiteSecurityCustomerMessage(error)
+            : error.message || "Could not analyze brand.",
       },
       { status: 500 }
     );

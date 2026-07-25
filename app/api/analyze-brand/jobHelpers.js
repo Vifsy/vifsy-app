@@ -1,4 +1,9 @@
+import { getWebsiteSecurityCustomerMessage } from "../../../lib/websiteSecurity.js";
+
 export function getCustomerFriendlyAnalysisError(error) {
+  const securityMessage = getWebsiteSecurityCustomerMessage(error);
+  if (securityMessage) return securityMessage;
+
   const message = String(error?.message || "");
 
   if (

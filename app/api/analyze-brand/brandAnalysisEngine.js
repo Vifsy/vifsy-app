@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { assertPublicHttpUrl } from "../../../lib/security.js";
+import { createWebsiteSecurityBlockedError } from "../../../lib/websiteSecurity.js";
 import {
   inferContentLanguageFromWebsiteSignals,
   inferMarketSetupFromWebsiteSignals,
@@ -499,6 +500,22 @@ export async function fetchWebsiteHtml(websiteUrl, options = {}) {
     });
 
     if (!response.ok) {
+      let blockedBody = "";
+
+      if (response.status === 403) {
+        try {
+          blockedBody = (await response.text()).slice(0, 20000);
+        } catch {
+          blockedBody = "";
+        }
+
+        throw createWebsiteSecurityBlockedError({
+          response,
+          body: blockedBody,
+          url: safeWebsiteUrl,
+        });
+      }
+
       throw new Error(`Website returned ${response.status}`);
     }
 
@@ -2414,12 +2431,18 @@ export async function saveBrandProfile({
       website_product_source_url: websiteProductMode?.available
         ? websiteProductMode?.source_url || websiteUrl || ""
         : "",
+      website_access_status: websiteUrl ? "accessible" : "not_checked",
+      website_security_provider: null,
+      website_security_confidence: null,
+      website_access_status_code: websiteUrl ? 200 : null,
+      website_access_message: null,
+      website_access_checked_at: websiteUrl ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", brandProfileId)
     .eq("user_id", userId)
     .select(
-      "id, business_name, website_url, brand_description, industry, target_audience, content_market, country_code, content_language, campaign_calendar_year, campaign_calendar_generated_at, campaign_calendar_refreshed_at, website_product_mode_available, website_product_mode_checked_at, website_product_mode_reason, website_product_source_url"
+      "id, business_name, website_url, brand_description, industry, target_audience, content_market, country_code, content_language, campaign_calendar_year, campaign_calendar_generated_at, campaign_calendar_refreshed_at, website_product_mode_available, website_product_mode_checked_at, website_product_mode_reason, website_product_source_url, website_access_status, website_security_provider, website_security_confidence, website_access_status_code, website_access_message, website_access_checked_at"
     )
     .single();
 

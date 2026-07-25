@@ -101,7 +101,15 @@ function getContentPlanStatus(rule, t) {
   const rules = getRulesFromContentPlan(rule);
   const hasWeeklyRule = rules.some((item) => item?.schedule_type === "weekly");
   const hasActiveRule = rules.some((item) => item?.is_active);
+  const hasTerminalFailure = rules.some((item) => item?.generation_occurrence_status === "failed_terminal");
   const nextDate = getPlanNextDate(rule);
+
+  if (hasTerminalFailure) {
+    return {
+      key: "failed",
+      label: "Kunde inte skapas",
+    };
+  }
 
   if (hasWeeklyRule) {
     if (hasActiveRule) {
@@ -133,11 +141,12 @@ function getContentPlanStatus(rule, t) {
 function getContentPlanSortScore(rule) {
   const status = getContentPlanStatus(rule, (key) => key);
   const statusWeight = {
-    running: 0,
-    coming: 1,
-    paused: 2,
-    finished: 3,
-  }[status.key] ?? 4;
+    failed: 0,
+    running: 1,
+    coming: 2,
+    paused: 3,
+    finished: 4,
+  }[status.key] ?? 5;
 
   const date = new Date(getPlanNextDate(rule) || rule?.created_at || 0).getTime();
 
@@ -205,6 +214,18 @@ function formatPlanName(rule, t) {
   if (firstRule?.post_type) return firstRule.post_type;
 
   return t("dashboard.contentPlan");
+}
+
+function getContentPlanFailureInfo(rule) {
+  const failedRule = getRulesFromContentPlan(rule).find(
+    (item) => item?.generation_occurrence_status === "failed_terminal"
+  );
+
+  return {
+    message: failedRule?.generation_customer_message || "Det planerade inlägget kunde inte skapas.",
+    refundedCredits: Math.max(0, Number(failedRule?.generation_refunded_credits || 0)),
+    notificationStatus: failedRule?.generation_notification_status || null,
+  };
 }
 
 function getContentPlanSummary(rule, t) {
@@ -462,7 +483,7 @@ export default function Home() {
     const { data: rulesData, error: rulesError } = await supabase
       .from("automation_rules")
       .select(
-        "id, brand_profile_id, name, weekday, publish_time, platform, post_type, schedule_type, run_date, timezone, next_run_at, is_active, content_type_label, uses_website_content, generate_image, approval_required, created_at"
+        "id, brand_profile_id, name, weekday, publish_time, platform, post_type, schedule_type, run_date, timezone, next_run_at, is_active, content_type_label, uses_website_content, generate_image, approval_required, created_at, generation_occurrence_status, generation_customer_message, generation_refunded_credits, generation_notification_status, generation_occurrence_scheduled_for"
       )
       .eq("user_id", user.id)
       .eq("brand_profile_id", selectedBrand.id)
@@ -1036,6 +1057,15 @@ export default function Home() {
                                           </span>
                                         </div>
                                         <p>{getContentPlanSummary(rule, t)}</p>
+                                        {status.key === "failed" ? (() => {
+                                          const failureInfo = getContentPlanFailureInfo(rule);
+                                          return (
+                                            <div className="dashboard-v140-failure-note">
+                                              <strong>{failureInfo.message}</strong>
+                                              <span>{failureInfo.refundedCredits > 0 ? `${failureInfo.refundedCredits} kredit${failureInfo.refundedCredits === 1 ? "" : "er"} återförd${failureInfo.refundedCredits === 1 ? "" : "a"}.` : "Samma planerade inlägg körs inte automatiskt igen."}</span>
+                                            </div>
+                                          );
+                                        })() : null}
                                         <small className="dashboard-recurring-credit-note">
                                           {t("dashboard.weeklyCreditsNote")}
                                         </small>
@@ -1101,6 +1131,15 @@ export default function Home() {
                                           </span>
                                         </div>
                                         <p>{getContentPlanSummary(rule, t)}</p>
+                                        {status.key === "failed" ? (() => {
+                                          const failureInfo = getContentPlanFailureInfo(rule);
+                                          return (
+                                            <div className="dashboard-v140-failure-note">
+                                              <strong>{failureInfo.message}</strong>
+                                              <span>{failureInfo.refundedCredits > 0 ? `${failureInfo.refundedCredits} kredit${failureInfo.refundedCredits === 1 ? "" : "er"} återförd${failureInfo.refundedCredits === 1 ? "" : "a"}.` : "Samma planerade inlägg körs inte automatiskt igen."}</span>
+                                            </div>
+                                          );
+                                        })() : null}
                                       </div>
 
                                       <div className="dashboard-plan-meta">

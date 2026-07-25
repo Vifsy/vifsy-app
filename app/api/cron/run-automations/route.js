@@ -8842,6 +8842,450 @@ async function setRuleError(supabase, ruleId, message) {
     .eq("id", ruleId);
 }
 
+function classifyAutomationCreationFailure(errorOrMessage, stage = "unhandled") {
+  const message = String(errorOrMessage?.message || errorOrMessage || "Unknown automation error");
+  const normalized = message.toLowerCase();
+  const normalizedStage = String(stage || "unhandled").toLowerCase();
+
+  if (
+    /website returned 403|http 403|forbidden|cloudflare|security protection|security_blocked/.test(normalized)
+  ) {
+    return {
+      code: "website_security_blocked",
+      customerMessage:
+        "The website's security protection stopped Spreelo from accessing the information needed for this post. Your website administrator needs to allow Spreelo before this plan can continue.",
+    };
+  }
+
+  if (
+    /domain cooldown|rate limit|too many requests|request pacing|retry-after/.test(normalized) &&
+    !/openai|quota|billing/.test(normalized)
+  ) {
+    return {
+      code: "website_rate_limited",
+      customerMessage:
+        "The website temporarily limited access, so Spreelo could not create this planned post. This occurrence will not be retried automatically.",
+    };
+  }
+
+  if (/quota|billing|openai.*429|ai service|model.*unavailable/.test(normalized)) {
+    return {
+      code: "ai_service_unavailable",
+      customerMessage:
+        "The AI service could not complete this planned post. This occurrence will not be retried automatically.",
+    };
+  }
+
+  if (
+    /no verified website product|no usable product|could not find.*product|needs at least .*products|product researcher returned no valid|product.*could not be normalized/.test(
+      normalized
+    ) || normalizedStage.includes("product_prepare")
+  ) {
+    return {
+      code: "no_suitable_product",
+      customerMessage:
+        "Spreelo could not verify enough suitable products from the website for this planned post. This occurrence will not be retried automatically.",
+    };
+  }
+
+  if (
+    /product image|website image|no usable image|image.*missing|transparent/.test(normalized) ||
+    normalizedStage.includes("image")
+  ) {
+    return {
+      code: "product_image_unusable",
+      customerMessage:
+        "The product image could not be used to create this planned post. This occurrence will not be retried automatically.",
+    };
+  }
+
+  if (
+    /carousel slides|render|shotstack|animated product video|video could not/.test(normalized) ||
+    normalizedStage.includes("render") ||
+    normalizedStage.includes("carousel_slide")
+  ) {
+    return {
+      code: "media_render_failed",
+      customerMessage:
+        "The image or video for this planned post could not be completed. This occurrence will not be retried automatically.",
+    };
+  }
+
+  if (/empty content|content generation|completion/.test(normalized) || normalizedStage === "content_generation") {
+    return {
+      code: "content_generation_failed",
+      customerMessage:
+        "Spreelo could not complete the content for this planned post. This occurrence will not be retried automatically.",
+    };
+  }
+
+  if (/credit balance|not enough credits/.test(normalized)) {
+    return {
+      code: "insufficient_credits",
+      customerMessage:
+        "The planned post could not be created because the account did not have enough available credits. The plan has been paused until credits are available.",
+    };
+  }
+
+  if (/stale|incomplete .*draft|still rendering/.test(normalized)) {
+    return {
+      code: "incomplete_generation",
+      customerMessage:
+        "The planned post could not be completed. This occurrence will not be retried automatically.",
+    };
+  }
+
+  return {
+    code: "unexpected_creation_error",
+    customerMessage:
+      "An unexpected technical error prevented this planned post from being created. This occurrence will not be retried automatically.",
+  };
+}
+
+function escapeAutomationEmailHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function buildAutomationFailureEmail({ rule, brandProfile, customerMessage, refundedCredits, locale }) {
+  const isSwedish = String(locale || "").toLowerCase().startsWith("sv");
+  const brandName = String(
+    brandProfile?.business_name || brandProfile?.name || rule?.brand_name || rule?.name || "your business"
+  ).trim();
+  const postLabel = String(rule?.content_type_label || rule?.post_type || rule?.name || "planned post").trim();
+  const refunded = Math.max(0, Number(refundedCredits || 0));
+  const appUrl = `${APP_URL}/calendar`;
+
+  if (isSwedish) {
+    const subject = "Ett planerat inlägg kunde inte skapas";
+    const refundText = refunded > 0
+      ? `${refunded} kredit${refunded === 1 ? "" : "er"} har återförts för det misslyckade inlägget. Om en återkommande plan fortsätter kan kredit samtidigt vara reserverad för nästa framtida inlägg.`
+      : "Ingen kredit har förbrukats för det misslyckade skapandet.";
+    const text = `Hej,\n\nSpreelo kunde inte skapa det planerade inlägget för ${brandName}.\n\nInlägg: ${postLabel}\nAnledning: ${customerMessage}\n\n${refundText}\nSamma planerade inlägg kommer inte att köras automatiskt igen. En återkommande plan fortsätter med nästa framtida inlägg så länge planen inte har pausats på grund av ett problem som behöver åtgärdas.\n\n${appUrl}`;
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;color:#172033;line-height:1.55">
+        <h1 style="font-size:24px;margin-bottom:16px">Ett planerat inlägg kunde inte skapas</h1>
+        <p>Hej,</p>
+        <p>Spreelo kunde inte skapa det planerade inlägget för <strong>${escapeAutomationEmailHtml(brandName)}</strong>.</p>
+        <div style="background:#f6f7fb;border:1px solid #e3e6ef;border-radius:12px;padding:16px;margin:20px 0">
+          <p style="margin:0 0 8px"><strong>Inlägg:</strong> ${escapeAutomationEmailHtml(postLabel)}</p>
+          <p style="margin:0"><strong>Anledning:</strong> ${escapeAutomationEmailHtml(customerMessage)}</p>
+        </div>
+        <p><strong>${escapeAutomationEmailHtml(refundText)}</strong></p>
+        <p>Samma planerade inlägg kommer inte att köras automatiskt igen. En återkommande plan fortsätter med nästa framtida inlägg så länge planen inte har pausats på grund av ett problem som behöver åtgärdas.</p>
+        <p><a href="${appUrl}" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:12px 18px;border-radius:9px;font-weight:700">Öppna Spreelo</a></p>
+      </div>`;
+    return { subject, text, html };
+  }
+
+  const subject = "A planned post could not be created";
+  const refundText = refunded > 0
+    ? `${refunded} credit${refunded === 1 ? "" : "s"} have been returned for the failed post. If a recurring plan continues, credit may be reserved at the same time for its next future post.`
+    : "No credit was charged for the failed creation.";
+  const text = `Hello,\n\nSpreelo could not create the planned post for ${brandName}.\n\nPost: ${postLabel}\nReason: ${customerMessage}\n\n${refundText}\nThe same scheduled post will not be attempted automatically again. A recurring plan continues with its next future post unless the plan has been paused because an issue requires action.\n\n${appUrl}`;
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;color:#172033;line-height:1.55">
+      <h1 style="font-size:24px;margin-bottom:16px">A planned post could not be created</h1>
+      <p>Hello,</p>
+      <p>Spreelo could not create the planned post for <strong>${escapeAutomationEmailHtml(brandName)}</strong>.</p>
+      <div style="background:#f6f7fb;border:1px solid #e3e6ef;border-radius:12px;padding:16px;margin:20px 0">
+        <p style="margin:0 0 8px"><strong>Post:</strong> ${escapeAutomationEmailHtml(postLabel)}</p>
+        <p style="margin:0"><strong>Reason:</strong> ${escapeAutomationEmailHtml(customerMessage)}</p>
+      </div>
+      <p><strong>${escapeAutomationEmailHtml(refundText)}</strong></p>
+      <p>The same scheduled post will not be attempted automatically again. A recurring plan continues with its next future post unless the plan has been paused because an issue requires action.</p>
+      <p><a href="${appUrl}" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:12px 18px;border-radius:9px;font-weight:700">Open Spreelo</a></p>
+    </div>`;
+  return { subject, text, html };
+}
+
+async function claimAutomationOccurrenceOnce({
+  supabase,
+  rule,
+  scheduledFor,
+  runLogId,
+  workerName,
+}) {
+  const { data, error } = await supabase.rpc("claim_automation_occurrence_once", {
+    p_rule_id: rule.id,
+    p_scheduled_for: scheduledFor,
+    p_run_log_id: runLogId,
+    p_worker_name: workerName,
+  });
+
+  if (error) {
+    throw new Error(
+      `The v140 database migration is required before automation can run: ${error.message || "claim_automation_occurrence_once is unavailable"}`
+    );
+  }
+
+  return data || { claimed: false, occurrence_id: null, status: "unknown" };
+}
+
+async function completeAutomationOccurrence({ supabase, occurrenceId, postId, metadata = {} }) {
+  if (!occurrenceId) return null;
+  const { data, error } = await supabase.rpc("complete_automation_occurrence", {
+    p_occurrence_id: occurrenceId,
+    p_post_id: postId || null,
+    p_metadata: metadata || {},
+  });
+  if (error) {
+    console.error("Could not mark automation occurrence completed", {
+      occurrenceId,
+      postId,
+      message: error.message,
+    });
+    return null;
+  }
+  return data;
+}
+
+async function markAutomationFailureNotification({
+  supabase,
+  occurrenceId,
+  status,
+  recipient = null,
+  subject = null,
+  errorMessage = null,
+  metadata = {},
+}) {
+  if (!occurrenceId) return;
+  const { error } = await supabase.rpc("mark_automation_failure_notification", {
+    p_occurrence_id: occurrenceId,
+    p_status: status,
+    p_recipient: recipient,
+    p_subject: subject,
+    p_error_message: errorMessage,
+    p_metadata: metadata || {},
+  });
+  if (error) {
+    console.warn("Could not save automation failure notification status", {
+      occurrenceId,
+      status,
+      message: error.message,
+    });
+  }
+}
+
+async function sendAutomationCreationFailureEmail({
+  supabase,
+  resendApiKey,
+  rule,
+  brandProfile,
+  occurrenceId,
+  customerMessage,
+  refundedCredits,
+}) {
+  if (!occurrenceId) return { status: "suppressed" };
+
+  if (!resendApiKey) {
+    await markAutomationFailureNotification({
+      supabase,
+      occurrenceId,
+      status: "suppressed",
+      errorMessage: "RESEND_API_KEY is not configured.",
+    });
+    return { status: "suppressed" };
+  }
+
+  const userProfile = await getUserAuthProfile(supabase, rule.user_id);
+  if (!userProfile?.email) {
+    await markAutomationFailureNotification({
+      supabase,
+      occurrenceId,
+      status: "failed",
+      errorMessage: "The customer account has no email address.",
+    });
+    return { status: "failed" };
+  }
+
+  const locale = resolveUiLocaleFromLanguageName(userProfile.appLanguage) || "en";
+  const email = buildAutomationFailureEmail({
+    rule,
+    brandProfile,
+    customerMessage,
+    refundedCredits,
+    locale,
+  });
+
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: RESEND_FROM_EMAIL,
+        to: userProfile.email,
+        subject: email.subject,
+        html: email.html,
+        text: email.text,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error((await response.text()) || "Resend email request failed");
+    }
+
+    await markAutomationFailureNotification({
+      supabase,
+      occurrenceId,
+      status: "sent",
+      recipient: userProfile.email,
+      subject: email.subject,
+      metadata: { refunded_credits: Math.max(0, Number(refundedCredits || 0)) },
+    });
+    return { status: "sent", recipient: userProfile.email };
+  } catch (error) {
+    await markAutomationFailureNotification({
+      supabase,
+      occurrenceId,
+      status: "failed",
+      recipient: userProfile.email,
+      subject: email.subject,
+      errorMessage: error.message,
+    });
+    return { status: "failed", error: error.message };
+  }
+}
+
+async function failAutomationOccurrenceTerminal({
+  supabase,
+  resendApiKey,
+  occurrenceId,
+  rule,
+  brandProfile = null,
+  errorOrMessage,
+  stage,
+  scheduledFor = null,
+  metadata = {},
+}) {
+  if (!occurrenceId) {
+    await setRuleError(supabase, rule.id, String(errorOrMessage?.message || errorOrMessage || "Automation failed"));
+    return { handled: false, refundedCredits: 0, notificationStatus: "not_applicable" };
+  }
+
+  const internalMessage = String(errorOrMessage?.message || errorOrMessage || "Unknown automation error");
+  const failure = classifyAutomationCreationFailure(errorOrMessage, stage);
+  const shouldPauseRecurringPlan = ["website_security_blocked", "insufficient_credits"].includes(failure.code);
+  const keepRuleActive = rule?.schedule_type === "weekly" && !shouldPauseRecurringPlan;
+  const nextRunAt = keepRuleActive
+    ? getNextWeeklyRunAtIsoAfterScheduled(
+        rule,
+        scheduledFor || getScheduledPublishAtIso(rule, new Date())
+      )
+    : null;
+  const { data, error } = await supabase.rpc("fail_automation_occurrence_terminal", {
+    p_occurrence_id: occurrenceId,
+    p_failure_code: failure.code,
+    p_internal_message: internalMessage,
+    p_customer_message: failure.customerMessage,
+    p_failure_stage: stage || null,
+    p_metadata: metadata || {},
+    p_keep_rule_active: keepRuleActive,
+    p_next_run_at: nextRunAt,
+  });
+
+  if (error) {
+    console.error("Could not terminally fail automation occurrence", {
+      occurrenceId,
+      ruleId: rule?.id,
+      message: error.message,
+    });
+    await setRuleError(supabase, rule.id, internalMessage);
+    return { handled: false, refundedCredits: 0, notificationStatus: "failed" };
+  }
+
+  const handled = Boolean(data?.handled);
+  const refundedCredits = Math.max(0, Number(data?.refunded_credits || 0));
+  let notificationStatus = String(data?.notification_status || "pending");
+
+  if (handled) {
+    let resolvedBrandProfile = brandProfile;
+    if (!resolvedBrandProfile && rule?.brand_profile_id) {
+      try {
+        const { data: loadedBrand } = await supabase
+          .from("brand_profiles")
+          .select("id, business_name, website_url")
+          .eq("id", rule.brand_profile_id)
+          .maybeSingle();
+        resolvedBrandProfile = loadedBrand || null;
+      } catch {
+        resolvedBrandProfile = null;
+      }
+    }
+
+    const notification = await sendAutomationCreationFailureEmail({
+      supabase,
+      resendApiKey,
+      rule,
+      brandProfile: resolvedBrandProfile,
+      occurrenceId,
+      customerMessage: failure.customerMessage,
+      refundedCredits,
+    });
+    notificationStatus = notification.status;
+  }
+
+  return {
+    handled,
+    failureCode: failure.code,
+    customerMessage: failure.customerMessage,
+    refundedCredits,
+    notificationStatus,
+    planContinues: Boolean(data?.plan_continues),
+    nextRunAt: data?.next_run_at || null,
+  };
+}
+
+async function finalizeStaleAutomationOccurrences({ supabase, resendApiKey, now = new Date() }) {
+  const staleBefore = new Date(now.getTime() - 3 * 60 * 60 * 1000).toISOString();
+  const { data: staleOccurrences, error } = await supabase
+    .from("automation_occurrences")
+    .select("id, automation_rule_id, started_at")
+    .eq("status", "running")
+    .lt("started_at", staleBefore)
+    .order("started_at", { ascending: true })
+    .limit(25);
+
+  if (error) {
+    if (!String(error.message || "").toLowerCase().includes("automation_occurrences")) {
+      console.warn("Could not check stale automation occurrences", { message: error.message });
+    }
+    return 0;
+  }
+
+  let finalized = 0;
+  for (const occurrence of staleOccurrences || []) {
+    const { data: rule } = await supabase
+      .from("automation_rules")
+      .select("*")
+      .eq("id", occurrence.automation_rule_id)
+      .maybeSingle();
+    if (!rule) continue;
+
+    const result = await failAutomationOccurrenceTerminal({
+      supabase,
+      resendApiKey,
+      occurrenceId: occurrence.id,
+      rule,
+      errorOrMessage:
+        "The automation run stopped before it could finish and exceeded the three-hour safety window.",
+      stage: "stale_running_occurrence",
+      scheduledFor: rule.generation_occurrence_scheduled_for || rule.next_run_at || occurrence.started_at,
+      metadata: { stale_started_at: occurrence.started_at, stale_finalized_at: new Date().toISOString() },
+    });
+    if (result.handled) finalized += 1;
+  }
+
+  return finalized;
+}
+
 async function stopRuleAfterCostProtectedCarouselFailure(supabase, ruleId, message) {
   const { error: releaseError } = await supabase.rpc(
     "release_reserved_automation_credit_system",
@@ -13921,6 +14365,59 @@ function isSameOrSubdomainUrl(candidateUrl, websiteUrl) {
   return candidateHost === websiteHost || candidateHost.endsWith(`.${websiteHost}`);
 }
 
+const WEBSITE_MARKET_PATH_CODES = new Set([
+  "ae", "at", "au", "be", "bg", "br", "ca", "ch", "cz", "de", "dk", "ee",
+  "es", "eu", "fi", "fr", "gb", "gr", "hr", "hu", "ie", "is", "it", "jp",
+  "lt", "lu", "lv", "mx", "nl", "no", "nz", "pl", "pt", "ro", "se", "si",
+  "sk", "uk", "us",
+]);
+
+function getConfiguredWebsiteMarketPath(websiteUrl) {
+  try {
+    const segments = new URL(websiteUrl).pathname
+      .split("/")
+      .map((segment) => segment.trim().toLowerCase())
+      .filter(Boolean);
+    const market = segments[0] || "";
+    const language = segments[1] || "";
+
+    if (!WEBSITE_MARKET_PATH_CODES.has(market)) {
+      return null;
+    }
+
+    return {
+      market,
+      language: /^[a-z]{2}(?:-[a-z]{2})?$/.test(language) ? language : "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function matchesConfiguredWebsiteMarket(candidateUrl, websiteUrl) {
+  const configured = getConfiguredWebsiteMarketPath(websiteUrl);
+  if (!configured) return true;
+
+  try {
+    const candidateSegments = new URL(candidateUrl).pathname
+      .split("/")
+      .map((segment) => segment.trim().toLowerCase())
+      .filter(Boolean);
+
+    if (candidateSegments[0] !== configured.market) {
+      return false;
+    }
+
+    if (configured.language && candidateSegments[1] !== configured.language) {
+      return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function isLikelyNonProductUrl(value, websiteUrl) {
   try {
     const url = new URL(value);
@@ -16785,6 +17282,7 @@ async function verifyDiscoveredWebsiteProductCandidates({
     websiteUrl
   )
     .filter((candidate) => !isBadProductUrl(candidate?.url))
+    .filter((candidate) => matchesConfiguredWebsiteMarket(candidate?.url, websiteUrl))
     .slice(
     0,
     Math.max(limit * 3, PRODUCT_ENGINE_V2_POOL_TARGETS.minimumCandidatePool)
@@ -17331,6 +17829,16 @@ For campaign carousels, stop once you have enough concrete product pages for a u
       continue;
     }
 
+    if (!matchesConfiguredWebsiteMarket(productUrl, websiteUrl)) {
+      console.log("Product researcher returned product from the wrong website market", {
+        ruleId: rule?.id,
+        websiteUrl,
+        productUrl,
+        attempt,
+      });
+      continue;
+    }
+
     if (isLikelyNonProductUrl(productUrl, websiteUrl)) {
       console.log("Product researcher returned weak or non-product URL", {
         ruleId: rule?.id,
@@ -17386,6 +17894,16 @@ For campaign carousels, stop once you have enough concrete product pages for a u
         attempt,
       });
 
+      continue;
+    }
+
+    if (!matchesConfiguredWebsiteMarket(pageUrl, websiteUrl)) {
+      console.log("Product researcher returned discovery page from the wrong website market", {
+        ruleId: rule?.id,
+        websiteUrl,
+        pageUrl,
+        attempt,
+      });
       continue;
     }
 
@@ -23465,6 +23983,11 @@ async function runAutomationCron(request, options = {}) {
     });
 
     const summary = createEmptySummary();
+    summary.stale_occurrences_finalized = await finalizeStaleAutomationOccurrences({
+      supabase,
+      resendApiKey,
+      now,
+    });
     const usedWebsiteImageUrlsThisRun = new Set();
     let animatedVideoRendersThisRun = 0;
 
@@ -23530,6 +24053,9 @@ async function runAutomationCron(request, options = {}) {
       let automationRunWebsiteItem = null;
       let automationRunWebsiteItems = [];
       let automationRunProductEngineDiagnostics = null;
+      let automationOccurrenceId = null;
+      let automationOccurrenceClaimed = false;
+      let automationBrandProfile = null;
 
       const finishRunLog = async (status, errorMessage = null, extraSummary = {}) => {
         if (automationRunFinished || !automationRunLogId) {
@@ -23555,6 +24081,41 @@ async function runAutomationCron(request, options = {}) {
 
         automationRunFinished = true;
         summary.automation_run_logs_finished += 1;
+      };
+
+      const failCurrentOccurrence = async (
+        errorOrMessage,
+        stage,
+        extraSummary = {}
+      ) => {
+        const result = await failAutomationOccurrenceTerminal({
+          supabase,
+          resendApiKey,
+          occurrenceId: automationOccurrenceId,
+          rule,
+          brandProfile: automationBrandProfile,
+          errorOrMessage,
+          stage,
+          scheduledFor: scheduledPublishAtIso,
+          metadata: extraSummary,
+        });
+        await finishRunLog(
+          "failed",
+          String(errorOrMessage?.message || errorOrMessage || "Automation failed"),
+          {
+            stage,
+            failure_code: result.failureCode || null,
+            failure_customer_message: result.customerMessage || null,
+            refunded_credits: result.refundedCredits || 0,
+            notification_status: result.notificationStatus || null,
+            automatic_retry_scheduled: false,
+            terminal_failure: true,
+            recurring_plan_continues: Boolean(result.planContinues),
+            next_future_run_at: result.nextRunAt || null,
+            ...extraSummary,
+          }
+        );
+        return result;
       };
 
       try {
@@ -23597,6 +24158,33 @@ async function runAutomationCron(request, options = {}) {
           summary.automation_run_logs_started += 1;
         }
 
+        const occurrenceClaim = await claimAutomationOccurrenceOnce({
+          supabase,
+          rule,
+          scheduledFor: scheduledPublishAtIso,
+          runLogId: automationRunLogId,
+          workerName,
+        });
+        automationOccurrenceId = occurrenceClaim?.occurrence_id || null;
+        automationOccurrenceClaimed = Boolean(occurrenceClaim?.claimed);
+
+        if (!automationOccurrenceClaimed) {
+          await finishRunLog(
+            "skipped",
+            "This scheduled occurrence already used its one automatic generation attempt.",
+            {
+              stage: "duplicate_automatic_occurrence",
+              occurrence_id: automationOccurrenceId,
+              existing_occurrence_status: occurrenceClaim?.status || null,
+              automatic_retry_scheduled: false,
+            }
+          );
+          summary.skipped += 1;
+          summary.skipped_duplicate_occurrence =
+            Number(summary.skipped_duplicate_occurrence || 0) + 1;
+          continue;
+        }
+
         let automationDrafts = await findAutomationDraftsForRule({
           supabase,
           ruleId: rule.id,
@@ -23607,42 +24195,35 @@ async function runAutomationCron(request, options = {}) {
         );
 
         if (staleIncompleteAnimatedVideoDrafts.length > 0) {
-          const cleanedAnimatedDraftCount =
-            await deleteIncompleteAnimatedVideoDrafts({
-              supabase,
-              posts: staleIncompleteAnimatedVideoDrafts,
-            });
-
-          automationDrafts = automationDrafts.filter(
-            (post) =>
-              !staleIncompleteAnimatedVideoDrafts.some(
-                (stalePost) => stalePost.id === post.id
-              )
-          );
+          const cleanedAnimatedDraftCount = await deleteIncompleteAnimatedVideoDrafts({
+            supabase,
+            posts: staleIncompleteAnimatedVideoDrafts,
+          });
+          const message =
+            "An earlier animated video draft did not finish. Spreelo stopped the occurrence instead of starting another automatic generation attempt.";
+          await failCurrentOccurrence(message, "stale_incomplete_animated_video_draft", {
+            deleted_incomplete_drafts: cleanedAnimatedDraftCount,
+            stale_draft_ids: staleIncompleteAnimatedVideoDrafts.map((post) => post.id),
+          });
           summary.cleaned_incomplete_animated_video_drafts =
             Number(summary.cleaned_incomplete_animated_video_drafts || 0) +
             cleanedAnimatedDraftCount;
+          summary.errors += 1;
+          continue;
         }
 
         const activeIncompleteAnimatedVideoDrafts = automationDrafts.filter(
-          (post) =>
-            isIncompleteAnimatedVideoDraftPost(post) &&
-            !isStaleIncompleteAnimatedVideoDraft(post, now)
+          (post) => isIncompleteAnimatedVideoDraftPost(post)
         );
 
         if (activeIncompleteAnimatedVideoDrafts.length > 0) {
           const message =
-            `Skipped temporarily because this automation rule has an animated video still rendering. Spreelo will retry automatically after ${INCOMPLETE_ANIMATED_VIDEO_GRACE_MINUTES} minutes if it becomes stale.`;
-
-          await setRuleError(supabase, rule.id, message);
-          await finishRunLog("skipped", message, {
-            stage: "active_incomplete_animated_video_draft",
-            incomplete_animated_video_drafts:
-              activeIncompleteAnimatedVideoDrafts.length,
-            automatic_retry_after_minutes:
-              INCOMPLETE_ANIMATED_VIDEO_GRACE_MINUTES,
+            "An animated video draft already exists for this occurrence and has not completed. Spreelo stopped further automatic attempts.";
+          await failCurrentOccurrence(message, "active_incomplete_animated_video_draft", {
+            incomplete_animated_video_drafts: activeIncompleteAnimatedVideoDrafts.length,
+            draft_ids: activeIncompleteAnimatedVideoDrafts.map((post) => post.id),
           });
-          summary.skipped += 1;
+          summary.errors += 1;
           summary.skipped_existing_draft += 1;
           continue;
         }
@@ -23652,115 +24233,40 @@ async function runAutomationCron(request, options = {}) {
         );
 
         if (staleIncompleteDrafts.length > 0) {
-          const recoveryState = await getStaleCarouselRecoveryState({
-            supabase,
-            ruleId: rule.id,
-            currentRunLogId: automationRunLogId,
-            now,
-          });
-          const recoveryAttempt = recoveryState.recoveryCount + 1;
-          const automaticRetryScheduled =
-            recoveryAttempt <= MAX_STALE_CAROUSEL_AUTOMATIC_RECOVERIES;
-
           const cleanedDraftCount = await deleteIncompleteCarouselDrafts({
             supabase,
             posts: staleIncompleteDrafts,
           });
-
+          const message =
+            "An earlier carousel draft did not finish. Spreelo stopped the occurrence instead of starting another automatic generation attempt.";
+          await failCurrentOccurrence(message, "stale_incomplete_carousel_draft", {
+            deleted_incomplete_drafts: cleanedDraftCount,
+            stale_draft_ids: staleIncompleteDrafts.map((post) => post.id),
+          });
           summary.cleaned_incomplete_carousel_drafts += cleanedDraftCount;
-
-          const staleBeforeIso = new Date(
-            now.getTime() - INCOMPLETE_CAROUSEL_DRAFT_GRACE_MINUTES * 60 * 1000
-          ).toISOString();
-
-          const recoveredRunLogs = await markAbandonedAutomationRunsRecovered({
-            supabase,
-            ruleId: rule.id,
-            staleBeforeIso,
-            deletedDraftCount: cleanedDraftCount,
-            recoveryAttempt,
-            automaticRetryScheduled,
-          });
-
-          automationDrafts = automationDrafts.filter(
-            (post) => !staleIncompleteDrafts.some((stalePost) => stalePost.id === post.id)
-          );
-
-          if (!automaticRetryScheduled) {
-            const message =
-              `Automation paused after ${MAX_STALE_CAROUSEL_AUTOMATIC_RECOVERIES} automatic retries because incomplete carousel drafts kept becoming stale within ${STALE_CAROUSEL_RECOVERY_WINDOW_HOURS} hours. Review the automation logs before reactivating it.`;
-
-            await stopRuleAfterCostProtectedCarouselFailure(
-              supabase,
-              rule.id,
-              message
-            );
-
-            await finishRunLog("failed", message, {
-              stage: "stale_incomplete_carousel_retry_limit",
-              automatic_retry_paused: true,
-              recovery_attempt: recoveryAttempt,
-              recovery_limit: MAX_STALE_CAROUSEL_AUTOMATIC_RECOVERIES,
-              recovery_window_hours: STALE_CAROUSEL_RECOVERY_WINDOW_HOURS,
-              previous_recoveries_in_window: recoveryState.recoveryCount,
-              recovery_history_available: recoveryState.historyAvailable,
-              latest_recovery_at: recoveryState.latestRecoveryAt,
-              deleted_incomplete_drafts: cleanedDraftCount,
-              stale_draft_ids: staleIncompleteDrafts.map((post) => post.id),
-              recovered_abandoned_run_logs: recoveredRunLogs,
-            });
-
-            console.error("Paused automation after repeated stale carousel drafts", {
-              ruleId: rule.id,
-              recoveryAttempt,
-              recoveryLimit: MAX_STALE_CAROUSEL_AUTOMATIC_RECOVERIES,
-              deletedDraftCount: cleanedDraftCount,
-              recoveredRunLogs,
-              staleDraftIds: staleIncompleteDrafts.map((post) => post.id),
-            });
-
-            summary.skipped += 1;
-            summary.errors += 1;
-            continue;
-          }
-
-          console.warn("Recovered stale incomplete carousel draft automatically", {
-            ruleId: rule.id,
-            recoveryAttempt,
-            recoveryLimit: MAX_STALE_CAROUSEL_AUTOMATIC_RECOVERIES,
-            recoveryWindowHours: STALE_CAROUSEL_RECOVERY_WINDOW_HOURS,
-            deletedDraftCount: cleanedDraftCount,
-            recoveredRunLogs,
-            staleDraftIds: staleIncompleteDrafts.map((post) => post.id),
-          });
+          summary.errors += 1;
+          continue;
         }
 
-        const activeIncompleteDrafts = automationDrafts.filter(
-          (post) =>
-            isIncompleteCarouselDraftPost(post) &&
-            !isStaleIncompleteCarouselDraft(post, now)
+        const activeIncompleteDrafts = automationDrafts.filter((post) =>
+          isIncompleteCarouselDraftPost(post)
         );
         const incompleteCarouselDrafts = countIncompleteCarouselDrafts(activeIncompleteDrafts);
 
         if (incompleteCarouselDrafts > 0) {
           const message =
-            `Skipped temporarily because this automation rule has an incomplete carousel draft newer than ${INCOMPLETE_CAROUSEL_DRAFT_GRACE_MINUTES} minutes. Spreelo will retry automatically if the draft becomes stale.`;
-
-          await setRuleError(supabase, rule.id, message);
-
-          await finishRunLog("skipped", message, {
-            stage: "active_incomplete_carousel_draft",
+            "An incomplete carousel draft already exists for this occurrence. Spreelo stopped further automatic attempts.";
+          await failCurrentOccurrence(message, "active_incomplete_carousel_draft", {
             incomplete_carousel_drafts: incompleteCarouselDrafts,
-            automatic_retry_after_minutes: INCOMPLETE_CAROUSEL_DRAFT_GRACE_MINUTES,
+            draft_ids: activeIncompleteDrafts.map((post) => post.id),
           });
-
-          summary.skipped += 1;
+          summary.errors += 1;
           summary.skipped_existing_draft += 1;
           continue;
         }
 
-        const existingCompleteDraft = automationDrafts.find(
-          (post) => isCompleteAutomationDraft(post) && isRecentAutomationDraft(post, now)
+        const existingCompleteDraft = automationDrafts.find((post) =>
+          isCompleteAutomationDraft(post)
         );
 
         if (existingCompleteDraft) {
@@ -23768,21 +24274,57 @@ async function runAutomationCron(request, options = {}) {
             supabase,
             post: existingCompleteDraft,
           });
+          automationRunPostId = existingCompleteDraft.id;
 
-          if (recovered) {
-            summary.recovered_completed_drafts += 1;
+          const ruleUpdatePayload = getRuleUpdatePayloadAfterSuccess(
+            rule,
+            nowIso,
+            now,
+            scheduledPublishAtIso
+          );
+          const { error: recoveredRuleUpdateError } = await supabase
+            .from("automation_rules")
+            .update(ruleUpdatePayload)
+            .eq("id", rule.id);
+
+          if (recoveredRuleUpdateError) {
+            console.warn("Could not advance recovered completed automation draft", {
+              ruleId: rule.id,
+              postId: existingCompleteDraft.id,
+              message: recoveredRuleUpdateError.message,
+            });
           }
 
-          await setRuleError(
+          if (
+            rule.credit_reservation_status === "reserved" &&
+            Number(rule.credit_reserved_amount || 0) >= Number(rule.credit_cost || 1)
+          ) {
+            const { error: recoveredCreditError } = await supabase.rpc(
+              "consume_reserved_automation_credit",
+              { p_rule_id: rule.id, p_post_id: existingCompleteDraft.id }
+            );
+            if (recoveredCreditError) {
+              console.warn("Could not consume credits for recovered completed draft", {
+                ruleId: rule.id,
+                postId: existingCompleteDraft.id,
+                message: recoveredCreditError.message,
+              });
+            }
+          }
+
+          await completeAutomationOccurrence({
             supabase,
-            rule.id,
-            "Skipped because this automation rule already has a recent completed draft awaiting review."
-          );
-
-          await finishRunLog("skipped", "Skipped because this automation rule already has a recent completed draft awaiting review.", { stage: "existing_completed_draft" });
-
-          summary.skipped += 1;
-          summary.skipped_existing_draft += 1;
+            occurrenceId: automationOccurrenceId,
+            postId: existingCompleteDraft.id,
+            metadata: { recovered_existing_completed_draft: true },
+          });
+          await finishRunLog("success", null, {
+            stage: "recovered_existing_completed_draft",
+            occurrence_id: automationOccurrenceId,
+            recovered: Boolean(recovered),
+          });
+          summary.recovered_completed_drafts += recovered ? 1 : 0;
+          summary.generated += 1;
           continue;
         }
 
@@ -23808,11 +24350,8 @@ async function runAutomationCron(request, options = {}) {
           if (balanceError || !balance) {
             const message = "No credit balance found";
 
-            await setRuleError(supabase, rule.id, message);
-
-            await finishRunLog("skipped", message, { stage: "credit_balance" });
-
-            summary.skipped += 1;
+            await failCurrentOccurrence(message, "credit_balance");
+            summary.errors += 1;
             summary.no_credit_balance += 1;
             continue;
           }
@@ -23822,17 +24361,15 @@ async function runAutomationCron(request, options = {}) {
           if (creditsRemaining < creditCost) {
             const message = "Not enough credits";
 
-            await setRuleError(supabase, rule.id, message);
-
-            await finishRunLog("skipped", message, { stage: "credits" });
-
-            summary.skipped += 1;
+            await failCurrentOccurrence(message, "credits");
+            summary.errors += 1;
             summary.not_enough_credits += 1;
             continue;
           }
         }
 
 const brandProfile = await getBrandProfileForRule(supabase, rule);
+automationBrandProfile = brandProfile || null;
 
         if (brandProfile) {
           summary.brand_profile_found += 1;
@@ -23896,28 +24433,12 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
             automationRunProductEngineDiagnostics =
               carouselError?.productEngineDiagnostics || null;
 
-            const productFailure = await handleProductEngineCarouselFailure({
-              supabase,
-              rule,
-              message,
+            await failCurrentOccurrence(carouselError, "carousel_product_prepare", {
+              product_engine_v2: PRODUCT_ENGINE_V2_ENABLED,
+              partial_product_count: partialProducts.length,
+              product_engine_diagnostics:
+                carouselError?.productEngineDiagnostics || null,
             });
-
-            await finishRunLog(
-              "failed",
-              productFailure.message,
-              {
-                stage: "carousel_product_prepare",
-                product_engine_v2: PRODUCT_ENGINE_V2_ENABLED,
-                automatic_retry_scheduled: productFailure.retryScheduled,
-                retry_attempt: productFailure.retryAttempt,
-                retry_at: productFailure.retryAt,
-                retry_delay_minutes: productFailure.retryDelayMinutes,
-                cost_protection: !productFailure.retryScheduled,
-                partial_product_count: partialProducts.length,
-                product_engine_diagnostics:
-                  carouselError?.productEngineDiagnostics || null,
-              }
-            );
 
             summary.errors += 1;
             summary.website_content_failed += 1;
@@ -24044,10 +24565,7 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
         if (!generatedContent) {
           const message = "OpenAI returned empty content";
 
-          await setRuleError(supabase, rule.id, message);
-
-          await finishRunLog("failed", message, { stage: "content_generation" });
-
+          await failCurrentOccurrence(message, "content_generation");
           summary.errors += 1;
           continue;
         }
@@ -24125,10 +24643,7 @@ product_research_model_used: rule.uses_website_content
         if (postError || !post) {
           const message = postError?.message || "Could not save post";
 
-          await setRuleError(supabase, rule.id, message);
-
-          await finishRunLog("failed", message, { stage: "post_insert" });
-
+          await failCurrentOccurrence(message, "post_insert");
           summary.errors += 1;
           continue;
         }
@@ -24646,7 +25161,7 @@ product_research_model_used: rule.uses_website_content
       .eq("id", post.id);
 
     summary.image_generation_failed += 1;
-    summary.warnings += 1;
+    throw imageError;
   }
 }
 
@@ -24664,9 +25179,8 @@ product_research_model_used: rule.uses_website_content
               })
               .eq("id", post.id);
 
-            await setRuleError(supabase, rule.id, message);
-            await finishRunLog("failed", message, {
-              stage: "animated_video_render",
+            await failCurrentOccurrence(message, "animated_video_render", {
+              failed_post_id: post.id,
             });
             summary.errors += 1;
             continue;
@@ -24684,9 +25198,8 @@ product_research_model_used: rule.uses_website_content
             const message =
               animatedReadyStatusError.message ||
               "Could not mark animated video ready for approval";
-            await setRuleError(supabase, rule.id, message);
-            await finishRunLog("failed", message, {
-              stage: "animated_video_ready",
+            await failCurrentOccurrence(message, "animated_video_ready", {
+              failed_post_id: post.id,
             });
             summary.errors += 1;
             continue;
@@ -24727,13 +25240,12 @@ product_research_model_used: rule.uses_website_content
             const message = carouselSlideError.message || "Carousel slides could not be created.";
             await supabase.from("post_slides").delete().eq("post_id", post.id);
             await supabase.from("posts").delete().eq("id", post.id);
-            await stopRuleAfterCostProtectedCarouselFailure(supabase, rule.id, message);
-            await finishRunLog("failed", message, {
-              stage: "carousel_slide_save",
-              retry_disabled: true,
+            await failCurrentOccurrence(carouselSlideError, "carousel_slide_save", {
+              deleted_failed_post_id: post.id,
               cost_protection: true,
             });
             summary.website_content_failed += 1;
+            summary.errors += 1;
             continue;
           }
         }
@@ -24827,38 +25339,38 @@ product_research_model_used: rule.uses_website_content
             const message =
               creditUpdateError.message || "Could not update credit balance";
 
-            await setRuleError(supabase, rule.id, message);
-
-            await finishRunLog("failed", message, { stage: "credit_update" });
-
-            summary.errors += 1;
-            continue;
-          }
-
-          const { error: transactionError } = await supabase
-            .from("credit_transactions")
-            .insert({
-              user_id: rule.user_id,
-              amount: -creditCost,
-              reason: rule.uses_website_content
-                ? "Automation website post generated"
-                : wantsImage
-                ? "Automation post with image generated"
-                : "Automation post generated",
-              reference_type: "post",
-              reference_id: post.id,
+            console.error("Created post could not be charged because the balance update failed", {
+              ruleId: rule.id,
+              postId: post.id,
+              message,
             });
+            summary.warnings += 1;
+          } else {
+            const { error: transactionError } = await supabase
+              .from("credit_transactions")
+              .insert({
+                user_id: rule.user_id,
+                amount: -creditCost,
+                reason: rule.uses_website_content
+                  ? "Automation website post generated"
+                  : wantsImage
+                  ? "Automation post with image generated"
+                  : "Automation post generated",
+                reference_type: "post",
+                reference_id: post.id,
+              });
 
-          if (transactionError) {
-            const message =
-              transactionError.message || "Could not create credit transaction";
+            if (transactionError) {
+              const message =
+                transactionError.message || "Could not create credit transaction";
 
-            await setRuleError(supabase, rule.id, message);
-
-            await finishRunLog("failed", message, { stage: "credit_transaction" });
-
-            summary.errors += 1;
-            continue;
+              console.error("Created post credit transaction could not be recorded", {
+                ruleId: rule.id,
+                postId: post.id,
+                message,
+              });
+              summary.warnings += 1;
+            }
           }
         }
 
@@ -24894,13 +25406,22 @@ product_research_model_used: rule.uses_website_content
           .eq("id", rule.id);
 
         if (ruleUpdateError) {
-          await finishRunLog("success", null, {
-            stage: "rule_update_warning",
-            rule_update_error: ruleUpdateError.message || null,
-            email_sent: effectivePostStatus === "pending_approval" && summary.emails_sent > 0,
+          console.error("Created post could not advance its automation rule", {
+            ruleId: rule.id,
+            postId: post.id,
+            message: ruleUpdateError.message,
           });
+          await supabase
+            .from("automation_rules")
+            .update({
+              is_active: false,
+              next_run_at: null,
+              queue_locked_until: null,
+              last_error: `Post created, but the automation was paused because its schedule could not be advanced: ${ruleUpdateError.message || "unknown error"}`,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", rule.id);
           summary.warnings += 1;
-          continue;
         }
 
         let reservedCreditResult = null;
@@ -24933,8 +25454,19 @@ product_research_model_used: rule.uses_website_content
   summary.approved += 1;
 }
 
+        await completeAutomationOccurrence({
+          supabase,
+          occurrenceId: automationOccurrenceId,
+          postId: post.id,
+          metadata: {
+            effective_post_status: effectivePostStatus,
+            credits_were_reserved: hasReservedCredits,
+          },
+        });
+
         await finishRunLog("success", null, {
           stage: "completed",
+          occurrence_id: automationOccurrenceId,
           effective_post_status: effectivePostStatus,
           email_expected: effectivePostStatus === "pending_approval",
           website_source_url: websiteSourceUrl,
@@ -24948,9 +25480,15 @@ product_research_model_used: rule.uses_website_content
       } catch (error) {
         const message = error.message || "Unknown automation error";
 
-        await setRuleError(supabase, rule.id, message);
-
-        await finishRunLog("failed", message, { stage: "unhandled" });
+        if (automationOccurrenceClaimed && automationOccurrenceId) {
+          await failCurrentOccurrence(error, "unhandled");
+        } else {
+          await setRuleError(supabase, rule.id, message);
+          await finishRunLog("failed", message, {
+            stage: "unhandled_before_occurrence_claim",
+            automatic_retry_scheduled: false,
+          });
+        }
 
         summary.errors += 1;
       }

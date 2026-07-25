@@ -33,6 +33,10 @@ const initialStats = {
   imageBackgrounds: 0,
   failedMedia: 0,
   pendingApproval: 0,
+  completedOccurrences: 0,
+  failedOccurrences: 0,
+  refundedCredits: 0,
+  unexpectedAutomaticReruns: 0,
 };
 
 function formatDateTime(value) {
@@ -196,6 +200,10 @@ export default function AdminDashboardPage() {
     { label: "Video backgrounds", value: stats.backgrounds, Icon: ImagePlay },
     { label: "Image backgrounds", value: stats.imageBackgrounds, Icon: ImagePlus },
     { label: "Pending approval", value: stats.pendingApproval, Icon: FileVideo2 },
+    { label: "Completed this month", value: stats.completedOccurrences, Icon: CheckCircle2 },
+    { label: "Failed this month", value: stats.failedOccurrences, Icon: AlertTriangle },
+    { label: "Refunded credits", value: stats.refundedCredits, Icon: CircleDollarSign },
+    { label: "Unexpected reruns", value: stats.unexpectedAutomaticReruns, Icon: RefreshCw },
   ];
 
   return (
@@ -268,6 +276,16 @@ export default function AdminDashboardPage() {
             ) : null}
 
             <section className="admin-tool-grid">
+              <a className="admin-tool-card" href="/admin/customers">
+                <span className="admin-tool-icon"><Users size={24} aria-hidden="true" /></span>
+                <div>
+                  <span className="admin-card-kicker">Kunder och drift</span>
+                  <h2>Kundlista och kundkort</h2>
+                  <p>Se företag, inlägg, misslyckanden, återförda krediter och teknisk statistik per kund och månad.</p>
+                </div>
+                <strong>Öppna kundlistan →</strong>
+              </a>
+
               <a className="admin-tool-card" href="/video-backgrounds">
                 <span className="admin-tool-icon"><ImagePlay size={24} aria-hidden="true" /></span>
                 <div>

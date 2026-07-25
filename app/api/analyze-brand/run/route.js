@@ -62,6 +62,7 @@ export async function POST(request) {
   let supabase = null;
   let user = null;
   let jobId = "";
+  let job = null;
 
   try {
     const authResult = await getAuthenticatedUser(request);
@@ -92,7 +93,7 @@ export async function POST(request) {
       );
     }
 
-    const job = await readBrandAnalysisJob({
+    job = await readBrandAnalysisJob({
       supabase,
       userId: user.id,
       jobId,
@@ -156,6 +157,29 @@ export async function POST(request) {
     });
 
     const customerError = getCustomerFriendlyAnalysisError(error);
+
+    if (supabase && user && job?.brand_profile_id && error?.code === "WEBSITE_SECURITY_BLOCKED") {
+      try {
+        await supabase
+          .from("brand_profiles")
+          .update({
+            website_access_status: "security_blocked",
+            website_security_provider: error.provider || "unknown",
+            website_security_confidence: error.confidence || "low",
+            website_access_status_code: Number(error.status || 403),
+            website_access_message: customerError,
+            website_access_checked_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", job.brand_profile_id)
+          .eq("user_id", user.id);
+      } catch (securityStatusError) {
+        console.error("Could not save website security block status:", {
+          jobId,
+          message: securityStatusError?.message,
+        });
+      }
+    }
 
     if (supabase && user && jobId) {
       try {

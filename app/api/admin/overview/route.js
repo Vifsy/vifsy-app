@@ -66,6 +66,33 @@ export async function GET(request) {
         query.eq("status", "pending_approval")
       )
     ),
+    safeAdminQuery("completedOccurrences", 0, () =>
+      countRows(context.admin, "automation_occurrences", (query) => {
+        const now = new Date();
+        const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+        return query.eq("status", "completed").gte("started_at", monthStart);
+      })
+    ),
+    safeAdminQuery("failedOccurrences", 0, () =>
+      countRows(context.admin, "automation_occurrences", (query) => {
+        const now = new Date();
+        const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+        return query.eq("status", "failed_terminal").gte("started_at", monthStart);
+      })
+    ),
+    safeAdminQuery("monthlyOccurrenceTotals", { refundedCredits: 0, unexpectedAutomaticReruns: 0 }, async () => {
+      const now = new Date();
+      const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+      const { data, error } = await context.admin
+        .from("automation_occurrences")
+        .select("refunded_credits, automatic_run_count")
+        .gte("started_at", monthStart);
+      if (error) throw error;
+      return (data || []).reduce((totals, row) => ({
+        refundedCredits: totals.refundedCredits + Math.max(0, Number(row.refunded_credits || 0)),
+        unexpectedAutomaticReruns: totals.unexpectedAutomaticReruns + Math.max(0, Number(row.automatic_run_count || 1) - 1),
+      }), { refundedCredits: 0, unexpectedAutomaticReruns: 0 });
+    }),
     safeAdminQuery("recentAdjustments", [], async () => {
       const { data, error } = await context.admin
         .from("admin_credit_adjustments")
@@ -89,6 +116,9 @@ export async function GET(request) {
     imageBackgrounds,
     failedMedia,
     pendingApproval,
+    completedOccurrences,
+    failedOccurrences,
+    monthlyOccurrenceTotals,
     recentAdjustments,
   ] = results;
   const warnings = results.map((result) => result.warning).filter(Boolean);
@@ -106,6 +136,10 @@ export async function GET(request) {
       imageBackgrounds: imageBackgrounds.value,
       failedMedia: failedMedia.value,
       pendingApproval: pendingApproval.value,
+      completedOccurrences: completedOccurrences.value,
+      failedOccurrences: failedOccurrences.value,
+      refundedCredits: monthlyOccurrenceTotals.value.refundedCredits,
+      unexpectedAutomaticReruns: monthlyOccurrenceTotals.value.unexpectedAutomaticReruns,
     },
     recentAdjustments: recentAdjustments.value,
   });

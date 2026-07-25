@@ -46,6 +46,12 @@ export default function AdminCreditsPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    const queryEmail = new URLSearchParams(window.location.search).get("email") || "";
+    if (queryEmail.trim()) {
+      setEmail(queryEmail.trim());
+      lookupAccount(null, queryEmail.trim());
+      return;
+    }
     loadRecentAdjustments();
   }, []);
 
@@ -65,9 +71,9 @@ export default function AdminCreditsPage() {
     }
   }
 
-  async function lookupAccount(event) {
+  async function lookupAccount(event, emailOverride = "") {
     event?.preventDefault();
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = String(emailOverride || email).trim().toLowerCase();
     if (!normalizedEmail) return;
 
     setSearching(true);
