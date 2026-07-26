@@ -102,7 +102,15 @@ function getContentPlanStatus(rule, t) {
   const hasWeeklyRule = rules.some((item) => item?.schedule_type === "weekly");
   const hasActiveRule = rules.some((item) => item?.is_active);
   const hasTerminalFailure = rules.some((item) => item?.generation_occurrence_status === "failed_terminal");
+  const hasRetryPending = rules.some((item) => item?.generation_occurrence_status === "retry_pending");
   const nextDate = getPlanNextDate(rule);
+
+  if (hasRetryPending) {
+    return {
+      key: "waiting",
+      label: "Väntar på webbplatsen",
+    };
+  }
 
   if (hasTerminalFailure) {
     return {

@@ -17,7 +17,8 @@
     "test:v128": "node scripts/test-v128-dynamic-strategy-planner.mjs",
     "test:v129": "node scripts/test-v129-product-driven-campaigns.mjs",
     "test:v129-1": "node scripts/test-v129-1-direct-campaign-policy.mjs",
-    "test:v140": "node scripts/test-v140-safe-attempts-security-boozt.mjs"
+    "test:v140": "node scripts/test-v140-safe-attempts-security-boozt.mjs",
+    "test:v141": "node scripts/test-v141-domain-cooldown.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.110.7",
