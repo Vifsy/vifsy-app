@@ -18,13 +18,16 @@
     "test:v129": "node scripts/test-v129-product-driven-campaigns.mjs",
     "test:v129-1": "node scripts/test-v129-1-direct-campaign-policy.mjs",
     "test:v140": "node scripts/test-v140-safe-attempts-security-boozt.mjs",
-    "test:v141": "node scripts/test-v141-domain-cooldown.mjs"
+    "test:v141": "node scripts/test-v141-domain-cooldown.mjs",
+    "test:v142": "node scripts/test-v142-largest-product-images.mjs"
   },
   "dependencies": {
+    "@sparticuz/chromium": "141.0.0",
     "@supabase/supabase-js": "2.110.7",
     "lucide-react": "1.25.0",
     "next": "16.2.10",
     "openai": "6.48.0",
+    "puppeteer-core": "24.26.1",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "sharp": "0.34.5"

@@ -40,6 +40,12 @@ import {
   validateSingleProductCopyAgainstContract,
 } from "../../../../lib/productEngineV2.js";
 import {
+  collectProductImageCandidates,
+  isPreferredProductImage,
+  selectLargestVerifiedProductImage,
+} from "../../../../lib/productImageResolver.js";
+import { createProductImageBrowserSession } from "../../../../lib/headlessProductImageBrowser.js";
+import {
   buildStoreMapIntent,
   canonicalizeStoreMapUrl,
   classifyStoreMapLinkHint,
@@ -22738,6 +22744,265 @@ function shouldUseLogoForRule(rule, brandProfile) {
   return brandProfile.logo_enabled_by_default !== false;
 }
 
+async function fetchPublicImageForResolution(imageUrl) {
+  let currentUrl = await assertPublicHttpUrl(imageUrl);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+
+  try {
+    for (let redirectCount = 0; redirectCount <= 4; redirectCount += 1) {
+      const response = await fetch(currentUrl, {
+        method: "GET",
+        redirect: "manual",
+        signal: controller.signal,
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+            "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Spreelo/1.0",
+          // Explicitly prefer formats Sharp can decode reliably. In particular,
+          // do not negotiate AVIF/HEIF when a WebP/PNG/JPEG version exists.
+          Accept: "image/webp,image/png,image/jpeg;q=0.9",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+      });
+
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location");
+        if (!location || redirectCount === 4) {
+          throw new Error(`Product image redirect could not be followed: ${response.status}`);
+        }
+        currentUrl = await assertPublicHttpUrl(new URL(location, currentUrl).toString());
+        continue;
+      }
+
+      if (!response.ok) {
+        throw new Error(`Product image returned ${response.status}`);
+      }
+
+      const declaredBytes = Number(response.headers.get("content-length") || 0);
+      if (declaredBytes > 25 * 1024 * 1024) {
+        throw new Error("Product image is larger than the 25 MB inspection limit");
+      }
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (!buffer.length || buffer.length > 25 * 1024 * 1024) {
+        throw new Error("Product image is empty or larger than the inspection limit");
+      }
+      return {
+        buffer,
+        finalUrl: currentUrl,
+        contentType: response.headers.get("content-type") || "",
+      };
+    }
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  throw new Error("Product image redirect limit exceeded");
+}
+
+async function inspectProductImageForResolution(imageUrl) {
+  const sharp = getSharpRuntime();
+  const downloaded = await fetchPublicImageForResolution(imageUrl);
+  const metadata = await sharp(downloaded.buffer, {
+    limitInputPixels: 80_000_000,
+  })
+    .rotate()
+    .metadata();
+  const width = Number(metadata?.width || 0);
+  const height = Number(metadata?.height || 0);
+  if (!width || !height) {
+    throw new Error("Product image has no readable pixel dimensions");
+  }
+
+  const fingerprint = await sharp(downloaded.buffer, {
+    limitInputPixels: 80_000_000,
+  })
+    .rotate()
+    .resize(16, 16, { fit: "fill" })
+    .grayscale()
+    .raw()
+    .toBuffer();
+
+  return {
+    width,
+    height,
+    bytes: downloaded.buffer.length,
+    format: metadata?.format || null,
+    contentType: downloaded.contentType,
+    finalUrl: downloaded.finalUrl,
+    fingerprint: [...fingerprint],
+  };
+}
+
+function getProductImageResolverPageUrl(item) {
+  return String(
+    item?.url ||
+      item?.product_url ||
+      item?.item_url ||
+      item?.source_url ||
+      item?.website_url ||
+      ""
+  ).trim();
+}
+
+async function resolveLargestProductImagesBeforeGeneration({
+  items,
+  ruleId,
+}) {
+  const inputItems = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!inputItems.length) return [];
+
+  const inspectionCache = new Map();
+  const inspectImage = (url) => {
+    if (!inspectionCache.has(url)) {
+      inspectionCache.set(url, inspectProductImageForResolution(url));
+    }
+    return inspectionCache.get(url);
+  };
+  const resolutions = [];
+
+  for (const item of inputItems) {
+    const primaryImageUrl = String(item?.image_url || item?.imageUrl || "").trim();
+    const pageUrl = getProductImageResolverPageUrl(item);
+    let html = "";
+    if (pageUrl) {
+      try {
+        html = await fetchHtml(pageUrl);
+      } catch (error) {
+        console.warn("Product image resolver continued without static product HTML", {
+          ruleId,
+          productUrl: pageUrl,
+          message: error?.message || String(error),
+        });
+      }
+    }
+
+    const candidates = collectProductImageCandidates({
+      html,
+      pageUrl,
+      primaryImageUrl,
+      productTitle: item?.title || item?.item_title || "",
+    });
+    let selection = null;
+    try {
+      selection = await selectLargestVerifiedProductImage({
+        candidates,
+        primaryImageUrl,
+        inspectImage,
+        maximumInspections: 16,
+      });
+    } catch (error) {
+      console.warn("Product image candidates could not be verified", {
+        ruleId,
+        productUrl: pageUrl || null,
+        primaryImageUrl: primaryImageUrl || null,
+        candidateCount: candidates.length,
+        message: error?.message || String(error),
+      });
+    }
+
+    resolutions.push({
+      item,
+      html,
+      pageUrl,
+      primaryImageUrl,
+      staticCandidates: candidates,
+      selection,
+      browserUsed: false,
+    });
+  }
+
+  const browserNeeded = resolutions.filter(
+    (resolution) =>
+      resolution.pageUrl &&
+      !isPreferredProductImage(resolution.selection?.selected)
+  );
+  let browserSession = null;
+  if (
+    browserNeeded.length &&
+    process.env.DISABLE_PRODUCT_IMAGE_BROWSER !== "1"
+  ) {
+    try {
+      browserSession = await createProductImageBrowserSession({
+        validateUrl: assertPublicHttpUrl,
+      });
+      for (const resolution of browserNeeded) {
+        try {
+          const renderedCandidates = await browserSession.discover({
+            pageUrl: resolution.pageUrl,
+            primaryImageUrl: resolution.primaryImageUrl,
+          });
+          const candidates = collectProductImageCandidates({
+            html: resolution.html,
+            pageUrl: resolution.pageUrl,
+            primaryImageUrl: resolution.primaryImageUrl,
+            productTitle:
+              resolution.item?.title || resolution.item?.item_title || "",
+            renderedCandidates,
+          });
+          resolution.selection = await selectLargestVerifiedProductImage({
+            candidates,
+            primaryImageUrl: resolution.primaryImageUrl,
+            inspectImage,
+            maximumInspections: 20,
+          });
+          resolution.browserUsed = true;
+          resolution.renderedCandidateCount = renderedCandidates.length;
+          resolution.totalCandidateCount = candidates.length;
+        } catch (error) {
+          console.warn("Product image browser fallback could not improve the image", {
+            ruleId,
+            productUrl: resolution.pageUrl,
+            message: error?.message || String(error),
+          });
+        }
+      }
+    } catch (error) {
+      console.warn("Product image browser fallback was unavailable", {
+        ruleId,
+        affectedProductCount: browserNeeded.length,
+        message: error?.message || String(error),
+      });
+    } finally {
+      await browserSession?.close().catch(() => {});
+    }
+  }
+
+  return resolutions.map((resolution) => {
+    const selected = resolution.selection?.selected || null;
+    const selectedImageUrl = String(selected?.url || resolution.primaryImageUrl || "").trim();
+    const smallFallback =
+      !selected || Boolean(resolution.selection?.usedSmallImageFallback);
+    const upgradedItem = {
+      ...resolution.item,
+      image_url: selectedImageUrl || null,
+      product_image_source: selected?.source || "existing_small_image_fallback",
+      product_image_width: Number(selected?.width || 0) || null,
+      product_image_height: Number(selected?.height || 0) || null,
+      product_image_resolution_verified: Boolean(selected),
+      product_image_small_fallback: smallFallback,
+    };
+
+    console.info("Product image resolver selected largest verified image", {
+      ruleId,
+      productUrl: resolution.pageUrl || null,
+      originalImageUrl: resolution.primaryImageUrl || null,
+      selectedImageUrl: selectedImageUrl || null,
+      selectedWidth: upgradedItem.product_image_width,
+      selectedHeight: upgradedItem.product_image_height,
+      preferredQuality: Boolean(
+        selected && isPreferredProductImage(selected)
+      ),
+      usedSmallImageFallback: smallFallback,
+      browserUsed: resolution.browserUsed,
+      staticCandidateCount: resolution.staticCandidates.length,
+      renderedCandidateCount: resolution.renderedCandidateCount || 0,
+    });
+
+    return upgradedItem;
+  });
+}
+
 async function fetchImageBufferForOverlay(imageUrl) {
   const normalizedImageUrl = normalizeShopifyImageWidthUrl(imageUrl, 1600);
   if (!normalizedImageUrl || !/^https?:\/\//i.test(normalizedImageUrl)) {
@@ -22751,7 +23016,7 @@ async function fetchImageBufferForOverlay(imageUrl) {
       "User-Agent":
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
         "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Spreelo/1.0",
-      Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+      Accept: "image/webp,image/png,image/jpeg,image/svg+xml;q=0.9",
       "Accept-Language": "en-US,en;q=0.9",
     },
   });
@@ -25076,6 +25341,38 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
           }
         }
 
+        if (websiteItem?.image_url) {
+          const primaryItems = isCarouselRule(rule)
+            ? websiteItems
+            : [websiteItem];
+          const additionalItems = isAnimatedVideoRule(websitePreparedRule || rule)
+            ? websiteReserveItems
+            : [];
+          const primaryCount = primaryItems.length;
+          const resolvedItems = await resolveLargestProductImagesBeforeGeneration({
+            items: [...primaryItems, ...additionalItems],
+            ruleId: rule.id,
+          });
+
+          if (isCarouselRule(rule)) {
+            websiteItems = resolvedItems.slice(0, primaryCount);
+            websiteItem = websiteItems[0] || websiteItem;
+          } else {
+            websiteItem = resolvedItems[0] || websiteItem;
+          }
+          if (additionalItems.length) {
+            websiteReserveItems = resolvedItems.slice(primaryCount);
+          }
+          productContentContract = buildProductContentContract(
+            isCarouselRule(rule) ? websiteItems : [websiteItem],
+            websiteReserveItems
+          );
+          automationRunWebsiteItem = websiteItem;
+          automationRunWebsiteItems = isCarouselRule(rule)
+            ? websiteItems
+            : [websiteItem];
+        }
+
         if (isAnimatedVideoRule(websitePreparedRule || rule)) {
           const preparedAnimatedCandidates = await prepareAnimatedReelProductCandidates({
             primaryItem: websiteItem,
@@ -25323,7 +25620,10 @@ product_research_model_used: rule.uses_website_content
             "9:16 animated product Reel using an automatically selected uploaded MP4 background, the unchanged original website product, a separate OpenAI text overlay and Shotstack HTML5 zoom motion.";
 
           let finalVideoError = null;
-          const renderCandidates = animatedReelCandidates.slice(0, 4);
+          // The product image has already been resolved and verified before the
+          // paid content call. Render that selected product once instead of
+          // regenerating paid copy for several reserve products.
+          const renderCandidates = animatedReelCandidates.slice(0, 1);
 
           for (let attemptIndex = 0; attemptIndex < renderCandidates.length; attemptIndex += 1) {
             const candidate = renderCandidates[attemptIndex];
@@ -25341,32 +25641,9 @@ product_research_model_used: rule.uses_website_content
               product_content_contract: attemptContract,
               animated_product_image_selection: candidate.imageSelection,
             };
-            let attemptContent = generatedContent;
+            const attemptContent = generatedContent;
 
             try {
-              if (attemptIndex > 0) {
-                const reserveRawContent =
-                  await generateAutomationPostWithProductContractValidation(
-                    openai,
-                    attemptRule
-                  );
-                const reserveSanitizedContent = sanitizeUnsupportedOfferLanguage(
-                  reserveRawContent,
-                  candidate.item
-                );
-                attemptContent = cleanPostContentUrls(
-                  removePricesFromAnimatedCaption(
-                    reserveSanitizedContent,
-                    attemptRule
-                  ),
-                  getPostDestinationUrl(attemptRule)
-                );
-
-                if (!attemptContent) {
-                  throw new Error("OpenAI returned empty content for Reel reserve product");
-                }
-              }
-
               const animatedVideo = await generateAnimatedProductVideo({
                 openai,
                 supabase,

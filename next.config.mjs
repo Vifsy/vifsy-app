@@ -7,8 +7,14 @@ const nextConfig = {
       "node_modules/sharp/**/*",
       "node_modules/@img/sharp-linux-x64/**/*",
       "node_modules/@img/sharp-libvips-linux-x64/**/*",
+      "node_modules/@sparticuz/chromium/**/*",
     ],
   },
+  serverExternalPackages: [
+    "sharp",
+    "@sparticuz/chromium",
+    "puppeteer-core",
+  ],
 };
 
 export default nextConfig;
