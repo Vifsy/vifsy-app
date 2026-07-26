@@ -87,8 +87,7 @@ begin
   end if;
 
   if v_profile.active_job_until is not null
-     and v_profile.active_job_until > v_now
-     and v_profile.active_job_rule_id is distinct from p_rule_id then
+     and v_profile.active_job_until > v_now then
     v_wait_ms := greatest(0, ceil(extract(epoch from (v_profile.active_job_until - v_now)) * 1000));
     return jsonb_build_object(
       'acquired', false,
@@ -316,6 +315,12 @@ begin
           worker_name = nullif(trim(coalesce(p_worker_name, '')), ''),
           retry_not_before = null,
           finished_at = null,
+          failure_code = null,
+          failure_stage = null,
+          failure_message_internal = null,
+          failure_message_customer = null,
+          refunded_credits = 0,
+          notification_status = 'not_applicable',
           updated_at = now(),
           metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
             'resumed_after_website_rate_limit', true,

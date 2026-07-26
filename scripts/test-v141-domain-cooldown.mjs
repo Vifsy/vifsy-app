@@ -12,6 +12,10 @@ assert.match(route, /deferCurrentOccurrenceForWebsiteRateLimit/);
 assert.match(route, /automatic_retry_scheduled:\s*true/);
 assert.match(route, /throwIfWebsiteDomainCoolingDown/);
 assert.match(route, /finally\s*\{[\s\S]*releaseWebsiteDomainJobLock/);
+assert.match(route, /WEBSITE_RATE_LIMIT_MAX_RETRIES/);
+assert.match(route, /WEBSITE_RATE_LIMIT_RETRY_EXHAUSTED/);
+assert.match(route, /website_rate_limit_exhausted/);
+assert.match(route, /no verified\(\?: matching\)\? website product/);
 
 assert.match(migration, /status in \('running', 'retry_pending', 'completed', 'failed_terminal'\)/);
 assert.match(migration, /create or replace function public\.acquire_website_domain_job_lock/);
@@ -20,5 +24,7 @@ assert.match(migration, /automatic_run_count/);
 assert.match(migration, /blocked_claim_count = blocked_claim_count \+ 1/);
 assert.match(migration, /v_occurrence\.status = 'retry_pending'/);
 assert.doesNotMatch(migration, /credits_remaining = credits_remaining \+/);
+assert.doesNotMatch(migration, /active_job_rule_id is distinct from p_rule_id/);
+assert.match(migration, /failure_code = null,[\s\S]*failure_message_customer = null/);
 
 console.log("v141 domain cooldown and resumable product-job invariants passed.");

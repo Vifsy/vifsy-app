@@ -156,6 +156,10 @@ const WEBSITE_FETCH_ACQUIRE_ATTEMPTS = Math.max(
   2,
   Math.min(12, Number(process.env.WEBSITE_FETCH_ACQUIRE_ATTEMPTS || 8) || 8)
 );
+const WEBSITE_RATE_LIMIT_MAX_RETRIES = Math.max(
+  1,
+  Math.min(12, Number(process.env.WEBSITE_RATE_LIMIT_MAX_RETRIES || 5) || 5)
+);
 const WEBSITE_VERIFICATION_SOFT_DEADLINE_MS = 225_000;
 const CAROUSEL_PREPARATION_SOFT_DEADLINE_MS = Math.max(
   180_000,
@@ -9041,6 +9045,14 @@ function classifyAutomationCreationFailure(errorOrMessage, stage = "unhandled") 
   const normalized = message.toLowerCase();
   const normalizedStage = String(stage || "unhandled").toLowerCase();
 
+  if (errorOrMessage?.code === "WEBSITE_RATE_LIMIT_RETRY_EXHAUSTED") {
+    return {
+      code: "website_rate_limit_exhausted",
+      customerMessage:
+        "The website continued limiting access after several automatic cooldown attempts. This occurrence has been stopped and will not be retried automatically.",
+    };
+  }
+
   if (
     /website returned 403|http 403|forbidden|cloudflare|security protection|security_blocked/.test(normalized)
   ) {
@@ -9071,7 +9083,7 @@ function classifyAutomationCreationFailure(errorOrMessage, stage = "unhandled") 
   }
 
   if (
-    /no verified website product|no usable product|could not find.*product|needs at least .*products|product researcher returned no valid|product.*could not be normalized/.test(
+    /no verified(?: matching)? website product|no usable product|could not find.*product|needs at least .*products|product researcher returned no valid|product.*could not be normalized/.test(
       normalized
     ) || normalizedStage.includes("product_prepare")
   ) {
@@ -24435,6 +24447,22 @@ async function runAutomationCron(request, options = {}) {
           stage,
           metadata: extraSummary,
         });
+        if (result.retryCount >= WEBSITE_RATE_LIMIT_MAX_RETRIES) {
+          const exhaustedError = new Error(
+            `The website remained rate limited after ${result.retryCount} automatic cooldown attempts.`
+          );
+          exhaustedError.code = "WEBSITE_RATE_LIMIT_RETRY_EXHAUSTED";
+          await failCurrentOccurrence(exhaustedError, stage, {
+            ...extraSummary,
+            website_domain: result.domain || null,
+            retry_count: result.retryCount,
+            retry_exhausted: true,
+            retry_limit: WEBSITE_RATE_LIMIT_MAX_RETRIES,
+          });
+          summary.website_rate_limit_retries_exhausted =
+            Number(summary.website_rate_limit_retries_exhausted || 0) + 1;
+          return { ...result, terminal: true };
+        }
         await finishRunLog(
           "skipped",
           String(errorOrMessage?.message || errorOrMessage || "Website temporarily rate limited"),
@@ -24452,7 +24480,7 @@ async function runAutomationCron(request, options = {}) {
         );
         summary.website_rate_limited_deferred =
           Number(summary.website_rate_limited_deferred || 0) + 1;
-        return result;
+        return { ...result, terminal: false };
       };
 
       try {
@@ -24810,7 +24838,7 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
               carouselError?.productEngineDiagnostics || null;
 
             if (isWebsiteRateLimitError(carouselError)) {
-              await deferCurrentOccurrenceForWebsiteRateLimit(
+              const rateLimitResult = await deferCurrentOccurrenceForWebsiteRateLimit(
                 carouselError,
                 "carousel_product_prepare",
                 {
@@ -24820,7 +24848,12 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
                     carouselError?.productEngineDiagnostics || null,
                 }
               );
-              summary.skipped += 1;
+              if (rateLimitResult.terminal) {
+                summary.errors += 1;
+                summary.website_content_failed += 1;
+              } else {
+                summary.skipped += 1;
+              }
               continue;
             }
 
@@ -25876,10 +25909,14 @@ product_research_model_used: rule.uses_website_content
           automationOccurrenceId &&
           isWebsiteRateLimitError(error)
         ) {
-          await deferCurrentOccurrenceForWebsiteRateLimit(error, "unhandled", {
+          const rateLimitResult = await deferCurrentOccurrenceForWebsiteRateLimit(error, "unhandled", {
             website_domain: getWebsiteFetchDomain(error?.domain || error?.url || ""),
           });
-          summary.skipped += 1;
+          if (rateLimitResult.terminal) {
+            summary.errors += 1;
+          } else {
+            summary.skipped += 1;
+          }
         } else if (automationOccurrenceClaimed && automationOccurrenceId) {
           await failCurrentOccurrence(error, "unhandled");
           summary.errors += 1;
