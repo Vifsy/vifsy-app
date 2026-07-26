@@ -19,6 +19,9 @@
 - Ett aktivt domänlås blockerar även en återinträde från samma regel.
 - En återupptagen occurrence rensas från tidigare 429-felfält innan den kör vidare.
 - Feltexten `No verified matching website product...` klassas som `no_suitable_product`.
+- Cooldown-fel från store search, discovery pages och produktverifiering avslutar sökningen omedelbart och går direkt till `retry_pending`.
+- Resume behåller regelns kölås så att samma regel inte plockas av flera workers.
+- En återupptagen kampanj verifierar först sparade kandidater och sparar varje verifierat delresultat, så att retries successivt kan nå fem produkter och färdigställa inlägget.
 
 ## Kontrollera Boozt-marknaden
 

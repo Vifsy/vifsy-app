@@ -16,6 +16,21 @@ assert.match(route, /WEBSITE_RATE_LIMIT_MAX_RETRIES/);
 assert.match(route, /WEBSITE_RATE_LIMIT_RETRY_EXHAUSTED/);
 assert.match(route, /website_rate_limit_exhausted/);
 assert.match(route, /no verified\(\?: matching\)\? website product/);
+assert.match(route, /catch \(error\) \{\s*if \(isWebsiteRateLimitError\(error\)\) \{\s*throw error;\s*\}\s*console\.log\("Store search preselection failed for campaign carousel"/);
+assert.match(route, /catch \(error\) \{\s*if \(isWebsiteRateLimitError\(error\)\) \{\s*throw error;\s*\}\s*console\.error\("Could not fetch discovery page for product links"/);
+assert.match(route, /catch \(candidateError\) \{\s*if \(isWebsiteRateLimitError\(candidateError\)\) \{\s*throw candidateError;/);
+assert.match(route, /same_rule_product_job_already_running/);
+assert.match(route, /active_job_continues:\s*sameRuleAlreadyRunning/);
+assert.match(route, /resumedAfterWebsiteRateLimit = false/);
+assert.match(route, /automationOccurrenceResumedAfterWebsiteRateLimit/);
+assert.match(route, /Campaign carousel resumed from persistent candidate queue/);
+assert.match(route, /loadWebsiteProductCandidateQueue\([\s\S]*categoryUrl:\s*null,[\s\S]*limit:\s*180/);
+assert.match(route, /persistent_candidate_queue_verification/);
+assert.match(route, /isCampaignRule && !resumedAfterWebsiteRateLimit/);
+assert.match(route, /if \(resumeRateLimited && !hasLockedCampaignSearchPool\)/);
+assert.match(route, /catch \(storeSearchError\) \{\s*if \(isWebsiteRateLimitError\(storeSearchError\)\) \{\s*throw storeSearchError;/);
+assert.match(route, /catch \(discoveryError\) \{\s*if \(isWebsiteRateLimitError\(discoveryError\)\) \{\s*throw discoveryError;/);
+assert.match(route, /catch \(webSearchError\) \{\s*if \(isWebsiteRateLimitError\(webSearchError\)\) \{\s*throw webSearchError;/);
 
 assert.match(migration, /status in \('running', 'retry_pending', 'completed', 'failed_terminal'\)/);
 assert.match(migration, /create or replace function public\.acquire_website_domain_job_lock/);
@@ -26,5 +41,6 @@ assert.match(migration, /v_occurrence\.status = 'retry_pending'/);
 assert.doesNotMatch(migration, /credits_remaining = credits_remaining \+/);
 assert.doesNotMatch(migration, /active_job_rule_id is distinct from p_rule_id/);
 assert.match(migration, /failure_code = null,[\s\S]*failure_message_customer = null/);
+assert.match(migration, /queue_locked_until = greatest\([\s\S]*now\(\) \+ interval '15 minutes'/);
 
 console.log("v141 domain cooldown and resumable product-job invariants passed.");

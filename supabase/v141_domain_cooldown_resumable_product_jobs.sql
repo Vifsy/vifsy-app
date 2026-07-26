@@ -341,7 +341,10 @@ begin
           generation_notification_status = null,
           generation_notification_sent_at = null,
           retry_not_before = null,
-          queue_locked_until = null,
+          queue_locked_until = greatest(
+            coalesce(queue_locked_until, now()),
+            now() + interval '15 minutes'
+          ),
           updated_at = now()
       where id = p_rule_id;
 
