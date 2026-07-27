@@ -22,7 +22,8 @@
     "test:v142": "node scripts/test-v142-largest-product-images.mjs",
     "test:v142.2": "node scripts/test-v142-2-generic-product-verification.mjs",
     "test:v142.3": "node scripts/test-v142-3-search-first-campaign-products.mjs",
-    "test:v142.4": "node scripts/test-v142-4-verified-product-main-gallery.mjs"
+    "test:v142.4": "node scripts/test-v142-4-verified-product-main-gallery.mjs",
+    "test:v142.5": "node scripts/test-v142-5-senior-final-selection.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
