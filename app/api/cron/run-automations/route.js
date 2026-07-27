@@ -45,6 +45,7 @@ import {
   collectProductImageCandidates,
   isPreferredProductImage,
   selectLargestVerifiedProductImage,
+  selectMostLikelyMainProductGalleryImage,
 } from "../../../../lib/productImageResolver.js";
 import { createProductImageBrowserSession } from "../../../../lib/headlessProductImageBrowser.js";
 import {
@@ -15938,6 +15939,22 @@ function imageUrlMatchesProductIdentity(imageUrl, productUrl, productTitle = "")
 }
 
 function extractBestProductImageFromHtml(html, pageUrl, productTitle = "") {
+  // Once the page itself is verified as a product page, gallery placement is
+  // stronger evidence than words in a CDN filename. Rank the main product
+  // gallery first and keep filename matching only as a final conservative
+  // fallback for unstructured pages.
+  const galleryCandidates = collectProductImageCandidates({
+    html,
+    pageUrl,
+    productTitle,
+  }).filter((candidate) => !isBadProductImageUrl(candidate?.url));
+  const mainGalleryImage =
+    selectMostLikelyMainProductGalleryImage(galleryCandidates);
+
+  if (mainGalleryImage?.url) {
+    return mainGalleryImage.url;
+  }
+
   const product = findBestJsonLdProduct(html, pageUrl, productTitle);
   const jsonLdImage = getProductImageFromJsonLd(product, pageUrl);
 
@@ -15999,6 +16016,7 @@ async function extractProductDataFromProductPage({
     productSchemaFound,
     ecommerceProofFound,
   });
+  let renderedProductPageUsed = false;
 
   const ambiguousProductCandidate =
     pageClassification.reason === "multiple_product_cards" &&
@@ -16016,6 +16034,7 @@ async function extractProductDataFromProductPage({
   ) {
     const rendered = await renderProductPage(effectiveProductUrl);
     if (rendered?.html) {
+      renderedProductPageUsed = true;
       html = rendered.html;
       effectiveProductUrl = rendered.finalUrl || effectiveProductUrl;
       product = findBestJsonLdProduct(
@@ -16143,14 +16162,62 @@ async function extractProductDataFromProductPage({
     });
   }
 
-  const imageUrl =
-    extractBestProductImageFromHtml(html, effectiveProductUrl, title) ||
-    (webSearchProduct?.image_url &&
+  const directProductProof =
+    productSchemaFound ||
+    pageClassification.pageType === "product";
+  let imageUrl = extractBestProductImageFromHtml(
+    html,
+    effectiveProductUrl,
+    title
+  );
+
+  // A page can prove that it is a real product while keeping its main gallery
+  // behind client-side rendering. In that case render once and trust the
+  // gallery structure; opaque CDN filenames do not need to repeat the title.
+  if (
+    !imageUrl &&
+    directProductProof &&
+    !renderedProductPageUsed &&
+    typeof renderProductPage === "function"
+  ) {
+    const rendered = await renderProductPage(effectiveProductUrl);
+    if (rendered?.html) {
+      const renderedProductUrl = rendered.finalUrl || effectiveProductUrl;
+      const renderedImageUrl = extractBestProductImageFromHtml(
+        rendered.html,
+        renderedProductUrl,
+        title
+      );
+      if (renderedImageUrl) {
+        imageUrl = renderedImageUrl;
+        effectiveProductUrl = renderedProductUrl;
+        console.log("Product page main-gallery image recovered after rendered verification", {
+          productUrl,
+          finalUrl: effectiveProductUrl,
+          title,
+          imageUrl,
+        });
+      }
+    }
+  }
+
+  // Search/listing thumbnails are still a useful last resort once the target
+  // page itself has supplied direct product proof. The later resolution pass
+  // will replace this with the largest verified gallery asset when available.
+  if (
+    !imageUrl &&
+    webSearchProduct?.image_url &&
     isHttpUrl(webSearchProduct.image_url) &&
     !isBadProductImageUrl(webSearchProduct.image_url) &&
-    imageUrlMatchesProductIdentity(webSearchProduct.image_url, effectiveProductUrl, title)
-      ? webSearchProduct.image_url
-      : null);
+    (directProductProof ||
+      imageUrlMatchesProductIdentity(
+        webSearchProduct.image_url,
+        effectiveProductUrl,
+        title
+      ))
+  ) {
+    imageUrl = webSearchProduct.image_url;
+  }
 
   const normalizedItem = normalizeWebsiteItem(
     {
@@ -16207,9 +16274,6 @@ async function extractProductDataFromProductPage({
   };
 
   const confidence = getCarouselProductConfidence(verifiedProductItem);
-  const directProductProof =
-    productSchemaFound ||
-    pageClassification.pageType === "product";
 
   if (!directProductProof || confidence < CAROUSEL_PRODUCT_CONFIDENCE_SOFT_MIN) {
     console.log("Rejected product page candidate because product proof was too weak", {
