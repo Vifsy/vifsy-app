@@ -31,7 +31,7 @@ assert.match(route, /Math\.min\(\s*30,\s*Math\.max\(\s*resumedAfterWebsiteRateLi
 assert.match(route, /website_persistent_product_preflight/);
 assert.match(route, /isCampaignRule &&[\s\S]*!resumedAfterWebsiteRateLimit &&[\s\S]*!hasLockedCampaignSearchPool/);
 assert.match(route, /if \(persistentRateLimited && !hasLockedCampaignSearchPool\)/);
-assert.match(route, /Campaign carousel locked to first-pass Store Map pool/);
+assert.match(route, /Campaign carousel locked to Store Map Product Agent pool/);
 assert.match(route, /const WEBSITE_RATE_LIMIT_MAX_RETRIES = 2;/);
 assert.match(route, /Accept:\s*"image\/webp,image\/png,image\/jpeg/);
 assert.doesNotMatch(route, /Accept:\s*"image\/avif/);

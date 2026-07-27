@@ -19,7 +19,9 @@
     "test:v129-1": "node scripts/test-v129-1-direct-campaign-policy.mjs",
     "test:v140": "node scripts/test-v140-safe-attempts-security-boozt.mjs",
     "test:v141": "node scripts/test-v141-domain-cooldown.mjs",
-    "test:v142": "node scripts/test-v142-largest-product-images.mjs"
+    "test:v142": "node scripts/test-v142-largest-product-images.mjs",
+    "test:v142.2": "node scripts/test-v142-2-generic-product-verification.mjs",
+    "test:v142.3": "node scripts/test-v142-3-search-first-campaign-products.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

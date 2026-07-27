@@ -41,9 +41,9 @@ const discoverySearchStart = route.indexOf("function buildCampaignDiscoverySearc
 const discoverySearchEnd = route.indexOf("function buildLikelyDiscoveryUrls", discoverySearchStart);
 const discoverySearchBlock = route.slice(discoverySearchStart, discoverySearchEnd);
 assert.ok(
-  discoverySearchBlock.indexOf("for (const term of coreThemeTerms)") <
-    discoverySearchBlock.indexOf("for (const query of dedicatedQueries)"),
-  "Core campaign theme searches must run before broader dedicated queries"
+  discoverySearchBlock.indexOf("for (const query of dedicatedQueries)") <
+    discoverySearchBlock.indexOf("for (const term of coreThemeTerms)"),
+  "Concrete retailer-search queries must run before broad campaign themes"
 );
 
 const rule = {
