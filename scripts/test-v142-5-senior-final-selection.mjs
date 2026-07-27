@@ -81,7 +81,7 @@ const browser = fs.readFileSync(
 
 assert.match(
   route,
-  /CAMPAIGN_FINAL_REVIEW_SHORTLIST_LIMIT = (?:15|20)/
+  /CAMPAIGN_FINAL_REVIEW_SHORTLIST_LIMIT = (?:15|20|30)/
 );
 assert.match(route, /CAMPAIGN_FINAL_REVIEW_MIN_SCORE = 75/);
 assert.match(

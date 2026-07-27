@@ -16,12 +16,16 @@ assert.match(route, /controlled_incomplete_exit/);
 assert.match(route, /normalizedProductHostname === normalizedBaseHostname/);
 
 const earlyExitCall = route.indexOf(
-  "const storeMapEarlyExitResult = await finalizeCarouselFromStoreMapEarlyExit"
+  "await finalizeCarouselFromStoreMapEarlyExit"
 );
 const brandWideCatalogLoad = route.indexOf(
   "const brandWideCatalogItems = filterWebsiteCatalogItemsForRule"
 );
 assert.ok(earlyExitCall > 0, "Store Map early-exit call is missing");
+assert.ok(
+  route.lastIndexOf("if (!isCampaignRule)", earlyExitCall) > 0,
+  "Store Map early exit must remain restricted to non-campaign carousels"
+);
 assert.ok(
   brandWideCatalogLoad > earlyExitCall,
   "Store Map early exit must happen before brand-wide catalogs and legacy fallbacks"

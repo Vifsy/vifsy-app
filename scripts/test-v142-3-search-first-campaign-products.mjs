@@ -38,7 +38,7 @@ assert.match(route, /CAMPAIGN_STORE_SEARCH_PRODUCT_FIT_SCORE = 55/);
 assert.match(route, /Found by retailer search query:/);
 assert.match(route, /hasTrustedCampaignStoreSearchSignal/);
 assert.match(route, /Campaign store-search verification batch finished/);
-assert.match(route, /CAMPAIGN_STORE_SEARCH_VERIFICATION_BATCH_SIZE = 15/);
+assert.match(route, /CAMPAIGN_STORE_SEARCH_VERIFICATION_BATCH_SIZE = 24/);
 assert.match(route, /selectBalancedStoreSearchCandidates/);
 assert.match(route, /rendered_store_search_page/);
 assert.match(route, /RENDERED_STORE_SEARCH_PAGE_LIMIT/);

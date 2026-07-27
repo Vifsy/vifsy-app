@@ -11,7 +11,7 @@ const route = fs.readFileSync(
 );
 
 assert.match(route, /export const maxDuration = 600;/);
-assert.match(route, /CAROUSEL_PREPARATION_SOFT_DEADLINE_MS[\s\S]*300_000/);
+assert.match(route, /CAROUSEL_PREPARATION_SOFT_DEADLINE_MS[\s\S]*420_000/);
 assert.match(route, /const CAROUSEL_PRODUCT_RENDER_CONCURRENCY = 3;/);
 assert.match(route, /const productVerificationCache = new Map\(\);/);
 assert.match(route, /verification_cache_hit/);

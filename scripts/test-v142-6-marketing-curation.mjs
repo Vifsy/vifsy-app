@@ -6,8 +6,8 @@ const route = fs.readFileSync(
   "utf8"
 );
 
-assert.match(route, /CAMPAIGN_FINAL_REVIEW_SHORTLIST_LIMIT = 20/);
-assert.match(route, /CAMPAIGN_CURATION_RESCUE_VERIFY_LIMIT = 24/);
+assert.match(route, /CAMPAIGN_FINAL_REVIEW_SHORTLIST_LIMIT = 30/);
+assert.match(route, /CAMPAIGN_CURATION_RESCUE_VERIFY_LIMIT = 40/);
 assert.match(
   route,
   /async function generateCampaignCarouselMarketingStrategy/

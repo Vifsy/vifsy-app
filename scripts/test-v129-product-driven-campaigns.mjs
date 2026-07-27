@@ -168,18 +168,18 @@ assert.ok(automationCron.includes("entry.campaignSignal?.hasMeaningfulCampaignSi
 assert.ok(automationCron.includes("Only consider previously used winners after all fresh"));
 
 // Reel candidates are image-validated before selection. Shopify {width} URLs are
-// resolved, and one primary plus at most three reserves are attempted in one run.
+// resolved, and the current one-render-per-run safety limit is respected.
 assert.ok(automationCron.includes("function normalizeShopifyImageWidthUrl"));
 assert.ok(automationCron.includes("replace(/\\{\\s*width\\s*\\}/gi"));
 assert.ok(automationCron.includes("prepareAnimatedReelProductCandidates"));
 assert.ok(automationCron.includes("maximumCandidates: 4"));
-assert.ok(automationCron.includes("animatedReelCandidates.slice(0, 4)"));
+assert.ok(automationCron.includes("animatedReelCandidates.slice(0, 1)"));
 assert.ok(automationCron.includes("Animated Reel product attempt failed"));
 assert.ok(automationCron.includes("websiteItem = candidate.item"));
 assert.ok(automationCron.includes("usedWebsiteImageUrlsThisRun.add"));
 const reelAttemptBlock = automationCron.slice(
-  automationCron.indexOf("const renderCandidates = animatedReelCandidates.slice(0, 4)"),
-  automationCron.indexOf("} else if (wantsImage && isWebsiteTextAdRule", automationCron.indexOf("const renderCandidates = animatedReelCandidates.slice(0, 4)")),
+  automationCron.indexOf("const renderCandidates = animatedReelCandidates.slice(0, 1)"),
+  automationCron.indexOf("} else if (wantsImage && isWebsiteTextAdRule", automationCron.indexOf("const renderCandidates = animatedReelCandidates.slice(0, 1)")),
 );
 assert.ok(reelAttemptBlock.indexOf("usedWebsiteImageUrlsThisRun.add") > reelAttemptBlock.indexOf("videoUrl = animatedVideo.videoUrl"));
 const normalizeShopifyImageWidthUrl = new Function(
