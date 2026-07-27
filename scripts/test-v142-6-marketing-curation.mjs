@@ -6,8 +6,8 @@ const route = fs.readFileSync(
   "utf8"
 );
 
-assert.match(route, /CAMPAIGN_FINAL_REVIEW_SHORTLIST_LIMIT = 30/);
-assert.match(route, /CAMPAIGN_CURATION_RESCUE_VERIFY_LIMIT = 40/);
+assert.match(route, /CAMPAIGN_FINAL_REVIEW_SHORTLIST_LIMIT = 20/);
+assert.match(route, /CAMPAIGN_CURATION_RESCUE_VERIFY_LIMIT = 24/);
 assert.match(
   route,
   /async function generateCampaignCarouselMarketingStrategy/
@@ -27,17 +27,23 @@ assert.match(
 );
 
 const prepareStart = route.indexOf("async function prepareCarouselProductsForRule");
-const strategyCall = route.indexOf(
-  "generateCampaignCarouselMarketingStrategy({",
+const prepareEnd = route.indexOf(
+  "async function createAutomationRunLog",
   prepareStart
 );
+const prepareBlock = route.slice(prepareStart, prepareEnd);
 const vocabularyCall = route.indexOf(
   "ensureProductSearchQueriesForRule({",
   prepareStart
 );
 assert.ok(
-  prepareStart >= 0 && strategyCall > prepareStart && vocabularyCall > strategyCall,
-  "Senior strategy must be prepared before fast-model vocabulary/research"
+  prepareStart >= 0 && vocabularyCall > prepareStart,
+  "Fast-model vocabulary must be prepared before product research"
+);
+assert.doesNotMatch(
+  prepareBlock,
+  /generateCampaignCarouselMarketingStrategy\(\{/,
+  "The superseding bounded flow must reserve the senior model for final curation"
 );
 
 const finalStart = route.indexOf(
@@ -61,12 +67,9 @@ assert.doesNotMatch(
 );
 
 assert.match(route, /async function runCampaignCurationTargetedRescue/);
-assert.match(
-  route,
-  /\(!finalReview\.publishable \|\|[\s\S]{0,200}hasProductPreparationBudget\(75_000\)/
-);
-assert.match(route, /reviewPass: "targeted_rescue"/);
 assert.match(route, /campaign_curation_targeted_rescue/);
+assert.doesNotMatch(prepareBlock, /runCampaignCurationTargetedRescue\(\{/);
+assert.doesNotMatch(prepareBlock, /reviewPass: "targeted_rescue"/);
 assert.match(route, /researchModel: PRODUCT_RESEARCH_FAST_MODEL/);
 assert.match(
   route,

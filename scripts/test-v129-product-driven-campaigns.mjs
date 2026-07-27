@@ -161,14 +161,14 @@ assert.ok(automationCron.includes("function compareCampaignScoredCandidates"));
 assert.ok(automationCron.includes("campaignFitScore"));
 assert.ok(automationCron.includes("freshSupportingCandidateCount < CAROUSEL_PRODUCT_SLIDE_TARGET"));
 assert.ok(automationCron.includes("allowUsedAfterExhausted: allowCampaignReuseAfterExhausted"));
-assert.ok(automationCron.includes('process.env.STRICT_PRODUCT_NO_REUSE || "true"'));
+assert.ok(automationCron.includes('process.env.STRICT_PRODUCT_NO_REUSE || "false"'));
 assert.ok(automationCron.includes("allowUsedAfterExhausted = Boolean(allowUsedAfterExhausted)"));
 assert.ok(automationCron.includes("strongReserveCount < reserveTarget"));
 assert.ok(automationCron.includes("entry.campaignSignal?.hasMeaningfulCampaignSignal"));
 assert.ok(automationCron.includes("Only consider previously used winners after all fresh"));
 
 // Reel candidates are image-validated before selection. Shopify {width} URLs are
-// resolved, and the current one-render-per-run safety limit is respected.
+// resolved, and one primary plus at most three reserves are attempted in one run.
 assert.ok(automationCron.includes("function normalizeShopifyImageWidthUrl"));
 assert.ok(automationCron.includes("replace(/\\{\\s*width\\s*\\}/gi"));
 assert.ok(automationCron.includes("prepareAnimatedReelProductCandidates"));

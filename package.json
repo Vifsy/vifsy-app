@@ -25,7 +25,7 @@
     "test:v142.4": "node scripts/test-v142-4-verified-product-main-gallery.mjs",
     "test:v142.5": "node scripts/test-v142-5-senior-final-selection.mjs",
     "test:v142.6": "node scripts/test-v142-6-marketing-curation.mjs",
-    "test:v142.7": "node scripts/test-v142-7-professional-first-run.mjs"
+    "test:v142.8": "node scripts/test-v142-8-theme-first-bounded.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
