@@ -15,13 +15,18 @@
 - Inga krediter återbetalas eller debiteras på nytt under cooldown.
 - Samma occurrence återupptas efter `retry_not_before` utan att öka `automatic_run_count`.
 - Första 429 ger minst två minuters väntan; upprepade 429 ger längre backoff.
-- Efter fem cooldown-försök stoppas occurrence terminalt och reserverade krediter återbetalas. Gränsen kan ändras med `WEBSITE_RATE_LIMIT_MAX_RETRIES` (1–12).
+- Högst två kompletta 429-drabbade körningar tillåts för samma occurrence: första försöket och ett enda automatiskt återförsök. Det hårda taket är två även om en äldre miljövariabel har ett högre värde.
 - Ett aktivt domänlås blockerar även en återinträde från samma regel.
 - En återupptagen occurrence rensas från tidigare 429-felfält innan den kör vidare.
 - Feltexten `No verified matching website product...` klassas som `no_suitable_product`.
 - Cooldown-fel från store search, discovery pages och produktverifiering avslutar sökningen omedelbart och går direkt till `retry_pending`.
 - Resume behåller regelns kölås så att samma regel inte plockas av flera workers.
-- En återupptagen kampanj verifierar först sparade kandidater och sparar varje verifierat delresultat, så att retries successivt kan nå fem produkter och färdigställa inlägget.
+- Redan första kampanjkörningen använder verifierad katalog och sparad kandidatkö före ny butikssökning.
+- Det enda återförsöket hoppar över den dyra butikssökningen och domän-webbsökningen, verifierar sparade kandidater först och sparar varje verifierat delresultat.
+- Första körningen använder därefter Store Map-vägen som lyckades i den verifierade Boozt-körningen, innan butikssökning och webbsökning.
+- Smala produkthyllor prioriteras före mycket breda avdelningar och Store Map får fortsätta tillräckligt länge för att samla fem kampanjrelevanta produkter i samma körning.
+- Ett återförsök verifierar upp till 24 sparade kandidater i stället för åtta.
+- Bildhämtning begär WebP/JPEG/PNG i stället för AVIF/HEIF som den driftsatta bildmotorn inte kunde avkoda.
 
 ## Kontrollera Boozt-marknaden
 

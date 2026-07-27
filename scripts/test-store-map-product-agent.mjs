@@ -4,6 +4,7 @@ import {
   canonicalizeStoreMapUrl,
   classifyStoreMapLinkHint,
   getStoreOriginUrl,
+  prioritizeStoreMapShelvesForExecution,
   rankStoreMapNodes,
   shouldRefreshStoreMap,
 } from "../lib/storeMapProductAgent.js";
@@ -74,6 +75,28 @@ const ranked = rankStoreMapNodes(
   3
 );
 assert.equal(ranked[0].title, "Halloween candy");
+
+const winterShelves = prioritizeStoreMapShelvesForExecution([
+  {
+    title: "Clothing 10 356",
+    url: "https://example.com/eu/en/women/collections/nordic-style/clothing",
+    product_link_count: 10356,
+    store_map_intent_score: 87,
+    store_map_ai_score: 100,
+  },
+  {
+    title: "Boots 213",
+    url: "https://example.com/eu/en/women/collections/nordic-style/shoes/boots",
+    product_link_count: 213,
+    store_map_intent_score: 87,
+    store_map_ai_score: 95,
+  },
+]);
+assert.equal(
+  winterShelves[0].title,
+  "Boots 213",
+  "Specific product shelves must run before oversized broad departments"
+);
 assert.equal(shouldRefreshStoreMap([], { minimumNodes: 2 }), true);
 assert.equal(
   shouldRefreshStoreMap(

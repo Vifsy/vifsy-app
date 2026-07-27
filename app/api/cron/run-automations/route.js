@@ -53,6 +53,7 @@ import {
   extractStoreMapKeywords,
   getStoreMapAgentTargets,
   getStoreOriginUrl,
+  prioritizeStoreMapShelvesForExecution,
   rankStoreMapNodes,
   shouldRefreshStoreMap,
 } from "../../../../lib/storeMapProductAgent.js";
@@ -162,10 +163,11 @@ const WEBSITE_FETCH_ACQUIRE_ATTEMPTS = Math.max(
   2,
   Math.min(12, Number(process.env.WEBSITE_FETCH_ACQUIRE_ATTEMPTS || 8) || 8)
 );
-const WEBSITE_RATE_LIMIT_MAX_RETRIES = Math.max(
-  1,
-  Math.min(12, Number(process.env.WEBSITE_RATE_LIMIT_MAX_RETRIES || 5) || 5)
-);
+// The counter includes the first run that received a 429. Exactly two complete
+// runs are allowed: the initial run and one different, persistent-first retry.
+// This is deliberately not environment-configurable, so an old Vercel value
+// cannot reopen an unbounded automation cost.
+const WEBSITE_RATE_LIMIT_MAX_RETRIES = 2;
 const WEBSITE_VERIFICATION_SOFT_DEADLINE_MS = 225_000;
 const CAROUSEL_PREPARATION_SOFT_DEADLINE_MS = Math.max(
   180_000,
@@ -4787,7 +4789,9 @@ async function rankStoreMapShelvesWithAi({
   const intent = buildStoreMapIntentForRule(rule);
   const deterministic = rankStoreMapNodes(nodes, intent, 50);
   if (!openai || deterministic.length < 2) {
-    return deterministic.slice(0, STORE_MAP_AGENT_TARGETS.shelfSelectionLimit);
+    return prioritizeStoreMapShelvesForExecution(
+      deterministic.slice(0, STORE_MAP_AGENT_TARGETS.shelfSelectionLimit)
+    );
   }
 
   const shelfBlock = deterministic
@@ -4869,13 +4873,20 @@ Return strict JSON only:
       selected.push(node);
     }
 
-    return selected;
+    // Inspect specific leaf shelves before broad departments. In the observed
+    // winter campaign, a generic "Clothing" shelf consumed most of the agent
+    // deadline while the later "Boots" shelf contained all five deliverable
+    // products. AI relevance still leads the score, but depth and broadness
+    // decide close calls so the useful shelf is verified in the first run.
+    return prioritizeStoreMapShelvesForExecution(selected);
   } catch (error) {
     console.log("Store Map AI shelf ranking unavailable; using deterministic ranking", {
       ruleId: rule?.id,
       message: error.message,
     });
-    return deterministic.slice(0, STORE_MAP_AGENT_TARGETS.shelfSelectionLimit);
+    return prioritizeStoreMapShelvesForExecution(
+      deterministic.slice(0, STORE_MAP_AGENT_TARGETS.shelfSelectionLimit)
+    );
   }
 }
 
@@ -4903,7 +4914,9 @@ async function discoverProductsFromStoreMapAgent({
   const agentTargets = getStoreMapAgentTargets(requiredCount);
   const startedAt = Date.now();
   const agentDeadline = Math.min(
-    startedAt + (requiredCount >= 5 ? 150_000 : 95_000),
+    // One sufficiently deep first pass is cheaper than several truncated
+    // retries. The route still has its own five-minute preparation deadline.
+    startedAt + (requiredCount >= 5 ? 240_000 : 95_000),
     deadlineMs
   );
   const storeMap = await buildOrRefreshWebsiteStoreMap({
@@ -5901,11 +5914,19 @@ async function prepareCarouselProductsForRule({
     });
   }
 
-  if (isCampaignRule && resumedAfterWebsiteRateLimit) {
-    triedStoreSearchForCampaign = true;
-    triedCampaignWebSearchBeforeStoreMap = true;
+  if (isCampaignRule) {
+    if (resumedAfterWebsiteRateLimit) {
+      // A resumed run must not repeat the expensive store-search and domain
+      // web-search phases that already ran during the first attempt.
+      triedStoreSearchForCampaign = true;
+      triedCampaignWebSearchBeforeStoreMap = true;
+    }
 
-    const queuedResumeCandidates = await loadWebsiteProductCandidateQueue({
+    // Reuse persistent work before every fresh discovery attempt, including the
+    // first run. Existing verified catalog rows can complete the carousel
+    // without another store request, while pending candidates are the cheapest
+    // useful pages to verify if the catalog is not ready yet.
+    const queuedPersistentCandidates = await loadWebsiteProductCandidateQueue({
       supabase,
       rule,
       sourceUrl: websiteUrl,
@@ -5913,36 +5934,49 @@ async function prepareCarouselProductsForRule({
       limit: 180,
     });
 
-    if (queuedResumeCandidates.length) {
-      let resumedVerifiedItems = await verifyDiscoveredWebsiteProductCandidates({
-        candidates: queuedResumeCandidates,
-        websiteUrl,
-        limit: Math.min(
-          24,
-          Math.max(
-            CAROUSEL_PRODUCT_SLIDE_TARGET + 3,
-            PRODUCT_ENGINE_V2_POOL_TARGETS.minimumVerifiedPool
-          )
-        ),
-        deadlineMs: productPreparationDeadline,
-        verificationCache: productVerificationCache,
-        supabase,
-        rule,
-      });
-      const resumeRateLimited = Boolean(resumedVerifiedItems.rateLimited);
-      const resumeRetryAfterMs = Number(resumedVerifiedItems.retryAfterMs || 0);
+    if (queuedPersistentCandidates.length || catalogItems.length) {
+      let persistentVerifiedItems = [];
+      if (queuedPersistentCandidates.length) {
+        persistentVerifiedItems = await verifyDiscoveredWebsiteProductCandidates({
+          candidates: queuedPersistentCandidates,
+          websiteUrl,
+          limit: Math.min(
+            30,
+            Math.max(
+              resumedAfterWebsiteRateLimit ? 24 : 12,
+              CAROUSEL_PRODUCT_SLIDE_TARGET + 3,
+              PRODUCT_ENGINE_V2_POOL_TARGETS.minimumVerifiedPool
+            )
+          ),
+          deadlineMs: productPreparationDeadline,
+          verificationCache: productVerificationCache,
+          supabase,
+          rule,
+        });
+      }
 
-      const resumePoolSeed = dedupeWebsiteItemsByUrlTitleAndImage([
-        ...resumedVerifiedItems,
+      const persistentRateLimited = Boolean(persistentVerifiedItems.rateLimited);
+      const persistentRetryAfterMs = Number(
+        persistentVerifiedItems.retryAfterMs || 0
+      );
+      let persistentPoolSeed = dedupeWebsiteItemsByUrlTitleAndImage([
+        ...persistentVerifiedItems,
         ...catalogItems,
       ]).slice(0, 40);
-      if (resumePoolSeed.length) {
-        resumedVerifiedItems = await applyAiCampaignFitScores({
+      const alreadyAiScoredCount = persistentPoolSeed.filter(
+        (item) => getAiCampaignFitScore(item) !== null
+      ).length;
+
+      if (
+        persistentPoolSeed.length &&
+        alreadyAiScoredCount < CAROUSEL_PRODUCT_SLIDE_TARGET
+      ) {
+        persistentPoolSeed = await applyAiCampaignFitScores({
           openai,
           rule,
           brandProfile,
-          items: resumePoolSeed,
-          maxItems: Math.min(CAMPAIGN_AI_FAST_SCORE_LIMIT, resumePoolSeed.length),
+          items: persistentPoolSeed,
+          maxItems: Math.min(CAMPAIGN_AI_FAST_SCORE_LIMIT, persistentPoolSeed.length),
           model: PRODUCT_RESEARCH_FAST_MODEL,
           escalateWhenUncertain: true,
           escalationModel: PRODUCT_RESEARCH_MODEL,
@@ -5951,15 +5985,15 @@ async function prepareCarouselProductsForRule({
         });
       }
 
-      const resumedPoolItems = buildCampaignSearchPoolItems({
-        verifiedItems: resumedVerifiedItems,
+      const persistentPoolItems = buildCampaignSearchPoolItems({
+        verifiedItems: persistentPoolSeed,
         websiteUrl,
         rule,
         selectionPriority: 280,
         scoreBonus: 25,
       });
-      const freshSafeResumedItems = getFreshCarouselProductCandidates({
-        items: getSafeCampaignProductCandidates(resumedPoolItems, rule),
+      const freshSafePersistentItems = getFreshCarouselProductCandidates({
+        items: getSafeCampaignProductCandidates(persistentPoolItems, rule),
         rule,
         sourceUrl: websiteUrl,
         recentUsedItems,
@@ -5967,42 +6001,125 @@ async function prepareCarouselProductsForRule({
       });
 
       catalogItems = dedupeWebsiteItemsByUrlTitleAndImage([
-        ...resumedPoolItems,
+        ...persistentPoolItems,
         ...catalogItems,
       ]);
-      lockedCampaignSearchPoolItems = freshSafeResumedItems;
+      lockedCampaignSearchPoolItems = dedupeWebsiteItemsByUrlTitleAndImage([
+        ...lockedCampaignSearchPoolItems,
+        ...freshSafePersistentItems,
+      ]);
       hasLockedCampaignSearchPool =
         lockedCampaignSearchPoolItems.length >= CAROUSEL_PRODUCT_SLIDE_TARGET;
-      summary.website_candidate_queue_resumed =
-        Number(summary.website_candidate_queue_resumed || 0) + 1;
 
-      console.log("Campaign carousel resumed from persistent candidate queue", {
+      if (resumedAfterWebsiteRateLimit) {
+        summary.website_candidate_queue_resumed =
+          Number(summary.website_candidate_queue_resumed || 0) + 1;
+      } else {
+        summary.website_persistent_product_preflight =
+          Number(summary.website_persistent_product_preflight || 0) + 1;
+      }
+
+      console.log("Campaign carousel loaded persistent product work before fresh discovery", {
         ruleId: rule.id,
         brandProfileId: rule.brand_profile_id,
         websiteUrl,
-        queuedCandidateCount: queuedResumeCandidates.length,
-        verifiedPoolCount: resumedPoolItems.length,
-        freshSafeCount: freshSafeResumedItems.length,
+        resumedAfterWebsiteRateLimit,
+        queuedCandidateCount: queuedPersistentCandidates.length,
+        catalogCandidateCount: catalogItems.length,
+        verifiedPoolCount: persistentPoolItems.length,
+        freshSafeCount: freshSafePersistentItems.length,
         lockedSearchPool: hasLockedCampaignSearchPool,
-        rateLimited: resumeRateLimited,
-        retryAfterMs: resumeRetryAfterMs,
+        rateLimited: persistentRateLimited,
+        retryAfterMs: persistentRetryAfterMs,
       });
 
-      if (resumeRateLimited && !hasLockedCampaignSearchPool) {
+      if (persistentRateLimited && !hasLockedCampaignSearchPool) {
         const rateLimitError = new WebsiteRateLimitError(
-          "The website rate limited resumed candidate verification before enough products were ready.",
+          resumedAfterWebsiteRateLimit
+            ? "The website rate limited the second-pass candidate verification before enough products were ready."
+            : "The website rate limited persistent candidate verification before enough products were ready.",
           {
             url: websiteUrl,
             domain: getWebsiteFetchDomain(websiteUrl),
-            retryAfterMs: resumeRetryAfterMs,
+            retryAfterMs: persistentRetryAfterMs,
             status: 429,
           }
         );
-        rateLimitError.partialProducts = freshSafeResumedItems;
+        rateLimitError.partialProducts = freshSafePersistentItems;
         throw rateLimitError;
       }
     }
   }
+
+  let storeMapAgentResult = {
+    products: [],
+    mapNodes: [],
+    selectedShelves: [],
+    diagnostics: { enabled: STORE_MAP_PRODUCT_AGENT_ENABLED },
+  };
+  let storeMapAgentAttempted = false;
+
+  const runStoreMapProductAgentOnce = async () => {
+    if (
+      storeMapAgentAttempted ||
+      !STORE_MAP_PRODUCT_AGENT_ENABLED ||
+      hasLockedCampaignSearchPool ||
+      !hasProductPreparationBudget(90_000)
+    ) {
+      return storeMapAgentResult;
+    }
+
+    storeMapAgentAttempted = true;
+    try {
+      storeMapAgentResult = await discoverProductsFromStoreMapAgent({
+        supabase,
+        openai,
+        rule,
+        brandProfile,
+        websiteUrl,
+        recentUsedItems,
+        usedWebsiteImageUrlsThisRun,
+        verificationCache: productVerificationCache,
+        deadlineMs: productPreparationDeadline,
+      });
+
+      if (storeMapAgentResult.products.length) {
+        catalogItems = dedupeWebsiteItemsByUrlTitleAndImage([
+          ...storeMapAgentResult.products.map((item) => ({
+            ...item,
+            selection_priority: Math.max(
+              Number(item?.selection_priority || 0),
+              280
+            ),
+            campaign_fit_source:
+              item?.campaign_fit_source || "store_map_product_agent",
+          })),
+          ...catalogItems,
+        ]);
+      }
+    } catch (error) {
+      if (isWebsiteRateLimitError(error)) {
+        throw error;
+      }
+      console.log("Store Map Product Agent could not complete; continuing with existing product fallbacks", {
+        ruleId: rule.id,
+        brandProfileId: rule.brand_profile_id,
+        websiteUrl,
+        message: error.message,
+      });
+      storeMapAgentResult = {
+        products: [],
+        mapNodes: [],
+        selectedShelves: [],
+        diagnostics: {
+          enabled: true,
+          error: error.message,
+        },
+      };
+    }
+
+    return storeMapAgentResult;
+  };
 
   async function buildLockedCampaignSearchPool({
     selectionPriority = 75,
@@ -6167,12 +6284,64 @@ async function prepareCarouselProductsForRule({
     }
   }
 
+  // The successful third v141.3 attempt came from Store Map, not from repeating
+  // store search. Run that proven path during the first attempt, directly after
+  // persistent candidates, and only pay for fresh search fallbacks if Store Map
+  // still cannot produce five campaign-safe products.
+  if (isCampaignRule && !hasLockedCampaignSearchPool) {
+    await runStoreMapProductAgentOnce();
+    const earlySafeStoreMapProducts = getFreshCarouselProductCandidates({
+      items: getSafeCampaignProductCandidates(storeMapAgentResult.products, rule),
+      rule,
+      sourceUrl: websiteUrl,
+      recentUsedItems,
+      usedWebsiteImageUrlsThisRun,
+    });
+    if (earlySafeStoreMapProducts.length >= CAROUSEL_PRODUCT_SLIDE_TARGET) {
+      lockedCampaignSearchPoolItems = earlySafeStoreMapProducts;
+      hasLockedCampaignSearchPool = true;
+      console.log("Campaign carousel locked to first-pass Store Map pool", {
+        ruleId: rule.id,
+        brandProfileId: rule.brand_profile_id,
+        websiteUrl,
+        verifiedProductCount: storeMapAgentResult.products.length,
+        freshSafeProductCount: earlySafeStoreMapProducts.length,
+        selectedShelves: storeMapAgentResult.selectedShelves
+          .slice(0, 8)
+          .map((shelf) => ({
+            title: shelf.title || null,
+            url: shelf.url,
+            executionPriority:
+              Number(shelf.store_map_execution_priority || 0) || null,
+          })),
+      });
+    }
+    if (
+      !hasLockedCampaignSearchPool &&
+      storeMapAgentResult?.diagnostics?.rate_limited
+    ) {
+      throw new WebsiteRateLimitError(
+        "The website temporarily rate limited the first-pass Store Map product verification.",
+        {
+          url: websiteUrl,
+          domain: getWebsiteFetchDomain(websiteUrl),
+          retryAfterMs: Number(
+            storeMapAgentResult.diagnostics.retry_after_ms || 0
+          ),
+          status: 429,
+        }
+      );
+    }
+  }
 
-  // Campaign carousels start with the store's own search. This is normally the
-  // fastest and most precise way to find motif/occasion products. Domain-limited
-  // web search is the second source, and Store Map remains the structural fallback
-  // when the first two sources cannot deliver five fresh campaign-safe products.
-  if (isCampaignRule && !resumedAfterWebsiteRateLimit) {
+
+  // Only use fresh store search after the persistent catalog/candidate preflight
+  // has failed to deliver five products. A resumed run never repeats this phase.
+  if (
+    isCampaignRule &&
+    !resumedAfterWebsiteRateLimit &&
+    !hasLockedCampaignSearchPool
+  ) {
     await buildLockedCampaignSearchPool({
       selectionPriority: 230,
       scoreBonus: 15,
@@ -6254,65 +6423,13 @@ async function prepareCarouselProductsForRule({
     }
   }
 
-  let storeMapAgentResult = {
-    products: [],
-    mapNodes: [],
-    selectedShelves: [],
-    diagnostics: { enabled: STORE_MAP_PRODUCT_AGENT_ENABLED },
-  };
-
   if (
+    !storeMapAgentAttempted &&
     STORE_MAP_PRODUCT_AGENT_ENABLED &&
     !hasLockedCampaignSearchPool &&
     hasProductPreparationBudget(90_000)
   ) {
-    try {
-      storeMapAgentResult = await discoverProductsFromStoreMapAgent({
-        supabase,
-        openai,
-        rule,
-        brandProfile,
-        websiteUrl,
-        recentUsedItems,
-        usedWebsiteImageUrlsThisRun,
-        verificationCache: productVerificationCache,
-        deadlineMs: productPreparationDeadline,
-      });
-
-      if (storeMapAgentResult.products.length) {
-        catalogItems = dedupeWebsiteItemsByUrlTitleAndImage([
-          ...storeMapAgentResult.products.map((item) => ({
-            ...item,
-            selection_priority: Math.max(
-              Number(item?.selection_priority || 0),
-              280
-            ),
-            campaign_fit_source:
-              item?.campaign_fit_source || "store_map_product_agent",
-          })),
-          ...catalogItems,
-        ]);
-      }
-    } catch (error) {
-      if (isWebsiteRateLimitError(error)) {
-        throw error;
-      }
-      console.log("Store Map Product Agent could not complete; continuing with existing product fallbacks", {
-        ruleId: rule.id,
-        brandProfileId: rule.brand_profile_id,
-        websiteUrl,
-        message: error.message,
-      });
-      storeMapAgentResult = {
-        products: [],
-        mapNodes: [],
-        selectedShelves: [],
-        diagnostics: {
-          enabled: true,
-          error: error.message,
-        },
-      };
-    }
+    await runStoreMapProductAgentOnce();
   }
 
   const storeMapEarlyExitResult = await finalizeCarouselFromStoreMapEarlyExit({
