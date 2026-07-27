@@ -79,7 +79,10 @@ const browser = fs.readFileSync(
   "utf8"
 );
 
-assert.match(route, /CAMPAIGN_FINAL_REVIEW_SHORTLIST_LIMIT = 15/);
+assert.match(
+  route,
+  /CAMPAIGN_FINAL_REVIEW_SHORTLIST_LIMIT = (?:15|20)/
+);
 assert.match(route, /CAMPAIGN_FINAL_REVIEW_MIN_SCORE = 75/);
 assert.match(
   route,
