@@ -6,7 +6,11 @@ const route = fs.readFileSync(
   "utf8"
 );
 
-assert.match(route, /CAMPAIGN_FINAL_REVIEW_SHORTLIST_LIMIT = 20/);
+assert.match(
+  route,
+  /CAMPAIGN_FINAL_REVIEW_SHORTLIST_LIMIT = 15/,
+  "The final senior prompt must use the compact bounded shortlist"
+);
 assert.match(route, /CAMPAIGN_CURATION_RESCUE_VERIFY_LIMIT = 24/);
 assert.match(
   route,
@@ -61,7 +65,15 @@ assert.match(
   /Do not reject a reasonable thematic product merely because it lacks a formal strategy slot/
 );
 assert.match(finalBlock, /"publishable": true/);
-assert.match(finalBlock, /"missing_needs"/);
+assert.match(
+  finalBlock,
+  /Return compact evaluations for the selected products/
+);
+assert.doesNotMatch(
+  finalBlock,
+  /"missing_needs":/,
+  "The bounded senior prompt must not spend output on optional rescue planning"
+);
 assert.match(finalBlock, /rejectedProducts:/);
 assert.doesNotMatch(
   finalBlock,
