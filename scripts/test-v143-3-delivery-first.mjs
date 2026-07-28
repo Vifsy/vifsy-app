@@ -17,8 +17,8 @@ assert.match(
 );
 assert.match(
   routeSource,
-  /isExplicitCampaignFitRejected\(item\) &&\s*!hasDirectCampaignEvidenceForRule\(item, rule\)/u,
-  "A broad AI/category rejection must not veto direct evidence in the concrete product."
+  /return isExplicitCampaignFitRejected\(item\);/u,
+  "An explicit product rejection must not be revived by search-page or generated theme wording."
 );
 assert.doesNotMatch(
   routeSource,

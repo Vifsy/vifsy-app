@@ -13442,19 +13442,6 @@ function getWebsiteSearchLanguageHint({ websiteUrl, brandProfile, rule } = {}) {
     rule?.language || brandProfile?.content_language,
     80
   );
-  let url;
-  try {
-    url = new URL(String(websiteUrl || ""));
-  } catch {
-    return configuredLanguage || "Use the language visible on the website";
-  }
-
-  const pathLocale = String(url.pathname || "")
-    .split("/")
-    .filter(Boolean)
-    .find((segment) => /^[a-z]{2}(?:-[a-z]{2})?$/i.test(segment));
-  const tld = String(url.hostname || "").split(".").pop()?.toLowerCase();
-  const localeCode = String(pathLocale || tld || "").toLowerCase().slice(0, 2);
   const languageByCode = {
     sv: "Swedish",
     se: "Swedish",
@@ -13472,6 +13459,23 @@ function getWebsiteSearchLanguageHint({ websiteUrl, brandProfile, rule } = {}) {
     en: "English",
     uk: "English",
   };
+  let url;
+  try {
+    url = new URL(String(websiteUrl || ""));
+  } catch {
+    return configuredLanguage || "Use the language visible on the website";
+  }
+
+  const pathLocale = String(url.pathname || "")
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => String(segment || "").toLowerCase())
+    .find((segment) => {
+      const languageCode = segment.split("-")[0];
+      return Boolean(languageByCode[languageCode]);
+    });
+  const tld = String(url.hostname || "").split(".").pop()?.toLowerCase();
+  const localeCode = String(pathLocale || tld || "").toLowerCase().slice(0, 2);
   const websiteLanguage = languageByCode[localeCode];
 
   if (websiteLanguage && configuredLanguage) {
@@ -13992,6 +13996,8 @@ Rules:
 - Also return explicit competing_theme_terms for nearby but different occasions/themes that a retailer search could mix into the results. Derive these semantically for this campaign and the website/product languages; do not use a fixed holiday list.
 - Competing terms are ranking guidance only. They must never remove a product or prevent delivery, and the current primary theme must never appear in that list.
 - Put concrete local-language theme plus product/category searches first, then add broader approved theme searches later.
+- Include at least one very short retailer-native head query for the campaign domain. It should be the ordinary word a shopper would type before narrowing by product type or recipient, not merely the full campaign title repeated in every query.
+- When the storefront language differs from the campaign-copy language, create the head query and the strongest product/category queries in the storefront language. Campaign-copy-language variants may follow later.
 - Also infer a small set of natural product/category directions for the campaign and this company. These searches do not need to repeat the theme word. For example, an occasion may naturally support particular clothing, accessories, decorations, food or services depending on what this company actually sells.
 - Put those concrete directions in secondary_context and use them in product_search_queries.
 - Never use a standalone generic gift, present, gift-card, bestseller or personalization query merely because almost anything can be given away.
@@ -15937,10 +15943,10 @@ function hasDirectCampaignEvidenceForRule(item, rule) {
 }
 
 function isCampaignFitRejectedForRule(item, rule) {
-  return (
-    isExplicitCampaignFitRejected(item) &&
-    !hasDirectCampaignEvidenceForRule(item, rule)
-  );
+  // Once either AI review explicitly rejects a product, discovery keywords or
+  // a search-page theme match must never revive it. This keeps the delivery
+  // guarantee from publishing a product that the curator already ruled out.
+  return isExplicitCampaignFitRejected(item);
 }
 
 function isCampaignThemeFitApproved(item) {
@@ -16118,6 +16124,7 @@ Important:
 - You are intentionally not shown the retailer search query or discovery source. Judge only the verified product facts. Retrieval provenance is never product-level evidence.
 - Audience or recipient terms describe who may use or receive a product; they are not proof that the product expresses the campaign occasion/theme.
 - A product explicitly made for another recipient, occasion or theme must not be promoted as a direct match merely because it shares a generic product type or buying context.
+- Treat an explicit recipient or audience conflict as does_not_fit. For example, when the campaign is expressly for children, a product identified by its supplied title, category, description or URL as adult womenswear or menswear must not be reinterpreted as youth clothing merely because it could theoretically be worn at school.
 - Prefer products that naturally support the campaign reason to buy, not products that merely share generic words with the prompt.
 - Do not reward generic words such as product, shop, buy, custom, print, collection, gift, offer, post or social media unless the product itself clearly fits the campaign.
 - Treat campaign avoid terms as soft ranking guidance, not as a veto. Direct occasion, motif or theme evidence in the concrete product title or description always overrides a broad avoided category.
@@ -16595,6 +16602,7 @@ function selectCampaignThemeSafeDeliveryProducts({
   );
   const entries = dedupeWebsiteItemsByUrlTitleAndImage(items)
     .filter(isValidCarouselProduct)
+    .filter((item) => !isCampaignFitRejectedForRule(item, rule))
     .map((item, index) => {
       const state = getCampaignThemeDeliveryState(item, rule);
       const key = getCarouselProductSelectionKey(item);
@@ -16821,6 +16829,7 @@ function buildBoundedCampaignFinalReviewFallback({
   // suites: technically verified, but only ${selectedProducts.length} were accepted as fitting the campaign theme
   // v143.5 backfills from verified products instead of throwing that error.
   const evidenceBackedItems = shortlist
+    .filter((item) => !isCampaignFitRejectedForRule(item, rule))
     .filter((item) => {
       const signalState = getCampaignProductSignalState(
         item,
@@ -16837,26 +16846,9 @@ function buildBoundedCampaignFinalReviewFallback({
         item?.campaign_fit_reason ||
         "Selected because the verified product reasonably fits the campaign theme after the optional final review was unavailable.",
     }));
-  const deliveryBackfillItems = shortlist
-    .filter(
-      (item) =>
-        !evidenceBackedItems.some((approvedItem) =>
-          areSameWebsiteItem(approvedItem, item)
-        )
-    )
-    .map((item) => ({
-      ...item,
-      campaign_final_reviewed: false,
-      campaign_fit_source:
-        item?.campaign_fit_source || "bounded_delivery_backfill",
-      campaign_fit_reason:
-        item?.campaign_fit_reason ||
-        "Selected as the best remaining technically verified product so the campaign can be delivered.",
-    }));
-  const deliveryItems = dedupeWebsiteItemsByUrlTitleAndImage([
-    ...evidenceBackedItems,
-    ...deliveryBackfillItems,
-  ]);
+  const deliveryItems = dedupeWebsiteItemsByUrlTitleAndImage(
+    evidenceBackedItems
+  );
   const themeSafeSelection = selectCampaignThemeSafeDeliveryProducts({
     items: deliveryItems,
     rule,
@@ -16905,19 +16897,10 @@ function getCampaignFinalEvaluationRelevance(item, evaluation, rule) {
     ],
     24
   );
-  const evidenceDirectMatches = countCampaignSearchTermMatches(
-    [
-      ...(evaluation?.evidence || []),
-      evaluation?.reason,
-      evaluation?.campaignRole,
-    ].join(" "),
-    directTerms
-  );
   const directMatches = Math.max(
     countCampaignCoreThemeTermMatches(item, rule),
     countCampaignAnchorTermMatches(item, rule),
-    countPrimaryCampaignTermMatches(item, rule),
-    evidenceDirectMatches
+    countPrimaryCampaignTermMatches(item, rule)
   );
 
   const fitDecision = evaluateSimpleCampaignThemeFit({
@@ -16925,9 +16908,9 @@ function getCampaignFinalEvaluationRelevance(item, evaluation, rule) {
     verdict: evaluation?.verdict,
     score: evaluation?.score,
   });
-  const directApproved = directMatches > 0;
-  const rejected = fitDecision.rejected && !directApproved;
-  const approved = directApproved || (!rejected && fitDecision.approved);
+  const rejected = fitDecision.rejected;
+  const directApproved = !rejected && directMatches > 0;
+  const approved = !rejected && (directApproved || fitDecision.approved);
 
   return {
     meaningful: approved,
@@ -17022,6 +17005,7 @@ Rules:
 - Decide whether each real product reasonably fits that theme and the company's assortment. A fit may be direct or a natural thematic choice based on the product's use, recipient, season, style or buying situation; it does not need to repeat the theme word.
 - Use only the supplied product title, description, category, tags and URL. The retailer query and result page are discovery clues, not proof by themselves; retailer queries, discovery sources and earlier screening opinions are intentionally hidden so they cannot bias this decision.
 - Audience and recipient words are context, not direct proof of the campaign occasion/theme. A product for a conflicting recipient, event or theme ranks behind products that genuinely serve the current campaign.
+- A clear audience conflict is a rejection, not a generic fallback. Never describe an adult product as a child/youth product, or otherwise change the supplied recipient, simply to complete the set.
 - Reject only products that are clearly unrelated to the campaign, not concrete products, or conflict with the supplied facts.
 - Do not reject a reasonable thematic product merely because it lacks a formal strategy slot, exact keyword, evidence chain or high numeric score.
 - Every selected item must be a concrete verified product page that reasonably fits this exact campaign.
@@ -17287,43 +17271,12 @@ Return strict JSON only:
     .map((entry) =>
       applyCampaignFinalReviewEvaluation(shortlist[entry.index], entry)
     );
-  let recoveredFromFastThemeFit = false;
-  if (selectedProducts.length < selectedLimit) {
-    const boundedFitFallback = buildBoundedCampaignFinalReviewFallback({
-      shortlist,
-      rule,
-      selectedLimit,
-      reserveLimit,
-      reason:
-        "Senior curation returned fewer than five products; retained the fast theme-fit selection.",
-    });
-    if (boundedFitFallback.selectedProducts.length === selectedLimit) {
-      selectedProducts = boundedFitFallback.selectedProducts;
-      reserveProducts = boundedFitFallback.reserveProducts;
-      recoveredFromFastThemeFit = true;
-      const selectedKeys = new Set(
-        selectedProducts
-          .map((item) => getCarouselProductSelectionKey(item, websiteUrl))
-          .filter(Boolean)
-      );
-      selectedSet = new Set(
-        shortlist
-          .map((item, index) =>
-            selectedKeys.has(
-              getCarouselProductSelectionKey(item, websiteUrl)
-            )
-              ? index
-              : null
-          )
-          .filter(Number.isInteger)
-      );
-    }
-  }
-  const evaluatedShortlist = shortlist.map((item, index) => {
+  const recoveredFromFastThemeFit = false;
+  const evaluatedShortlist = shortlist.flatMap((item, index) => {
     const evaluation = evaluationByIndex.get(index);
     return evaluation
-      ? applyCampaignFinalReviewEvaluation(item, evaluation)
-      : item;
+      ? [applyCampaignFinalReviewEvaluation(item, evaluation)]
+      : [];
   });
   const themeSafeFinalSelection = selectCampaignThemeSafeDeliveryProducts({
     items: evaluatedShortlist,
@@ -17400,7 +17353,9 @@ Return strict JSON only:
     blockingMissingNeedCount: blockingMissingNeeds.length,
     hasConfirmedBlockingMissingNeed,
     hasMissingRequiredCoverage,
-    acceptanceDecision: "fits_theme",
+    acceptanceDecision: publishable
+      ? "fits_theme"
+      : "reduced_theme_safe_delivery",
     curation,
     coverage,
     missingNeeds,
@@ -19258,9 +19213,18 @@ async function extractProductDataFromProductPage({
   const productTitleIdentityProof =
     Boolean(expectedTitle) &&
     haveProductTitlesIdentityAgreement(expectedTitle, title);
+  const structuredCommerceProductProof =
+    pageClassification.pageType === "product" &&
+    productSchemaFound &&
+    ecommerceProofFound &&
+    Boolean(title);
   const concreteProductProof =
     pageClassification.pageType === "product" &&
-    (productUrlProof || productTitleIdentityProof);
+    (
+      productUrlProof ||
+      productTitleIdentityProof ||
+      structuredCommerceProductProof
+    );
   let imageUrl = extractBestProductImageFromHtml(
     html,
     effectiveProductUrl,
@@ -19381,6 +19345,7 @@ async function extractProductDataFromProductPage({
       ecommerceProofFound,
       productUrlProof,
       productTitleIdentityProof,
+      structuredCommerceProductProof,
       pageType: pageClassification.pageType,
       pageTypeReason: pageClassification.reason,
       platform: commercePlatform,
@@ -20362,12 +20327,44 @@ function buildStoreSearchQueries(campaignPrompt) {
   return Array.from(new Set(searches)).slice(0, CAMPAIGN_STORE_SEARCH_QUERY_LIMIT);
 }
 
+function getWebsiteSearchBaseUrls(websiteUrl) {
+  const origin = getWebsiteOrigin(websiteUrl);
+  if (!origin) return [];
+
+  let parsed;
+  try {
+    parsed = new URL(String(websiteUrl || ""));
+  } catch {
+    return [origin];
+  }
+
+  const localeSegments = [];
+  for (const segment of String(parsed.pathname || "").split("/").filter(Boolean)) {
+    if (
+      localeSegments.length >= 2 ||
+      !/^[a-z]{2}(?:-[a-z]{2})?$/i.test(segment)
+    ) {
+      break;
+    }
+    localeSegments.push(segment);
+  }
+
+  const localizedBase = localeSegments.length
+    ? `${origin}/${localeSegments.join("/")}`
+    : "";
+
+  return Array.from(
+    new Set([localizedBase, origin].filter(Boolean))
+  );
+}
+
 function buildStoreSearchUrls(websiteUrl, campaignPrompt = "", platform = "generic") {
   const origin = getWebsiteOrigin(websiteUrl);
+  const searchBases = getWebsiteSearchBaseUrls(websiteUrl);
   const queries = buildStoreSearchQueries(campaignPrompt);
   const urls = [];
 
-  if (!origin || !queries.length) {
+  if (!origin || !searchBases.length || !queries.length) {
     return [];
   }
 
@@ -20382,41 +20379,61 @@ function buildStoreSearchUrls(websiteUrl, campaignPrompt = "", platform = "gener
 
   if (normalizedPlatform === "shopify") {
     for (const { encoded } of queryParts) {
-      urls.push(`${origin}/search?type=product&q=${encoded}`);
+      for (const base of searchBases) {
+        urls.push(`${base}/search?type=product&q=${encoded}`);
+      }
     }
     for (const { encoded } of queryParts) {
-      urls.push(`${origin}/search?q=${encoded}`);
+      for (const base of searchBases) {
+        urls.push(`${base}/search?q=${encoded}`);
+      }
     }
     for (const { encoded, slug } of queryParts) {
-      urls.push(
-        `${origin}/search?options[prefix]=last&q=${encoded}`,
-        `${origin}/collections/all?constraint=${slug}`
-      );
+      for (const base of searchBases) {
+        urls.push(
+          `${base}/search?options[prefix]=last&q=${encoded}`,
+          `${base}/collections/all?constraint=${slug}`
+        );
+      }
     }
   } else if (normalizedPlatform === "woocommerce") {
     for (const { encoded } of queryParts) {
-      urls.push(`${origin}/?s=${encoded}&post_type=product`);
+      for (const base of searchBases) {
+        urls.push(`${base}/?s=${encoded}&post_type=product`);
+      }
     }
   } else if (normalizedPlatform === "magento") {
     for (const { encoded } of queryParts) {
-      urls.push(`${origin}/catalogsearch/result/?q=${encoded}`);
+      for (const base of searchBases) {
+        urls.push(`${base}/catalogsearch/result/?q=${encoded}`);
+      }
     }
   } else if (normalizedPlatform === "prestashop") {
     for (const { encoded } of queryParts) {
-      urls.push(`${origin}/search?controller=search&s=${encoded}`);
+      for (const base of searchBases) {
+        urls.push(`${base}/search?controller=search&s=${encoded}`);
+      }
     }
   } else if (normalizedPlatform !== "quickbutik") {
     for (const { encoded } of queryParts) {
-      urls.push(`${origin}/search?q=${encoded}`);
+      for (const base of searchBases) {
+        urls.push(`${base}/search?q=${encoded}`);
+      }
     }
     for (const { encoded } of queryParts) {
-      urls.push(`${origin}/search?query=${encoded}`);
+      for (const base of searchBases) {
+        urls.push(`${base}/search?query=${encoded}`);
+      }
     }
     for (const { encoded } of queryParts) {
-      urls.push(`${origin}/sok?q=${encoded}`);
+      for (const base of searchBases) {
+        urls.push(`${base}/sok?q=${encoded}`);
+      }
     }
     for (const { encoded } of queryParts) {
-      urls.push(`${origin}/s%C3%B6k?q=${encoded}`);
+      for (const base of searchBases) {
+        urls.push(`${base}/s%C3%B6k?q=${encoded}`);
+      }
     }
   }
 
@@ -20722,13 +20739,26 @@ function selectStoreSearchUrlsForFetch(urls, limit) {
     grouped.set(query, group);
   }
 
+  const prioritizedGroups = Array.from(grouped.entries())
+    .map(([query, group], index) => ({
+      query,
+      group,
+      index,
+      tokenCount: tokenizeSearchText(query).length || Number.MAX_SAFE_INTEGER,
+    }))
+    .sort(
+      (left, right) =>
+        left.tokenCount - right.tokenCount || left.index - right.index
+    )
+    .map((entry) => entry.group);
+
   const selected = [];
-  for (const group of grouped.values()) {
+  for (const group of prioritizedGroups) {
     if (group[0]) selected.push(group[0]);
     if (selected.length >= limit) return selected;
   }
 
-  for (const group of grouped.values()) {
+  for (const group of prioritizedGroups) {
     for (const url of group.slice(1)) {
       selected.push(url);
       if (selected.length >= limit) return selected;
@@ -20818,7 +20848,10 @@ async function discoverProductCandidatesFromStoreSearch({
   const searchDiagnostics = [];
 
   const searchFormInspectionUrls = Array.from(
-    new Set([websiteUrl, getWebsiteOrigin(websiteUrl)].filter(Boolean))
+    new Set([
+      websiteUrl,
+      ...getWebsiteSearchBaseUrls(websiteUrl),
+    ].filter(Boolean))
   );
   for (const inspectionUrl of searchFormInspectionUrls) {
     try {
