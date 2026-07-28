@@ -169,7 +169,7 @@ assert.match(
   route,
   /productPreparationCompletionDeadline[\s\S]{0,240}CAMPAIGN_FINAL_REVIEW_RESERVE_MS/
 );
-assert.match(route, /CAMPAIGN_FINAL_REVIEW_TIMEOUT_MS \|\| 45_000/);
+assert.match(route, /CAMPAIGN_FINAL_REVIEW_TIMEOUT_MS \|\| 25_000/);
 assert.match(route, /excludeUsed: false/);
 assert.match(
   route,

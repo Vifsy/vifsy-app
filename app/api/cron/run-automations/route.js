@@ -69,6 +69,11 @@ import {
   evaluateSimpleCampaignThemeFit,
   expandCampaignThemeTerms,
 } from "../../../../lib/campaignThemeFit.js";
+import {
+  getCampaignThemeDeliveryTier,
+  resolveCampaignThemeEvidence,
+  selectCampaignThemeDeliveryEntries,
+} from "../../../../lib/campaignThemeDelivery.js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -197,11 +202,11 @@ const STRICT_PRODUCT_NO_REUSE =
 // queue checks or another automatic generation attempt.
 const AUTOMATION_STALE_RUNTIME_MS = 12 * 60 * 1000;
 const CAMPAIGN_FINAL_REVIEW_TIMEOUT_MS = Math.max(
-  30_000,
+  20_000,
   Math.min(
-    60_000,
-    Number(process.env.CAMPAIGN_FINAL_REVIEW_TIMEOUT_MS || 45_000) ||
-      45_000
+    30_000,
+    Number(process.env.CAMPAIGN_FINAL_REVIEW_TIMEOUT_MS || 25_000) ||
+      25_000
   )
 );
 const CAMPAIGN_STRATEGY_TIMEOUT_MS = Math.max(
@@ -10505,6 +10510,23 @@ function truncateText(value, maxLength) {
   return `${text.slice(0, maxLength)}...`;
 }
 
+function repairCommonUtf8Mojibake(value) {
+  return String(value || "")
+    .replace(/\u00c3([\u0080-\u00bf])/g, (match, secondCharacter) =>
+      Buffer.from([0xc3, secondCharacter.charCodeAt(0)]).toString("utf8")
+    )
+    .replace(/\u00c2([\u0080-\u00bf])/g, (match, secondCharacter) =>
+      Buffer.from([0xc2, secondCharacter.charCodeAt(0)]).toString("utf8")
+    )
+    .replace(/\u00e2\u20ac\u201c/g, "–")
+    .replace(/\u00e2\u20ac\u201d/g, "—")
+    .replace(/\u00e2\u20ac\u02dc/g, "‘")
+    .replace(/\u00e2\u20ac\u2122/g, "’")
+    .replace(/\u00e2\u20ac\u0153/g, "“")
+    .replace(/\u00e2\u20ac\u009d/g, "”")
+    .replace(/\u00e2\u20ac\u00a6/g, "…");
+}
+
 function decodeHtmlEntities(value) {
   const namedEntities = {
     amp: "&", quot: '"', apos: "'", lt: "<", gt: ">", nbsp: " ",
@@ -10559,7 +10581,7 @@ function decodeHtmlEntities(value) {
     decoded = nextValue;
   }
 
-  return decoded;
+  return repairCommonUtf8Mojibake(decoded);
 }
 
 function stripHtmlToText(html) {
@@ -12734,6 +12756,9 @@ function buildCampaignResearchText(rule) {
     themeContract?.secondaryContext?.length
       ? `Secondary context only: ${themeContract.secondaryContext.join(", ")}`
       : "",
+    themeContract?.competingThemeTerms?.length
+      ? `Competing occasions/themes (ranking only): ${themeContract.competingThemeTerms.join(", ")}`
+      : "",
     productSearchQueries.length ? `Product search queries: ${productSearchQueries.join(", ")}` : "",
     productMatchTerms.length ? `Campaign product match terms: ${productMatchTerms.join(", ")}` : "",
     productAvoidTerms.length ? `Avoid product terms: ${productAvoidTerms.join(", ")}` : "",
@@ -12826,7 +12851,7 @@ function formatUsedWebsiteItemsForResearchPrompt(usedItems, limit = 100) {
 }
 
 function normalizeSearchText(value) {
-  return String(value || "")
+  return repairCommonUtf8Mojibake(String(value || ""))
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -13033,6 +13058,11 @@ function normalizeCampaignMarketingStrategy(value) {
       16,
       100
     ),
+    competingThemeTerms: normalizeCampaignStrategyList(
+      value.competing_theme_terms || value.competingThemeTerms,
+      24,
+      100
+    ),
     contextualProductDirections: normalizeCampaignStrategyList(
       value.contextual_product_directions ||
         value.contextualProductDirections,
@@ -13129,6 +13159,9 @@ function formatCampaignMarketingStrategyForPrompt(strategy) {
       : "",
     normalized.directThemeEvidence.length
       ? `Direct theme evidence: ${normalized.directThemeEvidence.join(", ")}`
+      : "",
+    normalized.competingThemeTerms.length
+      ? `Explicitly competing occasions/themes: ${normalized.competingThemeTerms.join(", ")}`
       : "",
     normalized.contextualProductDirections.length
       ? `Contextually suitable product directions: ${normalized.contextualProductDirections.join("; ")}`
@@ -13260,6 +13293,7 @@ function applyCampaignMarketingStrategyToRule(rule, strategy) {
             18
           ),
           secondaryContext: normalized.contextualProductDirections,
+          competingThemeTerms: normalized.competingThemeTerms,
         }
       : rule?.campaign_theme_contract;
   const strategyRule = {
@@ -13344,6 +13378,7 @@ Rules:
 - Search queries must be short, realistic terms likely to work in this website's own search language. Do not invent exact product names.
 - Use this website search-language hint: ${websiteSearchLanguageHint}.
 - Separate direct theme evidence from contextual product fit. Direct evidence is wording, motifs or facts that explicitly express the main theme. Contextual fit is a product that naturally serves the campaign's buying situation even when the theme word is absent.
+- Identify explicit terms for nearby but different occasions or themes that could be confused with this campaign. These are ranking-only competing terms, never hard rejection terms.
 - Contextual directions must be specific to the campaign and evidenced assortment. "Giftable", "popular" or "nice" alone is never a sufficient product direction.
 - The five-product plan may combine direct and contextual products. Prefer direct products when the store has strong ones, but do not reject natural contextual products merely because their title omits the theme word.
 - If assortment evidence is incomplete, state that uncertainty and create adaptable slots grounded in the known business and campaign instead of pretending to know the catalog.
@@ -13368,6 +13403,7 @@ Return:
 {
   "primary_theme": "The shortest accurate expression of the campaign's main theme",
   "direct_theme_evidence": ["Words, synonyms, motifs or product facts that directly express the theme"],
+  "competing_theme_terms": ["Explicit words and translations for nearby but different occasions/themes that must rank after the current theme"],
   "contextual_product_directions": ["Specific product/use-case directions that naturally fit this campaign without requiring the theme word"],
   "campaign_meaning": "What this campaign means commercially and creatively",
   "audience_and_need": "Who should respond and what buying need the carousel should solve",
@@ -13468,6 +13504,18 @@ function normalizeCampaignThemeContract(value) {
     10,
     100
   );
+  const competingThemeTerms = collectUniqueTerms(
+    splitCampaignTermLine(
+      value.competing_theme_terms || value.competingThemeTerms
+    ),
+    24
+  ).filter((term) => {
+    const normalizedTerm = normalizeSearchText(term).trim();
+    return !approvedThemeTerms.some(
+      (approvedTerm) =>
+        normalizeSearchText(approvedTerm).trim() === normalizedTerm
+    );
+  });
 
   if (!primaryTheme || !approvedThemeTerms.length) {
     return null;
@@ -13477,6 +13525,7 @@ function normalizeCampaignThemeContract(value) {
     primaryTheme,
     approvedThemeTerms,
     secondaryContext,
+    competingThemeTerms,
   };
 }
 
@@ -13698,6 +13747,9 @@ Rules:
 - Summarize what the campaign is fundamentally about as one primary theme concept. Prefer one word; use the shortest established multiword concept only when splitting it would change the meaning.
 - Separate the primary theme from secondary context. Recipients, personalization, product format and generic gift language are secondary unless they truly are the central campaign theme.
 - Create approved theme terms containing only direct synonyms, translations, unmistakable motifs and normal word forms of the primary theme. Do not include generic giftability, popularity or personalization.
+- When the theme is an occasion-specific gift concept, preserve the occasion modifier in every translation. Never reduce "occasion + gift" to a standalone generic word meaning gift, present, card or personalization.
+- Also return explicit competing_theme_terms for nearby but different occasions/themes that a retailer search could mix into the results. Derive these semantically for this campaign and the website/product languages; do not use a fixed holiday list.
+- Competing terms are ranking guidance only. They must never remove a product or prevent delivery, and the current primary theme must never appear in that list.
 - Put concrete local-language theme plus product/category searches first, then add broader approved theme searches later.
 - Also infer a small set of natural product/category directions for the campaign and this company. These searches do not need to repeat the theme word. For example, an occasion may naturally support particular clothing, accessories, decorations, food or services depending on what this company actually sells.
 - Put those concrete directions in secondary_context and use them in product_search_queries.
@@ -13743,7 +13795,8 @@ Return:
   "theme_contract": {
     "primary_theme": "One normalized primary theme concept",
     "approved_theme_terms": ["Direct synonyms, translations, forms and unmistakable motifs"],
-    "secondary_context": ["Specific product/category directions that naturally fit the campaign and this business"]
+    "secondary_context": ["Specific product/category directions that naturally fit the campaign and this business"],
+    "competing_theme_terms": ["Explicit words/translations for nearby but different occasions/themes"]
   },
   "product_search_queries": ["10-12 short varied queries"],
   "product_match_terms": ["8-16 direct relevance terms"],
@@ -13780,6 +13833,13 @@ Return:
       ],
       16,
       140
+    ),
+    competingThemeTerms: collectUniqueTerms(
+      [
+        ...(strategy?.competingThemeTerms || []),
+        ...parsedThemeContract.competingThemeTerms,
+      ],
+      24
     ),
   });
   const contractRule = {
@@ -16159,6 +16219,125 @@ function countCampaignTitleThemeEvidence(item, rule) {
   );
 }
 
+function getCampaignThemeDeliveryState(item, rule) {
+  const signalState = getCampaignProductSignalState(item, rule);
+  const contract = getCampaignThemeContract(rule);
+  const directText = getWebsiteItemDirectCampaignText(item);
+  const matchedCompetingTerms = (contract?.competingThemeTerms || []).filter(
+    (term) => countCampaignSearchTermMatches(directText, [term]) > 0
+  );
+  const unambiguousCurrentThemeTerms = (
+    contract?.approvedThemeTerms || []
+  ).filter((approvedTerm) => {
+    const normalizedApprovedTerm = normalizeSearchText(approvedTerm).trim();
+    if (!normalizedApprovedTerm) return false;
+    return !matchedCompetingTerms.some((competingTerm) => {
+      const normalizedCompetingTerm =
+        normalizeSearchText(competingTerm).trim();
+      return (
+        normalizedCompetingTerm !== normalizedApprovedTerm &&
+        countCampaignSearchTermMatches(competingTerm, [approvedTerm]) > 0
+      );
+    });
+  });
+  const rawCurrentThemeMatches = contract
+    ? countCampaignSearchTermMatches(
+        directText,
+        unambiguousCurrentThemeTerms
+      )
+    : Math.max(
+        countCampaignTitleThemeEvidence(item, rule),
+        countCampaignCoreThemeTermMatches(item, rule),
+        countCampaignAnchorTermMatches(item, rule),
+        countPrimaryCampaignTermMatches(item, rule)
+      );
+  const rawCompetingThemeMatches = matchedCompetingTerms.length;
+  const {
+    currentThemeMatches,
+    competingThemeMatches,
+  } = resolveCampaignThemeEvidence({
+    currentThemeMatches: rawCurrentThemeMatches,
+    competingThemeMatches: rawCompetingThemeMatches,
+  });
+  const contextualApproved =
+    currentThemeMatches === 0 &&
+    competingThemeMatches === 0 &&
+    (signalState.contextualCampaignApproval ||
+      signalState.hasVerifiedContextualCampaignSignal);
+
+  return {
+    currentThemeMatches,
+    competingThemeMatches,
+    contextualApproved,
+    deliveryTier: getCampaignThemeDeliveryTier({
+      currentThemeMatches,
+      competingThemeMatches,
+      contextualApproved,
+    }),
+    signalState,
+  };
+}
+
+function selectCampaignThemeSafeDeliveryProducts({
+  items,
+  rule,
+  selectedLimit,
+  reserveLimit,
+  preferredItems = [],
+}) {
+  const preferredRanks = new Map();
+  dedupeWebsiteItemsByUrlTitleAndImage(preferredItems).forEach(
+    (item, index) => {
+      const key = getCarouselProductSelectionKey(item);
+      if (key && !preferredRanks.has(key)) {
+        preferredRanks.set(key, index);
+      }
+    }
+  );
+  const entries = dedupeWebsiteItemsByUrlTitleAndImage(items)
+    .filter(isValidCarouselProduct)
+    .map((item, index) => {
+      const state = getCampaignThemeDeliveryState(item, rule);
+      const key = getCarouselProductSelectionKey(item);
+      return {
+        item,
+        originalIndex: index,
+        currentThemeMatches: state.currentThemeMatches,
+        competingThemeMatches: state.competingThemeMatches,
+        contextualApproved: state.contextualApproved,
+        contextualScore:
+          state.signalState.aiCampaignFitScore ??
+          Number(item?.campaign_fit_score || 0),
+        qualityScore: scoreWebsiteItemForRule(item, rule),
+        preferredRank: preferredRanks.has(key)
+          ? preferredRanks.get(key)
+          : Number.MAX_SAFE_INTEGER,
+        deliveryTier: state.deliveryTier,
+      };
+    });
+  const selection = selectCampaignThemeDeliveryEntries(entries, {
+    selectedLimit,
+    reserveLimit,
+  });
+  const decorate = (entry) => ({
+    ...entry.item,
+    campaign_delivery_tier: entry.deliveryTier,
+    campaign_current_theme_matches: entry.currentThemeMatches,
+    campaign_competing_theme_matches: entry.competingThemeMatches,
+  });
+
+  return {
+    selectedProducts: selection.selectedEntries.map(decorate),
+    reserveProducts: selection.reserveEntries.map(decorate),
+    rankedProducts: selection.rankedEntries.map(decorate),
+    tierCounts: selection.rankedEntries.reduce((counts, entry) => {
+      counts[entry.deliveryTier] =
+        Number(counts[entry.deliveryTier] || 0) + 1;
+      return counts;
+    }, {}),
+  };
+}
+
 function buildCampaignFinalReviewShortlist(
   items,
   rule,
@@ -16169,15 +16348,12 @@ function buildCampaignFinalReviewShortlist(
     .map((item, index) => {
       const aiScore = getAiCampaignFitScore(item);
       const titleThemeEvidence = countCampaignTitleThemeEvidence(item, rule);
-      const directMatches = Math.max(
-        countCampaignCoreThemeTermMatches(item, rule),
-        countCampaignAnchorTermMatches(item, rule),
-        countPrimaryCampaignTermMatches(item, rule)
-      );
-      const signalState = getCampaignProductSignalState(
-        item,
-        rule
-      );
+      const deliveryState = getCampaignThemeDeliveryState(item, rule);
+      const directMatches = deliveryState.currentThemeMatches;
+      const signalState = deliveryState.signalState;
+      const competingThemeMatches =
+        deliveryState.competingThemeMatches;
+      const deliveryTier = deliveryState.deliveryTier;
       return {
         item,
         index,
@@ -16185,6 +16361,8 @@ function buildCampaignFinalReviewShortlist(
         titleThemeEvidence,
         directMatches,
         relevanceTier: signalState.relevanceTier,
+        competingThemeMatches,
+        deliveryTier,
         meaningful: signalState.hasMeaningfulCampaignSignal,
         fresh: !Boolean(
           item?.campaign_was_used_recently ||
@@ -16193,10 +16371,15 @@ function buildCampaignFinalReviewShortlist(
       };
     })
     .sort((left, right) => {
-      const tierWeight = { direct: 2, contextual: 1, generic: 0, reject: -1 };
+      const tierWeight = {
+        direct: 3,
+        contextual: 2,
+        generic: 1,
+        competing: 0,
+      };
       const tierDelta =
-        Number(tierWeight[right.relevanceTier] || 0) -
-        Number(tierWeight[left.relevanceTier] || 0);
+        Number(tierWeight[right.deliveryTier] || 0) -
+        Number(tierWeight[left.deliveryTier] || 0);
       if (tierDelta !== 0) return tierDelta;
 
       const titleThemeDelta =
@@ -16228,25 +16411,35 @@ function buildCampaignFinalReviewShortlist(
   // Retailer search can return many near-identical products for one broad
   // query. Round-robin the retrieval groups so the senior model receives the
   // best evidence from several searches instead of fifteen hoodies from one.
-  const groups = new Map();
-  ranked.forEach((entry, index) => {
-    const key = getCampaignFinalReviewGroupKey(entry.item, index);
-    const group = groups.get(key) || [];
-    group.push(entry);
-    groups.set(key, group);
-  });
-
   const shortlist = [];
-  let addedInRound = true;
-  while (shortlist.length < limit && addedInRound) {
-    addedInRound = false;
-    for (const group of groups.values()) {
-      const next = group.shift();
-      if (!next) continue;
-      shortlist.push(next.item);
-      addedInRound = true;
-      if (shortlist.length >= limit) break;
+  for (const deliveryTier of [
+    "direct",
+    "contextual",
+    "generic",
+    "competing",
+  ]) {
+    const groups = new Map();
+    ranked
+      .filter((entry) => entry.deliveryTier === deliveryTier)
+      .forEach((entry, index) => {
+        const key = getCampaignFinalReviewGroupKey(entry.item, index);
+        const group = groups.get(key) || [];
+        group.push(entry);
+        groups.set(key, group);
+      });
+
+    let addedInRound = true;
+    while (shortlist.length < limit && addedInRound) {
+      addedInRound = false;
+      for (const group of groups.values()) {
+        const next = group.shift();
+        if (!next) continue;
+        shortlist.push(next.item);
+        addedInRound = true;
+        if (shortlist.length >= limit) break;
+      }
     }
+    if (shortlist.length >= limit) break;
   }
 
   return shortlist;
@@ -16370,11 +16563,15 @@ function buildBoundedCampaignFinalReviewFallback({
     ...evidenceBackedItems,
     ...deliveryBackfillItems,
   ]);
-  const selectedProducts = deliveryItems.slice(0, selectedLimit);
-  const reserveProducts = deliveryItems.slice(
+  const themeSafeSelection = selectCampaignThemeSafeDeliveryProducts({
+    items: deliveryItems,
+    rule,
     selectedLimit,
-    selectedLimit + reserveLimit
-  );
+    reserveLimit,
+    preferredItems: evidenceBackedItems,
+  });
+  const selectedProducts = themeSafeSelection.selectedProducts;
+  const reserveProducts = themeSafeSelection.reserveProducts;
   const publishable = selectedProducts.length === selectedLimit;
 
   return {
@@ -16395,12 +16592,13 @@ function buildBoundedCampaignFinalReviewFallback({
         ],
     coverage: [],
     curation: {
-      concept: "Bounded defensible-relevance fallback",
+      concept: "Theme-first delivery-safe fallback",
       audienceFit: "",
       assortmentFit: "",
       setReason: reason || "Senior final review was unavailable.",
     },
     evaluations: [],
+    deliveryTierCounts: themeSafeSelection.tierCounts,
   };
 }
 
@@ -16490,6 +16688,29 @@ async function selectCampaignCarouselProductsWithSeniorFinalReview({
   const titleThemeCandidateCount = shortlist.filter(
     (item) => countCampaignTitleThemeEvidence(item, rule) > 0
   ).length;
+  const directThemeCandidateCount = shortlist.filter(
+    (item) =>
+      getCampaignThemeDeliveryState(item, rule).deliveryTier === "direct"
+  ).length;
+  if (directThemeCandidateCount >= selectedLimit) {
+    console.log("Campaign senior final review skipped because direct theme evidence already fills the delivery set", {
+      ruleId: rule?.id,
+      brandProfileId: rule?.brand_profile_id,
+      websiteUrl,
+      shortlistCount: shortlist.length,
+      directThemeCandidateCount,
+      selectedLimit,
+      reviewPass,
+    });
+    return buildBoundedCampaignFinalReviewFallback({
+      shortlist,
+      rule,
+      selectedLimit,
+      reserveLimit,
+      reason:
+        "Direct product-level theme evidence already filled the delivery set, so no additional AI curation was needed.",
+    });
+  }
   let response;
   try {
     response = await openai.responses.create(
@@ -16511,7 +16732,8 @@ Rules:
 - Every selected item must be a concrete verified product page that reasonably fits this exact campaign.
 - Never invent customization, motifs, recipients, materials, occasions or features that contradict the supplied product data.
 - Prefer clear thematic choices over vague giftability when both are available.
-- Rank in three stages: direct product-level theme evidence first, natural commercial/contextual fit second, and the best technically verified fallback last.
+- Rank in four stages: direct product-level evidence for the current theme first, natural commercial/contextual fit second, generic technically verified fallback third, and products explicitly tied to a different competing occasion/theme last.
+- A product explicitly tied to a different occasion must never replace an available direct-current-theme product. Competing products remain last-resort delivery fallbacks rather than hard rejections.
 - Campaign avoid terms are soft preferences. They may lower a generic product, but they must never veto direct theme or occasion evidence in the concrete product.
 - Mere theoretical giftability is weak. For a gift-oriented campaign, prefer the company's naturally gift-suitable products before size- or taste-sensitive everyday products when those stronger choices are available.
 - Choose products that complement one another and collectively solve the audience's buying need.
@@ -16823,6 +17045,37 @@ Return strict JSON only:
       );
     }
   }
+  const evaluatedShortlist = shortlist.map((item, index) => {
+    const evaluation = evaluationByIndex.get(index);
+    return evaluation
+      ? applyCampaignFinalReviewEvaluation(item, evaluation)
+      : item;
+  });
+  const themeSafeFinalSelection = selectCampaignThemeSafeDeliveryProducts({
+    items: evaluatedShortlist,
+    rule,
+    selectedLimit,
+    reserveLimit,
+    preferredItems: selectedProducts,
+  });
+  selectedProducts = themeSafeFinalSelection.selectedProducts;
+  reserveProducts = themeSafeFinalSelection.reserveProducts;
+  const selectedKeysAfterThemeReconciliation = new Set(
+    selectedProducts
+      .map((item) => getCarouselProductSelectionKey(item, websiteUrl))
+      .filter(Boolean)
+  );
+  selectedSet = new Set(
+    shortlist
+      .map((item, index) =>
+        selectedKeysAfterThemeReconciliation.has(
+          getCarouselProductSelectionKey(item, websiteUrl)
+        )
+          ? index
+          : null
+      )
+      .filter(Number.isInteger)
+  );
   const titleThemeSelectedCount = selectedProducts.filter(
     (item) => countCampaignTitleThemeEvidence(item, rule) > 0
   ).length;
@@ -16869,6 +17122,7 @@ Return strict JSON only:
     titleThemeCoverageReady,
     modelPublishable: parsed?.publishable === true,
     recoveredFromFastThemeFit,
+    deliveryTierCounts: themeSafeFinalSelection.tierCounts,
     blockingMissingNeedCount: blockingMissingNeeds.length,
     hasConfirmedBlockingMissingNeed,
     hasMissingRequiredCoverage,
@@ -16886,6 +17140,9 @@ Return strict JSON only:
       evidence: item?.campaign_final_review_evidence || [],
       relevanceClass: item?.campaign_relevance_class || null,
       campaignRole: item?.campaign_role || null,
+      deliveryTier: item?.campaign_delivery_tier || null,
+      currentThemeMatches: item?.campaign_current_theme_matches || 0,
+      competingThemeMatches: item?.campaign_competing_theme_matches || 0,
       reason: item?.campaign_fit_reason || null,
     })),
     rejectedProducts: rejectedEvaluations.map((entry) => ({
@@ -18933,7 +19190,7 @@ async function upsertWebsiteProductCandidateQueue({
   categoryUrl,
   candidates,
 }) {
-  if (!supabase || !rule?.user_id || !rule?.brand_profile_id || !Array.isArray(candidates)) return;
+  if (!supabase || !rule?.user_id || !rule?.brand_profile_id || !Array.isArray(candidates)) return false;
   const nowIso = new Date().toISOString();
   const rows = dedupeProductCandidateQueueRows(
     dedupeUrlItems(candidates)
@@ -18964,7 +19221,7 @@ async function upsertWebsiteProductCandidateQueue({
     })
     .filter(Boolean)
   ).slice(0, 200);
-  if (!rows.length) return;
+  if (!rows.length) return false;
   const { error } = await supabase
     .from("website_product_candidate_queue")
     .upsert(rows, {
@@ -18979,6 +19236,7 @@ async function upsertWebsiteProductCandidateQueue({
       message: error.message,
     });
   }
+  return !error;
 }
 
 async function loadWebsiteProductCandidateQueue({ supabase, rule, sourceUrl, categoryUrl, limit = 120 }) {
@@ -20517,7 +20775,7 @@ async function discoverProductCandidatesFromStoreSearch({
     }
   ).slice(0, WEBSITE_STORE_SEARCH_CANDIDATE_POOL_LIMIT);
 
-  await upsertWebsiteProductCandidateQueue({
+  const candidatesPersisted = await upsertWebsiteProductCandidateQueue({
     supabase,
     rule,
     sourceUrl: websiteUrl,
@@ -20532,7 +20790,7 @@ async function discoverProductCandidatesFromStoreSearch({
     fallbackSearchUrlCount: fallbackSearchUrls.length,
     candidateCount: result.length,
     excludeUsed,
-    candidatesPersisted: Boolean(supabase && rule?.brand_profile_id),
+    candidatesPersisted,
     renderedSearchPageCount,
     fetchedSearchPageCount: searchDiagnostics.filter((entry) =>
       /store_search_page/.test(entry.source)
@@ -20938,7 +21196,7 @@ async function discoverProductCandidatesFromWebsite({
     .sort((a, b) => Number(b.score || 0) - Number(a.score || 0))
     .slice(0, resultLimit);
 
-  await upsertWebsiteProductCandidateQueue({
+  const candidatesPersisted = await upsertWebsiteProductCandidateQueue({
     supabase,
     rule,
     sourceUrl: websiteUrl,
@@ -20952,7 +21210,7 @@ async function discoverProductCandidatesFromWebsite({
     candidateCount: result.length,
     excludeUsed,
     fastCampaignContinuation,
-    candidatesPersisted: Boolean(supabase && rule?.brand_profile_id),
+    candidatesPersisted,
   });
 
   return result;
@@ -22702,6 +22960,106 @@ async function prepareWebsiteContentForRule({
   );
 }
 
+function isDatabaseUniqueViolation(error) {
+  return (
+    String(error?.code || "") === "23505" ||
+    /duplicate key value|unique constraint/i.test(
+      String(error?.message || "")
+    )
+  );
+}
+
+async function insertWebsiteContentHistoryRowsIdempotently({
+  supabase,
+  rows,
+}) {
+  const uniqueRows = [];
+  const seen = new Set();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const key = [
+      row?.user_id,
+      row?.brand_profile_id,
+      row?.source_url,
+      row?.content_type,
+      row?.cycle_number,
+      row?.item_key,
+    ]
+      .map((value) => String(value || "").trim().toLowerCase())
+      .join("|");
+    if (!row?.item_key || seen.has(key)) continue;
+    seen.add(key);
+    uniqueRows.push(row);
+  }
+  if (!uniqueRows.length) return { inserted: 0, duplicates: 0 };
+
+  const first = uniqueRows[0];
+  const itemKeys = uniqueRows.map((row) => row.item_key);
+  let existingQuery = supabase
+    .from("website_content_history")
+    .select("item_key")
+    .eq("user_id", first.user_id)
+    .eq("brand_profile_id", first.brand_profile_id)
+    .eq("content_type", first.content_type)
+    .eq("cycle_number", first.cycle_number)
+    .in("item_key", itemKeys);
+  existingQuery = first.source_url
+    ? existingQuery.eq("source_url", first.source_url)
+    : existingQuery.is("source_url", null);
+  const { data: existingRows, error: existingError } = await existingQuery;
+  if (existingError) {
+    throw new Error(
+      existingError.message || "Could not inspect website content history"
+    );
+  }
+
+  const existingKeys = new Set(
+    (existingRows || []).map((row) => String(row?.item_key || ""))
+  );
+  const pendingRows = uniqueRows.filter(
+    (row) => !existingKeys.has(String(row.item_key))
+  );
+  if (!pendingRows.length) {
+    return { inserted: 0, duplicates: uniqueRows.length };
+  }
+
+  const { error: insertError } = await supabase
+    .from("website_content_history")
+    .insert(pendingRows);
+  if (!insertError) {
+    return {
+      inserted: pendingRows.length,
+      duplicates: uniqueRows.length - pendingRows.length,
+    };
+  }
+  if (!isDatabaseUniqueViolation(insertError)) {
+    throw new Error(
+      insertError.message || "Could not save website content history"
+    );
+  }
+
+  // Another worker may have inserted one of the same products between the
+  // read and write. Retry this very small set individually and treat an
+  // already-present history row as success.
+  let inserted = 0;
+  let duplicates = uniqueRows.length - pendingRows.length;
+  for (const row of pendingRows) {
+    const { error } = await supabase
+      .from("website_content_history")
+      .insert(row);
+    if (!error) {
+      inserted += 1;
+    } else if (isDatabaseUniqueViolation(error)) {
+      duplicates += 1;
+    } else {
+      throw new Error(
+        error.message || "Could not save website content history"
+      );
+    }
+  }
+
+  return { inserted, duplicates };
+}
+
 async function saveCarouselWebsiteContentHistory({
   supabase,
   rule,
@@ -22739,11 +23097,7 @@ async function saveCarouselWebsiteContentHistory({
     cycle_number: cycleNumber || 1,
   }));
 
-  const { error } = await supabase.from("website_content_history").insert(rows);
-
-  if (error) {
-    throw new Error(error.message || "Could not save carousel website content history");
-  }
+  await insertWebsiteContentHistoryRowsIdempotently({ supabase, rows });
 
   // Carousel products are reserved when selected, before slides/email are built.
   // website_content_history remains the audit trail and a secondary rotation source.
@@ -22761,7 +23115,7 @@ async function saveWebsiteContentHistory({
     return;
   }
 
-  const { error } = await supabase.from("website_content_history").insert({
+  const historyRow = {
     user_id: rule.user_id,
     brand_profile_id: rule.brand_profile_id,
     automation_rule_id: rule.id,
@@ -22775,11 +23129,12 @@ async function saveWebsiteContentHistory({
     item_description: websiteItem.description || null,
     item_image_url: websiteItem.image_url || null,
     cycle_number: cycleNumber || 1,
-  });
+  };
 
-  if (error) {
-    throw new Error(error.message || "Could not save website content history");
-  }
+  await insertWebsiteContentHistoryRowsIdempotently({
+    supabase,
+    rows: [historyRow],
+  });
 
   await markWebsiteProductCatalogItemUsed({
     supabase,
@@ -26209,8 +26564,8 @@ async function inspectProductImageForResolution(imageUrl) {
     limitInputPixels: 80_000_000,
   })
     .rotate()
-    .resize(16, 16, { fit: "fill" })
-    .grayscale()
+    .resize(24, 24, { fit: "fill" })
+    .removeAlpha()
     .raw()
     .toBuffer();
 
@@ -26384,6 +26739,10 @@ async function resolveLargestProductImagesBeforeGeneration({
       preferredQuality: Boolean(
         selected && isPreferredProductImage(selected)
       ),
+      identityVerified: Boolean(selected?.identityVerified),
+      identityMethod: selected?.identityMethod || null,
+      fingerprintSimilarity:
+        Number(selected?.fingerprintSimilarity || 0) || null,
       usedSmallImageFallback: smallFallback,
       browserUsed: resolution.browserUsed,
       staticCandidateCount: resolution.staticCandidates.length,

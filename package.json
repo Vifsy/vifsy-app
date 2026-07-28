@@ -30,7 +30,8 @@
     "test:v143": "node scripts/test-v143-semantic-product-fit.mjs",
     "test:v143.1": "node scripts/test-v143-1-theme-fit-delivery.mjs",
     "test:v143.2": "node scripts/test-v143-2-timeout-proof-theme-family.mjs",
-    "test:v143.3": "node scripts/test-v143-3-delivery-first.mjs"
+    "test:v143.3": "node scripts/test-v143-3-delivery-first.mjs",
+    "test:v143.4": "node scripts/test-v143-4-theme-safe-delivery.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
