@@ -21,7 +21,7 @@ assert.match(route, /function extractCampaignTitleThemeTerms/);
 assert.match(route, /function orderCampaignSearchQueriesThemeFirst/);
 assert.match(
   route,
-  /each of the first six queries must express that same theme/i
+  /Every product search query must contain the primary theme/i
 );
 assert.match(route, /titleThemeTerms: extractCampaignTitleThemeTerms\(rule\)/);
 assert.match(route, /titleThemeCoverageReady/);
