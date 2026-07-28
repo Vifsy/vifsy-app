@@ -64,7 +64,11 @@ import {
   normalizeCampaignRelevanceClass,
   normalizeCampaignRelevanceEvidence,
 } from "../../../../lib/campaignProductRelevance.js";
-import { evaluateSimpleCampaignThemeFit } from "../../../../lib/campaignThemeFit.js";
+import {
+  evaluateCampaignFallbackEligibility,
+  evaluateSimpleCampaignThemeFit,
+  expandCampaignThemeTerms,
+} from "../../../../lib/campaignThemeFit.js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -249,8 +253,9 @@ const CAROUSEL_OUTRO_SLIDE_COUNT = 1;
 const CAROUSEL_MAX_PRODUCT_SLIDES = CAROUSEL_PRODUCT_SLIDE_TARGET + CAROUSEL_OUTRO_SLIDE_COUNT;
 const CAMPAIGN_LOCKED_SEARCH_POOL_MIN_ITEMS = 15;
 const CAMPAIGN_DESIRED_READY_POOL_ITEMS = CAMPAIGN_LOCKED_SEARCH_POOL_MIN_ITEMS;
+const CAMPAIGN_DELIVERABLE_POOL_MIN_ITEMS = CAROUSEL_PRODUCT_SLIDE_TARGET;
 const CAMPAIGN_PRELIMINARY_TEXT_EVIDENCE_POOL_ITEMS = 20;
-const CAMPAIGN_AI_FAST_SCORE_LIMIT = 20;
+const CAMPAIGN_AI_FAST_SCORE_LIMIT = 12;
 const CAMPAIGN_AI_ESCALATION_LIMIT = 10;
 const CAMPAIGN_FINAL_REVIEW_SHORTLIST_LIMIT = 20;
 const CAMPAIGN_MARKETING_STRATEGY_SLOT_COUNT = CAROUSEL_PRODUCT_SLIDE_TARGET;
@@ -2588,7 +2593,12 @@ function isBadProductUrl(value) {
       /\/(?:api|graphql|ajax|admin|services\/login_with_shop|customer_authentication)(?:\/|$)/i.test(path) ||
       /\/(?:collect|track|tracking|analytics|pixel|events|beacon)(?:\/|$)/i.test(path) ||
       /\/(?:checkout|checkouts|cart|basket|kundvagn|kassa|account|login|sign-in|payments?|payment-dialog|wallets?|shopify_pay)(?:\/|$)/i.test(path) ||
-      /\/(?:cdn\/wpm|shopifycloud|shopify_pay)\//i.test(path)
+      /\/(?:cdn\/wpm|shopifycloud|shopify_pay)\//i.test(path) ||
+      /^\/(?:cdn|wpm|sf_private_access_tokens)\/?$/i.test(path) ||
+      /\/(?:digital_wallets|sf_private_access_tokens)(?:\/|$)/i.test(path) ||
+      /^\/\.well-known(?:\/|$)/i.test(path) ||
+      /^\/v\d+\/(?:produce|produce_batch)(?:\/|$)/i.test(path) ||
+      /^\/[\p{L}\p{N}]\/?$/u.test(path)
     ) {
       return true;
     }
@@ -3461,7 +3471,8 @@ function buildCampaignScoredProductCandidates({
         campaign_anchor_term_matches: anchorMatches,
         primary_campaign_term_matches: primaryMatches,
         campaign_has_direct_signal: hasDirectCampaignSignal,
-        campaign_has_meaningful_signal: hasDirectCampaignSignal || hasAiCampaignApproval,
+        campaign_has_meaningful_signal:
+          signalState.hasMeaningfulCampaignSignal,
         campaign_was_used_recently: wasUsedRecently,
         campaign_image_used_this_run: imageUsedThisRun,
         campaign_rotation_state:
@@ -3616,7 +3627,7 @@ function selectCampaignCarouselProductsByDeliveryLadder({
       CAMPAIGN_MINIMUM_PRODUCT_FIT_SCORE
     );
     const hasMeaningfulCampaignSignal =
-      signalState.hasDirectCampaignSignal || signalState.hasAiCampaignApproval;
+      signalState.hasMeaningfulCampaignSignal;
     const isFresh = isFreshCampaignCandidate(
       product,
       recentUsedItems,
@@ -3698,7 +3709,8 @@ function selectCampaignCarouselProductsByDeliveryLadder({
           themeMatches,
           sourceThemeMatches,
           hasDirectCampaignSignal,
-          hasMeaningfulCampaignSignal: hasDirectCampaignSignal || hasAiCampaignApproval,
+          hasMeaningfulCampaignSignal:
+            signalState.hasMeaningfulCampaignSignal,
           wasUsedRecently,
           imageUsedThisRun,
           usageCount,
@@ -3806,8 +3818,7 @@ function hasEnoughCarouselProductsForRule(products, rule) {
       CAMPAIGN_NEAR_PRODUCT_FIT_SCORE
     );
 
-    return signalState.hasMeaningfulCampaignSignal &&
-      scoreCampaignFitForRule(item, rule) >= CAMPAIGN_NEAR_PRODUCT_FIT_SCORE;
+    return signalState.hasMeaningfulCampaignSignal;
   });
 
   return relevantProducts.length >= CAROUSEL_MIN_PRODUCT_SLIDES;
@@ -6134,9 +6145,13 @@ async function prepareCarouselProductsForRule({
       const alreadyAiScoredCount = persistentPoolSeed.filter(
         (item) => getAiCampaignFitScore(item) !== null
       ).length;
+      const persistentSafeBeforeReviewCount =
+        getSafeCampaignProductCandidates(persistentPoolSeed, rule).length;
 
       if (
+        resumedAfterWebsiteRateLimit &&
         persistentPoolSeed.length &&
+        persistentSafeBeforeReviewCount < CAROUSEL_PRODUCT_SLIDE_TARGET &&
         alreadyAiScoredCount < CAROUSEL_PRODUCT_SLIDE_TARGET
       ) {
         try {
@@ -6162,6 +6177,17 @@ async function prepareCarouselProductsForRule({
             message: error?.message,
           });
         }
+      } else if (
+        !resumedAfterWebsiteRateLimit &&
+        persistentPoolSeed.length &&
+        persistentSafeBeforeReviewCount < CAROUSEL_PRODUCT_SLIDE_TARGET
+      ) {
+        console.log("Persistent campaign pool deferred AI review until after fresh targeted discovery", {
+          ruleId: rule.id,
+          brandProfileId: rule.brand_profile_id,
+          verifiedPersistentCount: persistentPoolSeed.length,
+          safePersistentCount: persistentSafeBeforeReviewCount,
+        });
       }
 
       const persistentPoolItems = buildCampaignSearchPoolItems({
@@ -6189,7 +6215,7 @@ async function prepareCarouselProductsForRule({
       ]);
       hasLockedCampaignSearchPool =
         lockedCampaignSearchPoolItems.length >=
-        CAMPAIGN_LOCKED_SEARCH_POOL_MIN_ITEMS;
+        CAMPAIGN_DELIVERABLE_POOL_MIN_ITEMS;
 
       if (resumedAfterWebsiteRateLimit) {
         summary.website_candidate_queue_resumed =
@@ -6413,21 +6439,34 @@ async function prepareCarouselProductsForRule({
         }
       }
 
-      // Score the evidence-backed pool once after progressive verification.
-      // This avoids one AI call per network batch and prevents irrelevant
-      // search-result products from consuming model time or budget.
-      const evidenceBackedStoreSearchItems =
+      // Direct theme-family and verified contextual matches do not need an
+      // intermediate AI call. The final curator can rank them later. Only ask
+      // the fast model to expand a pool that still has fewer than five safe
+      // products, and score raw verified pages so contextual products can be
+      // discovered instead of being excluded before evaluation.
+      const safeStoreSearchItemsBeforeReview =
         getSafeCampaignProductCandidates(storeSearchItems, rule);
-      if (evidenceBackedStoreSearchItems.length) {
+      if (
+        safeStoreSearchItemsBeforeReview.length <
+        CAROUSEL_PRODUCT_SLIDE_TARGET
+      ) {
+        const storeSearchReviewCandidates =
+          preferConcreteCampaignProducts(
+            storeSearchItems.filter(
+              (item) =>
+                item?.product_page_verified &&
+                !isExplicitCampaignFitRejected(item)
+            )
+          );
         try {
           const scoredEvidenceItems = await applyAiCampaignFitScores({
             openai,
             rule,
             brandProfile,
-            items: evidenceBackedStoreSearchItems,
+            items: storeSearchReviewCandidates,
             maxItems: Math.min(
               CAMPAIGN_AI_FAST_SCORE_LIMIT,
-              evidenceBackedStoreSearchItems.length
+              storeSearchReviewCandidates.length
             ),
             model: PRODUCT_RESEARCH_FAST_MODEL,
             escalateWhenUncertain: false,
@@ -6444,10 +6483,19 @@ async function prepareCarouselProductsForRule({
             ruleId: rule.id,
             brandProfileId: rule.brand_profile_id,
             websiteUrl,
-            evidenceBackedCount: evidenceBackedStoreSearchItems.length,
+            verifiedReviewCandidateCount:
+              storeSearchReviewCandidates.length,
             message: error?.message,
           });
         }
+      } else {
+        console.log("Campaign store-search skipped intermediate AI review because five theme-fitting products were already verified", {
+          ruleId: rule.id,
+          brandProfileId: rule.brand_profile_id,
+          websiteUrl,
+          verifiedCount: storeSearchItems.length,
+          safeCount: safeStoreSearchItemsBeforeReview.length,
+        });
       }
 
       const storeSearchPoolItems = buildCampaignSearchPoolItems({
@@ -6512,7 +6560,10 @@ async function prepareCarouselProductsForRule({
         ...lockedCampaignSearchPoolItems,
         ...freshSafeStoreSearchPoolItems,
       ]);
-      if (lockedCampaignSearchPoolItems.length >= CAMPAIGN_LOCKED_SEARCH_POOL_MIN_ITEMS) {
+      if (
+        lockedCampaignSearchPoolItems.length >=
+        CAMPAIGN_DELIVERABLE_POOL_MIN_ITEMS
+      ) {
         hasLockedCampaignSearchPool = true;
       }
 
@@ -6652,7 +6703,8 @@ async function prepareCarouselProductsForRule({
         ...catalogItems,
       ]);
       hasLockedCampaignSearchPool =
-        lockedCampaignSearchPoolItems.length >= CAMPAIGN_LOCKED_SEARCH_POOL_MIN_ITEMS;
+        lockedCampaignSearchPoolItems.length >=
+        CAMPAIGN_DELIVERABLE_POOL_MIN_ITEMS;
 
       console.log("Campaign carousel domain web search completed before Store Map", {
         ruleId: rule.id,
@@ -6824,17 +6876,14 @@ async function prepareCarouselProductsForRule({
         websiteUrl,
         catalogCandidateCount: catalogItems.length,
         evaluatedCount: catalogItems.filter((item) => getAiCampaignFitScore(item) !== null).length,
-        approvedCount: catalogItems.filter((item) => {
-          const score = getAiCampaignFitScore(item);
-          return (
-            score !== null &&
-            score >= getCampaignProductAcceptanceScore(item, rule) &&
-            !isExplicitCampaignFitRejected(item)
-          );
-        }).length,
+        approvedCount: catalogItems.filter(
+          (item) =>
+            getCampaignProductSignalState(item, rule)
+              .hasMeaningfulCampaignSignal
+        ).length,
       });
     } catch (error) {
-      console.warn("Campaign catalog fallback AI evaluation failed; unscored catalog products will stay excluded", {
+      console.warn("Campaign catalog fallback AI evaluation failed; continuing with verified theme-fit signals", {
         ruleId: rule.id,
         brandProfileId: rule.brand_profile_id,
         message: error?.message,
@@ -6939,19 +6988,37 @@ async function prepareCarouselProductsForRule({
           rule,
         });
 
-        if (isCampaignRule && storeSearchItems.length) {
-          storeSearchItems = await applyAiCampaignFitScores({
-            openai,
-            rule,
-            brandProfile,
-            items: storeSearchItems,
-            maxItems: Math.min(CAMPAIGN_AI_FAST_SCORE_LIMIT, storeSearchItems.length),
-            model: PRODUCT_RESEARCH_FAST_MODEL,
-            escalateWhenUncertain: false,
-            escalationModel: PRODUCT_RESEARCH_MODEL,
-            escalationMaxItems: CAMPAIGN_AI_ESCALATION_LIMIT,
-            minimumStrongProducts: CAROUSEL_PRODUCT_SLIDE_TARGET,
-          });
+        if (
+          isCampaignRule &&
+          storeSearchItems.length &&
+          getSafeCampaignProductCandidates(storeSearchItems, rule).length <
+            CAROUSEL_PRODUCT_SLIDE_TARGET
+        ) {
+          try {
+            storeSearchItems = await applyAiCampaignFitScores({
+              openai,
+              rule,
+              brandProfile,
+              items: storeSearchItems,
+              maxItems: Math.min(
+                CAMPAIGN_AI_FAST_SCORE_LIMIT,
+                storeSearchItems.length
+              ),
+              model: PRODUCT_RESEARCH_FAST_MODEL,
+              escalateWhenUncertain: false,
+              escalationModel: PRODUCT_RESEARCH_MODEL,
+              escalationMaxItems: CAMPAIGN_AI_ESCALATION_LIMIT,
+              minimumStrongProducts: CAROUSEL_PRODUCT_SLIDE_TARGET,
+            });
+          } catch (error) {
+            console.warn("Store search fallback AI review failed; continuing with verified theme-fit signals", {
+              ruleId: rule.id,
+              brandProfileId: rule.brand_profile_id,
+              websiteUrl,
+              verifiedCount: storeSearchItems.length,
+              message: error?.message,
+            });
+          }
         }
 
         if (storeSearchItems.length) {
@@ -7055,19 +7122,37 @@ async function prepareCarouselProductsForRule({
           rule,
         });
 
-        if (isCampaignRule && discoveredItems.length) {
-          discoveredItems = (await applyAiCampaignFitScores({
-            openai,
-            rule,
-            brandProfile,
-            items: discoveredItems,
-            maxItems: CAROUSEL_DISCOVERY_VERIFY_LIMIT,
-            model: PRODUCT_RESEARCH_FAST_MODEL,
-            escalateWhenUncertain: false,
-            escalationModel: PRODUCT_RESEARCH_MODEL,
-            escalationMaxItems: CAROUSEL_DISCOVERY_VERIFY_LIMIT,
-            minimumStrongProducts: CAROUSEL_PRODUCT_SLIDE_TARGET,
-          })).filter((item) => getAiCampaignFitScore(item) !== null);
+        if (
+          isCampaignRule &&
+          discoveredItems.length &&
+          getSafeCampaignProductCandidates(discoveredItems, rule).length <
+            CAROUSEL_PRODUCT_SLIDE_TARGET
+        ) {
+          try {
+            discoveredItems = await applyAiCampaignFitScores({
+              openai,
+              rule,
+              brandProfile,
+              items: discoveredItems,
+              maxItems: Math.min(
+                CAMPAIGN_AI_FAST_SCORE_LIMIT,
+                discoveredItems.length
+              ),
+              model: PRODUCT_RESEARCH_FAST_MODEL,
+              escalateWhenUncertain: false,
+              escalationModel: PRODUCT_RESEARCH_MODEL,
+              escalationMaxItems: CAMPAIGN_AI_ESCALATION_LIMIT,
+              minimumStrongProducts: CAROUSEL_PRODUCT_SLIDE_TARGET,
+            });
+          } catch (error) {
+            console.warn("Website discovery AI review failed; continuing with verified theme-fit signals", {
+              ruleId: rule.id,
+              brandProfileId: rule.brand_profile_id,
+              websiteUrl,
+              verifiedCount: discoveredItems.length,
+              message: error?.message,
+            });
+          }
         }
 
         const enrichedDiscoveredItems = discoveredItems.map((item) => ({
@@ -7501,7 +7586,7 @@ async function prepareCarouselProductsForRule({
         })),
       });
     } else {
-      console.warn("Campaign carousel could not find five products above the minimum campaign score", {
+      console.warn("Campaign carousel could not find five verified products that fit the campaign theme", {
         ruleId: rule.id,
         brandProfileId: rule.brand_profile_id,
         websiteUrl,
@@ -7509,7 +7594,6 @@ async function prepareCarouselProductsForRule({
         freshCandidateCount,
         freshSupportingCandidateCount,
         discoveryAttempts: campaignFreshDiscoveryAttempts,
-        minimumScore: CAMPAIGN_MINIMUM_PRODUCT_FIT_SCORE,
         lockedSearchPool: hasLockedCampaignSearchPool,
       });
     }
@@ -13275,7 +13359,7 @@ function normalizeCampaignThemeContract(value) {
     value.primary_theme || value.primaryTheme,
     80
   );
-  const approvedThemeTerms = collectUniqueTerms(
+  const suppliedThemeTerms = collectUniqueTerms(
     [
       primaryTheme,
       ...splitCampaignTermLine(
@@ -13283,6 +13367,10 @@ function normalizeCampaignThemeContract(value) {
       ),
     ],
     18
+  );
+  const approvedThemeTerms = collectUniqueTerms(
+    expandCampaignThemeTerms(suppliedThemeTerms),
+    24
   );
   const secondaryContext = normalizeCampaignStrategyList(
     value.secondary_context || value.secondaryContext,
@@ -14785,6 +14873,42 @@ function countCampaignCoreThemeTermMatches(item, rule) {
   return countCampaignThemeTermMatchesInText(getWebsiteItemDirectCampaignText(item), rule);
 }
 
+function extractCampaignContextualProductTerms(rule) {
+  const contract = getCampaignThemeContract(rule);
+  const strategy = normalizeCampaignMarketingStrategy(
+    rule?.campaign_marketing_strategy
+  );
+  const directions = normalizeCampaignStrategyList(
+    [
+      ...(contract?.secondaryContext || []),
+      ...(strategy?.contextualProductDirections || []),
+      ...(strategy?.selectionSlots || []).flatMap((slot) => [
+        ...(slot?.preferredProductTypes || []),
+        ...(slot?.searchQueries || []),
+      ]),
+    ],
+    24,
+    100
+  );
+  const directionWords = directions
+    .flatMap((direction) => tokenizeSearchText(direction))
+    .filter(
+      (word) =>
+        word.length >= 4 &&
+        !/^\d+$/u.test(word) &&
+        !weakShortSearchRoots.has(word)
+    );
+
+  return collectUniqueTerms([...directions, ...directionWords], 40);
+}
+
+function countCampaignContextualProductMatches(item, rule) {
+  return countCampaignSearchTermMatches(
+    getWebsiteItemDirectCampaignText(item),
+    extractCampaignContextualProductTerms(rule)
+  );
+}
+
 function getWebsiteItemCampaignSourceText(item) {
   const sourceValues = [
     item?.source_page_url,
@@ -15371,6 +15495,14 @@ function getCampaignProductSignalState(
   const primaryMatches = countPrimaryCampaignTermMatches(item, rule);
   const hasTrustedStoreSearchSignal = hasTrustedCampaignStoreSearchSignal(item, rule);
   const aiCampaignFitScore = getAiCampaignFitScore(item);
+  const themeFitDecision = getCampaignThemeFitDecision(item);
+  const campaignFitVerdict = normalizeCampaignFitVerdict(
+    item?.campaign_fit_verdict
+  );
+  const contextualProductMatches = countCampaignContextualProductMatches(
+    item,
+    rule
+  );
   const coreThemeTerms = extractCampaignCoreThemeTerms(rule);
   const anchorTerms = extractCampaignAnchorTerms(rule);
   const hasCoreThemeGuard = coreThemeTerms.length > 0;
@@ -15387,16 +15519,32 @@ function getCampaignProductSignalState(
     : hasAnchorGuard
       ? anchorMatches > 0
       : primaryMatches > 0;
+  const hasVerifiedContextualCampaignSignal =
+    item?.product_page_verified === true &&
+    contextualProductMatches > 0 &&
+    hasTrustedStoreSearchSignal;
 
-  const hasAiCampaignEvaluation = aiCampaignFitScore !== null;
+  const hasAiCampaignEvaluation =
+    aiCampaignFitScore !== null ||
+    themeFitDecision !== null ||
+    Boolean(campaignFitVerdict);
   const explicitlyRejected = isExplicitCampaignFitRejected(item);
   const hasAiCampaignApproval =
     hasAiCampaignEvaluation &&
     !explicitlyRejected &&
     isCampaignThemeFitApproved(item);
+  const fallbackEligibility = evaluateCampaignFallbackEligibility({
+    explicitlyRejected,
+    hasAiEvaluation: hasAiCampaignEvaluation,
+    hasAiApproval: hasAiCampaignApproval,
+    hasDirectThemeEvidence: hasDirectCampaignSignal,
+    productPageVerified: item?.product_page_verified === true,
+    contextualProductMatches,
+    trustedCampaignSearch: hasTrustedStoreSearchSignal,
+  });
   const relevanceTier = hasDirectCampaignSignal
     ? "direct"
-    : hasAiCampaignApproval
+    : hasAiCampaignApproval || hasVerifiedContextualCampaignSignal
       ? "contextual"
       : "reject";
 
@@ -15405,18 +15553,21 @@ function getCampaignProductSignalState(
     sourceThemeMatches,
     anchorMatches,
     primaryMatches,
+    contextualProductMatches,
     aiCampaignFitScore,
     hasCoreThemeGuard,
     hasAnchorGuard,
     hasStrictThemeGuard,
     hasTrustedStoreSearchSignal,
     hasDirectCampaignSignal,
+    hasVerifiedContextualCampaignSignal,
     hasAiCampaignEvaluation,
     explicitlyRejected,
     hasAiCampaignApproval,
     relevanceTier,
     contextualCampaignApproval:
-      !hasDirectCampaignSignal && hasAiCampaignApproval,
+      !hasDirectCampaignSignal &&
+      (hasAiCampaignApproval || hasVerifiedContextualCampaignSignal),
     campaignRole: normalizeCampaignStrategyText(
       item?.campaign_role,
       220
@@ -15429,11 +15580,7 @@ function getCampaignProductSignalState(
     // Once AI has evaluated a concrete product, that product-level verdict is
     // authoritative. A matching search/category source or a broad title word
     // must never override a reject or a sub-threshold score.
-    hasMeaningfulCampaignSignal: explicitlyRejected
-      ? false
-      : hasAiCampaignEvaluation
-        ? hasAiCampaignApproval
-        : hasDirectCampaignSignal,
+    hasMeaningfulCampaignSignal: fallbackEligibility.approved,
   };
 }
 
@@ -16913,10 +17060,12 @@ function scoreCampaignFitForRule(item, rule) {
     : hasAnchorGuard
       ? anchorMatches
       : primaryMatches;
+  const campaignSignalState = getCampaignProductSignalState(item, rule);
   const campaignThemeFitApproved =
-    aiScore !== null && isCampaignThemeFitApproved(item);
+    campaignSignalState.hasAiCampaignApproval;
   const contextualCampaignApproval =
-    directCampaignSignalCount === 0 && campaignThemeFitApproved;
+    directCampaignSignalCount === 0 &&
+    campaignSignalState.contextualCampaignApproval;
   if (!terms.length && !avoidTerms.length && !anchorTerms.length && !themeTerms.length) {
     return aiScore !== null ? aiScore : Number(item?.campaign_fit_score || 0);
   }
@@ -16935,6 +17084,9 @@ function scoreCampaignFitForRule(item, rule) {
         ? Math.max(aiScore, CAMPAIGN_MINIMUM_PRODUCT_FIT_SCORE)
         : aiScore
       : 0;
+  if (contextualCampaignApproval) {
+    score = Math.max(score, CAMPAIGN_MINIMUM_PRODUCT_FIT_SCORE);
+  }
 
   const shortRoots = getPrimaryCampaignShortRoots(rule);
 
@@ -21063,14 +21215,18 @@ function buildCampaignSearchPoolItems({
   scoreBonus = 0,
 }) {
   // Store-search cards are discovery hints, not verified campaign products.
-  // Only concrete product pages that were fetched, verified and individually
-  // evaluated may enter the relevance-first selection pool. Raw cards can have
-  // attractive images/prices while the underlying result page is unrelated.
+  // A fetched and verified product page may enter through direct theme-family
+  // evidence or a verified contextual signal without waiting for an AI score.
+  // An explicit AI rejection remains authoritative.
   return dedupeWebsiteItemsByUrlTitleAndImage(
     (verifiedItems || [])
       .filter((item) => item?.product_page_verified)
-      .filter((item) => getAiCampaignFitScore(item) !== null)
       .filter((item) => !isExplicitCampaignFitRejected(item))
+      .filter(
+        (item) =>
+          getCampaignProductSignalState(item, rule)
+            .hasMeaningfulCampaignSignal
+      )
       .map((item) =>
         normalizeCampaignSearchPoolItem(item, websiteUrl, rule, {
           selectionPriority: Math.max(selectionPriority, 190),

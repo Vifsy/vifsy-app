@@ -85,7 +85,7 @@ assert.doesNotMatch(
 );
 assert.match(
   signalBlock,
-  /hasMeaningfulCampaignSignal: explicitlyRejected/
+  /hasMeaningfulCampaignSignal: fallbackEligibility\.approved/
 );
 assert.match(signalBlock, /isCampaignThemeFitApproved\(item\)/);
 

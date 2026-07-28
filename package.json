@@ -28,7 +28,8 @@
     "test:v142.8": "node scripts/test-v142-8-theme-first-bounded.mjs",
     "test:v142.9": "node scripts/test-v142-9-semantic-theme-evidence.mjs",
     "test:v143": "node scripts/test-v143-semantic-product-fit.mjs",
-    "test:v143.1": "node scripts/test-v143-1-theme-fit-delivery.mjs"
+    "test:v143.1": "node scripts/test-v143-1-theme-fit-delivery.mjs",
+    "test:v143.2": "node scripts/test-v143-2-timeout-proof-theme-family.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
