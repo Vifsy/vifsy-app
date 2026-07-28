@@ -25,7 +25,7 @@ assert.match(
 );
 assert.match(
   route,
-  /contextually suitable product\/category searches from the supplied senior strategy/
+  /infer a small set of natural product\/category directions for the campaign and this company/
 );
 assert.match(
   route,
@@ -62,15 +62,15 @@ assert.match(
 );
 assert.match(
   route,
-  /\{ timeout: CAMPAIGN_VOCABULARY_TIMEOUT_MS \}/
+  /\{ timeout: CAMPAIGN_VOCABULARY_TIMEOUT_MS, maxRetries: 0 \}/
 );
 assert.match(
   route,
-  /\{ timeout: CAMPAIGN_FAST_REVIEW_TIMEOUT_MS \}/
+  /\{ timeout: CAMPAIGN_FAST_REVIEW_TIMEOUT_MS, maxRetries: 0 \}/
 );
 assert.match(
   route,
-  /Campaign store-search fast review timed out or failed; continuing with direct text evidence/
+  /Campaign store-search fast review timed out or failed; continuing with verified theme-fit signals/
 );
 
 const signalStart = route.indexOf("function getCampaignProductSignalState");
@@ -85,9 +85,9 @@ assert.doesNotMatch(
 );
 assert.match(
   signalBlock,
-  /hasMeaningfulCampaignSignal: relevance\.meaningful/
+  /hasMeaningfulCampaignSignal: explicitlyRejected/
 );
-assert.match(signalBlock, /contextualCampaignApproval/);
+assert.match(signalBlock, /isCampaignThemeFitApproved\(item\)/);
 
 const titleEvidenceStart = route.indexOf(
   "function countCampaignTitleThemeEvidence"
@@ -117,7 +117,7 @@ assert.match(finalBlock, /hasMissingRequiredCoverage/);
 assert.match(route, /function buildBoundedCampaignFinalReviewFallback/);
 assert.match(
   finalBlock,
-  /using bounded direct text-evidence fallback/
+  /using bounded theme-fit fallback/
 );
 assert.doesNotMatch(
   finalBlock,

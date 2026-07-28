@@ -42,7 +42,10 @@ assert.match(route, /CAMPAIGN_STORE_SEARCH_VERIFICATION_BATCH_SIZE = 15/);
 assert.match(route, /selectBalancedStoreSearchCandidates/);
 assert.match(route, /rendered_store_search_page/);
 assert.match(route, /RENDERED_STORE_SEARCH_PAGE_LIMIT/);
-assert.match(route, /technically verified, but only \$\{selectedProducts\.length\} passed/);
+assert.match(
+  route,
+  /technically verified, but only \$\{selectedProducts\.length\} were accepted as fitting the campaign theme/
+);
 
 const prepareStart = route.indexOf("async function prepareCarouselProductsForRule");
 const primarySearchMarker = route.indexOf(

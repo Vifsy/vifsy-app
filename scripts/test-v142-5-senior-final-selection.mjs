@@ -83,14 +83,14 @@ assert.match(
   route,
   /CAMPAIGN_FINAL_REVIEW_SHORTLIST_LIMIT = (?:15|20)/
 );
-assert.match(route, /CAMPAIGN_FINAL_REVIEW_MIN_SCORE = 75/);
+assert.doesNotMatch(route, /CAMPAIGN_FINAL_REVIEW_MIN_SCORE/);
 assert.match(
   route,
   /async function selectCampaignCarouselProductsWithSeniorFinalReview/
 );
 assert.match(
   route,
-  /A retailer search query is only a discovery clue and is never proof/
+  /The retailer query and result page are discovery clues, not proof by themselves/
 );
 assert.match(
   route,
@@ -107,7 +107,7 @@ assert.doesNotMatch(
 );
 assert.match(
   route,
-  /stopped by senior final relevance gate/
+  /still lacked five theme-fitting products after bounded discovery/
 );
 assert.match(
   route,

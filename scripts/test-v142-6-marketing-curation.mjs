@@ -40,15 +40,10 @@ assert.ok(
   prepareStart >= 0 && vocabularyCall > prepareStart,
   "Fast-model vocabulary must be prepared before product research"
 );
-assert.match(
+assert.doesNotMatch(
   prepareBlock,
   /generateCampaignCarouselMarketingStrategy\(\{/,
-  "The bounded senior strategy must shape retrieval before final curation"
-);
-assert.ok(
-  prepareBlock.indexOf("generateCampaignCarouselMarketingStrategy({") <
-    prepareBlock.indexOf("ensureProductSearchQueriesForRule({"),
-  "The strategy must be prepared before retailer-search vocabulary"
+  "Product discovery must not wait for an upfront senior strategy"
 );
 
 const finalStart = route.indexOf(
@@ -61,14 +56,17 @@ const rescueStart = route.indexOf(
 const finalBlock = route.slice(finalStart, rescueStart);
 
 assert.match(finalBlock, /Judge the carousel as one commercial story/);
-assert.match(finalBlock, /Do not silently fill an uncovered strategy slot/);
+assert.match(
+  finalBlock,
+  /Do not reject a reasonable thematic product merely because it lacks a formal strategy slot/
+);
 assert.match(finalBlock, /"publishable": true/);
 assert.match(finalBlock, /"missing_needs"/);
 assert.match(finalBlock, /rejectedProducts:/);
-assert.match(
+assert.doesNotMatch(
   finalBlock,
   /parsed\?\.publishable === true[\s\S]{0,300}for \(const evaluation of eligibleEvaluations\)/,
-  "Only a model-approved set may recover omitted eligible indices"
+  "Theme-fitting products must not be discarded because a JSON publishable flag was omitted"
 );
 
 assert.match(route, /async function runCampaignCurationTargetedRescue/);

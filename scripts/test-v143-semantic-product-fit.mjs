@@ -152,10 +152,12 @@ const route = fs.readFileSync(
 );
 
 assert.match(route, /generateCampaignCarouselMarketingStrategy/);
-assert.ok(
-  route.indexOf("generateCampaignCarouselMarketingStrategy({") <
-    route.indexOf("ensureProductSearchQueriesForRule({"),
-  "Senior strategy must shape retrieval before search vocabulary is finalized"
+const prepareStart = route.indexOf("async function prepareCarouselProductsForRule");
+const prepareEnd = route.indexOf("async function createAutomationRunLog", prepareStart);
+assert.doesNotMatch(
+  route.slice(prepareStart, prepareEnd),
+  /generateCampaignCarouselMarketingStrategy\(\{/,
+  "The final senior model must not block product discovery"
 );
 assert.match(route, /contextual_product_directions/);
 assert.match(route, /relevance_class/);

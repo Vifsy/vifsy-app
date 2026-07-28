@@ -34,10 +34,10 @@ const prepareEnd = route.indexOf(
 );
 const prepareBlock = route.slice(prepareStart, prepareEnd);
 
-assert.match(
+assert.doesNotMatch(
   prepareBlock,
   /generateCampaignCarouselMarketingStrategy\(\{/,
-  "Discovery must be shaped by one bounded senior strategy call."
+  "Discovery must not spend its budget on an upfront senior strategy."
 );
 assert.doesNotMatch(
   prepareBlock,
@@ -64,7 +64,7 @@ const rescueStart = route.indexOf(
 const finalReviewBlock = route.slice(finalReviewStart, rescueStart);
 assert.match(
   finalReviewBlock,
-  /\{ timeout: CAMPAIGN_FINAL_REVIEW_TIMEOUT_MS \}/
+  /\{ timeout: CAMPAIGN_FINAL_REVIEW_TIMEOUT_MS, maxRetries: 0 \}/
 );
 assert.match(
   finalReviewBlock,
