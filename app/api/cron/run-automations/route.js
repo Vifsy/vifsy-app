@@ -154,8 +154,9 @@ const WEBSITE_STORE_SEARCH_CANDIDATE_POOL_LIMIT = isProductEngineV2Enabled()
   ? 120
   : 36;
 const CAMPAIGN_STORE_SEARCH_QUERY_LIMIT = 12;
-const CAMPAIGN_SEARCH_FORM_QUERY_LIMIT = 4;
-const CAMPAIGN_SEARCH_FORM_URL_LIMIT = 6;
+const CAMPAIGN_SEARCH_FORM_QUERY_LIMIT = CAMPAIGN_STORE_SEARCH_QUERY_LIMIT;
+const CAMPAIGN_SEARCH_FORM_URL_LIMIT = CAMPAIGN_STORE_SEARCH_QUERY_LIMIT;
+const CAMPAIGN_STORE_SEARCH_PAGE_FETCH_LIMIT = 8;
 const PRODUCT_ENGINE_V2_ENABLED = isProductEngineV2Enabled();
 const STORE_MAP_PRODUCT_AGENT_ENABLED =
   PRODUCT_ENGINE_V2_ENABLED &&
@@ -249,6 +250,7 @@ const CAMPAIGN_MINIMUM_PRODUCT_FIT_SCORE = 60;
 const CAMPAIGN_STORE_SEARCH_PRODUCT_FIT_SCORE = 55;
 const CAROUSEL_MIN_PRODUCT_SLIDES = 5;
 const CAROUSEL_PRODUCT_SLIDE_TARGET = 5;
+const CAROUSEL_PLATFORM_MIN_PRODUCT_SLIDES = 2;
 const CAROUSEL_OUTRO_SLIDE_COUNT = 1;
 const CAROUSEL_MAX_PRODUCT_SLIDES = CAROUSEL_PRODUCT_SLIDE_TARGET + CAROUSEL_OUTRO_SLIDE_COUNT;
 const CAMPAIGN_LOCKED_SEARCH_POOL_MIN_ITEMS = 15;
@@ -3989,7 +3991,7 @@ function selectGuaranteedCampaignDeliveryProducts({
 
   const candidates = dedupeWebsiteItemsByUrlTitleAndImage(candidateItems)
     .filter(isValidCarouselProduct)
-    .filter((item) => !isExplicitCampaignFitRejected(item))
+    .filter((item) => !isCampaignFitRejectedForRule(item, rule))
     .filter(
       (item) =>
         !selected.some((selectedItem) =>
@@ -4203,7 +4205,7 @@ async function runProductEngineV2FinalCarouselExpansion({
   for (const item of existingProducts) appendUnique(item);
 
   const sortedDeliveryPool = combinedPool
-    .filter((item) => !isExplicitCampaignFitRejected(item))
+    .filter((item) => !isCampaignFitRejectedForRule(item, rule))
     .map((item) => {
       const wasUsedRecently = hasWebsiteItemAlreadyBeenUsed(item, recentUsedItems, websiteUrl);
       const imageUsedThisRun = usedWebsiteImageUrlsThisRun.has(normalizeComparableValue(item.image_url));
@@ -4306,7 +4308,7 @@ async function getProductEngineV2SingleProductReserves({
     const ranked = dedupeWebsiteItemsByUrlTitleAndImage(items)
       .filter(isValidCarouselProduct)
       .filter((item) => getCarouselProductSelectionKey(item, websiteUrl) !== selectedKey)
-      .filter((item) => !isExplicitCampaignFitRejected(item))
+      .filter((item) => !isCampaignFitRejectedForRule(item, rule))
       .map((item) => {
         const campaignFit = isCampaignRule
           ? Math.max(
@@ -6064,6 +6066,7 @@ async function prepareCarouselProductsForRule({
   let campaignFreshDiscoveryAttempts = 0;
   let triedCampaignWebSearchBeforeStoreMap = false;
   let campaignFinalReviewDiagnostics = null;
+  let campaignWebsiteRateLimited = false;
 
   if (isCampaignRule) {
     console.log("Campaign product search queries prepared", {
@@ -6207,6 +6210,16 @@ async function prepareCarouselProductsForRule({
 
       catalogItems = dedupeWebsiteItemsByUrlTitleAndImage([
         ...persistentPoolItems,
+        ...persistentPoolSeed
+          .filter(isValidCarouselProduct)
+          .map((item) => ({
+            ...item,
+            selection_priority:
+              Number(item?.selection_priority || 0) || 40,
+            campaign_fit_source:
+              item?.campaign_fit_source ||
+              "persistent_verified_delivery_pool",
+          })),
         ...catalogItems,
       ]);
       lockedCampaignSearchPoolItems = dedupeWebsiteItemsByUrlTitleAndImage([
@@ -6240,6 +6253,20 @@ async function prepareCarouselProductsForRule({
       });
 
       if (persistentRateLimited && !hasLockedCampaignSearchPool) {
+        const persistentTechnicalProducts =
+          persistentPoolSeed.filter(isValidCarouselProduct);
+        if (
+          persistentTechnicalProducts.length >=
+          CAROUSEL_PLATFORM_MIN_PRODUCT_SLIDES
+        ) {
+          campaignWebsiteRateLimited = true;
+          console.warn("Campaign is continuing offline with verified persistent products after website rate limit", {
+            ruleId: rule.id,
+            brandProfileId: rule.brand_profile_id,
+            websiteUrl,
+            verifiedProductCount: persistentTechnicalProducts.length,
+          });
+        } else {
         const rateLimitError = new WebsiteRateLimitError(
           resumedAfterWebsiteRateLimit
             ? "The website rate limited the second-pass candidate verification before enough products were ready."
@@ -6251,8 +6278,9 @@ async function prepareCarouselProductsForRule({
             status: 429,
           }
         );
-        rateLimitError.partialProducts = freshSafePersistentItems;
+        rateLimitError.partialProducts = persistentTechnicalProducts;
         throw rateLimitError;
+        }
       }
     }
   }
@@ -6269,6 +6297,7 @@ async function prepareCarouselProductsForRule({
     if (
       storeMapAgentAttempted ||
       !STORE_MAP_PRODUCT_AGENT_ENABLED ||
+      campaignWebsiteRateLimited ||
       hasLockedCampaignSearchPool ||
       !hasProductPreparationBudget(90_000)
     ) {
@@ -6332,6 +6361,9 @@ async function prepareCarouselProductsForRule({
     selectionPriority = 75,
     scoreBonus = 0,
   } = {}) {
+    if (campaignWebsiteRateLimited) {
+      return false;
+    }
     if (!hasProductPreparationBudget(55_000)) {
       logDeadlineSkip("locked_campaign_store_search");
       return false;
@@ -6455,7 +6487,7 @@ async function prepareCarouselProductsForRule({
             storeSearchItems.filter(
               (item) =>
                 item?.product_page_verified &&
-                !isExplicitCampaignFitRejected(item)
+                !isCampaignFitRejectedForRule(item, rule)
             )
           );
         try {
@@ -6506,9 +6538,38 @@ async function prepareCarouselProductsForRule({
         scoreBonus,
       });
 
+      const technicallyVerifiedStoreSearchItems =
+        storeSearchItems.filter(isValidCarouselProduct);
+      catalogItems = dedupeWebsiteItemsByUrlTitleAndImage([
+        ...storeSearchPoolItems,
+        ...technicallyVerifiedStoreSearchItems.map((item) => ({
+          ...item,
+          selection_priority:
+            Number(item?.selection_priority || 0) || 45,
+          campaign_fit_source:
+            item?.campaign_fit_source ||
+            "store_search_verified_delivery_pool",
+        })),
+        ...catalogItems,
+      ]);
+
       if (!storeSearchPoolItems.length) {
         if (storeSearchRateLimited) {
-          throw new WebsiteRateLimitError(
+          if (
+            technicallyVerifiedStoreSearchItems.length >=
+            CAROUSEL_PLATFORM_MIN_PRODUCT_SLIDES
+          ) {
+            campaignWebsiteRateLimited = true;
+            console.warn("Campaign is continuing offline with verified store-search products after website rate limit", {
+              ruleId: rule.id,
+              brandProfileId: rule.brand_profile_id,
+              websiteUrl,
+              verifiedProductCount:
+                technicallyVerifiedStoreSearchItems.length,
+            });
+            return true;
+          }
+          const rateLimitError = new WebsiteRateLimitError(
             "The website rate limited campaign store-search verification before any product was ready.",
             {
               url: websiteUrl,
@@ -6517,8 +6578,11 @@ async function prepareCarouselProductsForRule({
               status: 429,
             }
           );
+          rateLimitError.partialProducts =
+            technicallyVerifiedStoreSearchItems;
+          throw rateLimitError;
         }
-        return false;
+        return technicallyVerifiedStoreSearchItems.length > 0;
       }
 
       catalogItems = dedupeWebsiteItemsByUrlTitleAndImage([
@@ -6568,6 +6632,21 @@ async function prepareCarouselProductsForRule({
       }
 
       if (storeSearchRateLimited && !hasLockedCampaignSearchPool) {
+        if (
+          technicallyVerifiedStoreSearchItems.length >=
+          CAROUSEL_PLATFORM_MIN_PRODUCT_SLIDES
+        ) {
+          campaignWebsiteRateLimited = true;
+          console.warn("Campaign stopped further website requests and retained verified products after rate limit", {
+            ruleId: rule.id,
+            brandProfileId: rule.brand_profile_id,
+            websiteUrl,
+            verifiedProductCount:
+              technicallyVerifiedStoreSearchItems.length,
+            campaignSafeCount: freshSafeStoreSearchPoolItems.length,
+          });
+          return true;
+        }
         const rateLimitError = new WebsiteRateLimitError(
           "The website rate limited campaign store-search verification before a sufficient evidence-backed product pool was ready.",
           {
@@ -6577,7 +6656,8 @@ async function prepareCarouselProductsForRule({
             status: 429,
           }
         );
-        rateLimitError.partialProducts = freshSafeStoreSearchPoolItems;
+        rateLimitError.partialProducts =
+          technicallyVerifiedStoreSearchItems;
         throw rateLimitError;
       }
 
@@ -6642,6 +6722,7 @@ async function prepareCarouselProductsForRule({
   if (
     isCampaignRule &&
     !resumedAfterWebsiteRateLimit &&
+    !campaignWebsiteRateLimited &&
     !hasLockedCampaignSearchPool
   ) {
     await buildLockedCampaignSearchPool({
@@ -6653,6 +6734,7 @@ async function prepareCarouselProductsForRule({
   if (
     isCampaignRule &&
     !resumedAfterWebsiteRateLimit &&
+    !campaignWebsiteRateLimited &&
     !hasLockedCampaignSearchPool &&
     hasProductPreparationBudget(95_000)
   ) {
@@ -6730,6 +6812,7 @@ async function prepareCarouselProductsForRule({
   if (
     !storeMapAgentAttempted &&
     STORE_MAP_PRODUCT_AGENT_ENABLED &&
+    !campaignWebsiteRateLimited &&
     !hasLockedCampaignSearchPool &&
     hasProductPreparationBudget(90_000)
   ) {
@@ -6960,6 +7043,7 @@ async function prepareCarouselProductsForRule({
 
   if (
     hasProductPreparationBudget(55_000) &&
+    (!isCampaignRule || !campaignWebsiteRateLimited) &&
     !hasLockedCampaignSearchPool &&
     !hasEnoughCarouselProductsForRule(selectedProducts, rule) &&
     !triedStoreSearchForCampaign
@@ -7093,6 +7177,7 @@ async function prepareCarouselProductsForRule({
 
   if (
     hasProductPreparationBudget(60_000) &&
+    (!isCampaignRule || !campaignWebsiteRateLimited) &&
     (
       (!hasLockedCampaignSearchPool && !hasEnoughCarouselProductsForRule(selectedProducts, rule)) ||
       (isCampaignRule && hasLockedCampaignSearchPool && selectedProducts.length < CAROUSEL_PRODUCT_SLIDE_TARGET)
@@ -7285,6 +7370,7 @@ async function prepareCarouselProductsForRule({
 
   if (
     hasProductPreparationBudget(60_000) &&
+    (!isCampaignRule || !campaignWebsiteRateLimited) &&
     !hasLockedCampaignSearchPool &&
     !hasEnoughCarouselProductsForRule(selectedProducts, rule) &&
     !triedCampaignWebSearchBeforeStoreMap
@@ -7636,7 +7722,7 @@ async function prepareCarouselProductsForRule({
 
   if (isCampaignRule) {
     selectedProducts = selectedProducts.filter(
-      (item) => !isExplicitCampaignFitRejected(item)
+      (item) => !isCampaignFitRejectedForRule(item, rule)
     );
   }
 
@@ -7645,6 +7731,7 @@ async function prepareCarouselProductsForRule({
   // runs only when that complete flow still has fewer than five products.
   if (
     isCampaignRule &&
+    !campaignWebsiteRateLimited &&
     selectedProducts.length < CAROUSEL_PRODUCT_SLIDE_TARGET &&
     hasProductPreparationBudget(70_000)
   ) {
@@ -7827,6 +7914,7 @@ async function prepareCarouselProductsForRule({
   if (
     selectedProducts.length < CAROUSEL_PRODUCT_SLIDE_TARGET &&
     PRODUCT_ENGINE_V2_ENABLED &&
+    (!isCampaignRule || !campaignWebsiteRateLimited) &&
     hasProductPreparationBudget(60_000)
   ) {
     const expanded = await runProductEngineV2FinalCarouselExpansion({
@@ -7895,7 +7983,7 @@ async function prepareCarouselProductsForRule({
       !finalReview.publishable ||
       selectedProducts.length < CAROUSEL_PRODUCT_SLIDE_TARGET
     ) {
-      console.warn("Campaign carousel still lacked five theme-fitting products after bounded discovery", {
+      console.warn("Campaign carousel still lacked five theme-fitting products after bounded discovery; using the best verified reduced delivery set", {
         ruleId: rule.id,
         brandProfileId: rule.brand_profile_id,
         websiteUrl,
@@ -7911,10 +7999,11 @@ async function prepareCarouselProductsForRule({
     }
   }
 
+  const minimumDeliverableProductCount = isCampaignRule
+    ? CAROUSEL_PLATFORM_MIN_PRODUCT_SLIDES
+    : CAROUSEL_PRODUCT_SLIDE_TARGET;
   if (
-    selectedProducts.length < CAROUSEL_PRODUCT_SLIDE_TARGET ||
-    (isCampaignRule &&
-      campaignFinalReviewDiagnostics?.publishable === false)
+    selectedProducts.length < minimumDeliverableProductCount
   ) {
     await throwIfWebsiteDomainCoolingDown(
       websiteUrl,
@@ -7928,7 +8017,7 @@ async function prepareCarouselProductsForRule({
         ...catalogItems,
         ...storeMapAgentResult.products,
       ]).filter(isValidCarouselProduct).length;
-    const failureMessage = `Product Engine V2 exhausted store search and the remaining catalog fallbacks. The carousel requires ${CAROUSEL_PRODUCT_SLIDE_TARGET} products that reasonably fit the campaign and have usable images. ${technicallyVerifiedProductCount} products were technically verified, but only ${selectedProducts.length} were accepted as fitting the campaign theme.`;
+    const failureMessage = `Product Engine V2 exhausted store search and the remaining catalog fallbacks. The carousel requires at least ${minimumDeliverableProductCount} verified products with usable images. ${technicallyVerifiedProductCount} products were technically verified and ${selectedProducts.length} remained available for delivery.`;
 
     await recordProductEngineV2Run({
       rule,
@@ -7977,6 +8066,7 @@ async function prepareCarouselProductsForRule({
     });
 
     const productError = new Error(failureMessage);
+    productError.code = "CAMPAIGN_CAROUSEL_INSUFFICIENT_PRODUCTS";
     productError.partialProducts = selectedProducts;
     productError.productEngineDiagnostics = {
       candidateCount: catalogItems.length,
@@ -8544,9 +8634,10 @@ function buildAutomationPrompt(rule) {
   const brandProfileText = formatBrandProfileForPrompt(rule.brand_profile);
   const carouselProducts = getCarouselProducts(rule).filter(isValidCarouselProduct);
   const hasCarouselProducts = isCarouselRule(rule) && carouselProducts.length > 0;
-  const hasFullProductCarousel = carouselProducts.length >= CAROUSEL_MIN_PRODUCT_SLIDES;
+  const hasFullProductCarousel =
+    carouselProducts.length >= CAROUSEL_PLATFORM_MIN_PRODUCT_SLIDES;
   const carouselModeInstruction = hasFullProductCarousel
-    ? `This automation rule is supposed to create a product carousel with at least ${CAROUSEL_MIN_PRODUCT_SLIDES} different website products. The caption should introduce the collection and invite the audience to swipe through the carousel. Do not focus only on one product.`
+    ? `This automation rule is creating a product carousel with ${carouselProducts.length} different verified website products. The caption should introduce the collection and invite the audience to swipe through the carousel. Do not focus only on one product.`
     : `This automation rule is supposed to create a campaign carousel. Only ${carouselProducts.length} clearly relevant website product${carouselProducts.length === 1 ? "" : "s"} could be safely selected, so use them as campaign-relevant examples and keep the caption focused on the campaign theme. Do not invent additional products.`;
   const websiteItemText = hasCarouselProducts
     ? `Selected carousel products:\n${formatWebsiteItemsForPrompt(carouselProducts)}`
@@ -13611,12 +13702,12 @@ Rules:
 - Also infer a small set of natural product/category directions for the campaign and this company. These searches do not need to repeat the theme word. For example, an occasion may naturally support particular clothing, accessories, decorations, food or services depending on what this company actually sells.
 - Put those concrete directions in secondary_context and use them in product_search_queries.
 - Never use a standalone generic gift, present, gift-card, bestseller or personalization query merely because almost anything can be given away.
-- Include commonly used cross-language variants only when they are plausibly used in the website's product titles or search index.
+- For a local-language website with international product titles, include both the local-language term and the common English equivalent of the primary theme whenever either can plausibly occur in product titles or the search index.
 - Preserve useful existing terms, but replace weak generic searches with stronger direct theme searches.
 - Product search queries must be realistic store-search-box queries, normally 1-3 words and never more than 4 words.
 - Create 10-12 varied queries ordered by expected retailer-search usefulness. The first queries should be capable of returning several concrete products, not merely a campaign landing page.
 - Product match terms must identify genuine product-level relevance, not merely giftability.
-- Expand avoid terms semantically and across likely website-language variants when that prevents nearby but wrong products from being selected.
+- Avoid terms are soft ranking guidance. Never let a broad avoided category exclude a concrete product whose own title or description directly expresses the primary theme.
 - Never invent exact product names unless the supplied website/brand context supports them.
 - Return strict JSON only.
 
@@ -15381,7 +15472,7 @@ function getSafeCampaignProductCandidates(items, rule) {
   const dedupedItems = dedupeWebsiteItemsByUrlTitleAndImage(items).filter((item) => {
     const aiScore = getAiCampaignFitScore(item);
 
-    if (isExplicitCampaignFitRejected(item)) {
+    if (isCampaignFitRejectedForRule(item, rule)) {
       return false;
     }
 
@@ -15476,6 +15567,21 @@ function isExplicitCampaignFitRejected(item) {
   }).rejected;
 }
 
+function hasDirectCampaignEvidenceForRule(item, rule) {
+  return Math.max(
+    countCampaignCoreThemeTermMatches(item, rule),
+    countCampaignAnchorTermMatches(item, rule),
+    countPrimaryCampaignTermMatches(item, rule)
+  ) > 0;
+}
+
+function isCampaignFitRejectedForRule(item, rule) {
+  return (
+    isExplicitCampaignFitRejected(item) &&
+    !hasDirectCampaignEvidenceForRule(item, rule)
+  );
+}
+
 function isCampaignThemeFitApproved(item) {
   return evaluateSimpleCampaignThemeFit({
     fitsTheme: getCampaignThemeFitDecision(item),
@@ -15528,7 +15634,7 @@ function getCampaignProductSignalState(
     aiCampaignFitScore !== null ||
     themeFitDecision !== null ||
     Boolean(campaignFitVerdict);
-  const explicitlyRejected = isExplicitCampaignFitRejected(item);
+  const explicitlyRejected = isCampaignFitRejectedForRule(item, rule);
   const hasAiCampaignApproval =
     hasAiCampaignEvaluation &&
     !explicitlyRejected &&
@@ -15577,9 +15683,9 @@ function getCampaignProductSignalState(
         item?.campaign_final_review_evidence,
       8
     ),
-    // Once AI has evaluated a concrete product, that product-level verdict is
-    // authoritative. A matching search/category source or a broad title word
-    // must never override a reject or a sub-threshold score.
+    // A product-level AI verdict normally wins, but direct evidence in the
+    // concrete product itself must not be vetoed by a broad category avoid term.
+    // Search/category context alone still cannot override a rejection.
     hasMeaningfulCampaignSignal: fallbackEligibility.approved,
   };
 }
@@ -15655,6 +15761,8 @@ Important:
 - Treat the retailer search query only as a discovery clue. It is never product-level evidence and must never raise the product score by itself.
 - Prefer products that naturally support the campaign reason to buy, not products that merely share generic words with the prompt.
 - Do not reward generic words such as product, shop, buy, custom, print, collection, gift, offer, post or social media unless the product itself clearly fits the campaign.
+- Treat campaign avoid terms as soft ranking guidance, not as a veto. Direct occasion, motif or theme evidence in the concrete product title or description always overrides a broad avoided category.
+- Never reject a theme-specific concrete product merely because its general product category is normally a weak campaign choice.
 
 Score guide:
 - 80-100: especially strong choice for this campaign.
@@ -16058,7 +16166,6 @@ function buildCampaignFinalReviewShortlist(
 ) {
   const ranked = dedupeWebsiteItemsByUrlTitleAndImage(items)
     .filter(isValidCarouselProduct)
-    .filter((item) => !isExplicitCampaignFitRejected(item))
     .map((item, index) => {
       const aiScore = getAiCampaignFitScore(item);
       const titleThemeEvidence = countCampaignTitleThemeEvidence(item, rule);
@@ -16085,14 +16192,6 @@ function buildCampaignFinalReviewShortlist(
         ),
       };
     })
-    .filter(
-      (entry) =>
-        getCampaignThemeContract(rule)
-          ? entry.meaningful
-          : entry.aiScore === null ||
-            entry.aiScore >= 45 ||
-            entry.directMatches > 0
-    )
     .sort((left, right) => {
       const tierWeight = { direct: 2, contextual: 1, generic: 0, reject: -1 };
       const tierDelta =
@@ -16251,8 +16350,28 @@ function buildBoundedCampaignFinalReviewFallback({
         item?.campaign_fit_reason ||
         "Selected because the verified product reasonably fits the campaign theme after the optional final review was unavailable.",
     }));
-  const selectedProducts = evidenceBackedItems.slice(0, selectedLimit);
-  const reserveProducts = evidenceBackedItems.slice(
+  const deliveryBackfillItems = shortlist
+    .filter(
+      (item) =>
+        !evidenceBackedItems.some((approvedItem) =>
+          areSameWebsiteItem(approvedItem, item)
+        )
+    )
+    .map((item) => ({
+      ...item,
+      campaign_final_reviewed: false,
+      campaign_fit_source:
+        item?.campaign_fit_source || "bounded_delivery_backfill",
+      campaign_fit_reason:
+        item?.campaign_fit_reason ||
+        "Selected as the best remaining technically verified product so the campaign can be delivered.",
+    }));
+  const deliveryItems = dedupeWebsiteItemsByUrlTitleAndImage([
+    ...evidenceBackedItems,
+    ...deliveryBackfillItems,
+  ]);
+  const selectedProducts = deliveryItems.slice(0, selectedLimit);
+  const reserveProducts = deliveryItems.slice(
     selectedLimit,
     selectedLimit + reserveLimit
   );
@@ -16262,7 +16381,7 @@ function buildBoundedCampaignFinalReviewFallback({
     selectedProducts,
     reserveProducts,
     shortlistCount: shortlist.length,
-    eligibleCount: evidenceBackedItems.length,
+    eligibleCount: deliveryItems.length,
     publishable,
     missingNeeds: publishable
       ? []
@@ -16314,13 +16433,14 @@ function getCampaignFinalEvaluationRelevance(item, evaluation, rule) {
     verdict: evaluation?.verdict,
     score: evaluation?.score,
   });
-  const rejected = fitDecision.rejected;
-  const approved = !rejected && (fitDecision.approved || directMatches > 0);
+  const directApproved = directMatches > 0;
+  const rejected = fitDecision.rejected && !directApproved;
+  const approved = directApproved || (!rejected && fitDecision.approved);
 
   return {
     meaningful: approved,
     tier: directMatches > 0 ? "direct" : approved ? "contextual" : "reject",
-    directApproved: approved && directMatches > 0,
+    directApproved,
     contextualApproved: approved && directMatches === 0,
     rejected,
   };
@@ -16342,7 +16462,8 @@ async function selectCampaignCarouselProductsWithSeniorFinalReview({
     CAMPAIGN_FINAL_REVIEW_SHORTLIST_LIMIT
   );
 
-  if (shortlist.length < selectedLimit) {
+  const deliverySelectedLimit = Math.min(selectedLimit, shortlist.length);
+  if (deliverySelectedLimit < CAROUSEL_PLATFORM_MIN_PRODUCT_SLIDES) {
     return {
       selectedProducts: [],
       reserveProducts: [],
@@ -16363,6 +16484,7 @@ async function selectCampaignCarouselProductsWithSeniorFinalReview({
       evaluations: [],
     };
   }
+  selectedLimit = deliverySelectedLimit;
 
   const titleThemeTerms = extractCampaignTitleThemeTerms(rule);
   const titleThemeCandidateCount = shortlist.filter(
@@ -16389,10 +16511,13 @@ Rules:
 - Every selected item must be a concrete verified product page that reasonably fits this exact campaign.
 - Never invent customization, motifs, recipients, materials, occasions or features that contradict the supplied product data.
 - Prefer clear thematic choices over vague giftability when both are available.
+- Rank in three stages: direct product-level theme evidence first, natural commercial/contextual fit second, and the best technically verified fallback last.
+- Campaign avoid terms are soft preferences. They may lower a generic product, but they must never veto direct theme or occasion evidence in the concrete product.
+- Mere theoretical giftability is weak. For a gift-oriented campaign, prefer the company's naturally gift-suitable products before size- or taste-sensitive everyday products when those stronger choices are available.
 - Choose products that complement one another and collectively solve the audience's buying need.
 - Assortment breadth determines useful variation. Do not force unrelated categories for a specialist company, but do not repeat one generic category when the strategy and strong alternatives support a better mix.
 - Consider commercial clarity, variation and image suitability when selecting among products that fit.
-- Select exactly ${selectedLimit} products when at least ${selectedLimit} supplied concrete candidates reasonably fit. Do not turn a viable five-product pool into an empty or incomplete post because one optional strategy slot is imperfect.
+- Select exactly ${selectedLimit} of the supplied concrete verified products. Relevance controls their order; it must not turn an otherwise deliverable campaign into an empty or incomplete post.
 - Mark a missing need as blocking only when fewer than ${selectedLimit} supplied concrete products reasonably fit. Optional ways to improve an already complete set must be non-blocking.
 - Give a reason for every candidate, including rejected candidates, so decisions are auditable.
 
@@ -17039,7 +17164,7 @@ function scoreCampaignFitForRule(item, rule) {
 
   const aiScore = getAiCampaignFitScore(item);
 
-  if (isExplicitCampaignFitRejected(item)) {
+  if (isCampaignFitRejectedForRule(item, rule)) {
     return -200;
   }
 
@@ -18842,7 +18967,10 @@ async function upsertWebsiteProductCandidateQueue({
   if (!rows.length) return;
   const { error } = await supabase
     .from("website_product_candidate_queue")
-    .upsert(rows, { onConflict: "brand_profile_id,canonical_product_url" });
+    .upsert(rows, {
+      onConflict:
+        "brand_profile_id,automation_rule_id,canonical_product_url",
+    });
   if (error && !isMissingProductCandidateQueueError(error)) {
     console.log("Product candidate queue could not be stored", {
       ruleId: rule.id,
@@ -18857,8 +18985,9 @@ async function loadWebsiteProductCandidateQueue({ supabase, rule, sourceUrl, cat
   if (!supabase || !rule?.brand_profile_id) return [];
   let query = supabase
     .from("website_product_candidate_queue")
-    .select("product_url,title,image_url,visible_price,discovery_score,category_url,metadata,status,next_attempt_at")
+    .select("automation_rule_id,product_url,title,image_url,visible_price,discovery_score,category_url,metadata,status,next_attempt_at")
     .eq("brand_profile_id", rule.brand_profile_id)
+    .eq("automation_rule_id", rule.id)
     .in("status", ["pending", "rate_limited"])
     .lte("next_attempt_at", new Date().toISOString())
     .order("discovery_score", { ascending: false })
@@ -18908,6 +19037,7 @@ async function updateWebsiteProductCandidateQueueStatus({
     .from("website_product_candidate_queue")
     .update(payload)
     .eq("brand_profile_id", rule.brand_profile_id)
+    .eq("automation_rule_id", rule.id)
     .in("canonical_product_url", urls);
   if (error && !isMissingProductCandidateQueueError(error)) {
     console.log("Product candidate queue status could not be updated", {
@@ -20103,7 +20233,7 @@ function extractStoreSearchPaginationUrls({
       ["page", "paged", "pageno", "page_number", "offset", "start"].some(
         (key) => parsed.searchParams.has(key)
       ) ||
-      /\b(?:pagination|pager|page-numbers|next)\b/u.test(normalizedTag) ||
+      /\b(?:pagination|pager|page-numbers)\b/u.test(normalizedTag) ||
       /\brel\s*=\s*["']?next\b/i.test(tag);
     if (!hasStructuralPaginationSignal) {
       continue;
@@ -20212,8 +20342,11 @@ async function discoverProductCandidatesFromStoreSearch({
     CAMPAIGN_STORE_SEARCH_QUERY_LIMIT,
     WEBSITE_STORE_SEARCH_FETCH_LIMIT
   );
+  // Once the retailer exposes its real search form, use that contract for all
+  // campaign queries. Guessing common /search URL shapes alongside a known form
+  // created avoidable 404 pages and wasted the bounded retrieval budget.
   const allSearchUrls = Array.from(
-    new Set([...formSearchUrls, ...fallbackSearchUrls])
+    new Set(formSearchUrls.length ? formSearchUrls : fallbackSearchUrls)
   );
   const searchUrls = selectStoreSearchUrlsForFetch(
     allSearchUrls,
@@ -20225,7 +20358,7 @@ async function discoverProductCandidatesFromStoreSearch({
     (url) => !queuedSearchUrls.has(url)
   );
   const queueNextSearchAlternative = (query) => {
-    if (searchUrlQueue.length >= WEBSITE_STORE_SEARCH_FETCH_LIMIT) {
+    if (searchUrlQueue.length >= CAMPAIGN_STORE_SEARCH_PAGE_FETCH_LIMIT) {
       return false;
     }
     const comparableQuery = normalizeSearchText(query || "");
@@ -20260,7 +20393,7 @@ async function discoverProductCandidatesFromStoreSearch({
     for (
       let searchIndex = 0;
       searchIndex < searchUrlQueue.length &&
-      searchIndex < WEBSITE_STORE_SEARCH_FETCH_LIMIT;
+      searchIndex < CAMPAIGN_STORE_SEARCH_PAGE_FETCH_LIMIT;
       searchIndex += 1
     ) {
       if (
@@ -20337,7 +20470,7 @@ async function discoverProductCandidatesFromStoreSearch({
         });
         candidates.push(...searchCandidates);
 
-        if (searchUrlQueue.length < WEBSITE_STORE_SEARCH_FETCH_LIMIT) {
+        if (searchUrlQueue.length < CAMPAIGN_STORE_SEARCH_PAGE_FETCH_LIMIT) {
           const paginationUrls = extractStoreSearchPaginationUrls({
             html,
             pageUrl: searchUrl,
@@ -20347,7 +20480,7 @@ async function discoverProductCandidatesFromStoreSearch({
           for (const paginationUrl of paginationUrls) {
             if (
               queuedSearchUrls.has(paginationUrl) ||
-              searchUrlQueue.length >= WEBSITE_STORE_SEARCH_FETCH_LIMIT
+              searchUrlQueue.length >= CAMPAIGN_STORE_SEARCH_PAGE_FETCH_LIMIT
             ) {
               continue;
             }
@@ -21221,7 +21354,7 @@ function buildCampaignSearchPoolItems({
   return dedupeWebsiteItemsByUrlTitleAndImage(
     (verifiedItems || [])
       .filter((item) => item?.product_page_verified)
-      .filter((item) => !isExplicitCampaignFitRejected(item))
+      .filter((item) => !isCampaignFitRejectedForRule(item, rule))
       .filter(
         (item) =>
           getCampaignProductSignalState(item, rule)
@@ -23024,8 +23157,8 @@ async function saveCarouselSlidesForPost({
   const carouselProducts = getCarouselProducts(rule).filter(isValidCarouselProduct).slice(0, CAROUSEL_PRODUCT_SLIDE_TARGET);
   const productCount = carouselProducts.length;
 
-  if (productCount < CAROUSEL_MIN_PRODUCT_SLIDES) {
-    throw new Error(`Carousel needs at least ${CAROUSEL_MIN_PRODUCT_SLIDES} verified products with images. Found ${productCount}.`);
+  if (productCount < CAROUSEL_PLATFORM_MIN_PRODUCT_SLIDES) {
+    throw new Error(`Carousel needs at least ${CAROUSEL_PLATFORM_MIN_PRODUCT_SLIDES} verified products with images. Found ${productCount}.`);
   }
 
   const includeLogo = shouldUseLogoForRule(rule, rule.brand_profile);
@@ -23156,7 +23289,7 @@ async function saveCarouselSlidesForPost({
       product_url: slideProductUrl,
       logo_enabled: includeLogo,
       metadata: {
-        generated_by: productCount >= CAROUSEL_MIN_PRODUCT_SLIDES
+        generated_by: productCount >= CAROUSEL_PLATFORM_MIN_PRODUCT_SLIDES
           ? slideRenderedBy
           : 'step94_carousel_draft',
         carousel_slide_role: slide.slide_type || (index === 0 ? 'product_hook' : index === slides.length - 1 ? 'product_cta' : 'product'),
@@ -23197,8 +23330,11 @@ async function saveCarouselSlidesForPost({
     .filter(Boolean)
     .sort((a, b) => Number(a.slide_order || 0) - Number(b.slide_order || 0));
 
-  if (productCount >= CAROUSEL_MIN_PRODUCT_SLIDES && rows.length < CAROUSEL_MIN_PRODUCT_SLIDES + CAROUSEL_OUTRO_SLIDE_COUNT) {
-    throw new Error(`Carousel product slides were not created correctly. Expected at least ${CAROUSEL_MIN_PRODUCT_SLIDES + CAROUSEL_OUTRO_SLIDE_COUNT}, got ${rows.length}.`);
+  if (
+    productCount >= CAROUSEL_PLATFORM_MIN_PRODUCT_SLIDES &&
+    rows.length < productCount + CAROUSEL_OUTRO_SLIDE_COUNT
+  ) {
+    throw new Error(`Carousel product slides were not created correctly. Expected at least ${productCount + CAROUSEL_OUTRO_SLIDE_COUNT}, got ${rows.length}.`);
   }
 
   await supabase.from('post_slides').delete().eq('post_id', postId);
@@ -28510,18 +28646,101 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
           } catch (carouselError) {
             const message = carouselError.message ||
               `Website carousel needs at least ${CAROUSEL_MIN_PRODUCT_SLIDES} products with product images.`;
-            const partialProducts = Array.isArray(carouselError?.partialProducts)
-              ? carouselError.partialProducts.filter(Boolean)
-              : [];
-            if (partialProducts.length) {
-              automationRunWebsiteItems = partialProducts;
-              automationRunWebsiteItem = partialProducts[0] || null;
-            }
-
+            const partialProducts = dedupeWebsiteItemsByUrlTitleAndImage(
+              Array.isArray(carouselError?.partialProducts)
+                ? carouselError.partialProducts
+                : []
+            )
+              .filter(isValidCarouselProduct)
+              .slice(0, CAROUSEL_PRODUCT_SLIDE_TARGET);
             automationRunProductEngineDiagnostics =
               carouselError?.productEngineDiagnostics || null;
 
-            if (isWebsiteRateLimitError(carouselError)) {
+            const canUseCampaignDeliveryFallback =
+              isCampaignProductCarouselRule(rule) &&
+              (
+                isWebsiteRateLimitError(carouselError) ||
+                carouselError?.code ===
+                  "CAMPAIGN_CAROUSEL_INSUFFICIENT_PRODUCTS"
+              );
+
+            if (canUseCampaignDeliveryFallback) {
+              websiteSourceUrl =
+                getWebsiteProductSourceUrl(brandProfile) ||
+                rule.website_url ||
+                null;
+              websiteCycleNumber = 1;
+
+              if (
+                partialProducts.length >=
+                CAROUSEL_PLATFORM_MIN_PRODUCT_SLIDES
+              ) {
+                websiteItems = partialProducts;
+                websiteItem = partialProducts[0];
+                websiteReserveItems = [];
+                useWebsiteImage = true;
+                websitePreparedRule = {
+                  ...rule,
+                  website_item: websiteItem,
+                  website_items: websiteItems,
+                };
+                productContentContract = buildProductContentContract(
+                  websiteItems,
+                  []
+                );
+              } else if (partialProducts.length === 1) {
+                websiteItem = partialProducts[0];
+                websiteItems = [];
+                websiteReserveItems = [];
+                useWebsiteImage = true;
+                websitePreparedRule = {
+                  ...rule,
+                  content_format: "single_image",
+                  uses_website_content: true,
+                  generate_image: true,
+                  image_source: "website",
+                  website_item: websiteItem,
+                  website_items: [],
+                };
+                productContentContract = buildProductContentContract(
+                  [websiteItem],
+                  []
+                );
+              } else {
+                websiteItem = null;
+                websiteItems = [];
+                websiteReserveItems = [];
+                websiteSourceUrl = null;
+                useWebsiteImage = false;
+                websitePreparedRule = {
+                  ...rule,
+                  content_format: "single_image",
+                  uses_website_content: false,
+                  generate_image: true,
+                  image_source: "ai",
+                  website_item: null,
+                  website_items: [],
+                };
+                productContentContract = null;
+              }
+
+              automationRunWebsiteItem = websiteItem;
+              automationRunWebsiteItems = websiteItems.length
+                ? websiteItems
+                : websiteItem
+                  ? [websiteItem]
+                  : [];
+              summary.campaign_delivery_fallback =
+                Number(summary.campaign_delivery_fallback || 0) + 1;
+              console.warn("Campaign carousel switched to guaranteed delivery fallback", {
+                ruleId: rule.id,
+                brandProfileId: rule.brand_profile_id,
+                reason: message,
+                partialProductCount: partialProducts.length,
+                deliveryFormat: websitePreparedRule.content_format,
+                websiteRateLimited: isWebsiteRateLimitError(carouselError),
+              });
+            } else if (isWebsiteRateLimitError(carouselError)) {
               const rateLimitResult = await deferCurrentOccurrenceForWebsiteRateLimit(
                 carouselError,
                 "carousel_product_prepare",
@@ -28539,18 +28758,18 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
                 summary.skipped += 1;
               }
               continue;
+            } else {
+              await failCurrentOccurrence(carouselError, "carousel_product_prepare", {
+                product_engine_v2: PRODUCT_ENGINE_V2_ENABLED,
+                partial_product_count: partialProducts.length,
+                product_engine_diagnostics:
+                  carouselError?.productEngineDiagnostics || null,
+              });
+
+              summary.errors += 1;
+              summary.website_content_failed += 1;
+              continue;
             }
-
-            await failCurrentOccurrence(carouselError, "carousel_product_prepare", {
-              product_engine_v2: PRODUCT_ENGINE_V2_ENABLED,
-              partial_product_count: partialProducts.length,
-              product_engine_diagnostics:
-                carouselError?.productEngineDiagnostics || null,
-            });
-
-            summary.errors += 1;
-            summary.website_content_failed += 1;
-            continue;
           }
         } else if (rule.uses_website_content) {
           try {
@@ -28597,7 +28816,7 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
         }
 
         if (websiteItem?.image_url) {
-          const primaryItems = isCarouselRule(rule)
+          const primaryItems = isCarouselRule(websitePreparedRule)
             ? websiteItems
             : [websiteItem];
           const additionalItems = isAnimatedVideoRule(websitePreparedRule || rule)
@@ -28609,7 +28828,7 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
             ruleId: rule.id,
           });
 
-          if (isCarouselRule(rule)) {
+          if (isCarouselRule(websitePreparedRule)) {
             websiteItems = resolvedItems.slice(0, primaryCount);
             websiteItem = websiteItems[0] || websiteItem;
           } else {
@@ -28619,11 +28838,11 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
             websiteReserveItems = resolvedItems.slice(primaryCount);
           }
           productContentContract = buildProductContentContract(
-            isCarouselRule(rule) ? websiteItems : [websiteItem],
+            isCarouselRule(websitePreparedRule) ? websiteItems : [websiteItem],
             websiteReserveItems
           );
           automationRunWebsiteItem = websiteItem;
-          automationRunWebsiteItems = isCarouselRule(rule)
+          automationRunWebsiteItems = isCarouselRule(websitePreparedRule)
             ? websiteItems
             : [websiteItem];
         }
@@ -28713,11 +28932,11 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
     const approvalRequired = true;
 const approvalToken = crypto.randomBytes(32).toString("hex");
 const postStatus =
-  isCarouselRule(rule) || isAnimatedVideoRule(rule)
+  isCarouselRule(websitePreparedRule) || isAnimatedVideoRule(websitePreparedRule)
     ? "generating"
     : "pending_approval";
 let effectivePostStatus = postStatus;
-const wantsImage = Boolean(rule.generate_image);
+const wantsImage = Boolean(websitePreparedRule.generate_image);
 
 const { data: post, error: postError } = await supabase
   .from("posts")
@@ -28746,7 +28965,7 @@ const { data: post, error: postError } = await supabase
             source: "automation",
             source_label: getRuleContentSourceUrl(ruleWithBrandProfile)
               ? "Generated from selected website page"
-              : rule.uses_website_content
+              : websitePreparedRule.uses_website_content
               ? "Generated from website"
               : "Generated by automation",
             automation_rule_id: rule.id,
@@ -28757,23 +28976,23 @@ approval_token: approvalToken,
 approved_at: null,
 scheduled_for: scheduledPublishAtIso,
             image_status: wantsImage ? "generating" : "none",
-            image_prompt: wantsImage ? rule.image_prompt || null : null,
-            content_format: normalizeContentFormat(rule.content_format),
-            video_status: isAnimatedVideoRule(rule) ? "rendering" : "none",
-            video_provider: isAnimatedVideoRule(rule) ? "shotstack" : null,
-            video_duration_seconds: isAnimatedVideoRule(rule)
+            image_prompt: wantsImage ? websitePreparedRule.image_prompt || null : null,
+            content_format: normalizeContentFormat(websitePreparedRule.content_format),
+            video_status: isAnimatedVideoRule(websitePreparedRule) ? "rendering" : "none",
+            video_provider: isAnimatedVideoRule(websitePreparedRule) ? "shotstack" : null,
+            video_duration_seconds: isAnimatedVideoRule(websitePreparedRule)
               ? ANIMATED_VIDEO_DURATION_SECONDS
               : null,
     text_model_used: POST_TEXT_MODEL,
 image_model_used:
-  wantsImage && rule.image_source !== "uploaded"
-    ? isAnimatedVideoRule(rule)
+  wantsImage && websitePreparedRule.image_source !== "uploaded"
+    ? isAnimatedVideoRule(websitePreparedRule)
       ? ANIMATED_OVERLAY_IMAGE_MODEL
       : IMAGE_MODEL
     : null,
 include_logo: shouldUseLogoForRule(rule, brandProfile),
 logo_url: shouldUseLogoForRule(rule, brandProfile) ? brandProfile?.logo_url || null : null,
-product_research_model_used: rule.uses_website_content
+product_research_model_used: websitePreparedRule.uses_website_content
   ? PRODUCT_RESEARCH_MODEL
   : null,
           })
@@ -28792,13 +29011,13 @@ product_research_model_used: rule.uses_website_content
 
         let imageUrl = null;
         let imageStoragePath = null;
-        let finalImagePrompt = wantsImage ? rule.image_prompt || null : null;
+        let finalImagePrompt = wantsImage ? websitePreparedRule.image_prompt || null : null;
         let videoUrl = null;
         let videoStoragePath = null;
         let videoRenderId = null;
 
-        const isWebsiteBasedPost = Boolean(rule.uses_website_content || websiteItem || websiteSourceUrl);
-        const ruleImageSource = String(rule.image_source || "").trim().toLowerCase();
+        const isWebsiteBasedPost = Boolean(websitePreparedRule.uses_website_content || websiteItem || websiteSourceUrl);
+        const ruleImageSource = String(websitePreparedRule.image_source || "").trim().toLowerCase();
 
         if (wantsImage && ruleImageSource === "uploaded") {
           if (!rule.uploaded_image_url) {
@@ -29285,7 +29504,7 @@ product_research_model_used: rule.uses_website_content
   }
 }
 
-        if (isAnimatedVideoRule(rule)) {
+        if (isAnimatedVideoRule(websitePreparedRule)) {
           if (!videoUrl) {
             const message = "Animated product video could not be rendered.";
 
@@ -29328,7 +29547,7 @@ product_research_model_used: rule.uses_website_content
           effectivePostStatus = "pending_approval";
         }
 
-        if (isCarouselRule(rule)) {
+        if (isCarouselRule(websitePreparedRule)) {
           try {
             await saveCarouselSlidesForPost({
               supabase,
@@ -29370,7 +29589,7 @@ product_research_model_used: rule.uses_website_content
           }
         }
 
-        if (isCarouselRule(rule) && websiteItems.length) {
+        if (isCarouselRule(websitePreparedRule) && websiteItems.length) {
           try {
             await saveCarouselWebsiteContentHistory({
               supabase,
@@ -29389,7 +29608,7 @@ product_research_model_used: rule.uses_website_content
 
             summary.warnings += 1;
           }
-        } else if (rule.uses_website_content && websiteItem) {
+        } else if (websitePreparedRule.uses_website_content && websiteItem) {
           try {
             await saveWebsiteContentHistory({
               supabase,
@@ -29429,10 +29648,10 @@ product_research_model_used: rule.uses_website_content
                   rule: ruleWithBrandProfile,
                   postContent: generatedContent,
                   approvalToken,
-                  imageUrl: isCarouselRule(rule) ? null : (isWebsiteBasedPost && !websiteItem?.image_url ? null : imageUrl),
+                  imageUrl: isCarouselRule(websitePreparedRule) ? null : (isWebsiteBasedPost && !websiteItem?.image_url ? null : imageUrl),
                   userAppLanguage: userProfile.appLanguage,
                   postId: post.id,
-                  contentFormat: normalizeContentFormat(rule.content_format),
+                  contentFormat: normalizeContentFormat(websitePreparedRule.content_format),
                 });
 
                 summary.emails_sent += 1;
@@ -29471,7 +29690,7 @@ product_research_model_used: rule.uses_website_content
               .insert({
                 user_id: rule.user_id,
                 amount: -creditCost,
-                reason: rule.uses_website_content
+                reason: websitePreparedRule.uses_website_content
                   ? "Automation website post generated"
                   : wantsImage
                   ? "Automation post with image generated"
