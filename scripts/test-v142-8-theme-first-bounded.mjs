@@ -11,7 +11,7 @@ assert.match(
   /CAROUSEL_PREPARATION_SOFT_DEADLINE_MS[\s\S]{0,220}240_000/
 );
 assert.match(route, /AUTOMATION_STALE_RUNTIME_MS[\s\S]{0,220}12 \* 60 \* 1000/);
-assert.match(route, /CAMPAIGN_FINAL_REVIEW_TIMEOUT_MS[\s\S]{0,220}75_000/);
+assert.match(route, /CAMPAIGN_FINAL_REVIEW_TIMEOUT_MS[\s\S]{0,220}45_000/);
 assert.match(
   route,
   /process\.env\.STRICT_PRODUCT_NO_REUSE \|\| "false"/
@@ -21,7 +21,7 @@ assert.match(route, /function extractCampaignTitleThemeTerms/);
 assert.match(route, /function orderCampaignSearchQueriesThemeFirst/);
 assert.match(
   route,
-  /Every product search query must contain the primary theme/i
+  /Put concrete local-language theme plus product\/category searches first/i
 );
 assert.match(route, /titleThemeTerms: extractCampaignTitleThemeTerms\(rule\)/);
 assert.match(route, /titleThemeCoverageReady/);
@@ -34,10 +34,10 @@ const prepareEnd = route.indexOf(
 );
 const prepareBlock = route.slice(prepareStart, prepareEnd);
 
-assert.doesNotMatch(
+assert.match(
   prepareBlock,
   /generateCampaignCarouselMarketingStrategy\(\{/,
-  "Discovery must not spend a senior-model call on an upfront strategy."
+  "Discovery must be shaped by one bounded senior strategy call."
 );
 assert.doesNotMatch(
   prepareBlock,
@@ -68,7 +68,7 @@ assert.match(
 );
 assert.match(
   finalReviewBlock,
-  /This is the only senior-model call/
+  /This is the final bounded senior-model call/
 );
 
 const staleStart = route.indexOf("async function finalizeStaleAutomationOccurrences");

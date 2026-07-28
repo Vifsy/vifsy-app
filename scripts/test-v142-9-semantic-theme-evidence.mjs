@@ -21,7 +21,11 @@ assert.match(
 );
 assert.match(
   route,
-  /Every product search query must contain the primary theme/
+  /Put concrete local-language theme plus product\/category searches first/
+);
+assert.match(
+  route,
+  /contextually suitable product\/category searches from the supplied senior strategy/
 );
 assert.match(
   route,
@@ -81,8 +85,9 @@ assert.doesNotMatch(
 );
 assert.match(
   signalBlock,
-  /hasDirectCampaignSignal && hasAiCampaignApproval/
+  /hasMeaningfulCampaignSignal: relevance\.meaningful/
 );
+assert.match(signalBlock, /contextualCampaignApproval/);
 
 const titleEvidenceStart = route.indexOf(
   "function countCampaignTitleThemeEvidence"

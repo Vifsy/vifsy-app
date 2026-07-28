@@ -26,7 +26,8 @@
     "test:v142.5": "node scripts/test-v142-5-senior-final-selection.mjs",
     "test:v142.6": "node scripts/test-v142-6-marketing-curation.mjs",
     "test:v142.8": "node scripts/test-v142-8-theme-first-bounded.mjs",
-    "test:v142.9": "node scripts/test-v142-9-semantic-theme-evidence.mjs"
+    "test:v142.9": "node scripts/test-v142-9-semantic-theme-evidence.mjs",
+    "test:v143": "node scripts/test-v143-semantic-product-fit.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

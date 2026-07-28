@@ -40,10 +40,15 @@ assert.ok(
   prepareStart >= 0 && vocabularyCall > prepareStart,
   "Fast-model vocabulary must be prepared before product research"
 );
-assert.doesNotMatch(
+assert.match(
   prepareBlock,
   /generateCampaignCarouselMarketingStrategy\(\{/,
-  "The superseding bounded flow must reserve the senior model for final curation"
+  "The bounded senior strategy must shape retrieval before final curation"
+);
+assert.ok(
+  prepareBlock.indexOf("generateCampaignCarouselMarketingStrategy({") <
+    prepareBlock.indexOf("ensureProductSearchQueriesForRule({"),
+  "The strategy must be prepared before retailer-search vocabulary"
 );
 
 const finalStart = route.indexOf(
@@ -60,10 +65,10 @@ assert.match(finalBlock, /Do not silently fill an uncovered strategy slot/);
 assert.match(finalBlock, /"publishable": true/);
 assert.match(finalBlock, /"missing_needs"/);
 assert.match(finalBlock, /rejectedProducts:/);
-assert.doesNotMatch(
+assert.match(
   finalBlock,
-  /for \(const evaluation of eligibleEvaluations\)[\s\S]{0,200}addIndex/,
-  "Senior-selected indices must not be silently backfilled by standalone score"
+  /parsed\?\.publishable === true[\s\S]{0,300}for \(const evaluation of eligibleEvaluations\)/,
+  "Only a model-approved set may recover omitted eligible indices"
 );
 
 assert.match(route, /async function runCampaignCurationTargetedRescue/);

@@ -23,8 +23,12 @@ const brandWideCatalogLoad = route.indexOf(
 );
 assert.ok(earlyExitCall > 0, "Store Map early-exit call is missing");
 assert.ok(
-  brandWideCatalogLoad > earlyExitCall,
-  "Store Map early exit must happen before brand-wide catalogs and legacy fallbacks"
+  brandWideCatalogLoad > 0 && brandWideCatalogLoad < earlyExitCall,
+  "Verified brand-wide catalog evidence must be available before live Store Map fallback"
+);
+assert.match(
+  route,
+  /Campaign rate-limit resume is using verified catalog before any new website request/
 );
 
 const focusedPriority = route.indexOf(
