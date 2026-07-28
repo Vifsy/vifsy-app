@@ -3417,11 +3417,6 @@ function fillCampaignProductSelection(primaryItems, fallbackItems, rule, sourceU
 
 
 function getCampaignCandidateUsageState(item, recentUsedItems, sourceUrl, usedWebsiteImageUrlsThisRun = new Set()) {
-  const persistedConcreteProductProof =
-    typeof row.verification_metadata?.concrete_product_verified === "boolean"
-      ? row.verification_metadata.concrete_product_verified
-      : undefined;
-
   return {
     wasUsedRecently:
       hasWebsiteItemCatalogUsage(item) ||
@@ -10350,6 +10345,13 @@ async function failAutomationOccurrenceTerminal({
 
   const internalMessage = String(errorOrMessage?.message || errorOrMessage || "Unknown automation error");
   const failure = classifyAutomationCreationFailure(errorOrMessage, stage);
+  console.error("Automation occurrence failed terminally", {
+    occurrenceId,
+    ruleId: rule?.id || null,
+    stage: stage || "unhandled",
+    failureCode: failure.code,
+    message: internalMessage,
+  });
   const shouldPauseRecurringPlan = ["website_security_blocked", "insufficient_credits"].includes(failure.code);
   const keepRuleActive = rule?.schedule_type === "weekly" && !shouldPauseRecurringPlan;
   const nextRunAt = keepRuleActive
@@ -12200,6 +12202,11 @@ function normalizeWebsiteCatalogItem(row) {
   if (!row) {
     return null;
   }
+
+  const persistedConcreteProductProof =
+    typeof row.verification_metadata?.concrete_product_verified === "boolean"
+      ? row.verification_metadata.concrete_product_verified
+      : undefined;
 
   const item = normalizeWebsiteItem(
     {
@@ -29293,7 +29300,8 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
               carouselError?.productEngineDiagnostics || null;
 
             const canUseCampaignDeliveryFallback =
-              isCampaignProductCarouselRule(rule) &&
+              isCarouselRule(rule) &&
+              isCampaignScopedWebsiteRule(rule) &&
               (
                 isWebsiteRateLimitError(carouselError) ||
                 carouselError?.code ===
