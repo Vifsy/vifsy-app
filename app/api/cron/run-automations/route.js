@@ -76,6 +76,7 @@ import {
   resolveCampaignThemeEvidence,
   selectCampaignThemeDeliveryEntries,
 } from "../../../../lib/campaignThemeDelivery.js";
+import { holdPostForAdminReview } from "../../../../lib/adminPostReview.js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -10386,6 +10387,50 @@ async function failAutomationOccurrenceTerminal({
   let notificationStatus = String(data?.notification_status || "pending");
 
   if (handled) {
+    if (rule?.admin_review_no_charge && rule?.admin_review_rerun_of_post_id) {
+      notificationStatus = "suppressed_admin_review_rerun";
+      const adminFailureRuleReset = {
+        admin_review_no_charge: false,
+        admin_review_rerun_of_post_id: null,
+        admin_review_root_post_id: null,
+        admin_review_original_next_run_at: null,
+        admin_product_override_urls: [],
+        updated_at: new Date().toISOString(),
+      };
+      if (
+        rule.schedule_type === "weekly" &&
+        rule.admin_review_original_next_run_at
+      ) {
+        adminFailureRuleReset.is_active = true;
+        adminFailureRuleReset.next_run_at =
+          rule.admin_review_original_next_run_at;
+      }
+      await Promise.allSettled([
+        supabase
+          .from("admin_post_reviews")
+          .update({
+            status: "rejected",
+            admin_note: `Omkörningen kunde inte slutföras: ${truncateText(internalMessage, 900)}`,
+            reviewed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("post_id", rule.admin_review_rerun_of_post_id),
+        supabase
+          .from("automation_rules")
+          .update(adminFailureRuleReset)
+          .eq("id", rule.id),
+      ]);
+      return {
+        handled,
+        failureCode: failure.code,
+        customerMessage: failure.customerMessage,
+        refundedCredits,
+        notificationStatus,
+        planContinues: Boolean(data?.plan_continues),
+        nextRunAt: data?.next_run_at || null,
+      };
+    }
+
     let resolvedBrandProfile = brandProfile;
     if (!resolvedBrandProfile && rule?.brand_profile_id) {
       try {
@@ -18600,7 +18645,9 @@ function extractProductUrlCandidatesFromText({
       }
 
       const lower = resolvedUrl.toLowerCase();
+      const verifiedProductPath = isLikelyProductDetailUrl(resolvedUrl);
       const looksItemLike =
+        verifiedProductPath ||
         lower.includes("/p/") ||
         /\/[^/?#]+-p\d{3,}/i.test(lower) ||
         /\/[^/?#]+\d{5,}/i.test(lower);
@@ -18614,7 +18661,13 @@ function extractProductUrlCandidatesFromText({
         url: resolvedUrl.split("#")[0],
         price: "",
         reason: `Item-like URL found in embedded page data on ${pageUrl}`,
-        score: (looksItemLike ? 28 : 6) + scorePossibleProductLink({ url: resolvedUrl, text: "", campaignPrompt }),
+        score:
+          (verifiedProductPath ? 54 : looksItemLike ? 28 : 6) +
+          scorePossibleProductLink({
+            url: resolvedUrl,
+            text: "",
+            campaignPrompt,
+          }),
       });
     }
   }
@@ -18983,10 +19036,16 @@ function imageUrlMatchesProductIdentity(imageUrl, productUrl, productTitle = "")
 }
 
 function extractBestProductImageFromHtml(html, pageUrl, productTitle = "") {
-  // Once the page itself is verified as a product page, gallery placement is
-  // stronger evidence than words in a CDN filename. Rank the main product
-  // gallery first and keep filename matching only as a final conservative
-  // fallback for unstructured pages.
+  // Product schema is tied to the page's named product. Prefer it before a
+  // broad DOM gallery because recommendation carousels can otherwise supply a
+  // sharper image for a different product.
+  const product = findBestJsonLdProduct(html, pageUrl, productTitle);
+  const jsonLdImage = getProductImageFromJsonLd(product, pageUrl);
+
+  if (jsonLdImage && !isBadProductImageUrl(jsonLdImage)) {
+    return jsonLdImage;
+  }
+
   const galleryCandidates = collectProductImageCandidates({
     html,
     pageUrl,
@@ -18997,13 +19056,6 @@ function extractBestProductImageFromHtml(html, pageUrl, productTitle = "") {
 
   if (mainGalleryImage?.url) {
     return mainGalleryImage.url;
-  }
-
-  const product = findBestJsonLdProduct(html, pageUrl, productTitle);
-  const jsonLdImage = getProductImageFromJsonLd(product, pageUrl);
-
-  if (jsonLdImage) {
-    return jsonLdImage;
   }
 
   const ogImage = getMetaContent(html, ["og:image", "twitter:image"]);
@@ -19873,10 +19925,18 @@ function isLikelyBadDiscoveryPageUrl(value, websiteUrl) {
     }
 
     const hasProductPath =
+      isLikelyProductDetailUrl(url.toString()) ||
       /\/products?\//i.test(path) ||
       /\/produkt(er)?\//i.test(path) ||
       /\/p\//i.test(path) ||
       /\/[^/?#]+-p\d{3,}/i.test(path);
+
+    // Retailer search, filter and pagination URLs are discovery pages even
+    // when their slugs look item-like. Keep query strings only on URLs that
+    // already match a known product-detail pattern.
+    if (url.search && !hasProductPath) {
+      return true;
+    }
 
     const listingPathParts = [
       "/collections",
@@ -23277,6 +23337,93 @@ async function prepareWebsiteContentForRule({
   );
 }
 
+function getAdminProductOverrideUrls(rule) {
+  return Array.from(
+    new Set(
+      (Array.isArray(rule?.admin_product_override_urls)
+        ? rule.admin_product_override_urls
+        : []
+      )
+        .map((value) => String(value || "").trim())
+        .filter((value) => isHttpUrl(value))
+    )
+  ).slice(0, 8);
+}
+
+async function prepareAdminReviewOverrideProducts({
+  rule,
+  brandProfile,
+  summary,
+}) {
+  const overrideUrls = getAdminProductOverrideUrls(rule);
+  if (!overrideUrls.length) return null;
+
+  const websiteUrl =
+    getWebsiteProductSourceUrl(brandProfile, rule) ||
+    overrideUrls[0];
+  const products = [];
+  const failures = [];
+
+  for (const productUrl of overrideUrls) {
+    try {
+      if (!isSameOrSubdomainUrl(productUrl, websiteUrl)) {
+        throw new Error("Product URL did not belong to the customer's website");
+      }
+      const product = await extractProductDataFromProductPage({
+        productUrl,
+        websiteUrl,
+        webSearchProduct: {
+          title: "",
+          reason: "Spreelo admin selected this exact product for a review rerun.",
+          source_page_url: productUrl,
+          campaign_fit_source: "admin_selected_exact_product",
+        },
+      });
+      if (!product?.url || !product?.image_url) {
+        throw new Error("The product page did not provide a usable product image");
+      }
+      products.push({
+        ...product,
+        campaign_fit_source: "admin_selected_exact_product",
+        automation_search_method: "admin_selected_exact_product",
+        admin_selected_exact_product: true,
+      });
+    } catch (error) {
+      failures.push({ productUrl, message: error?.message || "Verification failed" });
+    }
+  }
+
+  if (failures.length) {
+    const error = new Error(
+      `Admin-selected product links could not all be verified: ${failures
+        .map((failure) => failure.productUrl)
+        .join(", ")}`
+    );
+    error.adminProductFailures = failures;
+    throw error;
+  }
+
+  const selectedProducts = dedupeWebsiteItemsByUrlTitleAndImage(products)
+    .filter(isValidCarouselProduct)
+    .slice(0, CAROUSEL_PRODUCT_SLIDE_TARGET);
+  if (!selectedProducts.length) {
+    throw new Error("No admin-selected product link produced a usable product.");
+  }
+
+  summary.admin_selected_products =
+    Number(summary.admin_selected_products || 0) + selectedProducts.length;
+  console.log("Admin review rerun locked exact product links", {
+    ruleId: rule?.id || null,
+    productCount: selectedProducts.length,
+    productUrls: selectedProducts.map((item) => item.url),
+  });
+
+  return {
+    products: selectedProducts,
+    websiteUrl,
+  };
+}
+
 function isDatabaseUniqueViolation(error) {
   return (
     String(error?.code || "") === "23505" ||
@@ -24911,46 +25058,59 @@ async function collectAnimatedProductImageCandidates(websiteItem) {
 }
 
 async function selectAnimatedProductImage(websiteItem) {
-  const candidates = await collectAnimatedProductImageCandidates(websiteItem);
-  const accepted = [];
-  const rejected = [];
-
-  for (const candidate of candidates.slice(0, 9)) {
-    try {
-      const sourceImageBuffer = await fetchImageBufferForOverlay(candidate.url);
-      const prepared = await prepareAnimatedProductCutout(sourceImageBuffer);
-      const metadata = await sharp(prepared.cutoutBuffer).metadata();
-      const resolutionScore = Math.min(
-        24,
-        (Number(metadata.width || 0) * Number(metadata.height || 0)) / 70000
-      );
-      accepted.push({
-        ...candidate,
-        sourceImageBuffer,
-        cutoutBuffer: prepared.cutoutBuffer,
-        analysis: prepared.analysis,
-        score: Number(candidate.identityScore || 0) + Number(prepared.score || 0) + resolutionScore,
-      });
-    } catch (error) {
-      rejected.push({
-        url: candidate.url,
-        source: candidate.source,
-        message: error?.message,
-      });
-    }
+  const selectedImageUrl = normalizeShopifyImageWidthUrl(
+    websiteItem?.image_url,
+    1600
+  );
+  if (!selectedImageUrl || isBadProductImageUrl(selectedImageUrl)) {
+    throw new Error("The selected product did not have a usable verified image");
   }
 
-  accepted.sort((left, right) => right.score - left.score);
-  const selected = accepted[0];
-  if (!selected) {
-    console.warn("Animated product image candidates rejected", {
-      productUrl: websiteItem?.url || null,
-      rejected: rejected.slice(0, 8),
-    });
-    throw new Error(
-      "No clean product image with a removable or transparent background was available for this animated Reel"
-    );
+  // The product resolver has already tied this high-resolution image to the
+  // selected product page. Do not scan the page again: retailer galleries and
+  // recommendation widgets can contain another product whose image otherwise
+  // outranks the correct one.
+  const sourceImageBuffer = await fetchImageBufferForOverlay(selectedImageUrl);
+  let prepared;
+  try {
+    prepared = await prepareAnimatedProductCutout(sourceImageBuffer);
+  } catch (error) {
+    // A background that cannot be removed safely must not stop delivery or
+    // cause Spreelo to switch products. Keep the exact verified product image
+    // as a clean framed asset instead.
+    prepared = {
+      cutoutBuffer: await sharp(sourceImageBuffer)
+        .rotate()
+        .resize({
+          width: 900,
+          height: 900,
+          fit: "inside",
+          withoutEnlargement: false,
+        })
+        .png()
+        .toBuffer(),
+      score: 80,
+      analysis: {
+        mode: "verified_product_image_frame",
+        cutoutError: error?.message || "Background removal was not safe",
+      },
+    };
   }
+
+  const metadata = await sharp(prepared.cutoutBuffer).metadata();
+  const resolutionScore = Math.min(
+    24,
+    (Number(metadata.width || 0) * Number(metadata.height || 0)) / 70000
+  );
+  const selected = {
+    url: selectedImageUrl,
+    source: "selected_verified_product_image",
+    identityScore: 160,
+    sourceImageBuffer,
+    cutoutBuffer: prepared.cutoutBuffer,
+    analysis: prepared.analysis,
+    score: 160 + Number(prepared.score || 0) + resolutionScore,
+  };
 
   console.log("Animated product image selected", {
     productUrl: websiteItem?.url || null,
@@ -24958,7 +25118,7 @@ async function selectAnimatedProductImage(websiteItem) {
     source: selected.source,
     score: Number(selected.score.toFixed(2)),
     analysis: selected.analysis,
-    rejectedCount: rejected.length,
+    rejectedCount: 0,
   });
 
   return selected;
@@ -24968,13 +25128,16 @@ async function prepareAnimatedReelProductCandidates({
   primaryItem,
   reserveItems = [],
   sourceUrl = "",
-  maximumCandidates = 4,
+  maximumCandidates = 1,
 }) {
   const candidates = [];
   const rejected = [];
   const seenFamilies = new Set();
 
-  for (const rawItem of [primaryItem, ...(reserveItems || [])]) {
+  // Only the already selected product is prepared. Pre-processing reserve
+  // products consumed several minutes even though the renderer used only the
+  // first result, which pushed otherwise valid videos into timeout.
+  for (const rawItem of [primaryItem]) {
     if (!rawItem || candidates.length + rejected.length >= maximumCandidates) break;
 
     const item = normalizeWebsiteItem(rawItem, rawItem?.url || sourceUrl);
@@ -26379,7 +26542,7 @@ async function createAnimatedProductLayer({ sourceImageBuffer, preparedCutoutBuf
       width: 920,
       height: 920,
       fit: "inside",
-      withoutEnlargement: true,
+      withoutEnlargement: false,
     })
     .png({ compressionLevel: 9 })
     .toBuffer();
@@ -26441,7 +26604,7 @@ async function createAnimatedProductLayer({ sourceImageBuffer, preparedCutoutBuf
         width: candidate.width,
         height: candidate.width,
         fit: "inside",
-        withoutEnlargement: true,
+        withoutEnlargement: false,
       })
       .webp({
         quality: candidate.quality,
@@ -29245,13 +29408,18 @@ async function runAutomationCron(request, options = {}) {
 
 
         const creditCost = Number(rule.credit_cost || 1);
+        const isAdminReviewRerun = Boolean(
+          rule.admin_review_no_charge &&
+            rule.admin_review_rerun_of_post_id
+        );
         const hasReservedCredits =
+          !isAdminReviewRerun &&
           rule.credit_reservation_status === "reserved" &&
           Number(rule.credit_reserved_amount || 0) >= creditCost;
 
         let creditsRemaining = 0;
 
-        if (!hasReservedCredits) {
+        if (!hasReservedCredits && !isAdminReviewRerun) {
           const { data: balance, error: balanceError } = await supabase
             .from("user_credit_balances")
             .select("credits_remaining, monthly_credit_limit, plan_name")
@@ -29292,8 +29460,54 @@ let websitePreparedRule = rule;
 let animatedReelCandidates = [];
 let animatedReelRejectedCandidates = [];
 const focusedPageContext = await prepareFocusedPageContextForRule(rule);
+const adminOverrideProducts = await prepareAdminReviewOverrideProducts({
+  rule,
+  brandProfile,
+  summary,
+});
 
-        if (isCarouselRule(rule)) {
+        if (adminOverrideProducts) {
+          websiteSourceUrl = adminOverrideProducts.websiteUrl;
+          websiteCycleNumber = 1;
+          useWebsiteImage = true;
+          if (isCarouselRule(rule) && adminOverrideProducts.products.length >= 2) {
+            websiteItems = adminOverrideProducts.products.slice(
+              0,
+              CAROUSEL_PRODUCT_SLIDE_TARGET
+            );
+            websiteReserveItems = [];
+            websiteItem = websiteItems[0];
+            websitePreparedRule = {
+              ...rule,
+              website_item: websiteItem,
+              website_items: websiteItems,
+            };
+            productContentContract = buildProductContentContract(
+              websiteItems,
+              []
+            );
+          } else {
+            websiteItem = adminOverrideProducts.products[0];
+            websiteItems = [];
+            websiteReserveItems = adminOverrideProducts.products.slice(1);
+            websitePreparedRule = {
+              ...rule,
+              content_format: isCarouselRule(rule)
+                ? "single_image"
+                : rule.content_format,
+              website_item: websiteItem,
+              website_items: [],
+            };
+            productContentContract = buildProductContentContract(
+              [websiteItem],
+              websiteReserveItems
+            );
+          }
+          automationRunWebsiteItem = websiteItem;
+          automationRunWebsiteItems = websiteItems.length
+            ? websiteItems
+            : [websiteItem];
+        } else if (isCarouselRule(rule)) {
           try {
             const preparedCarouselProducts = await prepareCarouselProductsForRule({
               supabase,
@@ -29527,9 +29741,9 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
         if (isAnimatedVideoRule(websitePreparedRule || rule)) {
           const preparedAnimatedCandidates = await prepareAnimatedReelProductCandidates({
             primaryItem: websiteItem,
-            reserveItems: websiteReserveItems,
+            reserveItems: [],
             sourceUrl: websiteSourceUrl || brandProfile?.website_url || rule.website_url || "",
-            maximumCandidates: 4,
+            maximumCandidates: 1,
           });
 
           animatedReelCandidates = preparedAnimatedCandidates.candidates;
@@ -29541,7 +29755,7 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
               .filter(Boolean)
               .slice(0, 4);
             throw new Error(
-              `Animated product Reel could not find a usable product image after checking the main product and up to three reserves${attemptedTitles.length ? `: ${attemptedTitles.join(", ")}` : ""}.`
+              `Animated product Reel could not prepare the verified image for the selected product${attemptedTitles.length ? `: ${attemptedTitles.join(", ")}` : ""}.`
             );
           }
 
@@ -30306,7 +30520,26 @@ product_research_model_used: websitePreparedRule.uses_website_content
           }
         }
 
+        let adminReviewHeld = false;
         if (effectivePostStatus === "pending_approval") {
+          const adminReview = await holdPostForAdminReview({
+            supabase,
+            resendApiKey,
+            rule,
+            postId: post.id,
+            postContent: generatedContent,
+            imageUrl,
+            videoUrl,
+            brandName: brandProfile?.business_name || "",
+          });
+          adminReviewHeld = Boolean(adminReview.held);
+          if (adminReviewHeld) {
+            summary.admin_review_held =
+              Number(summary.admin_review_held || 0) + 1;
+          }
+        }
+
+        if (effectivePostStatus === "pending_approval" && !adminReviewHeld) {
           if (!resendApiKey) {
             summary.warnings += 1;
             summary.emails_failed += 1;
@@ -30340,7 +30573,7 @@ product_research_model_used: websitePreparedRule.uses_website_content
           }
         }
 
-        if (!hasReservedCredits) {
+        if (!hasReservedCredits && !isAdminReviewRerun) {
           const newCreditsRemaining = creditsRemaining - creditCost;
 
           const { error: creditUpdateError } = await supabase
@@ -30396,6 +30629,22 @@ product_research_model_used: websitePreparedRule.uses_website_content
           now,
           scheduledPublishAtIso
         );
+
+        if (isAdminReviewRerun) {
+          if (
+            rule.schedule_type === "weekly" &&
+            rule.admin_review_original_next_run_at
+          ) {
+            ruleUpdatePayload.is_active = true;
+            ruleUpdatePayload.next_run_at =
+              rule.admin_review_original_next_run_at;
+          }
+          ruleUpdatePayload.admin_review_rerun_of_post_id = null;
+          ruleUpdatePayload.admin_review_root_post_id = null;
+          ruleUpdatePayload.admin_review_original_next_run_at = null;
+          ruleUpdatePayload.admin_product_override_urls = [];
+          ruleUpdatePayload.admin_review_no_charge = false;
+        }
 
         if (rule.schedule_type === "weekly" && ruleUpdatePayload.next_run_at) {
           const nextAdaptiveRule = resolveAdaptiveWeeklyRule(
@@ -30477,6 +30726,8 @@ product_research_model_used: websitePreparedRule.uses_website_content
           metadata: {
             effective_post_status: effectivePostStatus,
             credits_were_reserved: hasReservedCredits,
+            admin_review_rerun_no_charge: isAdminReviewRerun,
+            admin_review_held: adminReviewHeld,
           },
         });
 
@@ -30484,12 +30735,15 @@ product_research_model_used: websitePreparedRule.uses_website_content
           stage: "completed",
           occurrence_id: automationOccurrenceId,
           effective_post_status: effectivePostStatus,
-          email_expected: effectivePostStatus === "pending_approval",
+          email_expected:
+            effectivePostStatus === "pending_approval" && !adminReviewHeld,
+          admin_review_held: adminReviewHeld,
           website_source_url: websiteSourceUrl,
           website_cycle_number: websiteCycleNumber,
           use_website_image: useWebsiteImage,
           website_item_count: Array.isArray(websiteItems) ? websiteItems.length : (websiteItem ? 1 : 0),
           credits_were_reserved: hasReservedCredits,
+          admin_review_rerun_no_charge: isAdminReviewRerun,
           next_recurring_credit_reserved: Boolean(reservedCreditResult?.next_reserved),
           recurring_plan_paused_for_credits: Boolean(reservedCreditResult?.paused),
         });
