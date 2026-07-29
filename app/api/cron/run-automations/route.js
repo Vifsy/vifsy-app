@@ -247,12 +247,13 @@ const CAROUSEL_WEB_SEARCH_MAX_VERIFIED_ITEMS = PRODUCT_ENGINE_V2_ENABLED
 const CAROUSEL_WEB_SEARCH_CANDIDATE_LIMIT = PRODUCT_ENGINE_V2_ENABLED
   ? PRODUCT_ENGINE_V2_POOL_TARGETS.minimumCandidatePool * 2
   : 24;
-// v143.10: Campaign carousels now start with the same bounded task that
-// produced the strong manual result: ask GPT-5.5 to web-search one customer
-// domain for ten ranked products, then let Product Engine verify those exact
-// URLs. The legacy 180-candidate/store-search flow remains a fallback only.
+// v143.11: GPT-5.5's domain-restricted web research is authoritative for
+// whole-site campaign carousels. Spreelo hydrates technical product assets in
+// that exact order, but Product Engine must not judge, rerank or replace the
+// web agent's choices with the legacy candidate/store-search pipeline.
 const CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET = 10;
 const CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED = 5;
+const CAMPAIGN_PRIMARY_WEB_RESEARCH_MAX_ROUNDS = 2;
 const CAMPAIGN_PRIMARY_WEB_RESEARCH_TIMEOUT_MS = Math.max(
   45_000,
   Math.min(
@@ -262,7 +263,7 @@ const CAMPAIGN_PRIMARY_WEB_RESEARCH_TIMEOUT_MS = Math.max(
   )
 );
 const CAMPAIGN_PRIMARY_WEB_RESEARCH_SOURCE =
-  "gpt55_primary_domain_web_research";
+  "gpt55_authoritative_domain_web_agent";
 const CAROUSEL_PRODUCT_RESERVE_TARGET = PRODUCT_ENGINE_V2_ENABLED
   ? PRODUCT_ENGINE_V2_POOL_TARGETS.reserveCount
   : 0;
@@ -5945,24 +5946,83 @@ async function prepareCarouselProductsForRule({
 
   const canUsePrimaryCampaignWebResearch =
     isCampaignRule &&
-    !resumedAfterWebsiteRateLimit &&
     contentSourceScope !== "product_category" &&
     contentSourceScope !== "focus_page";
   let primaryCampaignWebResearch = null;
 
   if (canUsePrimaryCampaignWebResearch) {
     try {
-      primaryCampaignWebResearch =
-        await findPrimaryCampaignProductsWithWebSearch({
+      const researchRounds = [];
+      let combinedCandidates = [];
+      let combinedHydratedProducts = [];
+      let researchExclusions = [...recentUsedItems];
+
+      for (
+        let researchRound = 1;
+        researchRound <= CAMPAIGN_PRIMARY_WEB_RESEARCH_MAX_ROUNDS;
+        researchRound += 1
+      ) {
+        const roundResult = await findPrimaryCampaignProductsWithWebSearch({
           openai,
-          supabase,
-          brandProfile,
           rule,
           websiteUrl,
-          usedWebsiteItems: recentUsedItems,
+          usedWebsiteItems: researchExclusions,
+          cachedWebsiteItems: catalogItems,
           deadlineMs: productPreparationDeadline,
-          verificationCache: productVerificationCache,
+          researchRound,
         });
+        researchRounds.push(roundResult);
+        combinedCandidates = dedupeUrlItems([
+          ...combinedCandidates,
+          ...(roundResult?.candidates || []),
+        ]);
+        combinedHydratedProducts = dedupeUrlItems([
+          ...combinedHydratedProducts,
+          ...(roundResult?.validProducts || []),
+        ]).sort(
+          (left, right) =>
+            getPrimaryCampaignResearchRank(left) -
+            getPrimaryCampaignResearchRank(right)
+        );
+
+        if (
+          combinedHydratedProducts.length >=
+          CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED
+        ) {
+          break;
+        }
+
+        // The replacement round uses the same GPT-5.5 web-search method and
+        // explicitly excludes every URL already returned. It does not open the
+        // legacy Store Map, Product Engine queue or 180-candidate fallback.
+        researchExclusions = [
+          ...recentUsedItems,
+          ...combinedCandidates.map((candidate) => ({
+            item_title: candidate?.title || "",
+            item_url: candidate?.url || "",
+          })),
+        ];
+      }
+
+      const firstResearchRound = researchRounds[0] || {};
+      primaryCampaignWebResearch = {
+        ...firstResearchRound,
+        candidates: combinedCandidates,
+        verifiedProducts: combinedHydratedProducts,
+        validProducts: combinedHydratedProducts,
+        campaignTheme:
+          firstResearchRound?.campaignTheme ||
+          getPrimaryCampaignWebResearchTheme(rule),
+        researchRounds,
+        researchRoundCount: researchRounds.length,
+        technicalPageRateLimited: researchRounds.some((result) =>
+          Boolean(result?.technicalPageRateLimited)
+        ),
+        elapsedMs: researchRounds.reduce(
+          (total, result) => total + Number(result?.elapsedMs || 0),
+          0
+        ),
+      };
 
       const primaryWebResearchResult =
         await finalizeCarouselFromPrimaryCampaignWebResearch({
@@ -5980,74 +6040,40 @@ async function prepareCarouselProductsForRule({
         return primaryWebResearchResult;
       }
 
-      const partialPrimaryProducts =
-        primaryCampaignWebResearch?.validProducts || [];
-      if (partialPrimaryProducts.length) {
-        // Preserve the expensive, technically verified GPT-5.5 work as the
-        // highest-priority seed if the legacy fallback must complete the set.
-        catalogItems = dedupeWebsiteItemsByUrlTitleAndImage([
-          ...partialPrimaryProducts,
-          ...catalogItems,
-        ]);
-      }
-
-      console.warn("Campaign primary GPT-5.5 web research did not verify five usable products; continuing with the stable v143.8 fallback flow", {
-        ruleId: rule?.id,
-        brandProfileId: rule?.brand_profile_id,
-        websiteUrl,
-        directCandidateCount:
-          primaryCampaignWebResearch?.candidates?.length || 0,
-        verifiedCount:
-          primaryCampaignWebResearch?.verifiedProducts?.length || 0,
-        usableImageCount: partialPrimaryProducts.length,
-        rateLimited: Boolean(primaryCampaignWebResearch?.rateLimited),
-      });
-
-      if (primaryCampaignWebResearch?.rateLimited) {
-        const rateLimitError = new WebsiteRateLimitError(
-          "The website rate limited verification of GPT-5.5's ranked product URLs before five products were ready.",
-          {
-            url: websiteUrl,
-            domain: getWebsiteFetchDomain(websiteUrl),
-            retryAfterMs: Number(
-              primaryCampaignWebResearch?.retryAfterMs || 0
-            ),
-            status: 429,
-          }
-        );
-        rateLimitError.partialProducts = partialPrimaryProducts;
-        throw rateLimitError;
-      }
+      const authoritativeResearchError = new Error(
+        `GPT-5.5 web research completed ${researchRounds.length} round(s), but only ${combinedHydratedProducts.length} of its selected products had usable technical image assets. The legacy candidate flow was deliberately not used.`
+      );
+      authoritativeResearchError.code =
+        "CAMPAIGN_AUTHORITATIVE_WEB_RESEARCH_INSUFFICIENT_ASSETS";
+      authoritativeResearchError.partialProducts = combinedHydratedProducts;
+      authoritativeResearchError.candidateCount = combinedCandidates.length;
+      throw authoritativeResearchError;
     } catch (error) {
-      if (isWebsiteRateLimitError(error)) {
-        throw error;
-      }
-      console.warn("Campaign primary GPT-5.5 web research failed; continuing with the unchanged v143.8 fallback flow", {
+      console.error("Authoritative GPT-5.5 campaign web research failed; legacy product discovery was not allowed to replace its choices", {
         ruleId: rule?.id,
         brandProfileId: rule?.brand_profile_id,
         websiteUrl,
         model: PRODUCT_RESEARCH_MODEL,
+        code: error?.code || null,
         message: error?.message,
         elapsedMs: Date.now() - productPreparationStartedAt,
       });
+      throw error;
     }
   } else if (isCampaignRule) {
-    console.log("Campaign primary GPT-5.5 web research was not repeated", {
+    console.log("Campaign authoritative GPT-5.5 web research is not used for an explicitly focused customer URL", {
       ruleId: rule?.id,
       brandProfileId: rule?.brand_profile_id,
       websiteUrl,
       resumedAfterWebsiteRateLimit,
       contentSourceScope,
-      reason: resumedAfterWebsiteRateLimit
-        ? "persistent_ranked_products_are_resumed_before_new_ai_cost"
-        : "customer_selected_category_keeps_its_existing_focused_flow",
+      reason: "customer_selected_category_keeps_its_existing_focused_flow",
     });
   }
 
-  // Only pay for vocabulary expansion when the direct GPT-5.5 web-research
-  // route could not deliver five verified products. This keeps the successful
-  // path equivalent to the short human-style request instead of sending its
-  // results through the old query/score pipeline.
+  // Only explicitly focused customer URLs reach the established focused flow.
+  // Whole-site campaigns have already returned or thrown above, so they can
+  // never leak into vocabulary expansion or the legacy candidate pipeline.
   rule = await ensureProductSearchQueriesForRule({
     supabase,
     openai,
@@ -22249,7 +22275,8 @@ function getPrimaryCampaignWebResearchTheme(rule) {
 
 function isPrimaryCampaignWebResearchProduct(item) {
   return Boolean(
-    item?.product_page_verified === true &&
+    isValidCarouselProduct(item) &&
+      item?.authoritative_web_agent_selected === true &&
       (
         item?.campaign_primary_web_researched === true ||
         item?.campaign_fit_source === CAMPAIGN_PRIMARY_WEB_RESEARCH_SOURCE ||
@@ -22305,15 +22332,121 @@ function findMatchingPrimaryWebResearchCandidate(
   );
 }
 
+async function hydrateAuthoritativeWebAgentProduct({
+  candidate,
+  websiteUrl,
+  cachedItem = null,
+}) {
+  let html = "";
+  let technicalPageRateLimited = false;
+  try {
+    html = await fetchHtml(candidate.url);
+  } catch (error) {
+    technicalPageRateLimited = isWebsiteRateLimitError(error);
+    console.warn("Authoritative GPT-5.5 product page could not be fetched; retaining only web-agent facts", {
+      productUrl: candidate?.url,
+      title: candidate?.title,
+      message: error?.message,
+      technicalPageRateLimited,
+    });
+  }
+
+  const product = html
+    ? findBestJsonLdProduct(html, candidate.url, candidate.title)
+    : null;
+  const rawTitle =
+    String(product?.name || "").trim() ||
+    String(candidate?.title || "").trim() ||
+    (html ? extractPageTitle(html) : "");
+  const title = sanitizeProductTitleForCard(rawTitle) || rawTitle;
+  const description =
+    String(product?.description || "").trim() ||
+    String(candidate?.reason || "").trim() ||
+    (html
+      ? String(
+          getMetaContent(html, [
+            "description",
+            "og:description",
+            "twitter:description",
+          ]) || ""
+        ).trim()
+      : "");
+  const productImage = product
+    ? getProductImageFromJsonLd(product, candidate.url)
+    : null;
+  const pageImage = html
+    ? extractBestProductImageFromHtml(html, candidate.url, title)
+    : null;
+  const imageUrl =
+    pageImage ||
+    productImage ||
+    (
+      isHttpUrl(cachedItem?.image_url) &&
+      !isBadProductImageUrl(cachedItem.image_url)
+        ? cachedItem.image_url
+        : null
+    ) ||
+    (
+      isHttpUrl(candidate?.image_url) &&
+      !isBadProductImageUrl(candidate.image_url)
+        ? candidate.image_url
+        : null
+    );
+  const productPrice = product ? getProductPriceFromJsonLd(product) : "";
+  const normalized = normalizeWebsiteItem(
+    {
+      title,
+      type: "product",
+      url: candidate.url,
+      description,
+      price: productPrice || candidate?.price || cachedItem?.price || "",
+      image_url: imageUrl,
+    },
+    websiteUrl
+  );
+
+  if (!normalized?.title || !normalized?.url || !normalized?.image_url) {
+    console.warn("Authoritative GPT-5.5 product lacked a usable technical image asset", {
+      rank: getPrimaryCampaignResearchRank(candidate),
+      productUrl: candidate?.url,
+      title: candidate?.title,
+      pageFetched: Boolean(html),
+      modelImageProvided: Boolean(candidate?.image_url),
+    });
+    return null;
+  }
+
+  return {
+    ...candidate,
+    ...normalized,
+    reason: candidate?.reason || "",
+    item_key: createItemKey(normalized),
+    page_type: "product",
+    page_type_confidence: 100,
+    // This is deliberately false: GPT-5.5 already inspected and selected the
+    // product. Spreelo only hydrates its text/image and must not run Product
+    // Engine's semantic or page-proof acceptance gate afterwards.
+    product_page_verified: false,
+    product_confidence: 95,
+    product_schema_verified: Boolean(product),
+    ecommerce_proof_found: Boolean(product),
+    concrete_product_verified: null,
+    authoritative_web_agent_selected: true,
+    technical_page_rate_limited: technicalPageRateLimited,
+    campaign_primary_web_researched: true,
+    campaign_final_reviewed: true,
+    last_verified_at: new Date().toISOString(),
+  };
+}
+
 async function findPrimaryCampaignProductsWithWebSearch({
   openai,
-  supabase,
-  brandProfile,
   rule,
   websiteUrl,
   usedWebsiteItems = [],
+  cachedWebsiteItems = [],
   deadlineMs = Number.POSITIVE_INFINITY,
-  verificationCache = null,
+  researchRound = 1,
 }) {
   const startedAt = Date.now();
   const allowedDomain = getWebsiteFetchDomain(websiteUrl);
@@ -22358,10 +22491,8 @@ async function findPrimaryCampaignProductsWithWebSearch({
     })
     .filter(Boolean);
   const exactTask = `Hitta ${CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET} passande produkter från ${allowedDomain} för ${campaignTheme}.`;
-  const prompt = `
-${exactTask}
-
-Do this as a careful senior marketer using web search:
+  const webAgentInstructions = `
+Act as a careful senior marketer using web search:
 - Search only ${allowedDomain}. Use the site's public search, category and collection pages to find real products, then return the direct product pages.
 - Infer what the campaign really means, who it is for and which complementary product roles make the strongest social-media carousel.
 - Rank exactly ${CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET} concrete purchasable products. Ranks 1-5 must form the strongest varied carousel; ranks 6-10 are ordered reserves.
@@ -22370,6 +22501,8 @@ Do this as a careful senior marketer using web search:
 - Do not return homepages, search pages, category pages, gift guides, brand pages, images, articles or guessed URLs.
 - Stay in the same country/market version represented by ${websiteUrl}.
 - Do not invent product facts.
+- Return the best direct product-image URL you can actually verify for each product. Use an empty string if the image URL is not visible; never guess it.
+- Return the displayed price only when clearly visible. Otherwise use an empty string.
 ${usedProducts.length ? `- Prefer products not used in recent Spreelo posts. Avoid these unless the site cannot provide ten better choices:\n${usedProducts.join("\n")}` : ""}
 
 Return the result in the required JSON structure. Keep each reason concise and grounded in the product and campaign.
@@ -22384,6 +22517,7 @@ Return the result in the required JSON structure. Keep each reason concise and g
     requestedProductCount: CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET,
     campaignTheme,
     recentProductExclusionCount: usedProducts.length,
+    researchRound,
   });
 
   const response = await openai.responses.create(
@@ -22399,6 +22533,7 @@ Return the result in the required JSON structure. Keep each reason concise and g
         },
       ],
       tool_choice: "required",
+      instructions: webAgentInstructions,
       ...getReasoningOptionsForModel(PRODUCT_RESEARCH_MODEL),
       max_output_tokens: 5000,
       text: {
@@ -22412,6 +22547,7 @@ Return the result in the required JSON structure. Keep each reason concise and g
             properties: {
               products: {
                 type: "array",
+                minItems: CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET,
                 maxItems: CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET,
                 items: {
                   type: "object",
@@ -22422,6 +22558,8 @@ Return the result in the required JSON structure. Keep each reason concise and g
                     url: { type: "string" },
                     reason: { type: "string" },
                     product_role: { type: "string" },
+                    image_url: { type: "string" },
+                    price: { type: "string" },
                     relevance_class: {
                       type: "string",
                       enum: ["direct", "contextual"],
@@ -22433,6 +22571,8 @@ Return the result in the required JSON structure. Keep each reason concise and g
                     "url",
                     "reason",
                     "product_role",
+                    "image_url",
+                    "price",
                     "relevance_class",
                   ],
                 },
@@ -22442,7 +22582,8 @@ Return the result in the required JSON structure. Keep each reason concise and g
           },
         },
       },
-      input: prompt,
+      // Keep the actual user task identical to the successful manual test.
+      input: exactTask,
     },
     {
       timeout: Math.min(
@@ -22460,7 +22601,10 @@ Return the result in the required JSON structure. Keep each reason concise and g
 
   for (let index = 0; index < rawProducts.length; index += 1) {
     const product = rawProducts[index];
-    const productUrl = String(product?.url || "").trim();
+    const rawProductUrl = String(product?.url || "").trim();
+    const productUrl =
+      canonicalizeWebsiteProductUrl(rawProductUrl, websiteUrl) ||
+      rawProductUrl;
     if (
       !productUrl ||
       !isHttpUrl(productUrl) ||
@@ -22479,7 +22623,11 @@ Return the result in the required JSON structure. Keep each reason concise and g
       requestedRank <= CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET
         ? requestedRank
         : index + 1;
-    const fitScore = Math.max(88, 100 - rank);
+    const globalRank =
+      (Math.max(1, Number(researchRound || 1)) - 1) *
+        CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET +
+      rank;
+    const fitScore = Math.max(80, 100 - globalRank);
     const reason = String(product?.reason || "").trim();
     const campaignRole = String(product?.product_role || "").trim();
     const relevanceClass =
@@ -22489,11 +22637,14 @@ Return the result in the required JSON structure. Keep each reason concise and g
     candidates.push({
       title: String(product?.title || "").trim(),
       url: productUrl,
+      image_url: String(product?.image_url || "").trim(),
+      price: String(product?.price || "").trim(),
       reason,
-      score: 1000 - rank,
-      discovery_score: 1000 - rank,
-      selection_priority: 1000 - rank,
-      campaign_research_rank: rank,
+      score: 1000 - globalRank,
+      discovery_score: 1000 - globalRank,
+      selection_priority: 1000 - globalRank,
+      campaign_research_rank: globalRank,
+      campaign_research_round: Math.max(1, Number(researchRound || 1)),
       campaign_role: campaignRole,
       campaign_relevance_class: relevanceClass,
       campaign_relevance_evidence: reason ? [reason] : [],
@@ -22517,60 +22668,82 @@ Return the result in the required JSON structure. Keep each reason concise and g
     )
     .slice(0, CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET);
 
-  await upsertWebsiteProductCandidateQueue({
-    supabase,
-    rule,
-    sourceUrl: websiteUrl,
-    categoryUrl: null,
-    candidates: rankedCandidates,
-  });
-
-  const verifiedItems = rankedCandidates.length
-    ? await verifyDiscoveredWebsiteProductCandidates({
-        candidates: rankedCandidates,
-        websiteUrl,
-        limit: CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET,
-        deadlineMs,
-        verificationCache,
-        supabase,
-        rule,
+  const hydratedProducts = [];
+  let technicalPageRateLimited = false;
+  const cachedItemsByUrl = new Map(
+    (cachedWebsiteItems || [])
+      .map((item) => {
+        const itemUrl =
+          canonicalizeWebsiteProductUrl(
+            item?.url || item?.item_url || item?.product_url,
+            websiteUrl
+          ) || "";
+        return [
+          normalizeComparableValue(itemUrl),
+          item,
+        ];
       })
-    : [];
+      .filter(([key]) => Boolean(key))
+  );
 
-  const verifiedProducts = (verifiedItems || [])
-    .map((verifiedItem) => {
-      const candidate = findMatchingPrimaryWebResearchCandidate(
-        verifiedItem,
-        rankedCandidates,
-        websiteUrl
-      );
-      if (!candidate) return verifiedItem;
-      return {
-        ...verifiedItem,
-        reason: candidate.reason,
-        discovery_score: candidate.discovery_score,
-        selection_priority: candidate.selection_priority,
-        campaign_research_rank: candidate.campaign_research_rank,
-        campaign_role: candidate.campaign_role,
-        campaign_relevance_class: candidate.campaign_relevance_class,
-        campaign_relevance_evidence:
-          candidate.campaign_relevance_evidence,
-        campaign_fit_source: CAMPAIGN_PRIMARY_WEB_RESEARCH_SOURCE,
-        ai_campaign_fit_source: CAMPAIGN_PRIMARY_WEB_RESEARCH_SOURCE,
-        ai_campaign_fit_model: PRODUCT_RESEARCH_MODEL,
-        ai_campaign_fit_score: candidate.ai_campaign_fit_score,
-        campaign_fit_score: candidate.campaign_fit_score,
-        campaign_fit_verdict: "fits",
-        campaign_theme_fit: true,
-        campaign_primary_web_researched: true,
-        campaign_final_reviewed: true,
-      };
-    })
-    .sort(
-      (left, right) =>
-        getPrimaryCampaignResearchRank(left) -
-        getPrimaryCampaignResearchRank(right)
-    );
+  // Preserve GPT-5.5's exact order. This loop only obtains the title, price
+  // and largest usable image asset from each chosen product page. It does not
+  // call Product Engine, score campaign fit or reject a product semantically.
+  for (const candidate of rankedCandidates) {
+    if (
+      Number.isFinite(deadlineMs) &&
+      deadlineMs - Date.now() < WEBSITE_FETCH_TIMEOUT_MS + 10_000
+    ) {
+      console.warn("Authoritative GPT-5.5 product hydration stopped to protect the post-generation budget", {
+        ruleId: rule?.id,
+        websiteUrl,
+        researchRound,
+        hydratedCount: hydratedProducts.length,
+        remainingCandidateCount:
+          rankedCandidates.length - hydratedProducts.length,
+      });
+      break;
+    }
+
+    try {
+      const hydrated = await hydrateAuthoritativeWebAgentProduct({
+        candidate,
+        websiteUrl,
+        cachedItem:
+          cachedItemsByUrl.get(
+            normalizeComparableValue(
+              canonicalizeWebsiteProductUrl(candidate?.url, websiteUrl) ||
+                candidate?.url
+            )
+          ) || null,
+      });
+      if (hydrated) {
+        if (hydrated.technical_page_rate_limited) {
+          technicalPageRateLimited = true;
+        }
+        hydratedProducts.push(hydrated);
+      }
+    } catch (error) {
+      if (isWebsiteRateLimitError(error)) {
+        technicalPageRateLimited = true;
+        console.warn("Authoritative GPT-5.5 product page hydration encountered a website rate limit; continuing with remaining web-agent choices", {
+          ruleId: rule?.id,
+          websiteUrl,
+          researchRound,
+          productUrl: candidate?.url,
+          message: error?.message,
+        });
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  const verifiedProducts = hydratedProducts.sort(
+    (left, right) =>
+      getPrimaryCampaignResearchRank(left) -
+      getPrimaryCampaignResearchRank(right)
+  );
   const validProducts = verifiedProducts.filter(isValidCarouselProduct);
 
   console.log("Campaign primary GPT-5.5 web research finished", {
@@ -22582,10 +22755,11 @@ Return the result in the required JSON structure. Keep each reason concise and g
     requestedProductCount: CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET,
     returnedProductCount: rawProducts.length,
     acceptedDirectUrlCount: rankedCandidates.length,
-    technicallyVerifiedCount: verifiedProducts.length,
+    technicallyHydratedCount: verifiedProducts.length,
     usableImageCount: validProducts.length,
-    rateLimited: Boolean(verifiedItems?.rateLimited),
-    retryAfterMs: Number(verifiedItems?.retryAfterMs || 0),
+    technicalPageRateLimited,
+    productEngineVerificationSkipped: true,
+    researchRound,
     elapsedMs: Date.now() - startedAt,
     products: verifiedProducts.map((item) => ({
       rank: getPrimaryCampaignResearchRank(item),
@@ -22602,8 +22776,9 @@ Return the result in the required JSON structure. Keep each reason concise and g
     candidates: rankedCandidates,
     verifiedProducts,
     validProducts,
-    rateLimited: Boolean(verifiedItems?.rateLimited),
-    retryAfterMs: Number(verifiedItems?.retryAfterMs || 0),
+    rateLimited: false,
+    technicalPageRateLimited,
+    retryAfterMs: 0,
     campaignTheme,
     allowedDomain,
     prompt: exactTask,
@@ -22621,8 +22796,8 @@ async function finalizeCarouselFromPrimaryCampaignWebResearch({
   usedWebsiteImageUrlsThisRun,
   researchResult,
 }) {
-  const validProducts = dedupeWebsiteItemsByUrlTitleAndImage(
-    researchResult?.validProducts || []
+  const validProducts = dedupeUrlItems(
+    (researchResult?.validProducts || []).filter(isValidCarouselProduct)
   ).sort(
     (left, right) =>
       getPrimaryCampaignResearchRank(left) -
@@ -22635,27 +22810,10 @@ async function finalizeCarouselFromPrimaryCampaignWebResearch({
     return null;
   }
 
-  const freshProducts = getFreshCarouselProductCandidates({
-    items: validProducts,
-    rule,
-    sourceUrl: websiteUrl,
-    recentUsedItems,
-    usedWebsiteImageUrlsThisRun,
-  });
-  const freshKeys = new Set(
-    freshProducts
-      .map((item) => getCarouselProductSelectionKey(item, websiteUrl))
-      .filter(Boolean)
-  );
-  const rankedProducts = [
-    ...validProducts.filter((item) =>
-      freshKeys.has(getCarouselProductSelectionKey(item, websiteUrl))
-    ),
-    ...validProducts.filter(
-      (item) =>
-        !freshKeys.has(getCarouselProductSelectionKey(item, websiteUrl))
-    ),
-  ];
+  // GPT-5.5 already received the recent-product exclusions and ranked the
+  // final set. Preserve that order verbatim; no local freshness or score pass
+  // may move a product ahead of another one here.
+  const rankedProducts = validProducts;
   const selectedProducts = rankedProducts.slice(
     0,
     CAROUSEL_PRODUCT_SLIDE_TARGET
@@ -22714,8 +22872,8 @@ async function finalizeCarouselFromPrimaryCampaignWebResearch({
     selectedProducts,
     reserveProducts,
     discoveryMethods: [
-      "gpt55_primary_domain_web_search",
-      "direct_product_url_verification",
+      CAMPAIGN_PRIMARY_WEB_RESEARCH_SOURCE,
+      "technical_product_asset_hydration",
     ],
     metadata: {
       campaign_rule: true,
@@ -22726,10 +22884,18 @@ async function finalizeCarouselFromPrimaryCampaignWebResearch({
       exact_task: researchResult?.prompt || null,
       model: PRODUCT_RESEARCH_MODEL,
       primary_web_research: true,
-      final_review_reused_from_primary_research: true,
+      authoritative_gpt_ranking_preserved: true,
+      product_engine_verification_skipped: true,
+      second_senior_review_skipped: true,
       legacy_180_candidate_flow_skipped: true,
       store_search_skipped: true,
       store_map_skipped: true,
+      research_round_count: Number(
+        researchResult?.researchRoundCount || 1
+      ),
+      technical_page_rate_limited: Boolean(
+        researchResult?.technicalPageRateLimited
+      ),
     },
   });
 
@@ -22743,10 +22909,12 @@ async function finalizeCarouselFromPrimaryCampaignWebResearch({
     websiteUrl,
     selectedCount: selectedProducts.length,
     reserveCount: reserveProducts.length,
-    freshSelectedCount: selectedProducts.filter((item) =>
-      freshKeys.has(getCarouselProductSelectionKey(item, websiteUrl))
-    ).length,
+    recentExclusionCount: Array.isArray(recentUsedItems)
+      ? recentUsedItems.length
+      : 0,
     legacy180CandidateFlowSkipped: true,
+    productEngineVerificationSkipped: true,
+    authoritativeGptRankingPreserved: true,
     finalSeniorReviewSkippedBecausePrimaryResearchAlreadyRankedSet: true,
     selectedProducts: selectedProducts.map((item) => ({
       rank: getPrimaryCampaignResearchRank(item),

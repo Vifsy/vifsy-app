@@ -36,7 +36,8 @@
     "test:v143.6": "node scripts/test-v143-6-runtime-scope-fix.mjs",
     "test:v143.7": "node scripts/test-v143-7-fallback-runtime-fix.mjs",
     "test:v143.8": "node scripts/test-v143-8-school-search-quality.mjs",
-    "test:v143.10": "node scripts/test-v143-10-gpt55-primary-web-research.mjs"
+    "test:v143.10": "node scripts/test-v143-10-gpt55-primary-web-research.mjs",
+    "test:v143.11": "node scripts/test-v143-11-authoritative-gpt55-web-agent.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
