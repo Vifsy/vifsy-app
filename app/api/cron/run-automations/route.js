@@ -76,6 +76,7 @@ import {
   resolveCampaignThemeEvidence,
   selectCampaignThemeDeliveryEntries,
 } from "../../../../lib/campaignThemeDelivery.js";
+import { selectDiverseCampaignDeliveryEntries } from "../../../../lib/campaignCarouselDiversity.js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -16626,6 +16627,13 @@ function selectCampaignThemeSafeDeliveryProducts({
     selectedLimit,
     reserveLimit,
   });
+  const diverseSelection = selectDiverseCampaignDeliveryEntries(
+    selection.rankedEntries,
+    {
+      selectedLimit,
+      reserveLimit,
+    }
+  );
   const decorate = (entry) => ({
     ...entry.item,
     campaign_delivery_tier: entry.deliveryTier,
@@ -16634,9 +16642,10 @@ function selectCampaignThemeSafeDeliveryProducts({
   });
 
   return {
-    selectedProducts: selection.selectedEntries.map(decorate),
-    reserveProducts: selection.reserveEntries.map(decorate),
+    selectedProducts: diverseSelection.selectedEntries.map(decorate),
+    reserveProducts: diverseSelection.reserveEntries.map(decorate),
     rankedProducts: selection.rankedEntries.map(decorate),
+    diversity: diverseSelection.diagnostics,
     tierCounts: selection.rankedEntries.reduce((counts, entry) => {
       counts[entry.deliveryTier] =
         Number(counts[entry.deliveryTier] || 0) + 1;
@@ -17017,8 +17026,11 @@ Rules:
 - Mere theoretical giftability is weak. For a gift-oriented campaign, prefer the company's naturally gift-suitable products before size- or taste-sensitive everyday products when those stronger choices are available.
 - Choose products that complement one another and collectively solve the audience's buying need.
 - Assortment breadth determines useful variation. Do not force unrelated categories for a specialist company, but do not repeat one generic category when the strategy and strong alternatives support a better mix.
+- Treat colour, size and closely related variants of the same product family as one product concept. Never select two variants merely to fill the requested count.
+- When several equally relevant product types are available, build a balanced set instead of selecting three or more near-identical products from one type.
+- If fewer than ${selectedLimit} distinct supplied products reasonably fit, reject the weak remainder and return fewer selected indices. The runtime can safely deliver a reduced carousel; never invent a weak campaign story merely to reach ${selectedLimit}.
 - Consider commercial clarity, variation and image suitability when selecting among products that fit.
-- Select exactly ${selectedLimit} of the supplied concrete verified products. Relevance controls their order; it must not turn an otherwise deliverable campaign into an empty or incomplete post.
+- Select up to ${selectedLimit} of the supplied concrete verified products. Select exactly ${selectedLimit} when that many distinct products reasonably fit.
 - Mark a missing need as blocking only when fewer than ${selectedLimit} supplied concrete products reasonably fit. Optional ways to improve an already complete set must be non-blocking.
 - Return compact evaluations for the selected products and, when useful, up to ${reserveLimit} reserves. Do not spend output on every rejected candidate.
 
@@ -17350,6 +17362,7 @@ Return strict JSON only:
     modelPublishable: parsed?.publishable === true,
     recoveredFromFastThemeFit,
     deliveryTierCounts: themeSafeFinalSelection.tierCounts,
+    setDiversity: themeSafeFinalSelection.diversity,
     blockingMissingNeedCount: blockingMissingNeeds.length,
     hasConfirmedBlockingMissingNeed,
     hasMissingRequiredCoverage,
