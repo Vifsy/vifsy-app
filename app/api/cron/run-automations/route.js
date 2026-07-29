@@ -44,7 +44,9 @@ import {
   validateSingleProductCopyAgainstContract,
 } from "../../../../lib/productEngineV2.js";
 import {
+  canonicalProductImageAssetKey,
   collectProductImageCandidates,
+  findSharedProductImageAssetKeys,
   isPreferredProductImage,
   selectLargestVerifiedProductImage,
   selectMostLikelyMainProductGalleryImage,
@@ -19201,10 +19203,19 @@ function imageUrlMatchesProductIdentity(imageUrl, productUrl, productTitle = "")
 }
 
 function extractBestProductImageFromHtml(html, pageUrl, productTitle = "") {
-  // Once the page itself is verified as a product page, gallery placement is
-  // stronger evidence than words in a CDN filename. Rank the main product
-  // gallery first and keep filename matching only as a final conservative
-  // fallback for unstructured pages.
+  // Product.image belongs to the Product entity selected for this exact page.
+  // Prefer that explicit relationship before inferring a gallery image from
+  // general page markup, which may also contain site-wide brand assets.
+  const product = findBestJsonLdProduct(html, pageUrl, productTitle);
+  const jsonLdImage = getProductImageFromJsonLd(product, pageUrl);
+
+  if (jsonLdImage) {
+    return jsonLdImage;
+  }
+
+  // If structured product data is unavailable, gallery placement is stronger
+  // evidence than words in a CDN filename. Keep filename matching only as a
+  // final conservative fallback for unstructured pages.
   const galleryCandidates = collectProductImageCandidates({
     html,
     pageUrl,
@@ -19215,13 +19226,6 @@ function extractBestProductImageFromHtml(html, pageUrl, productTitle = "") {
 
   if (mainGalleryImage?.url) {
     return mainGalleryImage.url;
-  }
-
-  const product = findBestJsonLdProduct(html, pageUrl, productTitle);
-  const jsonLdImage = getProductImageFromJsonLd(product, pageUrl);
-
-  if (jsonLdImage) {
-    return jsonLdImage;
   }
 
   const ogImage = getMetaContent(html, ["og:image", "twitter:image"]);
@@ -22378,8 +22382,8 @@ async function hydrateAuthoritativeWebAgentProduct({
     ? extractBestProductImageFromHtml(html, candidate.url, title)
     : null;
   const imageUrl =
-    pageImage ||
     productImage ||
+    pageImage ||
     (
       isHttpUrl(cachedItem?.image_url) &&
       !isBadProductImageUrl(cachedItem.image_url)
@@ -27919,6 +27923,7 @@ async function resolveLargestProductImagesBeforeGeneration({
 }) {
   const inputItems = Array.isArray(items) ? items.filter(Boolean) : [];
   if (!inputItems.length) return [];
+  const sharedPrimaryAssetKeys = findSharedProductImageAssetKeys(inputItems);
 
   const inspectionCache = new Map();
   const inspectImage = (url) => {
@@ -27931,6 +27936,12 @@ async function resolveLargestProductImagesBeforeGeneration({
 
   for (const item of inputItems) {
     const primaryImageUrl = String(item?.image_url || item?.imageUrl || "").trim();
+    const primaryAssetKey = canonicalProductImageAssetKey(primaryImageUrl);
+    const sharedPrimaryImageRejected =
+      Boolean(primaryAssetKey) && sharedPrimaryAssetKeys.has(primaryAssetKey);
+    const identityAnchorImageUrl = sharedPrimaryImageRejected
+      ? ""
+      : primaryImageUrl;
     const pageUrl = getProductImageResolverPageUrl(item);
     let html = "";
     if (pageUrl) {
@@ -27945,17 +27956,22 @@ async function resolveLargestProductImagesBeforeGeneration({
       }
     }
 
-    const candidates = collectProductImageCandidates({
+    const collectedCandidates = collectProductImageCandidates({
       html,
       pageUrl,
-      primaryImageUrl,
+      primaryImageUrl: identityAnchorImageUrl,
       productTitle: item?.title || item?.item_title || "",
     });
+    const candidates = sharedPrimaryImageRejected
+      ? collectedCandidates.filter(
+          (candidate) => candidate?.assetKey !== primaryAssetKey
+        )
+      : collectedCandidates;
     let selection = null;
     try {
       selection = await selectLargestVerifiedProductImage({
         candidates,
-        primaryImageUrl,
+        primaryImageUrl: identityAnchorImageUrl,
         inspectImage,
         maximumInspections: 16,
       });
@@ -27974,6 +27990,9 @@ async function resolveLargestProductImagesBeforeGeneration({
       html,
       pageUrl,
       primaryImageUrl,
+      primaryAssetKey,
+      identityAnchorImageUrl,
+      sharedPrimaryImageRejected,
       staticCandidates: candidates,
       selection,
       browserUsed: false,
@@ -27998,19 +28017,25 @@ async function resolveLargestProductImagesBeforeGeneration({
         try {
           const renderedCandidates = await browserSession.discover({
             pageUrl: resolution.pageUrl,
-            primaryImageUrl: resolution.primaryImageUrl,
+            primaryImageUrl: resolution.identityAnchorImageUrl,
           });
-          const candidates = collectProductImageCandidates({
+          const collectedCandidates = collectProductImageCandidates({
             html: resolution.html,
             pageUrl: resolution.pageUrl,
-            primaryImageUrl: resolution.primaryImageUrl,
+            primaryImageUrl: resolution.identityAnchorImageUrl,
             productTitle:
               resolution.item?.title || resolution.item?.item_title || "",
             renderedCandidates,
           });
+          const candidates = resolution.sharedPrimaryImageRejected
+            ? collectedCandidates.filter(
+                (candidate) =>
+                  candidate?.assetKey !== resolution.primaryAssetKey
+              )
+            : collectedCandidates;
           resolution.selection = await selectLargestVerifiedProductImage({
             candidates,
-            primaryImageUrl: resolution.primaryImageUrl,
+            primaryImageUrl: resolution.identityAnchorImageUrl,
             inspectImage,
             maximumInspections: 20,
           });
@@ -28038,7 +28063,13 @@ async function resolveLargestProductImagesBeforeGeneration({
 
   return resolutions.map((resolution) => {
     const selected = resolution.selection?.selected || null;
-    const selectedImageUrl = String(selected?.url || resolution.primaryImageUrl || "").trim();
+    const selectedImageUrl = String(
+      selected?.url ||
+        (resolution.sharedPrimaryImageRejected
+          ? ""
+          : resolution.primaryImageUrl) ||
+        ""
+    ).trim();
     const smallFallback =
       !selected || Boolean(resolution.selection?.usedSmallImageFallback);
     const upgradedItem = {
@@ -28055,6 +28086,7 @@ async function resolveLargestProductImagesBeforeGeneration({
       ruleId,
       productUrl: resolution.pageUrl || null,
       originalImageUrl: resolution.primaryImageUrl || null,
+      sharedPrimaryImageRejected: resolution.sharedPrimaryImageRejected,
       selectedImageUrl: selectedImageUrl || null,
       selectedWidth: upgradedItem.product_image_width,
       selectedHeight: upgradedItem.product_image_height,
