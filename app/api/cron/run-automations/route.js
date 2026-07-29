@@ -314,6 +314,15 @@ const WEBSITE_TEXT_INTENT_AI_SCORE_MAX_ITEMS = 25;
 const WEBSITE_TEXT_INTENT_STORE_VERIFY_LIMIT = 12;
 
 const POST_TEXT_MODEL = "gpt-4.1-mini";
+const PRODUCT_IMAGE_SAFETY_MODEL =
+  process.env.PRODUCT_IMAGE_SAFETY_MODEL || POST_TEXT_MODEL;
+const PRODUCT_IMAGE_SAFETY_TIMEOUT_MS = Math.max(
+  12_000,
+  Math.min(
+    25_000,
+    Number(process.env.PRODUCT_IMAGE_SAFETY_TIMEOUT_MS || 20_000) || 20_000
+  )
+);
 const PRODUCT_RESEARCH_MODEL = process.env.PRODUCT_RESEARCH_MODEL || "gpt-5.5";
 const PRODUCT_RESEARCH_FAST_MODEL =
   process.env.PRODUCT_RESEARCH_FAST_MODEL || POST_TEXT_MODEL;
@@ -9982,6 +9991,22 @@ function classifyAutomationCreationFailure(errorOrMessage, stage = "unhandled") 
       code: "website_rate_limit_exhausted",
       customerMessage:
         "The website continued limiting access after several automatic cooldown attempts. This occurrence has been stopped and will not be retried automatically.",
+    };
+  }
+
+  if (errorOrMessage?.code === "NO_CLEAN_PRODUCT_ONLY_IMAGE") {
+    return {
+      code: "no_clean_product_only_image",
+      customerMessage:
+        "Spreelo could not verify a clean product-only image without people, animals or lifestyle scenery for this planned post.",
+    };
+  }
+
+  if (errorOrMessage?.code === "PRODUCT_IMAGE_SAFETY_UNAVAILABLE") {
+    return {
+      code: "product_image_safety_unavailable",
+      customerMessage:
+        "Spreelo could not safely inspect the product image, so no unverified image was used for this planned post.",
     };
   }
 
@@ -23800,7 +23825,7 @@ function buildCarouselOutroImagePrompt(rule, outroSlide, products) {
     ? `Show the exact authorized discount and campaign code from this offer as clear readable overlay text: ${authorizedOffer} Never change or invent any value.`
     : "Do not show prices or discount claims.";
 
-  return `Create a premium square closing slide for a social media carousel. This is the final CTA slide after product slides for ${brandName}. Use a clean, polished marketing design with a subtle modern background and clear readable text overlay. Write the overlaid text in ${language}. Main overlay text: "${headline}". Supporting overlay text: "${supportingText}". ${campaignVisualContext}. ${offerVisualRule} If this carousel is connected to a campaign, holiday, season, shopping event or theme, the closing image must clearly match that theme and must not look generic or unrelated. The slide should feel like a professional final call-to-action and may use abstract shapes, elegant composition, soft shadows, geometric shapes, or a tasteful category-inspired scene. If you include any product-like objects, they must be generic, unbranded, non-specific, and not directly identifiable as exact products from the store. Never invent or depict specific catalog items, exact product prints, poster motifs, readable slogan text on products, apparel graphics, packaging artwork, or branded product designs. Do not place the store name or brand logo onto any depicted product. Avoid close-up hero shots of a single product. For stores that sell printed or text-based products such as posters, apparel, mugs, or accessories, do not generate new readable product text or new product artwork. Keep all non-overlay product details subtle, generic, and secondary to the CTA message. Do not use crowded text. Products featured earlier in the carousel: ${productNames || "selected website products"}.`;
+  return `Create a premium square closing slide for a social media carousel. This is the final CTA slide after product slides for ${brandName}. Use a clean, polished marketing design with a subtle modern background and clear readable text overlay. Write the overlaid text in ${language}. Main overlay text: "${headline}". Supporting overlay text: "${supportingText}". ${campaignVisualContext}. ${offerVisualRule} If this carousel is connected to a campaign, holiday, season, shopping event or theme, the closing image must clearly match that theme and must not look generic or unrelated. The slide should feel like a professional final call-to-action and may use abstract shapes, elegant composition, soft shadows or geometric shapes. Do not include people, faces, body parts, animals or mannequins. If you include any product-like objects, they must be generic, unbranded, non-specific, and not directly identifiable as exact products from the store. Never invent or depict specific catalog items, exact product prints, poster motifs, readable slogan text on products, apparel graphics, packaging artwork, or branded product designs. Do not place the store name or brand logo onto any depicted product. Avoid close-up hero shots of a single product. For stores that sell printed or text-based products such as posters, apparel, mugs, or accessories, do not generate new readable product text or new product artwork. Keep all non-overlay product details subtle, generic, and secondary to the CTA message. Do not use crowded text. Products featured earlier in the carousel: ${productNames || "selected website products"}.`;
 }
 
 async function generateCarouselOutroSlideImage(openai, rule, outroSlide, products) {
@@ -24374,6 +24399,8 @@ ${customVisualDirection}` : "No extra custom visual direction was provided."}
 
 Rules:
 - The provided product image is the real product reference. Keep the product clearly recognizable.
+- Show only the supplied merchandise. Do not add people, faces, hands, other body parts, animals, mannequins or lifestyle models.
+- Do not turn the clean product photograph into a lifestyle scene. Preserve the exact product and build the graphic composition around it.
 - Preserve the product's core identity, silhouette, dominant colors, print/design, and overall appearance.
 - Preserve the exact visible product color from the verified source image.
 - Do not recolor the product or create a new color variant that is not verified.
@@ -24763,6 +24790,265 @@ function findAlphaBounds(alphaChannel, width, height, threshold = 24) {
 }
 
 
+async function buildProductImageSafetyReference(item, index) {
+  const imageUrl = String(item?.image_url || "").trim();
+  if (!imageUrl) {
+    return {
+      index,
+      item,
+      error: "The product had no image URL",
+      imageDataUrl: "",
+    };
+  }
+
+  try {
+    const sourceBuffer = await fetchImageBufferForOverlay(imageUrl);
+    const inspectionBuffer = await sharp(sourceBuffer)
+      .rotate()
+      .resize({
+        width: 512,
+        height: 512,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .flatten({ background: { r: 255, g: 255, b: 255 } })
+      .jpeg({ quality: 76, mozjpeg: true })
+      .toBuffer();
+    return {
+      index,
+      item,
+      error: "",
+      imageDataUrl: `data:image/jpeg;base64,${inspectionBuffer.toString("base64")}`,
+    };
+  } catch (error) {
+    return {
+      index,
+      item,
+      error: error?.message || "The product image could not be inspected",
+      imageDataUrl: "",
+    };
+  }
+}
+
+async function auditCleanProductOnlyImages({
+  openai,
+  items = [],
+  ruleId = null,
+  maximumCandidates = 10,
+}) {
+  if (!openai) {
+    const error = new Error(
+      "Product-image safety inspection was unavailable. No uninspected product image was used."
+    );
+    error.code = "PRODUCT_IMAGE_SAFETY_UNAVAILABLE";
+    throw error;
+  }
+
+  const candidates = dedupeWebsiteItemsByUrlTitleAndImage(items)
+    .filter((item) => item?.image_url)
+    .slice(0, Math.max(1, Math.min(12, Number(maximumCandidates || 10))));
+  if (!candidates.length) {
+    return { accepted: [], rejected: [], inspectedCount: 0 };
+  }
+
+  const references = await Promise.all(
+    candidates.map((item, index) => buildProductImageSafetyReference(item, index))
+  );
+  const inspectable = references.filter(
+    (reference) => reference.imageDataUrl && !reference.error
+  );
+  const downloadRejected = references
+    .filter((reference) => !reference.imageDataUrl || reference.error)
+    .map((reference) => ({
+      item: reference.item,
+      index: reference.index,
+      reason: reference.error || "The product image could not be inspected",
+      confidence: 1,
+    }));
+
+  if (!inspectable.length) {
+    return {
+      accepted: [],
+      rejected: downloadRejected,
+      inspectedCount: candidates.length,
+    };
+  }
+
+  const candidateDescription = inspectable
+    .map(
+      (reference) =>
+        `Candidate ${reference.index}: ${reference.item?.title || "Untitled product"}\nProduct URL: ${reference.item?.url || ""}`
+    )
+    .join("\n\n");
+  const content = [
+    {
+      type: "text",
+      text: `
+Inspect the ecommerce product images below.
+
+Spreelo may use only a clean, faithful product-only photograph:
+- Accept the actual merchandise alone on a plain, transparent, neutral studio or simple uniform background.
+- A clean bundle of products belonging to the exact product page is allowed.
+- Reject any real person, face, head, hair, hand, arm, leg or other body part, even if the person is modelling or holding the product.
+- Reject animals, mannequins, lifestyle scenes, rooms, outdoor scenes, editorial photos, collages and unrelated props.
+- A printed person or animal that is part of the merchandise's own design is allowed when no real person or animal appears in the scene.
+- Reject an image when the pictured merchandise does not match its candidate title.
+- When uncertain, reject it. Quality and product fidelity are more important than accepting an image.
+
+${candidateDescription}
+      `.trim(),
+    },
+  ];
+  for (const reference of inspectable) {
+    content.push({
+      type: "text",
+      text: `Candidate ${reference.index} image:`,
+    });
+    content.push({
+      type: "image_url",
+      image_url: {
+        url: reference.imageDataUrl,
+        detail: "low",
+      },
+    });
+  }
+
+  let parsed;
+  try {
+    const completion = await openai.chat.completions.create(
+      {
+        model: PRODUCT_IMAGE_SAFETY_MODEL,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a strict ecommerce image safety inspector. Return only the requested JSON and reject uncertain images.",
+          },
+          { role: "user", content },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "product_image_safety_audit",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                candidates: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      index: { type: "integer" },
+                      clean_product_only: { type: "boolean" },
+                      contains_human: { type: "boolean" },
+                      contains_animal: { type: "boolean" },
+                      contains_mannequin: { type: "boolean" },
+                      contains_lifestyle_scene: { type: "boolean" },
+                      matches_product: { type: "boolean" },
+                      confidence: { type: "number", minimum: 0, maximum: 1 },
+                      reason: { type: "string" },
+                    },
+                    required: [
+                      "index",
+                      "clean_product_only",
+                      "contains_human",
+                      "contains_animal",
+                      "contains_mannequin",
+                      "contains_lifestyle_scene",
+                      "matches_product",
+                      "confidence",
+                      "reason",
+                    ],
+                  },
+                },
+              },
+              required: ["candidates"],
+            },
+          },
+        },
+        temperature: 0,
+        max_completion_tokens: 900,
+      },
+      { timeout: PRODUCT_IMAGE_SAFETY_TIMEOUT_MS, maxRetries: 0 }
+    );
+    parsed = safeJsonParse(completion.choices?.[0]?.message?.content || "");
+  } catch (error) {
+    const safetyError = new Error(
+      `Product-image safety inspection did not finish: ${error?.message || "unknown error"}. No uninspected product image was used.`
+    );
+    safetyError.code = "PRODUCT_IMAGE_SAFETY_UNAVAILABLE";
+    throw safetyError;
+  }
+
+  const resultMap = new Map(
+    (Array.isArray(parsed?.candidates) ? parsed.candidates : [])
+      .filter((result) => Number.isInteger(Number(result?.index)))
+      .map((result) => [Number(result.index), result])
+  );
+  const accepted = [];
+  const rejected = [...downloadRejected];
+
+  for (const reference of inspectable) {
+    const result = resultMap.get(reference.index);
+    const isSafe =
+      result?.clean_product_only === true &&
+      result?.contains_human === false &&
+      result?.contains_animal === false &&
+      result?.contains_mannequin === false &&
+      result?.contains_lifestyle_scene === false &&
+      result?.matches_product === true &&
+      Number(result?.confidence || 0) >= 0.72;
+    const annotatedItem = {
+      ...reference.item,
+      image_content_safety: {
+        clean_product_only: Boolean(result?.clean_product_only),
+        contains_human: Boolean(result?.contains_human),
+        contains_animal: Boolean(result?.contains_animal),
+        contains_mannequin: Boolean(result?.contains_mannequin),
+        contains_lifestyle_scene: Boolean(result?.contains_lifestyle_scene),
+        matches_product: Boolean(result?.matches_product),
+        confidence: Number(result?.confidence || 0),
+        reason: String(result?.reason || "No conclusive safety result"),
+        model: PRODUCT_IMAGE_SAFETY_MODEL,
+      },
+    };
+    if (isSafe) {
+      accepted.push(annotatedItem);
+    } else {
+      rejected.push({
+        item: annotatedItem,
+        index: reference.index,
+        reason: annotatedItem.image_content_safety.reason,
+        confidence: annotatedItem.image_content_safety.confidence,
+      });
+    }
+  }
+
+  console.log("Clean product-only image audit finished", {
+    ruleId,
+    model: PRODUCT_IMAGE_SAFETY_MODEL,
+    candidateCount: candidates.length,
+    acceptedCount: accepted.length,
+    rejectedCount: rejected.length,
+    rejected: rejected.slice(0, 8).map((entry) => ({
+      title: entry.item?.title || null,
+      productUrl: entry.item?.url || null,
+      imageUrl: entry.item?.image_url || null,
+      reason: entry.reason,
+      confidence: entry.confidence,
+    })),
+  });
+
+  return {
+    accepted,
+    rejected,
+    inspectedCount: candidates.length,
+  };
+}
+
 function getCornerBackgroundStats(data, width, height) {
   const sampleSize = Math.max(10, Math.min(28, Math.floor(Math.min(width, height) * 0.05)));
   const corners = [
@@ -25057,6 +25343,19 @@ async function collectAnimatedProductImageCandidates(websiteItem) {
     .slice(0, 12);
 }
 
+async function createNonDestructiveAnimatedProductFrame(sourceImageBuffer) {
+  return sharp(sourceImageBuffer)
+    .rotate()
+    .resize({
+      width: 840,
+      height: 900,
+      fit: "inside",
+      withoutEnlargement: false,
+    })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
 async function selectAnimatedProductImage(websiteItem) {
   const selectedImageUrl = normalizeShopifyImageWidthUrl(
     websiteItem?.image_url,
@@ -25073,26 +25372,39 @@ async function selectAnimatedProductImage(websiteItem) {
   const sourceImageBuffer = await fetchImageBufferForOverlay(selectedImageUrl);
   let prepared;
   try {
-    prepared = await prepareAnimatedProductCutout(sourceImageBuffer);
+    const transparentProduct = await prepareAnimatedProductCutout(sourceImageBuffer);
+    if (transparentProduct?.analysis?.mode === "existing_transparency") {
+      prepared = transparentProduct;
+    } else {
+      prepared = {
+        cutoutBuffer: await createNonDestructiveAnimatedProductFrame(
+          sourceImageBuffer
+        ),
+        score: 110,
+        analysis: {
+          mode: "verified_clean_product_frame",
+          legacyMode: "verified_product_image_frame",
+          backgroundRemovalSkipped: true,
+          reason:
+            "Opaque website images are preserved without color-key background removal.",
+        },
+      };
+    }
   } catch (error) {
-    // A background that cannot be removed safely must not stop delivery or
-    // cause Spreelo to switch products. Keep the exact verified product image
-    // as a clean framed asset instead.
+    // A normal opaque source is kept intact. Pixel-color background removal
+    // can delete parts of a product or a model and is therefore never used as
+    // a fallback for animated posts.
     prepared = {
-      cutoutBuffer: await sharp(sourceImageBuffer)
-        .rotate()
-        .resize({
-          width: 900,
-          height: 900,
-          fit: "inside",
-          withoutEnlargement: false,
-        })
-        .png()
-        .toBuffer(),
-      score: 80,
+      cutoutBuffer: await createNonDestructiveAnimatedProductFrame(
+        sourceImageBuffer
+      ),
+      score: 100,
       analysis: {
-        mode: "verified_product_image_frame",
-        cutoutError: error?.message || "Background removal was not safe",
+        mode: "verified_clean_product_frame",
+        legacyMode: "verified_product_image_frame",
+        backgroundRemovalSkipped: true,
+        transparencyCheck:
+          error?.message || "The source did not provide safe transparency",
       },
     };
   }
@@ -29710,23 +30022,52 @@ const adminOverrideProducts = await prepareAdminReviewOverrideProducts({
           const primaryItems = isCarouselRule(websitePreparedRule)
             ? websiteItems
             : [websiteItem];
-          const additionalItems = isAnimatedVideoRule(websitePreparedRule || rule)
-            ? websiteReserveItems
-            : [];
-          const primaryCount = primaryItems.length;
+          const additionalItems = websiteReserveItems;
           const resolvedItems = await resolveLargestProductImagesBeforeGeneration({
             items: [...primaryItems, ...additionalItems],
             ruleId: rule.id,
           });
+          const cleanImageAudit = await auditCleanProductOnlyImages({
+            openai,
+            items: resolvedItems,
+            ruleId: rule.id,
+            maximumCandidates: isCarouselRule(websitePreparedRule) ? 10 : 6,
+          });
+          const safeProductItems = cleanImageAudit.accepted;
+
+          if (!safeProductItems.length) {
+            const unsafeImageError = new Error(
+              "No clean product-only image without people, animals, mannequins or lifestyle scenery could be verified."
+            );
+            unsafeImageError.code = "NO_CLEAN_PRODUCT_ONLY_IMAGE";
+            unsafeImageError.imageSafetyRejections =
+              cleanImageAudit.rejected.slice(0, 10);
+            throw unsafeImageError;
+          }
 
           if (isCarouselRule(websitePreparedRule)) {
-            websiteItems = resolvedItems.slice(0, primaryCount);
+            websiteItems = safeProductItems.slice(
+              0,
+              CAROUSEL_PRODUCT_SLIDE_TARGET
+            );
             websiteItem = websiteItems[0] || websiteItem;
+            websiteReserveItems = safeProductItems.slice(
+              CAROUSEL_PRODUCT_SLIDE_TARGET
+            );
+            if (websiteItems.length < CAROUSEL_PLATFORM_MIN_PRODUCT_SLIDES) {
+              const insufficientCleanImagesError = new Error(
+                `Only ${websiteItems.length} clean product-only image(s) were verified for the carousel.`
+              );
+              insufficientCleanImagesError.code =
+                "NO_CLEAN_PRODUCT_ONLY_IMAGE";
+              insufficientCleanImagesError.partialProducts = websiteItems;
+              insufficientCleanImagesError.imageSafetyRejections =
+                cleanImageAudit.rejected.slice(0, 10);
+              throw insufficientCleanImagesError;
+            }
           } else {
-            websiteItem = resolvedItems[0] || websiteItem;
-          }
-          if (additionalItems.length) {
-            websiteReserveItems = resolvedItems.slice(primaryCount);
+            websiteItem = safeProductItems[0];
+            websiteReserveItems = safeProductItems.slice(1);
           }
           productContentContract = buildProductContentContract(
             isCarouselRule(websitePreparedRule) ? websiteItems : [websiteItem],
@@ -29736,6 +30077,17 @@ const adminOverrideProducts = await prepareAdminReviewOverrideProducts({
           automationRunWebsiteItems = isCarouselRule(websitePreparedRule)
             ? websiteItems
             : [websiteItem];
+
+          console.log("Product selection restricted to clean product-only images", {
+            ruleId: rule.id,
+            contentFormat: websitePreparedRule?.content_format || null,
+            acceptedCount: safeProductItems.length,
+            selectedCount: isCarouselRule(websitePreparedRule)
+              ? websiteItems.length
+              : 1,
+            reserveCount: websiteReserveItems.length,
+            rejectedCount: cleanImageAudit.rejected.length,
+          });
         }
 
         if (isAnimatedVideoRule(websitePreparedRule || rule)) {

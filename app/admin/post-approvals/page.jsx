@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  AlertTriangle,
   CheckCircle2,
   ChevronRight,
   Clock3,
+  ExternalLink,
   FileCheck2,
   ImageIcon,
   LoaderCircle,
@@ -37,10 +39,26 @@ function formatDate(value) {
 function statusMeta(status, t) {
   if (status === "approved") return { label: t("admin.approvals.approved"), className: "approved", Icon: CheckCircle2 };
   if (status === "rejected") return { label: t("admin.approvals.rejected"), className: "rejected", Icon: XCircle };
+  if (status === "failed") return { label: "Misslyckad", className: "failed", Icon: AlertTriangle };
   return { label: t("admin.approvals.pending"), className: "pending", Icon: Clock3 };
 }
 
-function MediaPreview({ post, t }) {
+function getPostProductUrls(post) {
+  const slideUrls = (post?.slides || [])
+    .map((slide) => String(slide?.product_url || "").trim())
+    .filter(Boolean);
+  if (slideUrls.length) return Array.from(new Set(slideUrls));
+  const websiteUrl = String(post?.website_url || "").trim();
+  return websiteUrl && post?.content_format !== "carousel" ? [websiteUrl] : [];
+}
+
+function MediaPreview({
+  post,
+  t,
+  editableProducts = false,
+  keptProductUrls = [],
+  onToggleProduct,
+}) {
   if (post.video_url) {
     return (
       <div className="admin-v74-media-frame">
@@ -48,28 +66,52 @@ function MediaPreview({ post, t }) {
       </div>
     );
   }
-  if (post.image_url) {
-    return (
-      <div className="admin-v74-media-frame">
-        <img src={post.image_url} alt="" />
-      </div>
-    );
-  }
   if (post.slides?.length) {
     return (
       <div className="admin-v74-slide-grid">
-        {post.slides.map((slide) => (
-          <article key={`${post.id}-${slide.slide_order}`}>
+        {post.slides.map((slide) => {
+          const productUrl = String(slide.product_url || "").trim();
+          const selectable = editableProducts && Boolean(productUrl);
+          const kept = !selectable || keptProductUrls.includes(productUrl);
+          return (
+          <article
+            key={`${post.id}-${slide.slide_order}`}
+            className={selectable && !kept ? "admin-v144-product-removed" : ""}
+          >
+            {selectable ? (
+              <label className="admin-v144-product-toggle">
+                <input
+                  type="checkbox"
+                  checked={kept}
+                  onChange={() => onToggleProduct?.(productUrl)}
+                />
+                <span>{kept ? "Behåll" : "Tas bort"}</span>
+              </label>
+            ) : null}
             {slide.image_url ? <img src={slide.image_url} alt="" /> : <span><ImageIcon size={22} /></span>}
-            {post.content_format !== "carousel" ? (
+            {post.content_format !== "carousel" || editableProducts ? (
               <div>
                 <strong>{slide.headline || `Slide ${slide.slide_order}`}</strong>
                 {slide.body ? <p>{slide.body}</p> : null}
                 {slide.cta_text ? <small>{slide.cta_text}</small> : null}
+                {productUrl ? (
+                  <a href={productUrl} target="_blank" rel="noreferrer">
+                    Öppna produkten <ExternalLink size={12} />
+                  </a>
+                ) : editableProducts ? (
+                  <small>CTA-bild – skapas om automatiskt</small>
+                ) : null}
               </div>
             ) : null}
           </article>
-        ))}
+        );})}
+      </div>
+    );
+  }
+  if (post.image_url) {
+    return (
+      <div className="admin-v74-media-frame">
+        <img src={post.image_url} alt="" />
       </div>
     );
   }
@@ -95,6 +137,7 @@ export default function AdminPostApprovalsPage() {
     admin_note: "",
     product_urls: "",
   });
+  const [keptProductUrls, setKeptProductUrls] = useState([]);
   const [notice, setNotice] = useState("");
 
   const selectedPost = useMemo(
@@ -102,6 +145,12 @@ export default function AdminPostApprovalsPage() {
     [posts, selectedPostId]
   );
 
+  useEffect(() => {
+    const requestedFilter = new URLSearchParams(window.location.search).get("status");
+    if (["failed", "pending_approval", "approved", "rejected"].includes(requestedFilter)) {
+      setFilter(requestedFilter);
+    }
+  }, []);
   useEffect(() => { loadPosts(); }, [filter]);
   useEffect(() => {
     if (!selectedPostId) return undefined;
@@ -109,6 +158,24 @@ export default function AdminPostApprovalsPage() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [selectedPostId]);
+
+  function openPost(post) {
+    if (!post) return;
+    setSelectedPostId(post.id);
+    setKeptProductUrls(getPostProductUrls(post));
+    setActionDraft({
+      admin_note: post.admin_review?.admin_note || "",
+      product_urls: "",
+    });
+  }
+
+  function toggleKeptProduct(productUrl) {
+    setKeptProductUrls((current) =>
+      current.includes(productUrl)
+        ? current.filter((value) => value !== productUrl)
+        : [...current, productUrl]
+    );
+  }
 
   async function loadPosts() {
     setLoading(true);
@@ -139,9 +206,8 @@ export default function AdminPostApprovalsPage() {
       if (selectedPostId && !nextPosts.some((post) => post.id === selectedPostId)) setSelectedPostId("");
       if (!selectedPostId) {
         const requestedPostId = new URLSearchParams(window.location.search).get("post");
-        if (requestedPostId && nextPosts.some((post) => post.id === requestedPostId)) {
-          setSelectedPostId(requestedPostId);
-        }
+        const requestedPost = nextPosts.find((post) => post.id === requestedPostId);
+        if (requestedPost) openPost(requestedPost);
       }
     } catch (loadError) {
       setError(loadError.message || t("admin.approvals.loadError"));
@@ -186,6 +252,14 @@ export default function AdminPostApprovalsPage() {
     setError("");
     setNotice("");
     try {
+      const replacementProductUrls = actionDraft.product_urls
+        .split(/\r?\n/)
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const requestedProductUrls =
+        action === "regenerate"
+          ? Array.from(new Set([...keptProductUrls, ...replacementProductUrls]))
+          : [];
       const headers = await getHeaders();
       const response = await fetch("/api/admin/post-approvals", {
         method: "POST",
@@ -194,10 +268,7 @@ export default function AdminPostApprovalsPage() {
           action,
           post_id: selectedPost.id,
           admin_note: actionDraft.admin_note,
-          product_urls: actionDraft.product_urls
-            .split(/\r?\n/)
-            .map((value) => value.trim())
-            .filter(Boolean),
+          product_urls: requestedProductUrls,
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -210,6 +281,7 @@ export default function AdminPostApprovalsPage() {
             : "Inlägget har nekats och inget kundmejl skickades."
       );
       setActionDraft({ admin_note: "", product_urls: "" });
+      setKeptProductUrls([]);
       setSelectedPostId("");
       await loadPosts();
     } catch (actionError) {
@@ -299,7 +371,7 @@ export default function AdminPostApprovalsPage() {
         </section>
 
         <div className="admin-approval-tabs">
-          {[["all", t("admin.approvals.all")], ["pending_approval", t("admin.approvals.pending")], ["approved", t("admin.approvals.approved")], ["rejected", t("admin.approvals.rejected")]].map(([value, label]) => (
+          {[["all", t("admin.approvals.all")], ["failed", "Misslyckade jobb"], ["pending_approval", t("admin.approvals.pending")], ["approved", t("admin.approvals.approved")], ["rejected", t("admin.approvals.rejected")]].map(([value, label]) => (
             <button type="button" key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{label}</button>
           ))}
         </div>
@@ -329,7 +401,7 @@ export default function AdminPostApprovalsPage() {
                     : post.status;
               const meta = statusMeta(effectiveStatus, t);
               return (
-                <button type="button" className="admin-v74-approval-row" key={post.id} onClick={() => setSelectedPostId(post.id)}>
+                <button type="button" className="admin-v74-approval-row" key={post.id} onClick={() => openPost(post)}>
                   <strong>{post.brand_name || t("admin.approvals.unknownBrand")}</strong>
                   <span>{formatDate(post.created_at)}</span>
                   <span>{formatDate(post.scheduled_for)}</span>
@@ -373,7 +445,13 @@ export default function AdminPostApprovalsPage() {
                       : "SPREELO"}
                   </div>
                   <h3>{selectedPost.post_type || selectedPost.content_format || t("admin.approvals.post")}</h3>
-                  <MediaPreview post={selectedPost} t={t} />
+                  <MediaPreview
+                    post={selectedPost}
+                    t={t}
+                    editableProducts={Boolean(selectedPost.admin_review) || selectedPost.status === "failed"}
+                    keptProductUrls={keptProductUrls}
+                    onToggleProduct={toggleKeptProduct}
+                  />
                   <div className="admin-v74-post-copy">
                     <span>{t("admin.approvals.postCopy")}</span>
                     <p>{selectedPost.content || t("admin.approvals.noContent")}</p>
@@ -389,10 +467,36 @@ export default function AdminPostApprovalsPage() {
                     <div><dt>{t("admin.approvals.platform")}</dt><dd>{selectedPost.platform || "—"}</dd></div>
                   </dl>
 
-                  {selectedPost.admin_review ? (
+                  {selectedPost.status === "failed" ? (
+                    <div className="admin-v144-failure-details">
+                      <strong><AlertTriangle size={16} /> Genereringen misslyckades</strong>
+                      <p>
+                        {selectedPost.generation_failure?.customer_message ||
+                          selectedPost.generation_failure?.message ||
+                          selectedPost.video_error ||
+                          "Någon fullständig feltext sparades inte för den här äldre körningen."}
+                      </p>
+                      {selectedPost.generation_failure?.code ? (
+                        <small>Felkod: {selectedPost.generation_failure.code}</small>
+                      ) : null}
+                      {selectedPost.generation_failure?.stage ? (
+                        <small>Steg: {selectedPost.generation_failure.stage}</small>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {selectedPost.admin_review || selectedPost.status === "failed" ? (
                     <div className="admin-v144-review-actions">
-                      <strong>Adminbeslut</strong>
-                      <p>Kunden har inte fått mejlet förrän du godkänner.</p>
+                      <strong>
+                        {selectedPost.status === "failed"
+                          ? "Kör om det misslyckade jobbet"
+                          : "Adminbeslut"}
+                      </strong>
+                      <p>
+                        {selectedPost.status === "failed"
+                          ? "Omkörningen debiterar inte kunden. Den nya versionen hamnar här för granskning."
+                          : "Kunden har inte fått mejlet förrän du godkänner."}
+                      </p>
                       <label>
                         <span>Intern anteckning</span>
                         <textarea
@@ -405,8 +509,38 @@ export default function AdminPostApprovalsPage() {
                           }
                         />
                       </label>
+                      {getPostProductUrls(selectedPost).length ? (
+                        <div className="admin-v144-kept-summary">
+                          <strong>
+                            Behållna produkter: {keptProductUrls.length} av{" "}
+                            {getPostProductUrls(selectedPost).length}
+                          </strong>
+                          <small>
+                            Kryssa ur här eller direkt på en karusellbild. De markerade
+                            produkterna följer med till den nya versionen.
+                          </small>
+                          <ul>
+                            {getPostProductUrls(selectedPost).map((productUrl) => (
+                              <li key={productUrl}>
+                                <label>
+                                  <input
+                                    type="checkbox"
+                                    checked={keptProductUrls.includes(productUrl)}
+                                    onChange={() => toggleKeptProduct(productUrl)}
+                                  />
+                                  <span>{productUrl}</span>
+                                </label>
+                                <a href={productUrl} target="_blank" rel="noreferrer">
+                                  <ExternalLink size={12} />
+                                  Öppna
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
                       <label>
-                        <span>Produktlänkar för omkörning (en per rad)</span>
+                        <span>Nya ersättningsprodukter (en direktlänk per rad)</span>
                         <textarea
                           className="admin-v144-product-urls"
                           placeholder={"https://kund.se/produkt-1\nhttps://kund.se/produkt-2"}
@@ -418,10 +552,15 @@ export default function AdminPostApprovalsPage() {
                             }))
                           }
                         />
-                        <small>Lämna tomt för en ny automatisk sökning. Angivna länkar används exakt och fungerar även för video och singelprodukt.</small>
+                        <small>
+                          De nya länkarna läggs ihop med produkterna du behåller. Hela
+                          skapandeprocessen körs sedan om med exakt det urvalet, inklusive
+                          ny text och ny media. Om urvalet är helt tomt görs i stället en ny
+                          automatisk sökning.
+                        </small>
                       </label>
                       <div className="admin-v144-action-buttons">
-                        {selectedPost.admin_review.status === "pending" ? (
+                        {selectedPost.admin_review?.status === "pending" ? (
                           <>
                             <button
                               type="button"
@@ -441,10 +580,12 @@ export default function AdminPostApprovalsPage() {
                             </button>
                           </>
                         ) : null}
-                        {["pending", "rejected"].includes(selectedPost.admin_review.status) ? (
+                        {selectedPost.status === "failed" ||
+                        ["pending", "rejected"].includes(selectedPost.admin_review?.status) ? (
                           <button
                             type="button"
                             className="admin-v144-secondary-button"
+                            aria-label="Skapa ny version med valt produkturval"
                             disabled={savingId === selectedPost.id}
                             onClick={() => runAdminAction("regenerate")}
                           >
@@ -453,7 +594,7 @@ export default function AdminPostApprovalsPage() {
                             ) : (
                               <RotateCcw size={16} />
                             )}
-                            Skapa ny version
+                            Skapa om hela inlägget med urvalet
                           </button>
                         ) : null}
                       </div>

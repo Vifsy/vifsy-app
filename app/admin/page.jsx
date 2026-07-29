@@ -6,6 +6,7 @@ import {
   Bot,
   Building2,
   CheckCircle2,
+  ChevronRight,
   CircleDollarSign,
   FileVideo2,
   FileCheck2,
@@ -266,13 +267,17 @@ export default function AdminDashboardPage() {
             </section>
 
             {stats.failedMedia > 0 ? (
-              <div className="admin-alert warning">
+              <a
+                className="admin-alert warning admin-v144-failed-jobs-link"
+                href="/admin/post-approvals?status=failed"
+              >
                 <AlertTriangle size={19} aria-hidden="true" />
                 <div>
                   <strong>{t("admin.failedJobsTitle", { count: stats.failedMedia })}</strong>
                   <span>{t("admin.failedJobsText")}</span>
                 </div>
-              </div>
+                <ChevronRight size={20} aria-hidden="true" />
+              </a>
             ) : null}
 
             <section className="admin-tool-grid">

@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.spreelo.com";
 const RESEND_FROM_EMAIL = "Spreelo <noreply@spreelo.com>";
-const VISIBLE_STATUSES = new Set(["pending_approval", "approved", "rejected"]);
+const VISIBLE_STATUSES = new Set(["pending_approval", "approved", "rejected", "failed"]);
 const REVIEW_STATUSES = new Set(["new", "reviewing", "resolved"]);
 const REFUND_STATUSES = new Set(["pending_review", "approved", "declined", "credited"]);
 
@@ -94,7 +94,7 @@ export async function GET(request) {
   let query = context.admin
     .from("posts")
     .select(
-      "id, user_id, brand_profile_id, automation_rule_id, status, content, platform, post_type, content_format, image_url, video_url, image_status, video_status, scheduled_for, created_at, updated_at, approved_at, approval_email_sent_at"
+      "id, user_id, brand_profile_id, automation_rule_id, status, content, platform, post_type, content_format, website_url, image_url, video_url, image_status, video_status, video_error, scheduled_for, created_at, updated_at, approved_at, approval_email_sent_at"
     )
     .in("status", Array.from(VISIBLE_STATUSES))
     .order("created_at", { ascending: false })
@@ -111,6 +111,9 @@ export async function GET(request) {
   const brandIds = Array.from(new Set(postRows.map((item) => item.brand_profile_id).filter(Boolean)));
   const userIds = Array.from(new Set(postRows.map((item) => item.user_id).filter(Boolean)));
   const postIds = postRows.map((item) => item.id);
+  const ruleIds = Array.from(
+    new Set(postRows.map((item) => item.automation_rule_id).filter(Boolean))
+  );
 
   const { data: reviewRows, error: reviewError } = postIds.length
     ? await context.admin
@@ -134,6 +137,8 @@ export async function GET(request) {
     { data: feedbackRows },
     { data: slideRows },
     { data: previousPosts },
+    { data: failureRules },
+    { data: failureLogs },
   ] = await Promise.all([
     brandIds.length
       ? context.admin.from("brand_profiles").select("id, business_name").in("id", brandIds)
@@ -157,9 +162,28 @@ export async function GET(request) {
       ? context.admin
           .from("posts")
           .select(
-            "id, status, content, platform, post_type, content_format, image_url, video_url, scheduled_for, created_at"
+            "id, status, content, platform, post_type, content_format, website_url, image_url, video_url, video_error, scheduled_for, created_at"
           )
           .in("id", previousPostIds)
+      : Promise.resolve({ data: [] }),
+    ruleIds.length
+      ? context.admin
+          .from("automation_rules")
+          .select(
+            "id, generation_failure_code, generation_failure_message, generation_customer_message, generation_failure_stage, last_error"
+          )
+          .in("id", ruleIds)
+      : Promise.resolve({ data: [] }),
+    ruleIds.length
+      ? context.admin
+          .from("automation_run_logs")
+          .select(
+            "id, rule_id, status, error_message, failure_code, failure_customer_message, started_at, finished_at"
+          )
+          .in("rule_id", ruleIds)
+          .eq("status", "failed")
+          .order("started_at", { ascending: false })
+          .limit(Math.max(50, ruleIds.length * 4))
       : Promise.resolve({ data: [] }),
   ]);
 
@@ -178,6 +202,13 @@ export async function GET(request) {
   const userMap = Object.fromEntries(userEntries);
   const feedbackMap = Object.fromEntries((feedbackRows || []).map((item) => [item.post_id, item]));
   const reviewMap = Object.fromEntries((reviewRows || []).map((item) => [item.post_id, item]));
+  const failureRuleMap = Object.fromEntries(
+    (failureRules || []).map((item) => [item.id, item])
+  );
+  const failureLogMap = {};
+  for (const item of failureLogs || []) {
+    if (item.rule_id && !failureLogMap[item.rule_id]) failureLogMap[item.rule_id] = item;
+  }
   const slidesMap = (slideRows || []).reduce((map, slide) => {
     if (!map[slide.post_id]) map[slide.post_id] = [];
     map[slide.post_id].push(slide);
@@ -194,17 +225,43 @@ export async function GET(request) {
   return Response.json({
     ok: true,
     settings,
-    posts: postRows.map((item) => ({
-      ...item,
-      brand_name: brandMap[item.brand_profile_id] || "",
-      customer_email: userMap[item.user_id] || "",
-      rejection: feedbackMap[item.id] || null,
-      admin_review: reviewMap[item.id] || null,
-      previous_post: reviewMap[item.id]?.previous_post_id
-        ? previousPostMap[reviewMap[item.id].previous_post_id] || null
-        : null,
-      slides: slidesMap[item.id] || [],
-    })),
+    posts: postRows.map((item) => {
+      const ruleFailure = failureRuleMap[item.automation_rule_id] || null;
+      const runFailure = failureLogMap[item.automation_rule_id] || null;
+      return {
+        ...item,
+        brand_name: brandMap[item.brand_profile_id] || "",
+        customer_email: userMap[item.user_id] || "",
+        rejection: feedbackMap[item.id] || null,
+        admin_review: reviewMap[item.id] || null,
+        previous_post: reviewMap[item.id]?.previous_post_id
+          ? previousPostMap[reviewMap[item.id].previous_post_id] || null
+          : null,
+        slides: slidesMap[item.id] || [],
+        generation_failure:
+          item.status === "failed"
+            ? {
+                code:
+                  runFailure?.failure_code ||
+                  ruleFailure?.generation_failure_code ||
+                  null,
+                message:
+                  runFailure?.error_message ||
+                  ruleFailure?.generation_failure_message ||
+                  ruleFailure?.last_error ||
+                  item.video_error ||
+                  null,
+                customer_message:
+                  runFailure?.failure_customer_message ||
+                  ruleFailure?.generation_customer_message ||
+                  null,
+                stage: ruleFailure?.generation_failure_stage || null,
+                started_at: runFailure?.started_at || null,
+                finished_at: runFailure?.finished_at || null,
+              }
+            : null,
+      };
+    }),
   });
 }
 
@@ -283,14 +340,16 @@ export async function POST(request) {
       .maybeSingle(),
   ]);
 
-  if (!review) {
+  const isFailedRecovery = action === "regenerate" && post.status === "failed";
+
+  if (!review && !isFailedRecovery) {
     return Response.json(
       { ok: false, error: "Inlägget ingår inte i admin-granskningsflödet." },
       { status: 409 }
     );
   }
 
-  if (review.status === "superseded") {
+  if (review?.status === "superseded") {
     return Response.json(
       { ok: false, error: "En nyare version har redan beställts från detta inlägg." },
       { status: 409 }
@@ -386,7 +445,7 @@ export async function POST(request) {
   const originalNextRunAt =
     rule.admin_review_original_next_run_at ||
     (rule.schedule_type === "weekly" ? rule.next_run_at : null);
-  const rootPostId = review.root_post_id || post.id;
+  const rootPostId = review?.root_post_id || post.id;
 
   const { error: rerunError } = await context.admin
     .from("automation_rules")
@@ -422,15 +481,19 @@ export async function POST(request) {
   await Promise.all([
     context.admin
       .from("admin_post_reviews")
-      .update({
+      .upsert({
+        post_id: post.id,
+        previous_post_id: review?.previous_post_id || null,
+        root_post_id: rootPostId,
+        automation_rule_id: post.automation_rule_id,
+        revision: review?.revision || 1,
         status: "superseded",
         requested_product_urls: productUrls,
         admin_note: String(body?.admin_note || "").trim() || null,
         reviewed_by: context.user.id,
         reviewed_at: now,
         updated_at: now,
-      })
-      .eq("post_id", post.id),
+      }, { onConflict: "post_id" }),
     context.admin
       .from("posts")
       .update({ status: "rejected", approval_token: null, updated_at: now })
