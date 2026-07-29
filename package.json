@@ -35,10 +35,7 @@
     "test:v143.5": "node scripts/test-v143-5-semantic-campaign-curation.mjs",
     "test:v143.6": "node scripts/test-v143-6-runtime-scope-fix.mjs",
     "test:v143.7": "node scripts/test-v143-7-fallback-runtime-fix.mjs",
-    "test:v143.8": "node scripts/test-v143-8-school-search-quality.mjs",
-    "test:v144": "node scripts/test-v144-admin-review-video-rotation.mjs",
-    "test:v144.1": "node scripts/test-v144-1-admin-review-controls.mjs",
-    "test:v144.2": "node scripts/test-v144-2-clean-product-only-images.mjs"
+    "test:v143.8": "node scripts/test-v143-8-school-search-quality.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

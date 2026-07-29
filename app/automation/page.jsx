@@ -10162,18 +10162,11 @@ function blockFormatCardClickAfterDrag(event) {
                     <button
                       type="button"
                       onClick={savePlan}
-                      disabled={saving || !slots.length}
-                      aria-describedby={!hasEnoughCredits ? "plan-credit-block-reason" : undefined}
+                      disabled={saving || !hasEnoughCredits || !slots.length}
                     >
                       <Rocket size={17} />
                       {saving ? t("automation.saving") : t("automation.startActivatePlan")}
                     </button>
-                    {!hasEnoughCredits ? (
-                      <strong id="plan-credit-block-reason" className="plan-v144-credit-warning">
-                        Planen kräver {plannedCredits} krediter men kontot har {creditsRemaining}.
-                        Tryck på knappen för fullständig information.
-                      </strong>
-                    ) : null}
                     <span><ShieldCheck size={14} /> {t("automation.redesign.pauseAnytime")}</span>
                   </div>
                 )}
@@ -11393,17 +11386,10 @@ function blockFormatCardClickAfterDrag(event) {
         type="button"
         className="planner-save-button"
         onClick={savePlan}
-        disabled={saving}
-        aria-describedby={!hasEnoughCredits ? "legacy-plan-credit-block-reason" : undefined}
+        disabled={saving || !hasEnoughCredits}
       >
         {saving ? t("automation.saving") : t("automation.startActivatePlan")}
       </button>
-      {!hasEnoughCredits ? (
-        <strong id="legacy-plan-credit-block-reason" className="plan-v144-credit-warning">
-          Planen kräver {plannedCredits} krediter men kontot har {creditsRemaining}.
-          Tryck på knappen för fullständig information.
-        </strong>
-      ) : null}
       <p className="planner-save-trust">🔒 {t("automation.startAutomaticPlanTrust")}</p>
     </div>
   </>
