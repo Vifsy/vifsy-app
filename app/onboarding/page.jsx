@@ -16,6 +16,7 @@ import {
   WandSparkles,
 } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
+import { getValidAnalysisAccessToken } from "../../lib/analysisSession";
 import { useUiText } from "../../lib/i18n/useUiText";
 
 const ANALYSIS_STATUS_POLL_INTERVAL_MS = 2000;
@@ -166,6 +167,7 @@ async function pollAnalysisStatus({
 }) {
   let runFinished = false;
   let runResult = null;
+  let currentAccessToken = accessToken;
 
   runRequest
     .then((result) => {
@@ -183,15 +185,28 @@ async function pollAnalysisStatus({
   for (let pollCount = 0; pollCount < ANALYSIS_STATUS_MAX_POLLS; pollCount += 1) {
     await sleep(pollCount === 0 ? 1000 : ANALYSIS_STATUS_POLL_INTERVAL_MS);
 
-    const statusResponse = await fetch(
-      `/api/analyze-brand/status?jobId=${encodeURIComponent(jobId)}`,
-      {
+    const requestStatus = (token) =>
+      fetch(`/api/analyze-brand/status?jobId=${encodeURIComponent(jobId)}`, {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
         },
-      }
-    );
+      });
+
+    currentAccessToken = await getValidAnalysisAccessToken({
+      supabase,
+      fallbackAccessToken: currentAccessToken,
+    });
+    let statusResponse = await requestStatus(currentAccessToken);
+
+    if (statusResponse.status === 401) {
+      currentAccessToken = await getValidAnalysisAccessToken({
+        supabase,
+        fallbackAccessToken: currentAccessToken,
+        forceRefresh: true,
+      });
+      statusResponse = await requestStatus(currentAccessToken);
+    }
 
     const statusResult = await readJsonResponse(statusResponse);
 
@@ -453,11 +468,16 @@ export default function OnboardingPage() {
         return;
       }
 
+      const analysisAccessToken = await getValidAnalysisAccessToken({
+        supabase,
+        fallbackAccessToken: session.access_token,
+      });
+
       const startResponse = await fetch("/api/analyze-brand/start", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${analysisAccessToken}`,
         },
         body: JSON.stringify({
           brandProfileId: createdBrand.id,
@@ -488,7 +508,7 @@ export default function OnboardingPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${analysisAccessToken}`,
         },
         body: JSON.stringify({
           jobId,
@@ -505,7 +525,7 @@ export default function OnboardingPage() {
       });
 
       const completedJob = await pollAnalysisStatus({
-        accessToken: session.access_token,
+        accessToken: analysisAccessToken,
         jobId,
         runRequest,
         displayStartedAt,

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AppLayout from "../../components/AppLayout";
 import { supabase } from "../../lib/supabaseClient";
+import { getValidAnalysisAccessToken } from "../../lib/analysisSession";
 import { useUiText } from "../../lib/i18n/useUiText";
 import { normalizeSingleContentLanguage } from "../../lib/contentLanguage";
 
@@ -765,6 +766,7 @@ export default function BrandProfile() {
     let runResult = null;
     let consecutiveStatusErrors = 0;
     let queuedPollsAfterRunFailure = 0;
+    let currentAccessToken = accessToken;
 
     runRequest
       .then((result) => {
@@ -788,16 +790,32 @@ export default function BrandProfile() {
       let statusResult;
 
       try {
-        statusResponse = await fetchWithTimeout(
-          `/api/analyze-brand/status?jobId=${encodeURIComponent(jobId)}`,
-          {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
+        const requestStatus = (token) =>
+          fetchWithTimeout(
+            `/api/analyze-brand/status?jobId=${encodeURIComponent(jobId)}`,
+            {
+              method: "GET",
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
             },
-          },
-          ANALYSIS_STATUS_REQUEST_TIMEOUT_MS
-        );
+            ANALYSIS_STATUS_REQUEST_TIMEOUT_MS
+          );
+
+        currentAccessToken = await getValidAnalysisAccessToken({
+          supabase,
+          fallbackAccessToken: currentAccessToken,
+        });
+        statusResponse = await requestStatus(currentAccessToken);
+
+        if (statusResponse.status === 401) {
+          currentAccessToken = await getValidAnalysisAccessToken({
+            supabase,
+            fallbackAccessToken: currentAccessToken,
+            forceRefresh: true,
+          });
+          statusResponse = await requestStatus(currentAccessToken);
+        }
 
         statusResult = await readApiJson(statusResponse);
 
@@ -918,6 +936,11 @@ export default function BrandProfile() {
         return;
       }
 
+      const analysisAccessToken = await getValidAnalysisAccessToken({
+        supabase,
+        fallbackAccessToken: session.access_token,
+      });
+
       const analysisPayload = {
         brandProfileId,
         businessName: trimmedBusinessName,
@@ -934,7 +957,7 @@ export default function BrandProfile() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
+            Authorization: `Bearer ${analysisAccessToken}`,
           },
           body: JSON.stringify(analysisPayload),
         },
@@ -964,7 +987,7 @@ export default function BrandProfile() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${analysisAccessToken}`,
         },
         body: JSON.stringify({
           jobId,
@@ -979,8 +1002,8 @@ export default function BrandProfile() {
         };
       });
 
-           const completedJob = await pollAnalysisStatus({
-        accessToken: session.access_token,
+      const completedJob = await pollAnalysisStatus({
+        accessToken: analysisAccessToken,
         jobId,
         runRequest,
         displayStartedAt,
