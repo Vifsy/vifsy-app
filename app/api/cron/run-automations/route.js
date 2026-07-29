@@ -247,6 +247,22 @@ const CAROUSEL_WEB_SEARCH_MAX_VERIFIED_ITEMS = PRODUCT_ENGINE_V2_ENABLED
 const CAROUSEL_WEB_SEARCH_CANDIDATE_LIMIT = PRODUCT_ENGINE_V2_ENABLED
   ? PRODUCT_ENGINE_V2_POOL_TARGETS.minimumCandidatePool * 2
   : 24;
+// v143.10: Campaign carousels now start with the same bounded task that
+// produced the strong manual result: ask GPT-5.5 to web-search one customer
+// domain for ten ranked products, then let Product Engine verify those exact
+// URLs. The legacy 180-candidate/store-search flow remains a fallback only.
+const CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET = 10;
+const CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED = 5;
+const CAMPAIGN_PRIMARY_WEB_RESEARCH_TIMEOUT_MS = Math.max(
+  45_000,
+  Math.min(
+    75_000,
+    Number(process.env.CAMPAIGN_PRIMARY_WEB_RESEARCH_TIMEOUT_MS || 60_000) ||
+      60_000
+  )
+);
+const CAMPAIGN_PRIMARY_WEB_RESEARCH_SOURCE =
+  "gpt55_primary_domain_web_research";
 const CAROUSEL_PRODUCT_RESERVE_TARGET = PRODUCT_ENGINE_V2_ENABLED
   ? PRODUCT_ENGINE_V2_POOL_TARGETS.reserveCount
   : 0;
@@ -5912,16 +5928,6 @@ async function prepareCarouselProductsForRule({
     ]);
   }
 
-  // Product discovery owns the first and largest time budget. One fast,
-  // bounded vocabulary call derives theme and related product searches; the
-  // senior model is reserved for curation after real products exist.
-  rule = await ensureProductSearchQueriesForRule({
-    supabase,
-    openai,
-    rule,
-    brandProfile,
-  });
-
   const recentUsedItems = await getRecentUsedWebsiteItems({
     supabase,
     userId: rule.user_id,
@@ -5936,6 +5942,118 @@ async function prepareCarouselProductsForRule({
       "A website carousel needs a product category or collection URL. Choose another content type for one exact product."
     );
   }
+
+  const canUsePrimaryCampaignWebResearch =
+    isCampaignRule &&
+    !resumedAfterWebsiteRateLimit &&
+    contentSourceScope !== "product_category" &&
+    contentSourceScope !== "focus_page";
+  let primaryCampaignWebResearch = null;
+
+  if (canUsePrimaryCampaignWebResearch) {
+    try {
+      primaryCampaignWebResearch =
+        await findPrimaryCampaignProductsWithWebSearch({
+          openai,
+          supabase,
+          brandProfile,
+          rule,
+          websiteUrl,
+          usedWebsiteItems: recentUsedItems,
+          deadlineMs: productPreparationDeadline,
+          verificationCache: productVerificationCache,
+        });
+
+      const primaryWebResearchResult =
+        await finalizeCarouselFromPrimaryCampaignWebResearch({
+          supabase,
+          rule,
+          summary,
+          websiteUrl,
+          contentType,
+          recentUsedItems,
+          usedWebsiteImageUrlsThisRun,
+          researchResult: primaryCampaignWebResearch,
+        });
+
+      if (primaryWebResearchResult) {
+        return primaryWebResearchResult;
+      }
+
+      const partialPrimaryProducts =
+        primaryCampaignWebResearch?.validProducts || [];
+      if (partialPrimaryProducts.length) {
+        // Preserve the expensive, technically verified GPT-5.5 work as the
+        // highest-priority seed if the legacy fallback must complete the set.
+        catalogItems = dedupeWebsiteItemsByUrlTitleAndImage([
+          ...partialPrimaryProducts,
+          ...catalogItems,
+        ]);
+      }
+
+      console.warn("Campaign primary GPT-5.5 web research did not verify five usable products; continuing with the stable v143.8 fallback flow", {
+        ruleId: rule?.id,
+        brandProfileId: rule?.brand_profile_id,
+        websiteUrl,
+        directCandidateCount:
+          primaryCampaignWebResearch?.candidates?.length || 0,
+        verifiedCount:
+          primaryCampaignWebResearch?.verifiedProducts?.length || 0,
+        usableImageCount: partialPrimaryProducts.length,
+        rateLimited: Boolean(primaryCampaignWebResearch?.rateLimited),
+      });
+
+      if (primaryCampaignWebResearch?.rateLimited) {
+        const rateLimitError = new WebsiteRateLimitError(
+          "The website rate limited verification of GPT-5.5's ranked product URLs before five products were ready.",
+          {
+            url: websiteUrl,
+            domain: getWebsiteFetchDomain(websiteUrl),
+            retryAfterMs: Number(
+              primaryCampaignWebResearch?.retryAfterMs || 0
+            ),
+            status: 429,
+          }
+        );
+        rateLimitError.partialProducts = partialPrimaryProducts;
+        throw rateLimitError;
+      }
+    } catch (error) {
+      if (isWebsiteRateLimitError(error)) {
+        throw error;
+      }
+      console.warn("Campaign primary GPT-5.5 web research failed; continuing with the unchanged v143.8 fallback flow", {
+        ruleId: rule?.id,
+        brandProfileId: rule?.brand_profile_id,
+        websiteUrl,
+        model: PRODUCT_RESEARCH_MODEL,
+        message: error?.message,
+        elapsedMs: Date.now() - productPreparationStartedAt,
+      });
+    }
+  } else if (isCampaignRule) {
+    console.log("Campaign primary GPT-5.5 web research was not repeated", {
+      ruleId: rule?.id,
+      brandProfileId: rule?.brand_profile_id,
+      websiteUrl,
+      resumedAfterWebsiteRateLimit,
+      contentSourceScope,
+      reason: resumedAfterWebsiteRateLimit
+        ? "persistent_ranked_products_are_resumed_before_new_ai_cost"
+        : "customer_selected_category_keeps_its_existing_focused_flow",
+    });
+  }
+
+  // Only pay for vocabulary expansion when the direct GPT-5.5 web-research
+  // route could not deliver five verified products. This keeps the successful
+  // path equivalent to the short human-style request instead of sending its
+  // results through the old query/score pipeline.
+  rule = await ensureProductSearchQueriesForRule({
+    supabase,
+    openai,
+    rule,
+    brandProfile,
+  });
 
   if (contentSourceScope === "product_category" || contentSourceScope === "focus_page") {
     const focusedCategoryItems = await discoverProductsFromFocusedCategory({
@@ -6856,9 +6974,9 @@ async function prepareCarouselProductsForRule({
     }
   }
 
-  // The retailer's own search is the primary campaign retrieval path. Persistent
-  // verified work remains first because it is free to reuse; Store Map is the
-  // fallback only when direct store search cannot deliver five products.
+  // v143.10 fallback: this retailer-search path runs only when the primary
+  // GPT-5.5 domain research could not verify five usable product pages.
+  // Persistent work stays ahead of new retailer requests on a resumed run.
   if (
     isCampaignRule &&
     !resumedAfterWebsiteRateLimit &&
@@ -12248,6 +12366,43 @@ function normalizeWebsiteCatalogItem(row) {
     product_confidence: Number(row.verification_score || 0),
     last_verified_at: row.last_verified_at || null,
     verification_metadata: row.verification_metadata || {},
+    reason: row.verification_metadata?.reason || "",
+    campaign_fit_source:
+      row.verification_metadata?.campaign_fit_source ||
+      row.discovery_source ||
+      "catalog",
+    campaign_role: row.verification_metadata?.campaign_role || null,
+    campaign_relevance_class:
+      row.verification_metadata?.campaign_relevance_class || null,
+    campaign_relevance_evidence: Array.isArray(
+      row.verification_metadata?.campaign_relevance_evidence
+    )
+      ? row.verification_metadata.campaign_relevance_evidence
+      : [],
+    campaign_research_rank:
+      Number(row.verification_metadata?.campaign_research_rank || 0) ||
+      null,
+    ai_campaign_fit_score:
+      Number(row.verification_metadata?.ai_campaign_fit_score || 0) ||
+      null,
+    campaign_fit_score:
+      Number(row.verification_metadata?.campaign_fit_score || 0) || 0,
+    campaign_fit_verdict:
+      row.verification_metadata?.campaign_fit_verdict || null,
+    campaign_theme_fit:
+      row.verification_metadata?.campaign_theme_fit === true
+        ? true
+        : row.verification_metadata?.campaign_theme_fit === false
+          ? false
+          : null,
+    ai_campaign_fit_source:
+      row.verification_metadata?.ai_campaign_fit_source || null,
+    ai_campaign_fit_model:
+      row.verification_metadata?.ai_campaign_fit_model || null,
+    campaign_primary_web_researched:
+      row.verification_metadata?.campaign_primary_web_researched === true,
+    campaign_final_reviewed:
+      row.verification_metadata?.campaign_final_reviewed === true,
     store_map_node_url: row.store_map_node_url || row.verification_metadata?.store_map_node_url || "",
     store_map_node_title: row.store_map_node_title || row.verification_metadata?.store_map_node_title || "",
     store_map_node_type: row.store_map_node_type || row.verification_metadata?.store_map_node_type || "",
@@ -12512,6 +12667,36 @@ async function upsertWebsiteProductCatalogItems({
           source_search_url: rawItem?.source_search_url || null,
           discovery_score: Number(rawItem?.discovery_score || 0),
           campaign_fit_score: Number(rawItem?.campaign_fit_score || 0),
+          campaign_fit_source: rawItem?.campaign_fit_source || null,
+          reason: rawItem?.reason || null,
+          campaign_role: rawItem?.campaign_role || null,
+          campaign_relevance_class:
+            rawItem?.campaign_relevance_class || null,
+          campaign_relevance_evidence: Array.isArray(
+            rawItem?.campaign_relevance_evidence
+          )
+            ? rawItem.campaign_relevance_evidence.slice(0, 8)
+            : [],
+          campaign_research_rank:
+            Number(rawItem?.campaign_research_rank || 0) || null,
+          ai_campaign_fit_score:
+            Number(rawItem?.ai_campaign_fit_score || 0) || null,
+          campaign_fit_verdict:
+            rawItem?.campaign_fit_verdict || null,
+          campaign_theme_fit:
+            rawItem?.campaign_theme_fit === true
+              ? true
+              : rawItem?.campaign_theme_fit === false
+                ? false
+                : null,
+          ai_campaign_fit_source:
+            rawItem?.ai_campaign_fit_source || null,
+          ai_campaign_fit_model:
+            rawItem?.ai_campaign_fit_model || null,
+          campaign_primary_web_researched:
+            rawItem?.campaign_primary_web_researched === true,
+          campaign_final_reviewed:
+            rawItem?.campaign_final_reviewed === true,
           verification_level: rawItem?.verification_level || "deep_product_page",
           store_map_node_url: rawItem?.store_map_node_url || null,
           store_map_node_title: rawItem?.store_map_node_title || null,
@@ -15976,6 +16161,8 @@ function getCampaignProductSignalState(
     item,
     rule
   );
+  const hasTrustedPrimaryWebResearchSignal =
+    isPrimaryCampaignWebResearchProduct(item);
   const coreThemeTerms = extractCampaignCoreThemeTerms(rule);
   const anchorTerms = extractCampaignAnchorTerms(rule);
   const hasCoreThemeGuard = coreThemeTerms.length > 0;
@@ -15998,6 +16185,7 @@ function getCampaignProductSignalState(
     hasTrustedStoreSearchSignal;
 
   const hasAiCampaignEvaluation =
+    hasTrustedPrimaryWebResearchSignal ||
     aiCampaignFitScore !== null ||
     themeFitDecision !== null ||
     Boolean(campaignFitVerdict);
@@ -16005,7 +16193,10 @@ function getCampaignProductSignalState(
   const hasAiCampaignApproval =
     hasAiCampaignEvaluation &&
     !explicitlyRejected &&
-    isCampaignThemeFitApproved(item);
+    (
+      hasTrustedPrimaryWebResearchSignal ||
+      isCampaignThemeFitApproved(item)
+    );
   const fallbackEligibility = evaluateCampaignFallbackEligibility({
     explicitlyRejected,
     hasAiEvaluation: hasAiCampaignEvaluation,
@@ -16032,6 +16223,7 @@ function getCampaignProductSignalState(
     hasAnchorGuard,
     hasStrictThemeGuard,
     hasTrustedStoreSearchSignal,
+    hasTrustedPrimaryWebResearchSignal,
     hasDirectCampaignSignal,
     hasVerifiedContextualCampaignSignal,
     hasAiCampaignEvaluation,
@@ -19313,6 +19505,34 @@ async function extractProductDataFromProductPage({
     source_page_url: webSearchProduct?.source_page_url || null,
     source_search_url: webSearchProduct?.source_search_url || null,
     campaign_fit_source: webSearchProduct?.campaign_fit_source || null,
+    campaign_role: webSearchProduct?.campaign_role || null,
+    campaign_relevance_class:
+      webSearchProduct?.campaign_relevance_class || null,
+    campaign_relevance_evidence: Array.isArray(
+      webSearchProduct?.campaign_relevance_evidence
+    )
+      ? webSearchProduct.campaign_relevance_evidence
+      : [],
+    campaign_research_rank:
+      Number(webSearchProduct?.campaign_research_rank || 0) || null,
+    ai_campaign_fit_score:
+      Number(webSearchProduct?.ai_campaign_fit_score || 0) || null,
+    ai_campaign_fit_source:
+      webSearchProduct?.ai_campaign_fit_source || null,
+    ai_campaign_fit_model:
+      webSearchProduct?.ai_campaign_fit_model || null,
+    campaign_fit_verdict:
+      webSearchProduct?.campaign_fit_verdict || null,
+    campaign_theme_fit:
+      webSearchProduct?.campaign_theme_fit === true
+        ? true
+        : webSearchProduct?.campaign_theme_fit === false
+          ? false
+          : null,
+    campaign_primary_web_researched:
+      webSearchProduct?.campaign_primary_web_researched === true,
+    campaign_final_reviewed:
+      webSearchProduct?.campaign_final_reviewed === true,
     discovery_score: Number(webSearchProduct?.discovery_score || webSearchProduct?.score || 0),
     campaign_fit_score: Number(webSearchProduct?.campaign_fit_score || 0),
     product_page_verified: true,
@@ -19465,6 +19685,37 @@ async function upsertWebsiteProductCandidateQueue({
           source_page_url: candidate?.source_page_url || categoryUrl || null,
           campaign_fit_source: candidate?.campaign_fit_source || null,
           commerce_platform: candidate?.commerce_platform || null,
+          reason: candidate?.reason || null,
+          campaign_role: candidate?.campaign_role || null,
+          campaign_relevance_class:
+            candidate?.campaign_relevance_class || null,
+          campaign_relevance_evidence: Array.isArray(
+            candidate?.campaign_relevance_evidence
+          )
+            ? candidate.campaign_relevance_evidence.slice(0, 8)
+            : [],
+          campaign_research_rank:
+            Number(candidate?.campaign_research_rank || 0) || null,
+          ai_campaign_fit_score:
+            Number(candidate?.ai_campaign_fit_score || 0) || null,
+          campaign_fit_score:
+            Number(candidate?.campaign_fit_score || 0) || null,
+          campaign_fit_verdict:
+            candidate?.campaign_fit_verdict || null,
+          campaign_theme_fit:
+            candidate?.campaign_theme_fit === true
+              ? true
+              : candidate?.campaign_theme_fit === false
+                ? false
+                : null,
+          ai_campaign_fit_source:
+            candidate?.ai_campaign_fit_source || null,
+          ai_campaign_fit_model:
+            candidate?.ai_campaign_fit_model || null,
+          campaign_primary_web_researched:
+            candidate?.campaign_primary_web_researched === true,
+          campaign_final_reviewed:
+            candidate?.campaign_final_reviewed === true,
         },
       };
     })
@@ -19520,6 +19771,37 @@ async function loadWebsiteProductCandidateQueue({ supabase, rule, sourceUrl, cat
     source_page_url: row.category_url || categoryUrl || sourceUrl || "",
     campaign_fit_source: row?.metadata?.campaign_fit_source || "persistent_candidate_queue",
     commerce_platform: row?.metadata?.commerce_platform || "generic",
+    reason: row?.metadata?.reason || "",
+    campaign_role: row?.metadata?.campaign_role || null,
+    campaign_relevance_class:
+      row?.metadata?.campaign_relevance_class || null,
+    campaign_relevance_evidence: Array.isArray(
+      row?.metadata?.campaign_relevance_evidence
+    )
+      ? row.metadata.campaign_relevance_evidence
+      : [],
+    campaign_research_rank:
+      Number(row?.metadata?.campaign_research_rank || 0) || null,
+    ai_campaign_fit_score:
+      Number(row?.metadata?.ai_campaign_fit_score || 0) || null,
+    campaign_fit_score:
+      Number(row?.metadata?.campaign_fit_score || 0) || null,
+    campaign_fit_verdict:
+      row?.metadata?.campaign_fit_verdict || null,
+    campaign_theme_fit:
+      row?.metadata?.campaign_theme_fit === true
+        ? true
+        : row?.metadata?.campaign_theme_fit === false
+          ? false
+          : null,
+    ai_campaign_fit_source:
+      row?.metadata?.ai_campaign_fit_source || null,
+    ai_campaign_fit_model:
+      row?.metadata?.ai_campaign_fit_model || null,
+    campaign_primary_web_researched:
+      row?.metadata?.campaign_primary_web_researched === true,
+    campaign_final_reviewed:
+      row?.metadata?.campaign_final_reviewed === true,
   }));
 }
 
@@ -21943,6 +22225,561 @@ function buildCampaignSearchPoolItems({
       )
       .filter(Boolean)
   );
+}
+
+function getPrimaryCampaignWebResearchTheme(rule) {
+  const themeContract = getCampaignThemeContract(rule);
+  const candidates = [
+    themeContract?.primaryTheme,
+    rule?.name,
+    rule?.campaign_name,
+    rule?.campaign_title,
+    rule?.campaign_goal,
+    rule?.marketing_angle,
+    rule?.prompt,
+  ];
+
+  for (const candidate of candidates) {
+    const value = truncateText(String(candidate || "").trim(), 500);
+    if (value) return value;
+  }
+
+  return "the planned campaign";
+}
+
+function isPrimaryCampaignWebResearchProduct(item) {
+  return Boolean(
+    item?.product_page_verified === true &&
+      (
+        item?.campaign_primary_web_researched === true ||
+        item?.campaign_fit_source === CAMPAIGN_PRIMARY_WEB_RESEARCH_SOURCE ||
+        item?.ai_campaign_fit_source === CAMPAIGN_PRIMARY_WEB_RESEARCH_SOURCE
+      )
+  );
+}
+
+function getPrimaryCampaignResearchRank(item) {
+  const rank = Number(
+    item?.campaign_research_rank ||
+      item?.research_rank ||
+      item?.discovery_rank ||
+      0
+  );
+  return Number.isFinite(rank) && rank > 0
+    ? Math.round(rank)
+    : Number.MAX_SAFE_INTEGER;
+}
+
+function findMatchingPrimaryWebResearchCandidate(
+  verifiedItem,
+  candidates,
+  websiteUrl
+) {
+  const verifiedUrl = normalizeComparableValue(
+    canonicalizeWebsiteProductUrl(verifiedItem?.url, websiteUrl) ||
+      verifiedItem?.url
+  );
+  const verifiedTitle = normalizeComparableValue(verifiedItem?.title);
+
+  return (
+    (candidates || []).find((candidate) => {
+      const candidateUrl = normalizeComparableValue(
+        canonicalizeWebsiteProductUrl(candidate?.url, websiteUrl) ||
+          candidate?.url
+      );
+      return verifiedUrl && candidateUrl && verifiedUrl === candidateUrl;
+    }) ||
+    (candidates || []).find((candidate) => {
+      const candidateTitle = normalizeComparableValue(candidate?.title);
+      return (
+        verifiedTitle &&
+        candidateTitle &&
+        (
+          verifiedTitle === candidateTitle ||
+          verifiedTitle.includes(candidateTitle) ||
+          candidateTitle.includes(verifiedTitle)
+        )
+      );
+    }) ||
+    null
+  );
+}
+
+async function findPrimaryCampaignProductsWithWebSearch({
+  openai,
+  supabase,
+  brandProfile,
+  rule,
+  websiteUrl,
+  usedWebsiteItems = [],
+  deadlineMs = Number.POSITIVE_INFINITY,
+  verificationCache = null,
+}) {
+  const startedAt = Date.now();
+  const allowedDomain = getWebsiteFetchDomain(websiteUrl);
+  const campaignTheme = getPrimaryCampaignWebResearchTheme(rule);
+  const remainingBudgetMs = Number.isFinite(deadlineMs)
+    ? Math.max(0, deadlineMs - Date.now())
+    : CAMPAIGN_PRIMARY_WEB_RESEARCH_TIMEOUT_MS + 60_000;
+
+  if (
+    !allowedDomain ||
+    remainingBudgetMs < CAMPAIGN_PRIMARY_WEB_RESEARCH_TIMEOUT_MS + 30_000
+  ) {
+    console.log("Campaign primary GPT-5.5 web research skipped because its protected budget was unavailable", {
+      ruleId: rule?.id,
+      brandProfileId: rule?.brand_profile_id,
+      websiteUrl,
+      allowedDomain,
+      remainingBudgetMs,
+      requiredBudgetMs: CAMPAIGN_PRIMARY_WEB_RESEARCH_TIMEOUT_MS + 30_000,
+    });
+    return {
+      candidates: [],
+      verifiedProducts: [],
+      validProducts: [],
+      rateLimited: false,
+      retryAfterMs: 0,
+      campaignTheme,
+      allowedDomain,
+      prompt: "",
+      elapsedMs: Date.now() - startedAt,
+    };
+  }
+
+  const usedProducts = (usedWebsiteItems || [])
+    .slice(0, 30)
+    .map((item) => {
+      const title = String(item?.item_title || item?.title || "").trim();
+      const url = String(
+        item?.item_url || item?.product_url || item?.url || ""
+      ).trim();
+      return [title, url].filter(Boolean).join(" | ");
+    })
+    .filter(Boolean);
+  const exactTask = `Hitta ${CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET} passande produkter från ${allowedDomain} för ${campaignTheme}.`;
+  const prompt = `
+${exactTask}
+
+Do this as a careful senior marketer using web search:
+- Search only ${allowedDomain}. Use the site's public search, category and collection pages to find real products, then return the direct product pages.
+- Infer what the campaign really means, who it is for and which complementary product roles make the strongest social-media carousel.
+- Rank exactly ${CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET} concrete purchasable products. Ranks 1-5 must form the strongest varied carousel; ranks 6-10 are ordered reserves.
+- Choose products because they genuinely fit the campaign. The product title does not need to repeat the campaign word when the product is a natural commercial fit.
+- Avoid five near-identical products when the assortment supports useful variation. Do not force irrelevant variation.
+- Do not return homepages, search pages, category pages, gift guides, brand pages, images, articles or guessed URLs.
+- Stay in the same country/market version represented by ${websiteUrl}.
+- Do not invent product facts.
+${usedProducts.length ? `- Prefer products not used in recent Spreelo posts. Avoid these unless the site cannot provide ten better choices:\n${usedProducts.join("\n")}` : ""}
+
+Return the result in the required JSON structure. Keep each reason concise and grounded in the product and campaign.
+  `.trim();
+
+  console.log("Campaign primary GPT-5.5 web research started", {
+    ruleId: rule?.id,
+    brandProfileId: rule?.brand_profile_id,
+    websiteUrl,
+    allowedDomain,
+    model: PRODUCT_RESEARCH_MODEL,
+    requestedProductCount: CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET,
+    campaignTheme,
+    recentProductExclusionCount: usedProducts.length,
+  });
+
+  const response = await openai.responses.create(
+    {
+      model: PRODUCT_RESEARCH_MODEL,
+      tools: [
+        {
+          type: "web_search",
+          filters: {
+            allowed_domains: [allowedDomain],
+          },
+          search_context_size: "high",
+        },
+      ],
+      tool_choice: "required",
+      ...getReasoningOptionsForModel(PRODUCT_RESEARCH_MODEL),
+      max_output_tokens: 5000,
+      text: {
+        format: {
+          type: "json_schema",
+          name: "campaign_product_web_research",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              products: {
+                type: "array",
+                maxItems: CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    rank: { type: "integer", minimum: 1, maximum: 10 },
+                    title: { type: "string" },
+                    url: { type: "string" },
+                    reason: { type: "string" },
+                    product_role: { type: "string" },
+                    relevance_class: {
+                      type: "string",
+                      enum: ["direct", "contextual"],
+                    },
+                  },
+                  required: [
+                    "rank",
+                    "title",
+                    "url",
+                    "reason",
+                    "product_role",
+                    "relevance_class",
+                  ],
+                },
+              },
+            },
+            required: ["products"],
+          },
+        },
+      },
+      input: prompt,
+    },
+    {
+      timeout: Math.min(
+        CAMPAIGN_PRIMARY_WEB_RESEARCH_TIMEOUT_MS,
+        Math.max(25_000, remainingBudgetMs - 30_000)
+      ),
+      maxRetries: 0,
+    }
+  );
+
+  const content = response.output_text || "";
+  const parsed = safeJsonParse(content);
+  const rawProducts = Array.isArray(parsed?.products) ? parsed.products : [];
+  const candidates = [];
+
+  for (let index = 0; index < rawProducts.length; index += 1) {
+    const product = rawProducts[index];
+    const productUrl = String(product?.url || "").trim();
+    if (
+      !productUrl ||
+      !isHttpUrl(productUrl) ||
+      !isSameOrSubdomainUrl(productUrl, websiteUrl) ||
+      !matchesConfiguredWebsiteMarket(productUrl, websiteUrl) ||
+      isLikelyNonProductUrl(productUrl, websiteUrl) ||
+      isLikelyBadDiscoveryPageUrl(productUrl, websiteUrl)
+    ) {
+      continue;
+    }
+
+    const requestedRank = Number(product?.rank);
+    const rank =
+      Number.isInteger(requestedRank) &&
+      requestedRank >= 1 &&
+      requestedRank <= CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET
+        ? requestedRank
+        : index + 1;
+    const fitScore = Math.max(88, 100 - rank);
+    const reason = String(product?.reason || "").trim();
+    const campaignRole = String(product?.product_role || "").trim();
+    const relevanceClass =
+      normalizeCampaignRelevanceClass(product?.relevance_class) ||
+      "contextual";
+
+    candidates.push({
+      title: String(product?.title || "").trim(),
+      url: productUrl,
+      reason,
+      score: 1000 - rank,
+      discovery_score: 1000 - rank,
+      selection_priority: 1000 - rank,
+      campaign_research_rank: rank,
+      campaign_role: campaignRole,
+      campaign_relevance_class: relevanceClass,
+      campaign_relevance_evidence: reason ? [reason] : [],
+      campaign_fit_source: CAMPAIGN_PRIMARY_WEB_RESEARCH_SOURCE,
+      ai_campaign_fit_source: CAMPAIGN_PRIMARY_WEB_RESEARCH_SOURCE,
+      ai_campaign_fit_model: PRODUCT_RESEARCH_MODEL,
+      ai_campaign_fit_score: fitScore,
+      campaign_fit_score: fitScore,
+      campaign_fit_verdict: "fits",
+      campaign_theme_fit: true,
+      campaign_primary_web_researched: true,
+      campaign_final_reviewed: true,
+    });
+  }
+
+  const rankedCandidates = dedupeUrlItems(candidates)
+    .sort(
+      (left, right) =>
+        getPrimaryCampaignResearchRank(left) -
+        getPrimaryCampaignResearchRank(right)
+    )
+    .slice(0, CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET);
+
+  await upsertWebsiteProductCandidateQueue({
+    supabase,
+    rule,
+    sourceUrl: websiteUrl,
+    categoryUrl: null,
+    candidates: rankedCandidates,
+  });
+
+  const verifiedItems = rankedCandidates.length
+    ? await verifyDiscoveredWebsiteProductCandidates({
+        candidates: rankedCandidates,
+        websiteUrl,
+        limit: CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET,
+        deadlineMs,
+        verificationCache,
+        supabase,
+        rule,
+      })
+    : [];
+
+  const verifiedProducts = (verifiedItems || [])
+    .map((verifiedItem) => {
+      const candidate = findMatchingPrimaryWebResearchCandidate(
+        verifiedItem,
+        rankedCandidates,
+        websiteUrl
+      );
+      if (!candidate) return verifiedItem;
+      return {
+        ...verifiedItem,
+        reason: candidate.reason,
+        discovery_score: candidate.discovery_score,
+        selection_priority: candidate.selection_priority,
+        campaign_research_rank: candidate.campaign_research_rank,
+        campaign_role: candidate.campaign_role,
+        campaign_relevance_class: candidate.campaign_relevance_class,
+        campaign_relevance_evidence:
+          candidate.campaign_relevance_evidence,
+        campaign_fit_source: CAMPAIGN_PRIMARY_WEB_RESEARCH_SOURCE,
+        ai_campaign_fit_source: CAMPAIGN_PRIMARY_WEB_RESEARCH_SOURCE,
+        ai_campaign_fit_model: PRODUCT_RESEARCH_MODEL,
+        ai_campaign_fit_score: candidate.ai_campaign_fit_score,
+        campaign_fit_score: candidate.campaign_fit_score,
+        campaign_fit_verdict: "fits",
+        campaign_theme_fit: true,
+        campaign_primary_web_researched: true,
+        campaign_final_reviewed: true,
+      };
+    })
+    .sort(
+      (left, right) =>
+        getPrimaryCampaignResearchRank(left) -
+        getPrimaryCampaignResearchRank(right)
+    );
+  const validProducts = verifiedProducts.filter(isValidCarouselProduct);
+
+  console.log("Campaign primary GPT-5.5 web research finished", {
+    ruleId: rule?.id,
+    brandProfileId: rule?.brand_profile_id,
+    websiteUrl,
+    allowedDomain,
+    model: PRODUCT_RESEARCH_MODEL,
+    requestedProductCount: CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET,
+    returnedProductCount: rawProducts.length,
+    acceptedDirectUrlCount: rankedCandidates.length,
+    technicallyVerifiedCount: verifiedProducts.length,
+    usableImageCount: validProducts.length,
+    rateLimited: Boolean(verifiedItems?.rateLimited),
+    retryAfterMs: Number(verifiedItems?.retryAfterMs || 0),
+    elapsedMs: Date.now() - startedAt,
+    products: verifiedProducts.map((item) => ({
+      rank: getPrimaryCampaignResearchRank(item),
+      title: item?.title || null,
+      url: item?.url || null,
+      role: item?.campaign_role || null,
+      relevanceClass: item?.campaign_relevance_class || null,
+      reason: item?.reason || null,
+      usableImage: Boolean(item?.image_url),
+    })),
+  });
+
+  return {
+    candidates: rankedCandidates,
+    verifiedProducts,
+    validProducts,
+    rateLimited: Boolean(verifiedItems?.rateLimited),
+    retryAfterMs: Number(verifiedItems?.retryAfterMs || 0),
+    campaignTheme,
+    allowedDomain,
+    prompt: exactTask,
+    elapsedMs: Date.now() - startedAt,
+  };
+}
+
+async function finalizeCarouselFromPrimaryCampaignWebResearch({
+  supabase,
+  rule,
+  summary,
+  websiteUrl,
+  contentType,
+  recentUsedItems,
+  usedWebsiteImageUrlsThisRun,
+  researchResult,
+}) {
+  const validProducts = dedupeWebsiteItemsByUrlTitleAndImage(
+    researchResult?.validProducts || []
+  ).sort(
+    (left, right) =>
+      getPrimaryCampaignResearchRank(left) -
+      getPrimaryCampaignResearchRank(right)
+  );
+  if (
+    validProducts.length <
+    CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED
+  ) {
+    return null;
+  }
+
+  const freshProducts = getFreshCarouselProductCandidates({
+    items: validProducts,
+    rule,
+    sourceUrl: websiteUrl,
+    recentUsedItems,
+    usedWebsiteImageUrlsThisRun,
+  });
+  const freshKeys = new Set(
+    freshProducts
+      .map((item) => getCarouselProductSelectionKey(item, websiteUrl))
+      .filter(Boolean)
+  );
+  const rankedProducts = [
+    ...validProducts.filter((item) =>
+      freshKeys.has(getCarouselProductSelectionKey(item, websiteUrl))
+    ),
+    ...validProducts.filter(
+      (item) =>
+        !freshKeys.has(getCarouselProductSelectionKey(item, websiteUrl))
+    ),
+  ];
+  const selectedProducts = rankedProducts.slice(
+    0,
+    CAROUSEL_PRODUCT_SLIDE_TARGET
+  );
+  const reserveProducts = rankedProducts
+    .slice(CAROUSEL_PRODUCT_SLIDE_TARGET)
+    .slice(0, CAROUSEL_PRODUCT_RESERVE_TARGET);
+  const cycleNumber = await getCurrentWebsiteCycle({
+    supabase,
+    userId: rule.user_id,
+    brandProfileId: rule.brand_profile_id,
+    sourceUrl: websiteUrl,
+    contentType,
+  });
+
+  for (const product of selectedProducts) {
+    usedWebsiteImageUrlsThisRun.add(
+      normalizeComparableValue(product.image_url)
+    );
+  }
+
+  await upsertWebsiteProductCatalogItems({
+    supabase,
+    userId: rule.user_id,
+    brandProfileId: rule.brand_profile_id,
+    sourceUrl: websiteUrl,
+    items: [...selectedProducts, ...reserveProducts],
+    discoverySource: getWebsiteCatalogDiscoverySource(
+      CAMPAIGN_PRIMARY_WEB_RESEARCH_SOURCE,
+      rule
+    ),
+  });
+
+  await Promise.all(
+    selectedProducts.map((product) =>
+      markWebsiteProductCatalogItemUsed({
+        supabase,
+        userId: rule.user_id,
+        brandProfileId: rule.brand_profile_id,
+        productUrl: product.url,
+        sourceUrl: websiteUrl,
+        websiteItem: product,
+        usedSource: getWebsiteCatalogUsedSource(rule),
+      })
+    )
+  );
+
+  await recordProductEngineV2Run({
+    supabase,
+    rule,
+    sourceUrl: websiteUrl,
+    platform: selectedProducts[0]?.commerce_platform || "generic",
+    candidateCount: researchResult?.candidates?.length || 0,
+    inspectedCount: researchResult?.verifiedProducts?.length || 0,
+    verifiedCount: validProducts.length,
+    selectedProducts,
+    reserveProducts,
+    discoveryMethods: [
+      "gpt55_primary_domain_web_search",
+      "direct_product_url_verification",
+    ],
+    metadata: {
+      campaign_rule: true,
+      required_count: CAROUSEL_PRODUCT_SLIDE_TARGET,
+      requested_web_products: CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET,
+      campaign_theme: researchResult?.campaignTheme || null,
+      allowed_domain: researchResult?.allowedDomain || null,
+      exact_task: researchResult?.prompt || null,
+      model: PRODUCT_RESEARCH_MODEL,
+      primary_web_research: true,
+      final_review_reused_from_primary_research: true,
+      legacy_180_candidate_flow_skipped: true,
+      store_search_skipped: true,
+      store_map_skipped: true,
+    },
+  });
+
+  summary.website_items_found += selectedProducts.length;
+  summary.website_content_success += 1;
+  summary.website_image_used += selectedProducts.length;
+
+  console.log("Campaign primary GPT-5.5 web research locked carousel products", {
+    ruleId: rule?.id,
+    brandProfileId: rule?.brand_profile_id,
+    websiteUrl,
+    selectedCount: selectedProducts.length,
+    reserveCount: reserveProducts.length,
+    freshSelectedCount: selectedProducts.filter((item) =>
+      freshKeys.has(getCarouselProductSelectionKey(item, websiteUrl))
+    ).length,
+    legacy180CandidateFlowSkipped: true,
+    finalSeniorReviewSkippedBecausePrimaryResearchAlreadyRankedSet: true,
+    selectedProducts: selectedProducts.map((item) => ({
+      rank: getPrimaryCampaignResearchRank(item),
+      title: item?.title || null,
+      url: item?.url || null,
+      role: item?.campaign_role || null,
+      reason: item?.reason || null,
+    })),
+  });
+
+  return {
+    websiteItems: selectedProducts,
+    websiteReserveItems: reserveProducts,
+    productContentContract: buildProductContentContract(
+      selectedProducts,
+      reserveProducts
+    ),
+    websiteItem: selectedProducts[0],
+    websiteSourceUrl: websiteUrl,
+    websiteCycleNumber: cycleNumber,
+    useWebsiteImage: true,
+    websiteRule: rule,
+    productEngineDiagnostics: {
+      primaryWebResearch: {
+        model: PRODUCT_RESEARCH_MODEL,
+        candidateCount: researchResult?.candidates?.length || 0,
+        verifiedCount: validProducts.length,
+        selectedCount: selectedProducts.length,
+        reserveCount: reserveProducts.length,
+      },
+      earlyExit: true,
+    },
+  };
 }
 
 async function findProductUrlWithWebSearch({
