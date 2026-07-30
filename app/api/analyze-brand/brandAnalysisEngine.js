@@ -16,6 +16,7 @@ export const MAX_CAMPAIGN_OPPORTUNITIES = 12;
 export const WEBSITE_MAX_CONTEXT_LINK_CANDIDATES = 60;
 export const WEBSITE_PRODUCT_ASSORTMENT_HINT_MAX_ITEMS = 80;
 export const WEBSITE_PRODUCT_METADATA_REPAIR_MAX_OPPORTUNITIES = 12;
+export const WEBSITE_PRODUCT_METADATA_REPAIR_TIMEOUT_MS = 20000;
 
 export function normalizeWebsiteUrl(value) {
   const trimmedValue = String(value || "").trim();
@@ -764,12 +765,39 @@ export function formatProductAssortmentHintsForPrompt(hints) {
 function campaignNeedsProductMetadata(opportunity) {
   const strategy = String(opportunity?.website_content_strategy || "").toLowerCase().trim();
 
-  // Run the focused metadata pass for every product/service campaign, even when
-  // the first analysis already returned enough terms. A list can be structurally
-  // valid but still be strategically weak, repetitive or too product-type-led.
-  // The focused pass classifies both the store and the campaign before rewriting
-  // the search mix.
-  return ["product", "service"].includes(strategy);
+  if (!["product", "service"].includes(strategy)) {
+    return false;
+  }
+
+  const blueprint = opportunity?.campaign_blueprint || {};
+  const matchTerms = normalizeCampaignTerms(
+    opportunity?.product_match_terms || blueprint.product_match_terms
+  );
+  const searchQueries = normalizeCampaignProductSearchQueriesForOpportunity(
+    opportunity?.product_search_queries || blueprint.product_search_queries
+  );
+  const searchIntent = normalizeShortText(
+    opportunity?.product_search_intent || blueprint.product_search_intent,
+    300
+  );
+  const selectionGuidance = normalizeShortText(
+    opportunity?.product_selection_guidance ||
+      opportunity?.website_product_selection_hint ||
+      blueprint.product_selection_guidance ||
+      blueprint.website_product_selection_hint,
+    700
+  );
+
+  // The main brand-analysis response already creates this metadata. Only spend
+  // another model call when the returned contract is genuinely incomplete.
+  // This keeps the campaign thinking unchanged while removing the normal
+  // 10–12-campaign refinement call that could consume the whole function window.
+  return (
+    matchTerms.length < 8 ||
+    searchQueries.length < 6 ||
+    !searchIntent ||
+    !selectionGuidance
+  );
 }
 
 function mergeCampaignProductMetadata(opportunity, metadata) {
@@ -860,9 +888,10 @@ Existing search queries: ${existingSearchQueries.join(" | ") || "None"}`;
       })
       .join("\n\n");
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
-      messages: [
+    const completion = await openai.chat.completions.create(
+      {
+        model: "gpt-4.1-mini",
+        messages: [
         {
           role: "system",
           content:
@@ -949,34 +978,23 @@ Return JSON only:
 }
 `.trim(),
         },
-      ],
-      temperature: 0.1,
-      response_format: { type: "json_object" },
-      max_completion_tokens: 7500,
-    });
+        ],
+        temperature: 0.1,
+        response_format: { type: "json_object" },
+        max_completion_tokens: 7500,
+      },
+      {
+        timeout: WEBSITE_PRODUCT_METADATA_REPAIR_TIMEOUT_MS,
+        maxRetries: 0,
+      }
+    );
 
     const content = completion.choices?.[0]?.message?.content || "";
-    const parsed = await parseOpenAIJsonWithRepair({
-      openai,
-      content,
-      contextLabel: "campaign product metadata refinement response",
-      expectedShapeDescription: `
-{
-  "campaigns": [
-    {
-      "index": 1,
-      "title": "",
-      "product_match_terms": [],
-      "product_search_queries": [],
-      "product_avoid_terms": [],
-      "product_search_intent": "",
-      "product_selection_guidance": "",
-      "website_product_selection_hint": ""
+    const parsed = safeJsonParse(content);
+
+    if (!parsed) {
+      throw new Error("Campaign product metadata refinement returned invalid JSON.");
     }
-  ]
-}
-`.trim(),
-    });
 
     const repairsByIndex = new Map();
 

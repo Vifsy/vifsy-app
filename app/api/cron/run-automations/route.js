@@ -2769,7 +2769,7 @@ function getCarouselProductConfidence(item) {
     return 0;
   }
 
-  if (isBadProductUrl(item.url) || isBadProductImageUrl(item.image_url)) {
+  if (isBadProductUrl(item.url) || !isUsableProductImageForItem(item)) {
     return 0;
   }
 
@@ -2778,7 +2778,7 @@ function getCarouselProductConfidence(item) {
   if (hasMeaningfulProductIdentityText(item.title)) score += 18;
   if (String(item.description || "").trim().length >= 20) score += 8;
   if (getTrustedWebsiteItemPrice(item) || normalizeVerifiedPriceValue(item.price)) score += 16;
-  if (item.image_url && !isBadProductImageUrl(item.image_url)) score += 22;
+  if (isUsableProductImageForItem(item)) score += 22;
 
   score += getProductUrlEvidenceScore(item.url);
 
@@ -2799,7 +2799,7 @@ function isValidCarouselProduct(item) {
     item?.url &&
     item?.image_url &&
     !isBadProductUrl(item.url) &&
-    !isBadProductImageUrl(item.image_url) &&
+    isUsableProductImageForItem(item) &&
     !isLikelyVisuallyEmptyProductTemplate(item) &&
     getCarouselProductConfidence(item) >= CAROUSEL_PRODUCT_CONFIDENCE_SOFT_MIN
   );
@@ -18384,7 +18384,10 @@ function hasSmallImageDimensionHint(value, minDimension = 500) {
     return true;
   }
 
-  const sizeMatches = [...lowerUrl.matchAll(/(?:^|[^0-9])([1-9][0-9]{1,3})[x×_-]([1-9][0-9]{1,3})(?:[^0-9]|$)/g)];
+  // Only an explicit 400x400-style token is a generic filename dimension.
+  // Underscores and hyphens also occur in product IDs and content hashes (for
+  // example "_H26_46a...") and must not make a verified image look too small.
+  const sizeMatches = [...lowerUrl.matchAll(/(?:^|[^0-9])([1-9][0-9]{1,3})[x×]([1-9][0-9]{1,3})(?:[^0-9]|$)/g)];
   for (const match of sizeMatches) {
     const width = Number(match[1]);
     const height = Number(match[2]);
@@ -18424,7 +18427,7 @@ function isLowQualityProductImageUrl(value) {
   return hasSmallImageDimensionHint(value, 500);
 }
 
-function isBadProductImageUrl(value) {
+function isStructurallyBadProductImageUrl(value) {
   const lowerUrl = String(value || "").toLowerCase();
 
   if (!lowerUrl) {
@@ -18451,8 +18454,38 @@ function isBadProductImageUrl(value) {
     lowerUrl.includes("separator") ||
     lowerUrl.includes("texture") ||
     lowerUrl.includes("swatch") ||
-    lowerUrl.endsWith(".svg") ||
+    lowerUrl.endsWith(".svg")
+  );
+}
+
+function isBadProductImageUrl(value) {
+  return (
+    isStructurallyBadProductImageUrl(value) ||
     isLowQualityProductImageUrl(value)
+  );
+}
+
+function hasVerifiedLargeProductImage(item, minDimension = 500) {
+  const width = Number(item?.product_image_width || 0);
+  const height = Number(item?.product_image_height || 0);
+
+  return Boolean(
+    item?.product_image_resolution_verified === true &&
+      width >= minDimension &&
+      height >= minDimension
+  );
+}
+
+function isUsableProductImageForItem(item) {
+  if (!item?.image_url || isStructurallyBadProductImageUrl(item.image_url)) {
+    return false;
+  }
+
+  // Measured dimensions from the fetched image are authoritative. URL text is
+  // only a fallback hint while no verified dimensions are available.
+  return (
+    hasVerifiedLargeProductImage(item) ||
+    !isLowQualityProductImageUrl(item.image_url)
   );
 }
 
@@ -24833,9 +24866,19 @@ async function saveCarouselSlidesForPost({
     return [];
   }
 
-  const slides = await generateCarouselSlides(openai, rule, postContent);
   const selectedItem = rule?.website_item || null;
-  const carouselProducts = getCarouselProducts(rule).filter(isValidCarouselProduct).slice(0, CAROUSEL_PRODUCT_SLIDE_TARGET);
+  const carouselProducts = fillCarouselProductSelection(
+    getCarouselProducts(rule),
+    [rule?.website_reserve_items || []],
+    getWebsiteProductSourceUrl(rule?.brand_profile) || rule?.website_url || "",
+    CAROUSEL_PRODUCT_SLIDE_TARGET
+  );
+  const carouselRule = {
+    ...rule,
+    website_item: carouselProducts[0] || selectedItem,
+    website_items: carouselProducts,
+  };
+  const slides = await generateCarouselSlides(openai, carouselRule, postContent);
   const productCount = carouselProducts.length;
 
   if (productCount < CAROUSEL_PLATFORM_MIN_PRODUCT_SLIDES) {
@@ -30543,13 +30586,67 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
           });
 
           if (isCarouselRule(websitePreparedRule)) {
-            websiteItems = resolvedItems.slice(0, primaryCount);
+            const resolvedPrimaryItems = resolvedItems.slice(0, primaryCount);
+            const usablePrimaryItems = fillCarouselProductSelection(
+              resolvedPrimaryItems,
+              [],
+              websiteSourceUrl || brandProfile?.website_url || rule.website_url || "",
+              CAROUSEL_PRODUCT_SLIDE_TARGET
+            );
+            const missingProductCount = Math.max(
+              0,
+              CAROUSEL_PRODUCT_SLIDE_TARGET - usablePrimaryItems.length
+            );
+            const reserveCandidates = missingProductCount > 0
+              ? websiteReserveItems.slice(
+                  0,
+                  Math.min(
+                    websiteReserveItems.length,
+                    missingProductCount + 2
+                  )
+                )
+              : [];
+            const resolvedReserveItems = reserveCandidates.length
+              ? await resolveLargestProductImagesBeforeGeneration({
+                  items: reserveCandidates,
+                  ruleId: rule.id,
+                })
+              : [];
+
+            websiteItems = fillCarouselProductSelection(
+              usablePrimaryItems,
+              [resolvedReserveItems],
+              websiteSourceUrl || brandProfile?.website_url || rule.website_url || "",
+              CAROUSEL_PRODUCT_SLIDE_TARGET
+            );
+            websiteReserveItems = [
+              ...resolvedReserveItems,
+              ...websiteReserveItems.slice(reserveCandidates.length),
+            ].filter(
+              (reserveItem) =>
+                !websiteItems.some((selectedItem) =>
+                  areSameWebsiteItem(
+                    selectedItem,
+                    reserveItem,
+                    websiteSourceUrl || brandProfile?.website_url || rule.website_url || ""
+                  )
+                )
+            );
             websiteItem = websiteItems[0] || websiteItem;
+
+            if (websiteItems.length < CAROUSEL_PRODUCT_SLIDE_TARGET) {
+              console.warn("Carousel image verification could not fill every product slot", {
+                ruleId: rule.id,
+                selectedProductCount: websiteItems.length,
+                resolvedReserveCount: resolvedReserveItems.length,
+                targetProductCount: CAROUSEL_PRODUCT_SLIDE_TARGET,
+              });
+            }
           } else {
             websiteItem = resolvedItems[0] || websiteItem;
-          }
-          if (additionalItems.length) {
-            websiteReserveItems = resolvedItems.slice(primaryCount);
+            if (additionalItems.length) {
+              websiteReserveItems = resolvedItems.slice(primaryCount);
+            }
           }
           productContentContract = buildProductContentContract(
             isCarouselRule(websitePreparedRule) ? websiteItems : [websiteItem],

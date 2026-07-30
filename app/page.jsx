@@ -1,6 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  ArrowRight,
+  BadgeCheck,
+  CalendarClock,
+  CalendarDays,
+  CheckCircle2,
+  CircleDollarSign,
+  Layers3,
+  Lightbulb,
+  Plus,
+  RefreshCw,
+  Sparkles,
+} from "lucide-react";
 import AppLayout from "../components/AppLayout";
 import { supabase } from "../lib/supabaseClient";
 import { useUiText } from "../lib/i18n/useUiText";
@@ -861,10 +874,12 @@ export default function Home() {
 
           <div className="dashboard-hero-actions">
             <a className="dashboard-secondary-action" href="/calendar">
+              <CalendarDays size={16} aria-hidden="true" />
               {t("dashboard.yourCalendar")}
             </a>
 
             <a className="dashboard-primary-action" href="/automation">
+              <Plus size={16} aria-hidden="true" />
               {t("dashboard.newContentPlan")}
             </a>
           </div>
@@ -883,28 +898,48 @@ export default function Home() {
         ) : (
           <>
             <section className="dashboard-stat-grid">
-              <div className="dashboard-stat-card">
-                <span>{t("dashboard.stat.plannedPosts")}</span>
-                <strong>{activeRules.length + scheduledPosts.length}</strong>
-                <p>{t("dashboard.stat.plannedPostsText")}</p>
+              <div className="dashboard-stat-card is-planned">
+                <span className="dashboard-stat-icon" aria-hidden="true">
+                  <CalendarClock />
+                </span>
+                <div className="dashboard-stat-copy">
+                  <span className="dashboard-stat-label">{t("dashboard.stat.plannedPosts")}</span>
+                  <strong>{activeRules.length + scheduledPosts.length}</strong>
+                  <p>{t("dashboard.stat.plannedPostsText")}</p>
+                </div>
               </div>
 
-              <div className="dashboard-stat-card">
-                <span>{t("dashboard.stat.pendingApproval")}</span>
-                <strong>{pendingApprovalPosts.length}</strong>
-                <p>{t("dashboard.stat.pendingApprovalText")}</p>
+              <div className="dashboard-stat-card is-review">
+                <span className="dashboard-stat-icon" aria-hidden="true">
+                  <Sparkles />
+                </span>
+                <div className="dashboard-stat-copy">
+                  <span className="dashboard-stat-label">{t("dashboard.stat.pendingApproval")}</span>
+                  <strong>{pendingApprovalPosts.length}</strong>
+                  <p>{t("dashboard.stat.pendingApprovalText")}</p>
+                </div>
               </div>
 
-              <div className="dashboard-stat-card">
-                <span>{t("dashboard.stat.publishedThisMonth")}</span>
-                <strong>{publishedThisMonthCount}</strong>
-                <p>{t("dashboard.stat.publishedThisMonthText")}</p>
+              <div className="dashboard-stat-card is-published">
+                <span className="dashboard-stat-icon" aria-hidden="true">
+                  <CheckCircle2 />
+                </span>
+                <div className="dashboard-stat-copy">
+                  <span className="dashboard-stat-label">{t("dashboard.stat.publishedThisMonth")}</span>
+                  <strong>{publishedThisMonthCount}</strong>
+                  <p>{t("dashboard.stat.publishedThisMonthText")}</p>
+                </div>
               </div>
 
-              <div className="dashboard-stat-card">
-                <span>{t("dashboard.stat.activePlans")}</span>
-                <strong>{activeRules.length}</strong>
-                <p>{t("dashboard.stat.activePlansText")}</p>
+              <div className="dashboard-stat-card is-active">
+                <span className="dashboard-stat-icon" aria-hidden="true">
+                  <Layers3 />
+                </span>
+                <div className="dashboard-stat-copy">
+                  <span className="dashboard-stat-label">{t("dashboard.stat.activePlans")}</span>
+                  <strong>{activeRules.length}</strong>
+                  <p>{t("dashboard.stat.activePlansText")}</p>
+                </div>
               </div>
             </section>
 
@@ -1032,7 +1067,9 @@ export default function Home() {
                           <section className="dashboard-plan-group">
                             <div className="dashboard-plan-group-heading">
                               <div>
-                                <span className="dashboard-plan-group-icon ongoing">↻</span>
+                                <span className="dashboard-plan-group-icon ongoing">
+                                  <RefreshCw aria-hidden="true" />
+                                </span>
                                 <div>
                                   <h4>{t("dashboard.ongoingPlansTitle")}</h4>
                                   <p>{t("dashboard.ongoingPlansText")}</p>
@@ -1106,7 +1143,9 @@ export default function Home() {
                           <section className="dashboard-plan-group">
                             <div className="dashboard-plan-group-heading">
                               <div>
-                                <span className="dashboard-plan-group-icon planned">◷</span>
+                                <span className="dashboard-plan-group-icon planned">
+                                  <CalendarClock aria-hidden="true" />
+                                </span>
                                 <div>
                                   <h4>{t("dashboard.plannedPlansTitle")}</h4>
                                   <p>{t("dashboard.plannedPlansText")}</p>
@@ -1401,7 +1440,7 @@ export default function Home() {
               <aside className="dashboard-sidebar">
                 <section className="dashboard-side-card">
                   <div className="dashboard-side-title">
-                    <span>▣</span>
+                    <span><CircleDollarSign aria-hidden="true" /></span>
                     <div>
                       <h3>{t("dashboard.creditsUsage")}</h3>
                       <p>{t("dashboard.creditsBalanceText")}</p>
@@ -1431,7 +1470,7 @@ export default function Home() {
 
                 <section className="dashboard-side-card">
                   <div className="dashboard-side-title">
-                    <span>✓</span>
+                    <span><BadgeCheck aria-hidden="true" /></span>
                     <div>
                       <h3>{t("dashboard.brandProfile")}</h3>
                       <p>{t("dashboard.brandProfileText")}</p>
@@ -1472,7 +1511,7 @@ export default function Home() {
 
                 <section className="dashboard-side-card highlighted">
                   <div className="dashboard-side-title">
-                    <span>◇</span>
+                    <span><Lightbulb aria-hidden="true" /></span>
                     <div>
                       <h3>{t("dashboard.suggestedCampaign")}</h3>
                       <p>{t("dashboard.suggestedCampaignText")}</p>
@@ -1500,6 +1539,7 @@ export default function Home() {
   href={`/automation?campaignOpportunityId=${suggestedCampaign.id}&brandProfileId=${currentBrandId}`}
 >
   {t("dashboard.createCampaignPlan")}
+  <ArrowRight size={15} aria-hidden="true" />
 </a>
                     </>
                   ) : (
@@ -1520,7 +1560,7 @@ export default function Home() {
                 {nextAutomation && (
                   <section className="dashboard-side-card highlighted">
                     <div className="dashboard-side-title">
-                      <span>⌁</span>
+                      <span><CalendarClock aria-hidden="true" /></span>
                       <div>
                         <h3>{t("dashboard.nextContentPlan")}</h3>
                         <p>{formatDate(nextAutomation.next_run_at, t)}</p>
