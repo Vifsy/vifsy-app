@@ -479,7 +479,10 @@ export async function fetchWebsiteHtml(websiteUrl, options = {}) {
     throw new Error("Website URL is required");
   }
 
-  const safeWebsiteUrl = await assertPublicHttpUrl(normalizedWebsiteUrl);
+  const safeWebsiteUrl = await assertPublicHttpUrl(normalizedWebsiteUrl, {
+    resolutionCache: options?.resolutionCache,
+    onResolutionTiming: options?.onResolutionTiming,
+  });
 
   const controller = new AbortController();
   const timeoutId = setTimeout(
@@ -629,7 +632,13 @@ Return JSON only:
   return sourceLinks.slice(0, WEBSITE_MAX_PRODUCT_SOURCE_PAGES);
 }
 
-export async function fetchProductSourceCandidates({ openai, websiteUrl, html }) {
+export async function fetchProductSourceCandidates({
+  openai,
+  websiteUrl,
+  html,
+  resolutionCache,
+  onResolutionTiming,
+}) {
   const sourceLinks = await selectWebsiteContextLinksWithOpenAI({
     openai,
     websiteUrl,
@@ -642,6 +651,8 @@ export async function fetchProductSourceCandidates({ openai, websiteUrl, html })
     try {
       const candidate = await fetchWebsiteHtml(link.url, {
         timeoutMs: WEBSITE_MAX_PRODUCT_SOURCE_FETCH_TIMEOUT_MS,
+        resolutionCache,
+        onResolutionTiming,
       });
 
       candidates.push({
@@ -2588,6 +2599,38 @@ export async function runBrandAnalysisJob({
   }
 
   const openai = createOpenAIClient();
+  const analysisStartedAt = Date.now();
+  const resolutionCache = new Map();
+  const runTimedPhase = async (phase, task) => {
+    const phaseStartedAt = Date.now();
+
+    try {
+      const value = await task();
+
+      console.info("Brand analysis phase finished", {
+        jobId: job.id,
+        phase,
+        durationMs: Date.now() - phaseStartedAt,
+      });
+
+      return value;
+    } catch (error) {
+      console.error("Brand analysis phase failed", {
+        jobId: job.id,
+        phase,
+        durationMs: Date.now() - phaseStartedAt,
+        message: error?.message,
+      });
+
+      throw error;
+    }
+  };
+  const onResolutionTiming = (timing) => {
+    console.info("Brand analysis hostname verification finished", {
+      jobId: job.id,
+      ...timing,
+    });
+  };
 
   await updateJob({
     status: "running",
@@ -2633,7 +2676,12 @@ export async function runBrandAnalysisJob({
       progress: 15,
     });
 
-    const website = await fetchWebsiteHtml(websiteUrl);
+    const website = await runTimedPhase("website_homepage", () =>
+      fetchWebsiteHtml(websiteUrl, {
+        resolutionCache,
+        onResolutionTiming,
+      })
+    );
     finalWebsiteUrl = website.url;
     detectedWebsiteMarketSetup = inferMarketSetupFromWebsiteSignals(website.url, website.html);
 
@@ -2656,11 +2704,17 @@ export async function runBrandAnalysisJob({
       progress: 35,
     });
 
-    const productSourceCandidates = await fetchProductSourceCandidates({
-      openai,
-      websiteUrl: website.url,
-      html: website.html,
-    });
+    const productSourceCandidates = await runTimedPhase(
+      "website_context_pages",
+      () =>
+        fetchProductSourceCandidates({
+          openai,
+          websiteUrl: website.url,
+          html: website.html,
+          resolutionCache,
+          onResolutionTiming,
+        })
+    );
 
     await updateJob({
       status: "running",
@@ -2668,20 +2722,25 @@ export async function runBrandAnalysisJob({
       progress: 45,
     });
 
-    analysis = await analyzeWebsiteWithOpenAI({
-      openai,
-      businessName,
-      websiteUrl: website.url,
-      html: website.html,
-      productSourceCandidates,
-      brandDescription,
-      contentMarket: detectedWebsiteMarketSetup?.contentMarket || contentMarket,
-      countryCode: detectedWebsiteMarketSetup?.countryCode || countryCode,
-      contentLanguage:
-        requestedContentLanguage || detectedWebsiteMarketSetup?.contentLanguage || detectedWebsiteContentLanguage,
-      currentDate,
-      campaignCalendarYear,
-    });
+    analysis = await runTimedPhase("openai_brand_strategy", () =>
+      analyzeWebsiteWithOpenAI({
+        openai,
+        businessName,
+        websiteUrl: website.url,
+        html: website.html,
+        productSourceCandidates,
+        brandDescription,
+        contentMarket:
+          detectedWebsiteMarketSetup?.contentMarket || contentMarket,
+        countryCode: detectedWebsiteMarketSetup?.countryCode || countryCode,
+        contentLanguage:
+          requestedContentLanguage ||
+          detectedWebsiteMarketSetup?.contentLanguage ||
+          detectedWebsiteContentLanguage,
+        currentDate,
+        campaignCalendarYear,
+      })
+    );
   } else {
     await updateJob({
       status: "running",
@@ -2689,16 +2748,18 @@ export async function runBrandAnalysisJob({
       progress: 65,
     });
 
-    analysis = await analyzeDescriptionWithOpenAI({
-      openai,
-      businessName,
-      brandDescription,
-      contentMarket,
-      countryCode,
-      contentLanguage: requestedContentLanguage,
-      currentDate,
-      campaignCalendarYear,
-    });
+    analysis = await runTimedPhase("openai_brand_strategy", () =>
+      analyzeDescriptionWithOpenAI({
+        openai,
+        businessName,
+        brandDescription,
+        contentMarket,
+        countryCode,
+        contentLanguage: requestedContentLanguage,
+        currentDate,
+        campaignCalendarYear,
+      })
+    );
   }
 
   await updateJob({
@@ -2787,6 +2848,13 @@ export async function runBrandAnalysisJob({
       campaign_opportunities: savedOpportunities,
     },
     completedAt: new Date().toISOString(),
+  });
+
+  console.info("Brand analysis job completed", {
+    jobId: job.id,
+    totalDurationMs: Date.now() - analysisStartedAt,
+    hostnameResolutionCacheEntries: resolutionCache.size,
+    campaignOpportunityCount: savedOpportunities.length,
   });
 
   return completedJob;

@@ -1,0 +1,710 @@
+/* v143.15 — Brand, channels, settings and campaign planning in the
+   same responsive visual system as AI Content Studio. */
+
+:root {
+  --studio-page-canvas: var(--home-canvas, #eef1f6);
+  --studio-page-ink: var(--home-ink, #111a2e);
+  --studio-page-muted: var(--home-muted, #68758c);
+  --studio-page-orange: var(--home-orange, #f06445);
+  --studio-page-orange-deep: var(--home-orange-deep, #cf4f33);
+  --studio-page-line: rgba(204, 211, 223, 0.72);
+  --studio-page-border: rgba(255, 255, 255, 0.9);
+  --studio-page-panel:
+    linear-gradient(
+      132deg,
+      rgba(255, 255, 255, 0.88) 0%,
+      rgba(252, 251, 250, 0.76) 58%,
+      rgba(247, 248, 252, 0.78) 100%
+    );
+  --studio-page-tile:
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.8),
+      rgba(249, 250, 253, 0.66)
+    );
+  --studio-page-shadow:
+    0 20px 48px rgba(35, 44, 70, 0.11),
+    0 4px 12px rgba(35, 44, 70, 0.045),
+    inset 0 1px 0 rgba(255, 255, 255, 0.96);
+  --studio-page-shadow-soft:
+    0 12px 28px rgba(35, 44, 70, 0.09),
+    0 2px 7px rgba(35, 44, 70, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.98);
+}
+
+html body .content.spreelo-content:has(.brand-profile-page),
+html body .content.spreelo-content:has(.social-v74-page),
+html body .content.spreelo-content:has(.settings-v14315-page),
+html body .content.spreelo-content:has(.campaign-planner-clean) {
+  min-width: 0 !important;
+  overflow-x: clip !important;
+  background:
+    radial-gradient(circle at 84% 0%, rgba(255, 190, 168, 0.21), transparent 29%),
+    radial-gradient(circle at 8% 22%, rgba(142, 168, 222, 0.13), transparent 27%),
+    var(--studio-page-canvas) !important;
+}
+
+html body .content.spreelo-content:has(.brand-profile-page)::before,
+html body .content.spreelo-content:has(.social-v74-page)::before,
+html body .content.spreelo-content:has(.settings-v14315-page)::before,
+html body .content.spreelo-content:has(.campaign-planner-clean)::before {
+  content: "" !important;
+  position: fixed !important;
+  inset: 0 0 auto 0 !important;
+  z-index: 0 !important;
+  height: min(720px, 62vh) !important;
+  pointer-events: none !important;
+  opacity: 0.74 !important;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(238, 241, 246, 0.02),
+      rgba(238, 241, 246, 0.42) 74%,
+      var(--studio-page-canvas)
+    ),
+    url("/backgrounds/spreelo-background-v97.png") center top / cover no-repeat !important;
+}
+
+html body .brand-profile-page,
+html body .social-v74-page,
+html body .settings-v14315-page,
+html body .campaign-planner-clean {
+  position: relative !important;
+  z-index: 1 !important;
+  width: 100% !important;
+  max-width: 1540px !important;
+  min-width: 0 !important;
+  margin: 0 auto !important;
+  padding: clamp(22px, 2.5vw, 42px) clamp(18px, 2.8vw, 44px) 54px !important;
+  color: var(--studio-page-ink) !important;
+}
+
+html body .brand-profile-page *,
+html body .social-v74-page *,
+html body .settings-v14315-page *,
+html body .campaign-planner-clean * {
+  box-sizing: border-box !important;
+}
+
+/* Shared studio surfaces */
+html body .brand-profile-hero,
+html body .brand-profile-guide-card,
+html body .brand-profile-form-card,
+html body .social-v74-hero,
+html body .social-v74-hero-summary,
+html body .social-v74-intro-strip,
+html body .social-v74-card,
+html body .settings-v14315-page > .topbar,
+html body .settings-v14315-page > .hero-card,
+html body .settings-v14315-page > .settings-danger-zone,
+html body .campaign-planner-clean .planner-hero-final,
+html body .campaign-planner-clean .campaign-mode-banner,
+html body .campaign-planner-clean .planner-builder-card,
+html body .campaign-planner-clean .planner-mode-card,
+html body .campaign-planner-clean .planner-manual-intro-card,
+html body .campaign-planner-clean .planner-schedule-card,
+html body .campaign-planner-clean .planner-settings-card,
+html body .campaign-planner-clean .planner-includes-preview-card,
+html body .campaign-planner-clean .planner-how-it-works-card,
+html body .campaign-planner-clean .planner-save-card {
+  border: 1px solid var(--studio-page-border) !important;
+  background: var(--studio-page-panel) !important;
+  box-shadow: var(--studio-page-shadow) !important;
+  backdrop-filter: blur(17px) saturate(118%) !important;
+  -webkit-backdrop-filter: blur(17px) saturate(118%) !important;
+}
+
+html body .brand-profile-page input,
+html body .brand-profile-page textarea,
+html body .brand-profile-page select,
+html body .social-v74-page input,
+html body .social-v74-page select,
+html body .settings-v14315-page input,
+html body .settings-v14315-page select,
+html body .campaign-planner-clean input,
+html body .campaign-planner-clean textarea,
+html body .campaign-planner-clean select {
+  max-width: 100% !important;
+  min-height: 45px !important;
+  border: 1px solid rgba(198, 205, 216, 0.8) !important;
+  border-radius: 12px !important;
+  color: var(--studio-page-ink) !important;
+  background: rgba(255, 255, 255, 0.76) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.96) !important;
+}
+
+html body .brand-profile-page input:focus,
+html body .brand-profile-page textarea:focus,
+html body .brand-profile-page select:focus,
+html body .social-v74-page input:focus,
+html body .social-v74-page select:focus,
+html body .settings-v14315-page input:focus,
+html body .settings-v14315-page select:focus,
+html body .campaign-planner-clean input:focus,
+html body .campaign-planner-clean textarea:focus,
+html body .campaign-planner-clean select:focus {
+  border-color: rgba(240, 100, 69, 0.72) !important;
+  outline: 3px solid rgba(240, 100, 69, 0.12) !important;
+}
+
+/* Brand profile */
+html body .brand-profile-hero {
+  min-height: 174px !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px) !important;
+  align-items: center !important;
+  gap: clamp(20px, 4vw, 58px) !important;
+  margin: 0 0 18px !important;
+  padding: clamp(24px, 3vw, 42px) !important;
+  overflow: hidden !important;
+  border-radius: 22px !important;
+}
+
+html body .brand-profile-hero > div:first-child,
+html body .brand-profile-hero > div:first-child > * {
+  min-width: 0 !important;
+  max-width: 780px !important;
+}
+
+html body .brand-profile-hero h2 {
+  width: auto !important;
+  max-width: 760px !important;
+  margin: 5px 0 11px !important;
+  color: var(--studio-page-ink) !important;
+  font-size: clamp(35px, 4vw, 58px) !important;
+  line-height: 0.98 !important;
+  font-weight: 920 !important;
+  letter-spacing: -0.052em !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+}
+
+html body .brand-profile-hero > div:first-child > span {
+  display: block !important;
+  width: auto !important;
+  max-width: 660px !important;
+  color: var(--studio-page-muted) !important;
+  font-size: 14px !important;
+  line-height: 1.58 !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+}
+
+html body .brand-profile-hero-badge {
+  width: 100% !important;
+  min-width: 0 !important;
+  padding: 18px 20px !important;
+  border-radius: 16px !important;
+  background: rgba(255, 255, 255, 0.64) !important;
+  box-shadow: var(--studio-page-shadow-soft) !important;
+}
+
+html body .brand-profile-layout {
+  display: grid !important;
+  grid-template-columns: minmax(270px, 340px) minmax(0, 1fr) !important;
+  align-items: start !important;
+  gap: 18px !important;
+}
+
+html body .brand-profile-guide-card,
+html body .brand-profile-form-card {
+  min-width: 0 !important;
+  border-radius: 20px !important;
+}
+
+html body .brand-profile-guide-card {
+  position: sticky !important;
+  top: 22px !important;
+  padding: 24px !important;
+}
+
+html body .brand-profile-form-card {
+  padding: clamp(20px, 2.3vw, 34px) !important;
+}
+
+html body .brand-profile-form-section,
+html body .brand-profile-logo-compact-card {
+  min-width: 0 !important;
+  padding: clamp(18px, 2vw, 27px) !important;
+  border: 1px solid rgba(209, 214, 223, 0.72) !important;
+  border-radius: 16px !important;
+  background: var(--studio-page-tile) !important;
+  box-shadow: var(--studio-page-shadow-soft) !important;
+}
+
+html body .brand-profile-two-col {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 14px !important;
+}
+
+html body .brand-profile-primary-button {
+  min-height: 48px !important;
+  border: 1px solid rgba(206, 73, 47, 0.9) !important;
+  border-radius: 13px !important;
+  color: #fff !important;
+  background: linear-gradient(180deg, #ff7657, var(--studio-page-orange-deep)) !important;
+  box-shadow: 0 14px 26px rgba(198, 71, 43, 0.24) !important;
+}
+
+html body .brand-profile-page .danger-zone-card {
+  min-width: 0 !important;
+  border-radius: 17px !important;
+  background: linear-gradient(135deg, rgba(255, 249, 247, 0.92), rgba(255, 239, 236, 0.86)) !important;
+}
+
+/* Social channels */
+html body .social-v74-hero {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 370px) !important;
+  align-items: center !important;
+  gap: clamp(22px, 4vw, 58px) !important;
+  margin: 0 0 16px !important;
+  padding: clamp(25px, 3vw, 42px) !important;
+  overflow: hidden !important;
+  border-radius: 22px !important;
+}
+
+html body .social-v74-hero-copy {
+  min-width: 0 !important;
+}
+
+html body .social-v74-hero h1 {
+  max-width: 760px !important;
+  margin: 6px 0 12px !important;
+  color: var(--studio-page-ink) !important;
+  font-size: clamp(35px, 3.8vw, 56px) !important;
+  line-height: 0.99 !important;
+  font-weight: 920 !important;
+  letter-spacing: -0.05em !important;
+}
+
+html body .social-v74-hero-copy > p {
+  max-width: 700px !important;
+  color: var(--studio-page-muted) !important;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+}
+
+html body .social-v74-hero-summary,
+html body .social-v74-intro-strip {
+  min-width: 0 !important;
+  padding: 19px !important;
+  border-radius: 17px !important;
+}
+
+html body .social-v74-intro-strip {
+  margin: 0 0 16px !important;
+}
+
+html body .social-v74-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  align-items: stretch !important;
+  gap: 16px !important;
+}
+
+html body .social-v74-card {
+  min-width: 0 !important;
+  padding: clamp(20px, 2vw, 28px) !important;
+  border-radius: 20px !important;
+}
+
+html body .social-v74-card-panel {
+  min-width: 0 !important;
+  border-color: rgba(206, 211, 220, 0.76) !important;
+  border-radius: 15px !important;
+  background: rgba(255, 255, 255, 0.62) !important;
+}
+
+/* Settings */
+html body .settings-v14315-page {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  align-items: start !important;
+  gap: 18px !important;
+}
+
+html body .settings-v14315-page > .topbar {
+  grid-column: 1 / -1 !important;
+  min-height: 154px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  margin: 0 !important;
+  padding: clamp(24px, 3vw, 40px) !important;
+  border-radius: 22px !important;
+}
+
+html body .settings-v14315-page > .topbar h2 {
+  margin: 5px 0 0 !important;
+  color: var(--studio-page-ink) !important;
+  font-size: clamp(35px, 3.7vw, 54px) !important;
+  line-height: 1 !important;
+  font-weight: 920 !important;
+  letter-spacing: -0.048em !important;
+}
+
+html body .settings-v14315-page > .hero-card {
+  min-width: 0 !important;
+  min-height: 300px !important;
+  margin: 0 !important;
+  padding: clamp(22px, 2.5vw, 34px) !important;
+  border-radius: 20px !important;
+}
+
+html body .settings-v14315-page > .hero-card h3 {
+  color: var(--studio-page-ink) !important;
+  font-size: clamp(27px, 2.2vw, 36px) !important;
+  letter-spacing: -0.035em !important;
+}
+
+html body .settings-v14315-page .prompt-box {
+  min-width: 0 !important;
+  margin-top: 22px !important;
+  padding: 18px !important;
+  border: 1px solid rgba(207, 212, 221, 0.76) !important;
+  border-radius: 15px !important;
+  background: rgba(255, 255, 255, 0.63) !important;
+}
+
+html body .settings-v14315-page > .settings-danger-zone {
+  grid-column: 1 / -1 !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 22px !important;
+  border-color: rgba(246, 174, 163, 0.72) !important;
+  border-radius: 18px !important;
+  background: linear-gradient(135deg, rgba(255, 249, 247, 0.92), rgba(255, 239, 236, 0.86)) !important;
+}
+
+/* Campaign planner */
+html body .campaign-planner-clean .wizard-layout,
+html body .campaign-planner-clean .wizard-main {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+html body .campaign-planner-clean .planner-hero-final {
+  position: relative !important;
+  min-height: 182px !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(170px, 250px) !important;
+  align-items: center !important;
+  gap: 24px !important;
+  margin: 0 0 16px !important;
+  padding: clamp(25px, 3vw, 42px) !important;
+  overflow: hidden !important;
+  border-radius: 22px !important;
+}
+
+html body .campaign-planner-clean .planner-hero-copy {
+  min-width: 0 !important;
+}
+
+html body .campaign-planner-clean .planner-hero h2 {
+  max-width: 820px !important;
+  margin: 0 0 11px !important;
+  color: var(--studio-page-ink) !important;
+  font-size: clamp(35px, 3.7vw, 56px) !important;
+  line-height: 0.99 !important;
+  font-weight: 920 !important;
+  letter-spacing: -0.052em !important;
+}
+
+html body .campaign-planner-clean .planner-hero p {
+  max-width: 680px !important;
+  color: var(--studio-page-muted) !important;
+  font-size: 14px !important;
+  line-height: 1.58 !important;
+}
+
+html body .campaign-planner-clean .planner-hero-learn {
+  right: 24px !important;
+  bottom: 20px !important;
+}
+
+html body .campaign-planner-clean .campaign-mode-banner {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 360px) !important;
+  align-items: center !important;
+  gap: 22px !important;
+  margin: 0 0 16px !important;
+  padding: clamp(20px, 2.4vw, 30px) !important;
+  border-radius: 19px !important;
+}
+
+html body .campaign-planner-clean .campaign-mode-banner > div {
+  min-width: 0 !important;
+}
+
+html body .campaign-planner-clean .campaign-mode-banner h3 {
+  margin: 3px 0 7px !important;
+  color: var(--studio-page-ink) !important;
+  font-size: clamp(24px, 2.4vw, 35px) !important;
+  line-height: 1.08 !important;
+  letter-spacing: -0.035em !important;
+}
+
+html body .campaign-planner-clean .campaign-mode-meta {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  gap: 8px 15px !important;
+  padding: 16px 18px !important;
+  border: 1px solid rgba(207, 212, 221, 0.76) !important;
+  border-radius: 14px !important;
+  background: rgba(255, 255, 255, 0.64) !important;
+}
+
+html body .campaign-planner-clean .planner-builder-card,
+html body .campaign-planner-clean .planner-mode-card,
+html body .campaign-planner-clean .planner-manual-intro-card,
+html body .campaign-planner-clean .planner-schedule-card,
+html body .campaign-planner-clean .planner-settings-card,
+html body .campaign-planner-clean .planner-includes-preview-card,
+html body .campaign-planner-clean .planner-how-it-works-card,
+html body .campaign-planner-clean .planner-save-card {
+  min-width: 0 !important;
+  margin: 0 0 16px !important;
+  padding: clamp(20px, 2.4vw, 32px) !important;
+  border-radius: 20px !important;
+}
+
+html body .campaign-planner-clean .planner-settings-card.planner-builder-card {
+  display: block !important;
+}
+
+html body .campaign-planner-clean .planner-settings-grid.simple,
+html body .campaign-planner-clean .planner-setup-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 14px !important;
+}
+
+html body .campaign-planner-clean .planner-setting-field,
+html body .campaign-planner-clean .planner-setup-card,
+html body .campaign-planner-clean .planner-includes-chip,
+html body .campaign-planner-clean .planner-how-it-works-grid > div {
+  min-width: 0 !important;
+  border: 1px solid rgba(207, 212, 221, 0.74) !important;
+  border-radius: 15px !important;
+  background: var(--studio-page-tile) !important;
+  box-shadow: var(--studio-page-shadow-soft) !important;
+}
+
+html body .campaign-planner-clean .planner-post-table {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  border-radius: 15px !important;
+}
+
+html body .campaign-planner-clean .planner-post-row {
+  min-width: 0 !important;
+  border-color: rgba(207, 212, 221, 0.72) !important;
+  background: rgba(255, 255, 255, 0.62) !important;
+}
+
+html body .campaign-planner-clean .planner-how-it-works-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+}
+
+html body .campaign-planner-clean .planner-save-button {
+  min-height: 50px !important;
+  border: 1px solid rgba(206, 73, 47, 0.9) !important;
+  border-radius: 13px !important;
+  color: #fff !important;
+  background: linear-gradient(180deg, #ff7657, var(--studio-page-orange-deep)) !important;
+  box-shadow: 0 14px 26px rgba(198, 71, 43, 0.24) !important;
+}
+
+@media (max-width: 1100px) {
+  html body .brand-profile-layout {
+    grid-template-columns: minmax(245px, 300px) minmax(0, 1fr) !important;
+  }
+
+  html body .campaign-planner-clean .planner-how-it-works-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 900px) {
+  html body .brand-profile-hero,
+  html body .social-v74-hero,
+  html body .campaign-planner-clean .planner-hero-final,
+  html body .campaign-planner-clean .campaign-mode-banner {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  html body .brand-profile-layout,
+  html body .social-v74-grid,
+  html body .settings-v14315-page {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  html body .brand-profile-guide-card {
+    position: static !important;
+  }
+
+  html body .settings-v14315-page > .topbar,
+  html body .settings-v14315-page > .settings-danger-zone {
+    grid-column: 1 !important;
+  }
+
+  html body .settings-v14315-page > .hero-card {
+    min-height: 0 !important;
+  }
+
+  html body .campaign-planner-clean .planner-hero-visual {
+    display: none !important;
+  }
+
+  html body .campaign-planner-clean .planner-hero-learn {
+    position: static !important;
+    justify-self: start !important;
+    margin-top: 3px !important;
+  }
+
+  html body .campaign-planner-clean .planner-settings-grid.simple,
+  html body .campaign-planner-clean .planner-setup-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  html body .brand-profile-page,
+  html body .social-v74-page,
+  html body .settings-v14315-page,
+  html body .campaign-planner-clean {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 14px 12px 34px !important;
+  }
+
+  html body .brand-profile-page > *,
+  html body .brand-profile-hero > *,
+  html body .brand-profile-layout > *,
+  html body .social-v74-page > *,
+  html body .social-v74-hero > *,
+  html body .social-v74-grid > *,
+  html body .settings-v14315-page > *,
+  html body .campaign-planner-clean > *,
+  html body .campaign-planner-clean .wizard-layout > *,
+  html body .campaign-planner-clean .wizard-main > * {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+
+  html body .brand-profile-hero,
+  html body .social-v74-hero,
+  html body .settings-v14315-page > .topbar,
+  html body .campaign-planner-clean .planner-hero-final {
+    min-height: 0 !important;
+    padding: 22px 18px !important;
+    border-radius: 18px !important;
+  }
+
+  html body .brand-profile-hero h2,
+  html body .social-v74-hero h1,
+  html body .settings-v14315-page > .topbar h2,
+  html body .campaign-planner-clean .planner-hero h2 {
+    width: 100% !important;
+    max-width: none !important;
+    font-size: clamp(30px, 10vw, 39px) !important;
+    line-height: 1.01 !important;
+    letter-spacing: -0.045em !important;
+    overflow-wrap: normal !important;
+    word-break: normal !important;
+  }
+
+  html body .brand-profile-hero > div:first-child > span,
+  html body .social-v74-hero-copy > p,
+  html body .campaign-planner-clean .planner-hero p {
+    width: 100% !important;
+    max-width: none !important;
+    font-size: 13.5px !important;
+    line-height: 1.55 !important;
+    overflow-wrap: normal !important;
+    word-break: normal !important;
+  }
+
+  html body .brand-profile-form-card,
+  html body .brand-profile-guide-card,
+  html body .brand-profile-form-section,
+  html body .brand-profile-logo-compact-card,
+  html body .social-v74-card,
+  html body .social-v74-hero-summary,
+  html body .social-v74-intro-strip,
+  html body .settings-v14315-page > .hero-card,
+  html body .settings-v14315-page > .settings-danger-zone,
+  html body .campaign-planner-clean .campaign-mode-banner,
+  html body .campaign-planner-clean .planner-builder-card,
+  html body .campaign-planner-clean .planner-mode-card,
+  html body .campaign-planner-clean .planner-manual-intro-card,
+  html body .campaign-planner-clean .planner-schedule-card,
+  html body .campaign-planner-clean .planner-settings-card,
+  html body .campaign-planner-clean .planner-includes-preview-card,
+  html body .campaign-planner-clean .planner-how-it-works-card,
+  html body .campaign-planner-clean .planner-save-card {
+    padding: 16px !important;
+    border-radius: 16px !important;
+  }
+
+  html body .brand-profile-two-col,
+  html body .campaign-planner-clean .planner-how-it-works-grid,
+  html body .campaign-planner-clean .campaign-mode-meta {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  html body .social-v74-card-top {
+    align-items: flex-start !important;
+  }
+
+  html body .social-v74-card-identity h2 {
+    font-size: 22px !important;
+  }
+
+  html body .settings-v14315-page {
+    gap: 13px !important;
+  }
+
+  html body .campaign-planner-clean .planner-post-table {
+    overflow: visible !important;
+  }
+
+  html body .campaign-planner-clean .planner-post-row {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 11px !important;
+    padding: 14px !important;
+  }
+
+  html body .campaign-planner-clean button,
+  html body .campaign-planner-clean a,
+  html body .brand-profile-page button,
+  html body .social-v74-page button,
+  html body .settings-v14315-page button {
+    min-height: 42px !important;
+  }
+
+  html body .campaign-planner-clean input,
+  html body .campaign-planner-clean textarea,
+  html body .campaign-planner-clean select,
+  html body .brand-profile-page input,
+  html body .brand-profile-page textarea,
+  html body .brand-profile-page select,
+  html body .social-v74-page input,
+  html body .social-v74-page select,
+  html body .settings-v14315-page input,
+  html body .settings-v14315-page select {
+    min-width: 0 !important;
+    font-size: 16px !important;
+  }
+}

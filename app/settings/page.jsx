@@ -446,6 +446,7 @@ export default function Settings() {
 
   return (
     <AppLayout active="settings">
+      <div className="settings-v14315-page">
       <header className="topbar">
         <div>
           <p className="eyebrow">{t("settings.eyebrow")}</p>
@@ -620,6 +621,7 @@ export default function Settings() {
           </div>
         </div>
       )}
+      </div>
     </AppLayout>
   );
 }
