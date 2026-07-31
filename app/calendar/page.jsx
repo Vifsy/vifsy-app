@@ -967,9 +967,7 @@ export default function Calendar() {
     }
 
     return (
-      visibleCampaigns.find((campaign) => campaign.id === selectedCampaignId) ||
-      visibleCampaigns[0] ||
-      null
+      visibleCampaigns.find((campaign) => campaign.id === selectedCampaignId) || null
     );
   }, [visibleCampaigns, selectedCampaignId]);
 
@@ -1100,9 +1098,7 @@ export default function Calendar() {
         );
 
       setCampaigns(upcomingCampaigns);
-
-      // The closest campaign in time is first and expanded on entry.
-      setSelectedCampaignId(upcomingCampaigns[0]?.id || "");
+      setSelectedCampaignId("");
 
       setLoading(false);
     }

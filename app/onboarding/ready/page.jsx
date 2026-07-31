@@ -6,6 +6,7 @@ import {
   BadgeCheck,
   Building2,
   CalendarDays,
+  Check,
   CheckCircle2,
   Globe2,
   LogOut,
@@ -25,7 +26,7 @@ const launchPlatforms = [
   { key: "tiktok", label: "TikTok", icon: "/social-icons/tiktok.png" },
   { key: "youtube", label: "YouTube", icon: "/social-icons/youtube.png" },
   { key: "x", label: "X", icon: "/social-icons/x.png" },
-  { key: "threads", label: "Threads", fallback: "@" },
+  { key: "threads", label: "Threads", icon: "/social-icons/threads.svg" },
   { key: "pinterest", label: "Pinterest", icon: "/social-icons/pinterest.png" },
 ];
 
@@ -213,6 +214,10 @@ export default function OnboardingReadyPage() {
   }
 
   const brandName = brand.business_name || "Spreelo";
+  const brandTitleToken = "__SPREELO_BRAND_NAME__";
+  const readyTitleParts = t("onboardingReady.title", {
+    brandName: brandTitleToken,
+  }).split(brandTitleToken);
   const profileRows = [
     {
       label: t("onboardingReady.industry"),
@@ -252,7 +257,11 @@ export default function OnboardingReadyPage() {
             <CheckCircle2 size={17} aria-hidden="true" />
             {t("onboardingReady.eyebrow")}
           </span>
-          <h1>{t("onboardingReady.title", { brandName })}</h1>
+          <h1>
+            {readyTitleParts[0]}
+            <span>{brandName}</span>
+            {readyTitleParts.slice(1).join(brandTitleToken)}
+          </h1>
           <p>{t("onboardingReady.description")}</p>
           <div className="onboarding-ready-actions">
             <a className="is-primary" href="/social-channels">
@@ -263,10 +272,20 @@ export default function OnboardingReadyPage() {
           </div>
         </div>
 
-        <div className="onboarding-ready-hero-mark" aria-hidden="true">
-          <span><Sparkles size={34} /></span>
-          <strong>{t("onboardingReady.resultBadge")}</strong>
-          <i />
+        <div className="onboarding-ready-hero-status" aria-hidden="true">
+          <header>
+            <span><Sparkles size={22} /></span>
+            <div>
+              <small>SPREELO AI</small>
+              <strong>{t("onboardingReady.resultBadge")}</strong>
+            </div>
+            <CheckCircle2 size={22} />
+          </header>
+          <div>
+            <span><Check size={15} /> {t("onboardingReady.profileTitle")}</span>
+            <span><Check size={15} /> {t("onboardingReady.calendarTitle")}</span>
+            <span><Check size={15} /> {t("onboardingReady.strategyTitle")}</span>
+          </div>
         </div>
       </section>
 
@@ -302,7 +321,7 @@ export default function OnboardingReadyPage() {
               <h2>{t("onboardingReady.analysisTitle", { brandName })}</h2>
               <p>{t("onboardingReady.analysisDescription")}</p>
             </div>
-            {brand.logo_url ? <img src={brand.logo_url} alt={brandName} /> : <strong>{brandName.slice(0, 1)}</strong>}
+            {brand.logo_url ? <img src={brand.logo_url} alt={brandName} /> : null}
           </header>
 
           <div className="onboarding-ready-profile-grid">

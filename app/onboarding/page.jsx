@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   Building2,
@@ -21,6 +21,8 @@ import { useUiText } from "../../lib/i18n/useUiText";
 
 const ANALYSIS_STATUS_POLL_INTERVAL_MS = 2000;
 const ANALYSIS_STATUS_MAX_POLLS = 180;
+const ANALYSIS_VISUAL_DURATION_MS = 5 * 60 * 1000;
+const ANALYSIS_VISUAL_MAX_PROGRESS = 99;
 
 const marketOptions = [
   {
@@ -239,6 +241,8 @@ export default function OnboardingPage() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [message, setMessage] = useState("");
   const [analysisProgress, setAnalysisProgress] = useState(0);
+  const analysisStartedAtRef = useRef(0);
+  const reportedProgressRef = useRef(0);
 
   const normalizedWebsiteUrl = useMemo(() => {
     return normalizeWebsiteUrl(websiteUrl);
@@ -308,6 +312,26 @@ export default function OnboardingPage() {
 
     checkUserAndBrand();
   }, []);
+
+  useEffect(() => {
+    if (!loading || !analysisStartedAtRef.current) return undefined;
+
+    const updateVisualProgress = () => {
+      const elapsedMs = Math.max(0, Date.now() - analysisStartedAtRef.current);
+      const elapsedRatio = Math.min(1, elapsedMs / ANALYSIS_VISUAL_DURATION_MS);
+      const timedProgress =
+        1 + elapsedRatio * (ANALYSIS_VISUAL_MAX_PROGRESS - 1);
+
+      setAnalysisProgress((currentProgress) =>
+        Math.max(currentProgress, Math.min(ANALYSIS_VISUAL_MAX_PROGRESS, timedProgress))
+      );
+    };
+
+    updateVisualProgress();
+    const intervalId = window.setInterval(updateVisualProgress, 250);
+
+    return () => window.clearInterval(intervalId);
+  }, [loading]);
 
 
   function handleMarketChange(event) {
@@ -382,6 +406,8 @@ export default function OnboardingPage() {
       return;
     }
 
+    analysisStartedAtRef.current = Date.now();
+    reportedProgressRef.current = 1;
     setLoading(true);
     setAnalysisProgress(1);
     setMessage("");
@@ -498,7 +524,10 @@ export default function OnboardingPage() {
           const nextProgress = Number(job?.progress || 0);
 
           if (Number.isFinite(nextProgress)) {
-            setAnalysisProgress(Math.max(1, Math.min(100, nextProgress)));
+            reportedProgressRef.current = Math.max(
+              reportedProgressRef.current,
+              Math.max(1, Math.min(100, nextProgress))
+            );
           }
         },
       });
@@ -515,11 +544,13 @@ export default function OnboardingPage() {
       );
       setContentSettingsTouched(false);
       setAnalysisProgress(100);
+      analysisStartedAtRef.current = 0;
       setMessage(t("onboarding.ready"));
 
       await sleep(350);
       window.location.href = `/onboarding/ready?brandId=${encodeURIComponent(createdBrand.id)}`;
     } catch (error) {
+      analysisStartedAtRef.current = 0;
       setMessage(error.message || t("onboarding.errorGeneric"));
       setLoading(false);
     }
@@ -583,15 +614,21 @@ export default function OnboardingPage() {
             </article>
           </div>
 
-          <div className="onboarding-refresh-illustration" aria-hidden="true">
-            <div className="onboarding-refresh-orbit orbit-one" />
-            <div className="onboarding-refresh-orbit orbit-two" />
-            <div className="onboarding-refresh-dashboard">
-              <i /><i /><i />
-              <b />
+          <div className="onboarding-refresh-saas-preview" aria-hidden="true">
+            <header>
+              <span><Sparkles size={17} /></span>
+              <div><strong>BRAND INTELLIGENCE</strong><i /></div>
+              <b>AI</b>
+            </header>
+            <div className="onboarding-refresh-saas-chart">
+              <span /><span /><span /><span /><span /><span />
+              <i />
             </div>
-            <div className="onboarding-refresh-spark spark-one" />
-            <div className="onboarding-refresh-spark spark-two" />
+            <div className="onboarding-refresh-saas-insights">
+              <article><span><Building2 size={15} /></span><i /><b /></article>
+              <article><span><Sparkles size={15} /></span><i /><b /></article>
+              <article><span><CalendarHeart size={15} /></span><i /><b /></article>
+            </div>
           </div>
         </aside>
 

@@ -15,6 +15,12 @@ Email Hook that:
 - contains copy for every app language currently listed by Spreelo;
 - keeps the six-digit Supabase OTP and its existing security model.
 
+## Important: the Vercel deployment does not activate this email
+
+Deploying the application zip only updates the web application. Supabase Auth
+continues to send its standard email until the separate Send Email Hook below
+has been deployed and selected in the Supabase dashboard.
+
 ## Activate it after deploying the zip
 
 1. Deploy the function:

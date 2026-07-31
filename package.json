@@ -42,7 +42,8 @@
     "test:v143.13": "node scripts/test-v143-13-product-image-anchor-fix.mjs",
     "test:v143.14": "node scripts/test-v143-14-analysis-carousel-dashboard.mjs",
     "test:v143.15": "node scripts/test-v143-15-analysis-speed-studio-pages.mjs",
-    "test:v143.17": "node scripts/test-v143-17-onboarding-welcome-flow.mjs"
+    "test:v143.17": "node scripts/test-v143-17-onboarding-welcome-flow.mjs",
+    "test:v143.18": "node scripts/test-v143-18-onboarding-polish.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

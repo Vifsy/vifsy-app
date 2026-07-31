@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Send,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { useUiText } from "../../lib/i18n/useUiText";
@@ -435,22 +436,22 @@ export default function LoginPage() {
             </article>
           </div>
 
-          <div className="login-refresh-illustration" aria-hidden="true">
-            <div className="login-refresh-hill hill-one" />
-            <div className="login-refresh-hill hill-two" />
-            <div className="login-refresh-plant">
-              <i className="leaf leaf-one" />
-              <i className="leaf leaf-two" />
-              <i className="leaf leaf-three" />
-              <b />
+          <div className="login-refresh-saas-preview" aria-hidden="true">
+            <header>
+              <span><Sparkles size={17} /></span>
+              <div><strong>SPREELO AI</strong><i /></div>
+              <b>LIVE</b>
+            </header>
+            <div className="login-refresh-saas-metrics">
+              <span><i /><i /><i /></span>
+              <span><i /><i /></span>
             </div>
-            <div className="login-refresh-monitor">
-              <span className="monitor-side" />
-              <span className="monitor-line line-one" />
-              <span className="monitor-line line-two" />
-              <span className="monitor-chart" />
+            <div className="login-refresh-saas-content">
+              <article><span /><div><i /><i /></div><b /></article>
+              <article><span /><div><i /><i /></div><b /></article>
+              <article><span /><div><i /><i /></div><b /></article>
             </div>
-            <div className="login-refresh-mug" />
+            <footer><span /><span /><span /></footer>
           </div>
         </aside>
 

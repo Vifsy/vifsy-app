@@ -26,7 +26,8 @@ function testRealAnalysisProgressAndCompletionRoute() {
   assert.doesNotMatch(onboarding, /getSmoothAnalysisProgress/u);
   assert.doesNotMatch(onboarding, /onboarding-refresh-stepper/u);
   assert.match(onboarding, /onStatus: \(job\)/u);
-  assert.match(onboarding, /setAnalysisProgress\(Math\.max/u);
+  assert.match(onboarding, /reportedProgressRef\.current = Math\.max/u);
+  assert.match(onboarding, /setAnalysisProgress\(100\)/u);
   assert.match(onboarding, /\/onboarding\/ready\?brandId=/u);
 }
 
