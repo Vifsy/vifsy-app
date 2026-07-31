@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
+  Bookmark,
   BookOpen,
   CalendarClock,
   CalendarDays,
@@ -6117,18 +6118,6 @@ const shouldShowPlannerDetails =
     (planCreationMode === "select" && slots.length > 0) ||
     (planCreationMode === "manual" && slots.length > 0) ||
     Boolean(autoPlanGoal));
-const studioReadinessChecks = [
-  Boolean(autoPlanGoal),
-  selectedPlatformOptions.length > 0,
-  slots.length > 0,
-];
-const studioReadinessPercent = Math.round(
-  (studioReadinessChecks.filter(Boolean).length / studioReadinessChecks.length) * 100
-);
-const studioGoalLabel = translateAutoPlanGoalLabel(autoPlanGoal);
-const studioPlatformLabel =
-  selectedPlatformOptions.map((item) => item.label).join(", ") ||
-  t("automation.choosePlatform");
 
   function getFocusSourceCopy(key) {
     return t(`automation.focusSource.${key}`);
@@ -9464,22 +9453,20 @@ function blockFormatCardClickAfterDrag(event) {
           <main className="wizard-main">
             <section className="plan-v70-shell">
               <header className="plan-v70-header">
-                <div className="plan-v14316-title-group">
-                  <span className="plan-v14316-kicker">
-                    <Sparkles size={15} aria-hidden="true" />
-                    {t("layout.nav.aiContentStudio")}
-                  </span>
+                <div>
                   <h1>{t("automation.redesign.title")}</h1>
                   <p>{t("automation.redesign.subtitle")}</p>
-                  <div className="plan-v14316-header-meta">
-                    <span>
-                      <span className="plan-v14316-live-dot" aria-hidden="true" />
-                      {currentBrandProfile?.business_name || t("automation.yourBusiness")}
-                    </span>
-                    <span>{scheduleType === "weekly" ? t("automation.weekly") : t("automation.once")}</span>
-                  </div>
                 </div>
                 <div className="plan-v95-header-actions">
+                  <button
+                    type="button"
+                    className="plan-v95-template-button"
+                    disabled
+                    title={t("automation.redesign.templateComingSoon")}
+                  >
+                    <Bookmark size={17} aria-hidden="true" />
+                    <span>{t("automation.redesign.saveTemplate")}</span>
+                  </button>
                   <button
                     type="button"
                     className="plan-v95-header-help"
@@ -9487,88 +9474,11 @@ function blockFormatCardClickAfterDrag(event) {
                     aria-label={t("automation.guide.needHelp")}
                   >
                     <CircleHelp size={19} aria-hidden="true" />
-                    <span>{t("automation.guide.needHelp")}</span>
                   </button>
                 </div>
               </header>
 
-              <section
-                className="plan-v14316-command-center"
-                aria-label={plannerUiCopy.planSummary}
-              >
-                <div className="plan-v14316-progress">
-                  <div className="plan-v14316-progress-copy">
-                    <div>
-                      <span>{plannerUiCopy.planSummary}</span>
-                      <strong>{studioReadinessPercent}%</strong>
-                    </div>
-                    <div
-                      className="plan-v14316-progress-track"
-                      role="progressbar"
-                      aria-valuemin="0"
-                      aria-valuemax="100"
-                      aria-valuenow={studioReadinessPercent}
-                    >
-                      <span style={{ width: `${studioReadinessPercent}%` }} />
-                    </div>
-                  </div>
-
-                  <nav className="plan-v14316-steps" aria-label={t("automation.guide.title")}>
-                    <a className={autoPlanGoal ? "complete" : "active"} href="#plan-v14316-setup">
-                      <span>{autoPlanGoal ? <CheckCircle2 size={15} /> : "1"}</span>
-                      {plannerSectionCopy.settingsTitle}
-                    </a>
-                    <a className={slots.length ? "complete" : autoPlanGoal ? "active" : ""} href="#plan-v14316-formats">
-                      <span>{slots.length ? <CheckCircle2 size={15} /> : "2"}</span>
-                      {t("automation.redesign.contentTypesTitleV2")}
-                    </a>
-                    <a className={slots.length ? "active" : ""} href="#plan-v70-planned-posts">
-                      <span>3</span>
-                      {t("automation.redesign.plannedPostsTitle")}
-                    </a>
-                    <a href="#plan-v14316-activate">
-                      <span>4</span>
-                      {t("automation.redesign.readyTitle")}
-                    </a>
-                  </nav>
-                </div>
-
-                <div className="plan-v14316-summary-grid">
-                  <article>
-                    <span className="plan-v14316-summary-icon coral"><Target size={17} /></span>
-                    <div>
-                      <small>{t("automation.goal")}</small>
-                      <strong>{studioGoalLabel}</strong>
-                    </div>
-                  </article>
-                  <article>
-                    <span className="plan-v14316-summary-icon violet"><ClipboardList size={17} /></span>
-                    <div>
-                      <small>{t("automation.redesign.plannedPostsTitle")}</small>
-                      <strong>{slots.length}</strong>
-                    </div>
-                  </article>
-                  <article>
-                    <span className="plan-v14316-summary-icon blue"><LayoutGrid size={17} /></span>
-                    <div>
-                      <small>{t("automation.platform")}</small>
-                      <strong>{studioPlatformLabel}</strong>
-                    </div>
-                  </article>
-                  <article>
-                    <span className="plan-v14316-summary-icon green"><CreditCard size={17} /></span>
-                    <div>
-                      <small>{t("automation.credits")}</small>
-                      <strong>{plannedCredits}</strong>
-                    </div>
-                  </article>
-                </div>
-              </section>
-
-              <section
-                id="plan-v14316-setup"
-                className="plan-v70-settings-card plan-v84-settings-card plan-v89-settings-section"
-              >
+              <section className="plan-v70-settings-card plan-v84-settings-card plan-v89-settings-section">
                 <section className={`plan-v89-guide-banner${guideExpanded ? " expanded" : " collapsed"}`}>
                   {guideExpanded ? (
                     <>
@@ -9811,7 +9721,7 @@ function blockFormatCardClickAfterDrag(event) {
 
               </section>
 
-              <section id="plan-v14316-formats" className="plan-v70-card plan-v70-formats-card">
+              <section className="plan-v70-card plan-v70-formats-card">
                 <div className="plan-v70-formats-head">
                   <div>
                     <h2>{t("automation.redesign.contentTypesTitleV2")}</h2>
@@ -10226,7 +10136,7 @@ function blockFormatCardClickAfterDrag(event) {
                 </section>
               ) : null}
 
-              <section id="plan-v14316-activate" className={`plan-v70-activate-card${savedPlanSummary ? " saved" : ""}${!shouldShowPlannerDetails && !savedPlanSummary ? " no-plan" : ""}`}>
+              <section className={`plan-v70-activate-card${savedPlanSummary ? " saved" : ""}${!shouldShowPlannerDetails && !savedPlanSummary ? " no-plan" : ""}`}>
                 <span className="plan-v70-activate-visual" aria-hidden="true">
                   {savedPlanSummary ? <CheckCircle2 size={27} /> : <CalendarClock size={27} />}
                 </span>

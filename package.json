@@ -41,8 +41,7 @@
     "test:v143.12": "node scripts/test-v143-12-brand-analysis-session-refresh.mjs",
     "test:v143.13": "node scripts/test-v143-13-product-image-anchor-fix.mjs",
     "test:v143.14": "node scripts/test-v143-14-analysis-carousel-dashboard.mjs",
-    "test:v143.15": "node scripts/test-v143-15-analysis-speed-studio-pages.mjs",
-    "test:v143.16": "node scripts/test-v143-16-content-studio-saas.mjs"
+    "test:v143.15": "node scripts/test-v143-15-analysis-speed-studio-pages.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
