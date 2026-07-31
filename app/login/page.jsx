@@ -139,6 +139,29 @@ export default function LoginPage() {
     return `${path}${separator}lang=${encodeURIComponent(locale)}`;
   }
 
+  function getSafeNextPath() {
+    if (typeof window === "undefined") return "";
+    const value = String(
+      new URLSearchParams(window.location.search).get("next") || ""
+    ).trim();
+    return value.startsWith("/") && !value.startsWith("//") ? value : "";
+  }
+
+  function requestWelcomeEmail(accessToken) {
+    if (!accessToken) return;
+    fetch("/api/account/welcome-email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ locale: locale || "en" }),
+      keepalive: true,
+    }).catch((error) => {
+      console.error("Could not request the welcome email:", error);
+    });
+  }
+
   async function redirectAfterLogin(loggedInUser) {
     if (!loggedInUser?.id) {
       throw new Error(t("login.errorCheckWorkspace"));
@@ -174,7 +197,7 @@ export default function LoginPage() {
         );
       }
 
-      window.location.href = "/";
+      window.location.href = getSafeNextPath() || "/";
       return;
     }
 
@@ -207,9 +230,12 @@ export default function LoginPage() {
     setMessageType("info");
 
     try {
+      const safeNextPath = getSafeNextPath();
       const emailRedirectTo =
         typeof window !== "undefined"
-          ? `${window.location.origin}/login?lang=${encodeURIComponent(locale || "en")}`
+          ? `${window.location.origin}/login?lang=${encodeURIComponent(
+              locale || "en"
+            )}${safeNextPath ? `&next=${encodeURIComponent(safeNextPath)}` : ""}`
           : undefined;
 
       const { error } = await withTimeout(
@@ -310,6 +336,7 @@ export default function LoginPage() {
         localStorage.setItem(SAVED_LOGIN_EMAIL_KEY, normalizedEmail);
       }
 
+      requestWelcomeEmail(data?.session?.access_token);
       await redirectAfterLogin(data?.user);
     } catch (error) {
       if (error?.code === "LOGIN_REQUEST_TIMEOUT") {

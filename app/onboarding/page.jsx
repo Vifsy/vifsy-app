@@ -19,8 +19,8 @@ import { supabase } from "../../lib/supabaseClient";
 import { getValidAnalysisAccessToken } from "../../lib/analysisSession";
 import { useUiText } from "../../lib/i18n/useUiText";
 
-const ANALYSIS_STATUS_POLL_INTERVAL_MS = 2000;
-const ANALYSIS_STATUS_MAX_POLLS = 180;
+const ANALYSIS_STATUS_POLL_INTERVAL_MS = 5000;
+const ANALYSIS_STATUS_MAX_POLLS = 720;
 const ANALYSIS_VISUAL_DURATION_MS = 5 * 60 * 1000;
 const ANALYSIS_VISUAL_MAX_PROGRESS = 99;
 
@@ -147,25 +147,9 @@ async function readJsonResponse(response) {
 async function pollAnalysisStatus({
   accessToken,
   jobId,
-  runRequest,
   onStatus,
 }) {
-  let runFinished = false;
-  let runResult = null;
   let currentAccessToken = accessToken;
-
-  runRequest
-    .then((result) => {
-      runFinished = true;
-      runResult = result;
-    })
-    .catch((error) => {
-      runFinished = true;
-      runResult = {
-        ok: false,
-        error: error?.message || "Could not run analysis.",
-      };
-    });
 
   for (let pollCount = 0; pollCount < ANALYSIS_STATUS_MAX_POLLS; pollCount += 1) {
     await sleep(pollCount === 0 ? 1000 : ANALYSIS_STATUS_POLL_INTERVAL_MS);
@@ -213,16 +197,13 @@ async function pollAnalysisStatus({
       throw new Error(job?.error_message || "Could not analyze brand.");
     }
 
-    if (runFinished && runResult && !runResult.ok) {
-      throw new Error(runResult.error || "Could not run analysis.");
-    }
   }
 
   throw new Error("Brand analysis took too long. Please try again.");
 }
 
 export default function OnboardingPage() {
-  const { t } = useUiText(["onboarding"]);
+  const { t, locale } = useUiText(["onboarding"]);
 
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);
@@ -241,6 +222,7 @@ export default function OnboardingPage() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [message, setMessage] = useState("");
   const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [analysisNoticeCode, setAnalysisNoticeCode] = useState("background");
   const analysisStartedAtRef = useRef(0);
   const reportedProgressRef = useRef(0);
 
@@ -410,6 +392,7 @@ export default function OnboardingPage() {
     reportedProgressRef.current = 1;
     setLoading(true);
     setAnalysisProgress(1);
+    setAnalysisNoticeCode("background");
     setMessage("");
 
     try {
@@ -479,6 +462,7 @@ export default function OnboardingPage() {
           contentMarket: contentSettingsTouched ? contentMarket : "",
           countryCode: contentSettingsTouched ? countryCode : "",
           contentLanguage: contentSettingsTouched ? contentLanguage : "",
+          notificationLocale: locale || "en",
         }),
       });
 
@@ -496,30 +480,9 @@ export default function OnboardingPage() {
 
       setAnalysisProgress(5);
 
-      const runRequest = fetch("/api/analyze-brand/run", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${analysisAccessToken}`,
-        },
-        body: JSON.stringify({
-          jobId,
-        }),
-      }).then(async (runResponse) => {
-        const runResult = await readJsonResponse(runResponse);
-
-        return {
-          ...runResult,
-          ok: Boolean(runResponse.ok && runResult?.ok),
-          httpOk: runResponse.ok,
-          error: runResult?.error || t("onboarding.errorAnalyzeBrand"),
-        };
-      });
-
       const completedJob = await pollAnalysisStatus({
         accessToken: analysisAccessToken,
         jobId,
-        runRequest,
         onStatus: (job) => {
           const nextProgress = Number(job?.progress || 0);
 
@@ -528,6 +491,15 @@ export default function OnboardingPage() {
               reportedProgressRef.current,
               Math.max(1, Math.min(100, nextProgress))
             );
+          }
+
+          if (job?.user_message_code === "website_blocked_background_research") {
+            setAnalysisNoticeCode("blocked");
+          } else if (
+            job?.user_message_code === "analysis_unusually_long" ||
+            Date.now() - analysisStartedAtRef.current > 90_000
+          ) {
+            setAnalysisNoticeCode("long");
           }
         },
       });
@@ -806,8 +778,20 @@ export default function OnboardingPage() {
               <div className="onboarding-refresh-keep-open">
                 <ShieldCheck size={22} aria-hidden="true" />
                 <div>
-                  <strong>{t("onboarding.analysis.keepOpenTitle")}</strong>
-                  <p>{t("onboarding.analysis.keepOpenText")}</p>
+                  <strong>
+                    {analysisNoticeCode === "blocked"
+                      ? t("onboarding.analysis.blockedTitle")
+                      : analysisNoticeCode === "long"
+                        ? t("onboarding.analysis.longTitle")
+                        : t("onboarding.analysis.keepOpenTitle")}
+                  </strong>
+                  <p>
+                    {analysisNoticeCode === "blocked"
+                      ? t("onboarding.analysis.blockedText")
+                      : analysisNoticeCode === "long"
+                        ? t("onboarding.analysis.longText")
+                        : t("onboarding.analysis.keepOpenText")}
+                  </p>
                 </div>
               </div>
             </div>

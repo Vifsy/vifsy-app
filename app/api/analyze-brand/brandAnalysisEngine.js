@@ -1,6 +1,9 @@
 import OpenAI from "openai";
 import { assertPublicHttpUrl } from "../../../lib/security.js";
-import { createWebsiteSecurityBlockedError } from "../../../lib/websiteSecurity.js";
+import {
+  createWebsiteSecurityBlockedError,
+  detectWebsiteSecurityProvider,
+} from "../../../lib/websiteSecurity.js";
 import {
   inferContentLanguageFromWebsiteSignals,
   inferMarketSetupFromWebsiteSignals,
@@ -506,7 +509,7 @@ export async function fetchWebsiteHtml(websiteUrl, options = {}) {
     if (!response.ok) {
       let blockedBody = "";
 
-      if (response.status === 403) {
+      if ([401, 403, 429].includes(response.status)) {
         try {
           blockedBody = (await response.text()).slice(0, 20000);
         } catch {
@@ -530,6 +533,19 @@ export async function fetchWebsiteHtml(websiteUrl, options = {}) {
     }
 
     const html = await response.text();
+    const securityDetection = detectWebsiteSecurityProvider({
+      status: response.status,
+      headers: response.headers,
+      body: html,
+    });
+
+    if (securityDetection.blocked) {
+      throw createWebsiteSecurityBlockedError({
+        response,
+        body: html,
+        url: safeWebsiteUrl,
+      });
+    }
 
     return {
       url: safeWebsiteUrl,
@@ -2437,6 +2453,8 @@ export async function saveBrandProfile({
   contentLanguage,
   campaignCalendarYear,
   websiteProductMode,
+  websiteAccessStatus = "",
+  websiteAccessMessage = "",
 }) {
   const { data, error } = await supabase
     .from("brand_profiles")
@@ -2460,11 +2478,14 @@ export async function saveBrandProfile({
       website_product_source_url: websiteProductMode?.available
         ? websiteProductMode?.source_url || websiteUrl || ""
         : "",
-      website_access_status: websiteUrl ? "accessible" : "not_checked",
+      website_access_status: websiteUrl
+        ? websiteAccessStatus || "accessible"
+        : "not_checked",
       website_security_provider: null,
       website_security_confidence: null,
-      website_access_status_code: websiteUrl ? 200 : null,
-      website_access_message: null,
+      website_access_status_code:
+        websiteUrl && websiteAccessStatus !== "web_research" ? 200 : null,
+      website_access_message: websiteAccessMessage || null,
       website_access_checked_at: websiteUrl ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
     })
@@ -2649,6 +2670,7 @@ export async function runBrandAnalysisJob({
   const businessName = String(job.business_name || "").trim();
   const websiteUrl = normalizeWebsiteUrl(job.website_url);
   const brandDescription = String(job.brand_description || "").trim();
+  const webResearchEvidence = String(job.web_research_evidence || "").trim();
 
   const requestedMarketSetup = inferMarketSetup({
     contentMarket: job.content_market,
@@ -2670,56 +2692,87 @@ export async function runBrandAnalysisJob({
   let detectedWebsiteMarketSetup = null;
 
   if (websiteUrl) {
-    await updateJob({
-      status: "running",
-      step: "reading_website",
-      progress: 15,
-    });
+    let website;
+    let productSourceCandidates = [];
 
-    const website = await runTimedPhase("website_homepage", () =>
-      fetchWebsiteHtml(websiteUrl, {
-        resolutionCache,
-        onResolutionTiming,
-      })
-    );
-    finalWebsiteUrl = website.url;
-    detectedWebsiteMarketSetup = inferMarketSetupFromWebsiteSignals(website.url, website.html);
-
-    if (!requestedContentLanguage) {
+    if (webResearchEvidence) {
       await updateJob({
         status: "running",
-        step: "detecting_language",
-        progress: 25,
+        step: "creating_profile_from_web_research",
+        progress: 55,
+        userMessageCode: "web_research_completed",
       });
 
-      detectedWebsiteContentLanguage = inferContentLanguageFromWebsiteSignals(
+      website = {
+        url: websiteUrl,
+        html: `<html><head><title>${businessName || websiteUrl}</title><meta name="description" content="Official-domain web research evidence"></head><body><main>${webResearchEvidence
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")}</main></body></html>`,
+      };
+      finalWebsiteUrl = websiteUrl;
+      detectedWebsiteMarketSetup = inferMarketSetupFromWebsiteSignals(
         website.url,
         website.html
+      );
+      detectedWebsiteContentLanguage =
+        requestedContentLanguage ||
+        inferContentLanguageFromWebsiteSignals(website.url, website.html);
+    } else {
+      await updateJob({
+        status: "running",
+        step: "reading_website",
+        progress: 15,
+      });
+
+      website = await runTimedPhase("website_homepage", () =>
+        fetchWebsiteHtml(websiteUrl, {
+          resolutionCache,
+          onResolutionTiming,
+        })
+      );
+      finalWebsiteUrl = website.url;
+      detectedWebsiteMarketSetup = inferMarketSetupFromWebsiteSignals(
+        website.url,
+        website.html
+      );
+
+      if (!requestedContentLanguage) {
+        await updateJob({
+          status: "running",
+          step: "detecting_language",
+          progress: 25,
+        });
+
+        detectedWebsiteContentLanguage = inferContentLanguageFromWebsiteSignals(
+          website.url,
+          website.html
+        );
+      }
+
+      await updateJob({
+        status: "running",
+        step: "selecting_context_pages",
+        progress: 35,
+      });
+
+      productSourceCandidates = await runTimedPhase(
+        "website_context_pages",
+        () =>
+          fetchProductSourceCandidates({
+            openai,
+            websiteUrl: website.url,
+            html: website.html,
+            resolutionCache,
+            onResolutionTiming,
+          })
       );
     }
 
     await updateJob({
       status: "running",
-      step: "selecting_context_pages",
-      progress: 35,
-    });
-
-    const productSourceCandidates = await runTimedPhase(
-      "website_context_pages",
-      () =>
-        fetchProductSourceCandidates({
-          openai,
-          websiteUrl: website.url,
-          html: website.html,
-          resolutionCache,
-          onResolutionTiming,
-        })
-    );
-
-    await updateJob({
-      status: "running",
       step: "creating_profile",
-      progress: 45,
+      progress: webResearchEvidence ? 65 : 45,
     });
 
     analysis = await runTimedPhase("openai_brand_strategy", () =>
@@ -2803,6 +2856,10 @@ export async function runBrandAnalysisJob({
     contentLanguage: finalContentLanguage,
     campaignCalendarYear,
     websiteProductMode: analysis.website_product_mode,
+    websiteAccessStatus: webResearchEvidence ? "web_research" : "accessible",
+    websiteAccessMessage: webResearchEvidence
+      ? "The website blocked Spreelo's direct analysis connection. The profile was completed using public evidence from the official domain."
+      : "",
   });
 
   const strategicCampaignOpportunities = buildStrategicCampaignOpportunitySet({
@@ -2848,6 +2905,10 @@ export async function runBrandAnalysisJob({
       campaign_opportunities: savedOpportunities,
     },
     completedAt: new Date().toISOString(),
+    userMessageCode: "analysis_completed",
+    userMessage: "",
+    leaseExpiresAt: null,
+    leaseToken: null,
   });
 
   console.info("Brand analysis job completed", {

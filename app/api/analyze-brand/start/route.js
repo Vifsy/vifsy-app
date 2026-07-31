@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { normalizeUiLocale } from "../../../../lib/i18n/defaultLabels.js";
 
 export const dynamic = "force-dynamic";
 
@@ -111,6 +112,9 @@ export async function POST(request) {
     const businessName = String(body?.businessName || "").trim();
     const websiteUrl = normalizeWebsiteUrl(body?.websiteUrl);
     const brandDescription = String(body?.brandDescription || "").trim();
+    const notificationLocale = normalizeUiLocale(
+      body?.notificationLocale || user?.user_metadata?.app_locale || "en"
+    );
 
     const requestedMarketSetup = inferMarketSetup({
       contentMarket: body?.contentMarket,
@@ -154,6 +158,31 @@ export async function POST(request) {
       brandProfileId,
     });
 
+    const { data: activeJobs, error: activeJobError } = await supabase
+      .from("brand_analysis_jobs")
+      .select(
+        "id, status, step, progress, website_url, brand_description, business_name, content_market, country_code, content_language, notification_locale, user_message_code, user_message, created_at, updated_at"
+      )
+      .eq("user_id", user.id)
+      .eq("brand_profile_id", brandProfileId)
+      .in("status", ["pending", "running"])
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (activeJobError) {
+      throw new Error(activeJobError.message || "Could not check active analysis jobs.");
+    }
+
+    if (activeJobs?.[0]?.id) {
+      return Response.json({
+        ok: true,
+        reused: true,
+        job: activeJobs[0],
+        job_id: activeJobs[0].id,
+        message: "The existing brand analysis is continuing in the background.",
+      });
+    }
+
     const { data: job, error: insertError } = await supabase
       .from("brand_analysis_jobs")
       .insert({
@@ -171,13 +200,18 @@ export async function POST(request) {
         content_market: requestedMarketSetup.contentMarket || "",
         country_code: requestedMarketSetup.countryCode || "",
         content_language: requestedMarketSetup.contentLanguage || "",
+        notification_locale: notificationLocale,
+        user_message_code: "analysis_queued",
+        user_message: "",
+        attempt_count: 0,
+        next_attempt_at: new Date().toISOString(),
 
         result: {},
         error_message: "",
         internal_error: "",
       })
       .select(
-        "id, status, step, progress, website_url, brand_description, business_name, content_market, country_code, content_language, created_at, updated_at"
+        "id, status, step, progress, website_url, brand_description, business_name, content_market, country_code, content_language, notification_locale, user_message_code, user_message, created_at, updated_at"
       )
       .single();
 

@@ -115,8 +115,8 @@ const analysisProgressStages = [
   },
 ];
 
-const ANALYSIS_STATUS_POLL_INTERVAL_MS = 2000;
-const ANALYSIS_STATUS_MAX_POLLS = 180;
+const ANALYSIS_STATUS_POLL_INTERVAL_MS = 5000;
+const ANALYSIS_STATUS_MAX_POLLS = 720;
 const ANALYSIS_MAIN_PROGRESS_DURATION_MS = 120000;
 const ANALYSIS_DISPLAY_DURATION_MS = 150000; // Typical analysis reaches 96% after about 2.5 minutes.
 const ANALYSIS_FINAL_CREEP_TIME_CONSTANT_MS = 60000;
@@ -314,7 +314,7 @@ async function readApiJson(response) {
 }
 
 export default function BrandProfile() {
-  const { t } = useUiText(["brand"]);
+  const { t, locale } = useUiText(["brand"]);
   const [brandProfileId, setBrandProfileId] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
@@ -339,6 +339,7 @@ export default function BrandProfile() {
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [analysisNoticeCode, setAnalysisNoticeCode] = useState("background");
   const [user, setUser] = useState(null);
 
   const [allBrands, setAllBrands] = useState([]);
@@ -759,27 +760,10 @@ export default function BrandProfile() {
     async function pollAnalysisStatus({
     accessToken,
     jobId,
-    runRequest,
     displayStartedAt,
   }) {
-    let runFinished = false;
-    let runResult = null;
     let consecutiveStatusErrors = 0;
-    let queuedPollsAfterRunFailure = 0;
     let currentAccessToken = accessToken;
-
-    runRequest
-      .then((result) => {
-        runFinished = true;
-        runResult = result;
-      })
-      .catch((error) => {
-        runFinished = true;
-        runResult = {
-          ok: false,
-          error: error?.message || t("brand.errorRunAnalysis"),
-        };
-      });
 
     for (let pollCount = 0; pollCount < ANALYSIS_STATUS_MAX_POLLS; pollCount++) {
       await sleep(
@@ -840,6 +824,15 @@ export default function BrandProfile() {
 
       const job = statusResult.job || {};
 
+      if (job.user_message_code === "website_blocked_background_research") {
+        setAnalysisNoticeCode("blocked");
+      } else if (
+        job.user_message_code === "analysis_unusually_long" ||
+        Date.now() - displayStartedAt > 90_000
+      ) {
+        setAnalysisNoticeCode("long");
+      }
+
       
             if (job.status === "completed") {
         const remainingMs =
@@ -861,23 +854,6 @@ export default function BrandProfile() {
         );
       }
 
-      if (runFinished && runResult && runResult.ok === false) {
-        if (job.status === "queued") {
-          queuedPollsAfterRunFailure += 1;
-
-          if (queuedPollsAfterRunFailure >= 5) {
-            throw new Error(
-              getFriendlyAnalysisError(
-                runResult.error || t("brand.errorFinishAnalysis")
-              )
-            );
-          }
-        } else {
-          // The browser can lose the long /run response while the server-side
-          // job continues. In that case the job status is the source of truth.
-          queuedPollsAfterRunFailure = 0;
-        }
-      }
     }
 
     throw new Error(
@@ -909,6 +885,7 @@ export default function BrandProfile() {
         const displayStartedAt = Date.now();
 
     setAnalysisProgress(1);
+    setAnalysisNoticeCode("background");
     setAnalyzing(true);
 
     const progressInterval = setInterval(() => {
@@ -949,6 +926,7 @@ export default function BrandProfile() {
         contentMarket: contentSettingsTouched ? contentMarket : "",
         countryCode: contentSettingsTouched ? countryCode : "",
         contentLanguage: contentSettingsTouched ? contentLanguage : "",
+        notificationLocale: locale || "en",
       };
 
       const startResponse = await fetchWithTimeout(
@@ -983,29 +961,9 @@ export default function BrandProfile() {
 
             setAnalysisProgress(getSmoothAnalysisProgress(displayStartedAt));
 
-      const runRequest = fetch("/api/analyze-brand/run", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${analysisAccessToken}`,
-        },
-        body: JSON.stringify({
-          jobId,
-        }),
-      }).then(async (runResponse) => {
-        const runResult = await readApiJson(runResponse);
-
-        return {
-          ...runResult,
-          ok: Boolean(runResponse.ok && runResult?.ok),
-          httpOk: runResponse.ok,
-        };
-      });
-
       const completedJob = await pollAnalysisStatus({
         accessToken: analysisAccessToken,
         jobId,
-        runRequest,
         displayStartedAt,
       });
 
@@ -1731,6 +1689,23 @@ export default function BrandProfile() {
                     {t(getCurrentAnalysisStage(analysisProgress).titleKey)}
                   </strong>
                   <p>{t(getCurrentAnalysisStage(analysisProgress).descriptionKey)}</p>
+                </div>
+
+                <div className="brand-profile-analysis-background" role="status">
+                  <strong>
+                    {analysisNoticeCode === "blocked"
+                      ? t("brand.analysisBlockedTitle")
+                      : analysisNoticeCode === "long"
+                        ? t("brand.analysisLongTitle")
+                        : t("brand.analysisBackgroundTitle")}
+                  </strong>
+                  <p>
+                    {analysisNoticeCode === "blocked"
+                      ? t("brand.analysisBlockedText")
+                      : analysisNoticeCode === "long"
+                        ? t("brand.analysisLongText")
+                        : t("brand.analysisBackgroundText")}
+                  </p>
                 </div>
 
                 <div className="brand-profile-analysis-steps">

@@ -1,5 +1,42 @@
 import { getWebsiteSecurityCustomerMessage } from "../../../lib/websiteSecurity.js";
 
+export const BRAND_ANALYSIS_JOB_SELECT = [
+  "id",
+  "user_id",
+  "brand_profile_id",
+  "status",
+  "step",
+  "progress",
+  "website_url",
+  "brand_description",
+  "business_name",
+  "content_market",
+  "country_code",
+  "content_language",
+  "notification_locale",
+  "result",
+  "error_message",
+  "internal_error",
+  "user_message_code",
+  "user_message",
+  "attempt_count",
+  "next_attempt_at",
+  "worker_name",
+  "lease_token",
+  "lease_expires_at",
+  "last_heartbeat_at",
+  "openai_response_id",
+  "web_research_evidence",
+  "web_research_sources",
+  "analysis_completed_email_sent_at",
+  "analysis_completed_email_error",
+  "created_at",
+  "updated_at",
+  "started_at",
+  "completed_at",
+  "failed_at",
+].join(", ");
+
 export function getCustomerFriendlyAnalysisError(error) {
   const securityMessage = getWebsiteSecurityCustomerMessage(error);
   if (securityMessage) return securityMessage;
@@ -52,6 +89,20 @@ export async function updateBrandAnalysisJob({
   startedAt,
   completedAt,
   failedAt,
+  notificationLocale,
+  userMessageCode,
+  userMessage,
+  nextAttemptAt,
+  workerName,
+  leaseToken,
+  leaseExpiresAt,
+  lastHeartbeatAt,
+  openaiResponseId,
+  webResearchEvidence,
+  webResearchSources,
+  analysisCompletedEmailSentAt,
+  analysisCompletedEmailError,
+  expectedLeaseToken,
 }) {
   const updatePayload = {
     updated_at: new Date().toISOString(),
@@ -93,33 +144,72 @@ export async function updateBrandAnalysisJob({
     updatePayload.failed_at = failedAt;
   }
 
-  const { data, error } = await supabase
+  if (notificationLocale !== undefined) {
+    updatePayload.notification_locale = notificationLocale;
+  }
+
+  if (userMessageCode !== undefined) {
+    updatePayload.user_message_code = userMessageCode;
+  }
+
+  if (userMessage !== undefined) {
+    updatePayload.user_message = userMessage;
+  }
+
+  if (nextAttemptAt !== undefined) {
+    updatePayload.next_attempt_at = nextAttemptAt;
+  }
+
+  if (workerName !== undefined) {
+    updatePayload.worker_name = workerName;
+  }
+
+  if (leaseToken !== undefined) {
+    updatePayload.lease_token = leaseToken;
+  }
+
+  if (leaseExpiresAt !== undefined) {
+    updatePayload.lease_expires_at = leaseExpiresAt;
+  }
+
+  if (lastHeartbeatAt !== undefined) {
+    updatePayload.last_heartbeat_at = lastHeartbeatAt;
+  }
+
+  if (openaiResponseId !== undefined) {
+    updatePayload.openai_response_id = openaiResponseId;
+  }
+
+  if (webResearchEvidence !== undefined) {
+    updatePayload.web_research_evidence = webResearchEvidence;
+  }
+
+  if (webResearchSources !== undefined) {
+    updatePayload.web_research_sources = webResearchSources;
+  }
+
+  if (analysisCompletedEmailSentAt !== undefined) {
+    updatePayload.analysis_completed_email_sent_at =
+      analysisCompletedEmailSentAt;
+  }
+
+  if (analysisCompletedEmailError !== undefined) {
+    updatePayload.analysis_completed_email_error =
+      analysisCompletedEmailError;
+  }
+
+  let updateQuery = supabase
     .from("brand_analysis_jobs")
     .update(updatePayload)
     .eq("id", jobId)
-    .eq("user_id", userId)
-    .select(
-      [
-        "id",
-        "brand_profile_id",
-        "status",
-        "step",
-        "progress",
-        "website_url",
-        "brand_description",
-        "business_name",
-        "content_market",
-        "country_code",
-        "content_language",
-        "result",
-        "error_message",
-        "created_at",
-        "updated_at",
-        "started_at",
-        "completed_at",
-        "failed_at",
-      ].join(", ")
-    )
+    .eq("user_id", userId);
+
+  if (expectedLeaseToken) {
+    updateQuery = updateQuery.eq("lease_token", expectedLeaseToken);
+  }
+
+  const { data, error } = await updateQuery
+    .select(BRAND_ANALYSIS_JOB_SELECT)
     .single();
 
   if (error) {
@@ -132,30 +222,7 @@ export async function updateBrandAnalysisJob({
 export async function readBrandAnalysisJob({ supabase, userId, jobId }) {
   const { data: job, error } = await supabase
     .from("brand_analysis_jobs")
-    .select(
-      [
-        "id",
-        "user_id",
-        "brand_profile_id",
-        "status",
-        "step",
-        "progress",
-        "website_url",
-        "brand_description",
-        "business_name",
-        "content_market",
-        "country_code",
-        "content_language",
-        "result",
-        "error_message",
-        "internal_error",
-        "created_at",
-        "updated_at",
-        "started_at",
-        "completed_at",
-        "failed_at",
-      ].join(", ")
-    )
+    .select(BRAND_ANALYSIS_JOB_SELECT)
     .eq("id", jobId)
     .eq("user_id", userId)
     .maybeSingle();

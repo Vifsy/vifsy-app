@@ -21,6 +21,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/run-brand-analysis-jobs",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/refresh-instagram-tokens",
       "schedule": "0 3 * * *"
     },
