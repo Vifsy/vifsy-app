@@ -1,0 +1,1573 @@
+/* v143.16 — AI Content Studio rebuilt as a focused, product-grade SaaS flow.
+   Scoped to ordinary plan creation so calendar campaign mode keeps its own UI. */
+
+:root {
+  --studio16-canvas: #f3f5f9;
+  --studio16-panel: #ffffff;
+  --studio16-panel-soft: #f8f9fc;
+  --studio16-ink: #101827;
+  --studio16-muted: #667085;
+  --studio16-line: #e3e7ee;
+  --studio16-line-strong: #d4dae4;
+  --studio16-navy: #071d32;
+  --studio16-navy-soft: #12324f;
+  --studio16-coral: #f06445;
+  --studio16-coral-deep: #cf4f33;
+  --studio16-violet: #745fd8;
+  --studio16-blue: #3b78d8;
+  --studio16-green: #2f8d59;
+  --studio16-shadow:
+    0 18px 45px rgba(21, 31, 52, 0.08),
+    0 3px 10px rgba(21, 31, 52, 0.04);
+  --studio16-shadow-soft:
+    0 9px 24px rgba(21, 31, 52, 0.065),
+    0 2px 6px rgba(21, 31, 52, 0.03);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+html body .content.spreelo-content:has(.automation-page.plan-v70-active) {
+  min-width: 0 !important;
+  overflow-x: clip !important;
+  color: var(--studio16-ink) !important;
+  background:
+    radial-gradient(circle at 86% -8%, rgba(240, 100, 69, 0.09), transparent 27%),
+    radial-gradient(circle at 4% 18%, rgba(85, 119, 184, 0.08), transparent 24%),
+    var(--studio16-canvas) !important;
+}
+
+html body .automation-page.plan-v70-active {
+  width: 100% !important;
+  max-width: 1530px !important;
+  min-width: 0 !important;
+  margin: 0 auto !important;
+  padding: clamp(24px, 2.6vw, 42px) clamp(20px, 3vw, 48px) 58px !important;
+  color: var(--studio16-ink) !important;
+}
+
+html body .automation-page.plan-v70-active *,
+html body .automation-page.plan-v70-active *::before,
+html body .automation-page.plan-v70-active *::after {
+  box-sizing: border-box !important;
+}
+
+html body .automation-page.plan-v70-active .wizard-layout,
+html body .automation-page.plan-v70-active .wizard-main {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-shell {
+  position: relative !important;
+  isolation: isolate !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 18px !important;
+  margin: 0 0 20px !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-shell::before,
+html body .automation-page.plan-v70-active .plan-v70-shell::after {
+  display: none !important;
+  content: none !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-shell > * {
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+/* Product header */
+html body .automation-page.plan-v70-active .plan-v70-header {
+  position: relative !important;
+  min-height: 228px !important;
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 28px !important;
+  margin: 0 !important;
+  padding: 34px 38px 78px !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  border-radius: 26px !important;
+  color: #fff !important;
+  background:
+    radial-gradient(circle at 86% 20%, rgba(255, 133, 100, 0.27), transparent 28%),
+    radial-gradient(circle at 66% 120%, rgba(71, 116, 167, 0.32), transparent 44%),
+    linear-gradient(128deg, #061829 0%, #0b233a 58%, #123653 100%) !important;
+  box-shadow:
+    0 24px 50px rgba(4, 20, 36, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-header::before {
+  content: "" !important;
+  position: absolute !important;
+  right: -70px !important;
+  bottom: -130px !important;
+  width: 430px !important;
+  height: 430px !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 50% !important;
+  box-shadow:
+    0 0 0 45px rgba(255, 255, 255, 0.025),
+    0 0 0 100px rgba(255, 255, 255, 0.018) !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-title-group {
+  position: relative !important;
+  z-index: 1 !important;
+  min-width: 0 !important;
+  max-width: 780px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-kicker {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  margin: 0 0 14px !important;
+  color: #ffb7a6 !important;
+  font-size: 11px !important;
+  line-height: 1 !important;
+  font-weight: 850 !important;
+  letter-spacing: 0.12em !important;
+  text-transform: uppercase !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-header h1 {
+  max-width: 760px !important;
+  margin: 0 !important;
+  color: #fff !important;
+  font-size: clamp(38px, 4.2vw, 62px) !important;
+  line-height: 0.98 !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.055em !important;
+  text-wrap: balance !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-header p {
+  max-width: 660px !important;
+  margin: 15px 0 0 !important;
+  color: rgba(226, 234, 243, 0.8) !important;
+  font-size: 14px !important;
+  line-height: 1.58 !important;
+  font-weight: 500 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-header-meta {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 9px !important;
+  margin-top: 22px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-header-meta > span {
+  min-height: 31px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 0 11px !important;
+  border: 1px solid rgba(255, 255, 255, 0.13) !important;
+  border-radius: 999px !important;
+  color: rgba(244, 248, 252, 0.9) !important;
+  background: rgba(255, 255, 255, 0.07) !important;
+  font-size: 11.5px !important;
+  font-weight: 720 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-live-dot {
+  width: 7px !important;
+  height: 7px !important;
+  border-radius: 50% !important;
+  background: #5bd48e !important;
+  box-shadow: 0 0 0 4px rgba(91, 212, 142, 0.13) !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v95-header-actions {
+  position: relative !important;
+  z-index: 1 !important;
+  flex: 0 0 auto !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  margin: 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v95-header-help {
+  width: auto !important;
+  min-width: 0 !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  display: inline-flex !important;
+  place-items: unset !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  padding: 0 15px !important;
+  border: 1px solid rgba(255, 255, 255, 0.17) !important;
+  border-radius: 11px !important;
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.09) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  font-size: 12px !important;
+  font-weight: 760 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v95-header-help:hover {
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  background: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* New command center */
+html body .automation-page.plan-v70-active .plan-v14316-command-center {
+  z-index: 3 !important;
+  min-width: 0 !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.25fr) minmax(400px, 0.75fr) !important;
+  gap: 22px !important;
+  margin: -66px 22px 0 !important;
+  padding: 22px !important;
+  border: 1px solid var(--studio16-line) !important;
+  border-radius: 20px !important;
+  background: rgba(255, 255, 255, 0.97) !important;
+  box-shadow:
+    0 22px 45px rgba(9, 25, 43, 0.14),
+    0 2px 7px rgba(9, 25, 43, 0.05) !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-progress {
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  gap: 18px !important;
+  padding: 2px 3px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-progress-copy > div:first-child {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  margin-bottom: 8px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-progress-copy span {
+  color: var(--studio16-muted) !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-progress-copy strong {
+  color: var(--studio16-ink) !important;
+  font-size: 13px !important;
+  font-weight: 850 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-progress-track {
+  width: 100% !important;
+  height: 6px !important;
+  overflow: hidden !important;
+  border-radius: 999px !important;
+  background: #edf0f5 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-progress-track > span {
+  display: block !important;
+  height: 100% !important;
+  border-radius: inherit !important;
+  background: linear-gradient(90deg, var(--studio16-coral), #ff987c) !important;
+  box-shadow: 0 0 14px rgba(240, 100, 69, 0.26) !important;
+  transition: width 220ms ease !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-steps {
+  min-width: 0 !important;
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-steps a {
+  min-width: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 9px 10px !important;
+  border: 1px solid transparent !important;
+  border-radius: 10px !important;
+  color: #7a8496 !important;
+  background: transparent !important;
+  font-size: 11px !important;
+  line-height: 1.22 !important;
+  font-weight: 720 !important;
+  text-decoration: none !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-steps a:hover,
+html body .automation-page.plan-v70-active .plan-v14316-steps a.active {
+  border-color: #e5e8ef !important;
+  color: var(--studio16-ink) !important;
+  background: #f7f8fb !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-steps a.complete {
+  color: #26784c !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-steps a > span {
+  flex: 0 0 auto !important;
+  width: 25px !important;
+  height: 25px !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 1px solid #dfe4eb !important;
+  border-radius: 8px !important;
+  color: #657085 !important;
+  background: #fff !important;
+  font-size: 10px !important;
+  font-weight: 850 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-steps a.complete > span {
+  border-color: #cfe9da !important;
+  color: #26784c !important;
+  background: #eff9f3 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-summary-grid {
+  min-width: 0 !important;
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 9px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-summary-grid article {
+  min-width: 0 !important;
+  min-height: 69px !important;
+  display: grid !important;
+  grid-template-columns: 34px minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 10px !important;
+  border: 1px solid #e8ebf1 !important;
+  border-radius: 12px !important;
+  background: #fafbfc !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-summary-icon {
+  width: 34px !important;
+  height: 34px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 10px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-summary-icon.coral {
+  color: #d7593d !important;
+  background: #fff0eb !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-summary-icon.violet {
+  color: #6951cf !important;
+  background: #f0edff !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-summary-icon.blue {
+  color: #316fc9 !important;
+  background: #ebf3ff !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-summary-icon.green {
+  color: #287b4d !important;
+  background: #ebf8f0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-summary-grid article > div {
+  min-width: 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-summary-grid small,
+html body .automation-page.plan-v70-active .plan-v14316-summary-grid strong {
+  display: block !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-summary-grid small {
+  margin-bottom: 3px !important;
+  color: #8490a2 !important;
+  font-size: 9.5px !important;
+  font-weight: 780 !important;
+  letter-spacing: 0.055em !important;
+  text-transform: uppercase !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14316-summary-grid strong {
+  color: var(--studio16-ink) !important;
+  font-size: 12px !important;
+  line-height: 1.25 !important;
+  font-weight: 800 !important;
+}
+
+/* Shared section system */
+html body .automation-page.plan-v70-active #plan-v14316-setup,
+html body .automation-page.plan-v70-active #plan-v14316-formats,
+html body .automation-page.plan-v70-active #plan-v70-planned-posts,
+html body .automation-page.plan-v70-active .plan-v83-continuation-card,
+html body .automation-page.plan-v70-active #plan-v14316-activate {
+  scroll-margin-top: 18px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v89-settings-section,
+html body .automation-page.plan-v70-active .plan-v70-formats-card,
+html body .automation-page.plan-v70-active .plan-v70-planned-card,
+html body .automation-page.plan-v70-active .plan-v83-continuation-card,
+html body .automation-page.plan-v70-active .plan-v70-activate-card {
+  min-width: 0 !important;
+  border: 1px solid var(--studio16-line) !important;
+  border-radius: 20px !important;
+  background: var(--studio16-panel) !important;
+  box-shadow: var(--studio16-shadow) !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v89-settings-section,
+html body .automation-page.plan-v70-active .plan-v70-formats-card,
+html body .automation-page.plan-v70-active .plan-v70-planned-card {
+  gap: 22px !important;
+  margin: 0 !important;
+  padding: clamp(22px, 2.4vw, 32px) !important;
+  overflow: visible !important;
+}
+
+/* Guide and plan settings */
+html body .automation-page.plan-v70-active .plan-v89-guide-banner {
+  width: 100% !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  border: 1px solid #dfe5ee !important;
+  border-radius: 15px !important;
+  background:
+    linear-gradient(115deg, #f8faff 0%, #faf8ff 56%, #fff8f5 100%) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v89-guide-banner.expanded {
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 19px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v89-guide-grid {
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v89-guide-grid article,
+html body .automation-page.plan-v70-active .plan-v89-guide-grid article:first-child,
+html body .automation-page.plan-v70-active .plan-v89-guide-grid article:last-child {
+  min-width: 0 !important;
+  min-height: 84px !important;
+  display: grid !important;
+  grid-template-columns: 42px minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 0 20px !important;
+  border: 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v89-guide-grid article:first-child {
+  padding-left: 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v89-guide-grid article:last-child {
+  padding-right: 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v89-guide-grid article + article {
+  border-left: 1px solid #e0e5ed !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v89-guide-icon {
+  width: 42px !important;
+  height: 42px !important;
+  display: grid !important;
+  place-items: center !important;
+  color: var(--studio16-coral) !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  background: #fff !important;
+  box-shadow: var(--studio16-shadow-soft) !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v89-guide-icon svg {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v89-guide-grid h2 {
+  margin: 0 0 5px !important;
+  color: var(--studio16-ink) !important;
+  font-size: 13px !important;
+  line-height: 1.2 !important;
+  font-weight: 820 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v89-guide-grid p {
+  max-width: 300px !important;
+  margin: 0 !important;
+  color: var(--studio16-muted) !important;
+  font-size: 10.5px !important;
+  line-height: 1.45 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v89-guide-collapse {
+  display: grid !important;
+  right: 10px !important;
+  bottom: 10px !important;
+  width: 29px !important;
+  height: 29px !important;
+  place-items: center !important;
+  border: 1px solid #e1e6ed !important;
+  border-radius: 9px !important;
+  color: #7b8798 !important;
+  background: #fff !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v89-guide-banner.collapsed {
+  min-height: 48px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v89-guide-compact {
+  min-height: 48px !important;
+  padding: 0 15px !important;
+  color: var(--studio16-ink) !important;
+  background: transparent !important;
+  font-size: 12px !important;
+  font-weight: 760 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v89-settings-heading {
+  display: flex !important;
+  align-items: flex-end !important;
+  justify-content: space-between !important;
+  gap: 18px !important;
+  margin: 0 !important;
+  padding: 0 2px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v89-settings-heading h2,
+html body .automation-page.plan-v70-active .plan-v70-formats-head h2,
+html body .automation-page.plan-v70-active .plan-v70-planned-head h2,
+html body .automation-page.plan-v70-active .plan-v83-continuation-card h2,
+html body .automation-page.plan-v70-active .plan-v70-activate-card h2 {
+  margin: 0 !important;
+  color: var(--studio16-ink) !important;
+  font-size: clamp(20px, 2vw, 27px) !important;
+  line-height: 1.12 !important;
+  font-weight: 860 !important;
+  letter-spacing: -0.035em !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v89-settings-heading p,
+html body .automation-page.plan-v70-active .plan-v70-formats-head p {
+  margin: 6px 0 0 !important;
+  color: var(--studio16-muted) !important;
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v89-settings-heading button {
+  min-height: 36px !important;
+  padding: 0 11px !important;
+  border: 1px solid var(--studio16-line) !important;
+  border-radius: 10px !important;
+  color: #526074 !important;
+  background: #f8f9fb !important;
+  font-size: 11px !important;
+  font-weight: 760 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v90-settings-grid {
+  width: 100% !important;
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  align-items: stretch !important;
+  gap: 13px !important;
+  margin: 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 132px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+  padding: 16px !important;
+  border: 1px solid #e5e8ee !important;
+  border-radius: 15px !important;
+  background: #fafbfc !important;
+  box-shadow: none !important;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile:hover {
+  border-color: #d5dbe4 !important;
+  background: #fff !important;
+  transform: translateY(-1px) !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v90-setting-head {
+  width: 100% !important;
+  min-width: 0 !important;
+  display: grid !important;
+  grid-template-columns: 38px minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 11px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v90-setting-icon {
+  width: 38px !important;
+  height: 38px !important;
+  display: grid !important;
+  place-items: center !important;
+  color: var(--studio16-coral) !important;
+  border-radius: 11px !important;
+  background: #ffede7 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v90-setting-icon svg {
+  width: 19px !important;
+  height: 19px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v90-setting-copy {
+  min-width: 0 !important;
+  padding: 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v90-setting-title {
+  display: block !important;
+  margin: 0 0 3px !important;
+  color: var(--studio16-ink) !important;
+  font-size: 12.5px !important;
+  line-height: 1.2 !important;
+  font-weight: 820 !important;
+  white-space: normal !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v90-setting-copy small {
+  display: block !important;
+  min-height: 0 !important;
+  color: #7d8899 !important;
+  font-size: 10px !important;
+  line-height: 1.35 !important;
+  white-space: normal !important;
+  overflow: visible !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > select,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > .custom-picker-field,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > .platform-multiselect,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > .plan-v73-platform-loading,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > .plan-v73-connect-platform,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .custom-picker-anchor,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .custom-picker-field,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .platform-multiselect {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: auto 0 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v90-settings-grid select,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .custom-picker-button,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .platform-multiselect-button,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v73-platform-loading,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v73-connect-platform {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  min-height: 42px !important;
+  height: 42px !important;
+  margin: 0 !important;
+  padding: 0 12px !important;
+  border: 1px solid var(--studio16-line-strong) !important;
+  border-radius: 10px !important;
+  color: var(--studio16-ink) !important;
+  background: #fff !important;
+  box-shadow: 0 1px 2px rgba(20, 29, 47, 0.025) !important;
+  font-size: 12px !important;
+  font-weight: 650 !important;
+}
+
+/* Content format library */
+html body .automation-page.plan-v70-active .plan-v70-formats-head {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 18px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v74-content-types-note {
+  display: inline-flex !important;
+  margin-top: 8px !important;
+  color: #b44c35 !important;
+  font-size: 10.5px !important;
+  line-height: 1.4 !important;
+  font-weight: 720 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-filter-row {
+  width: 100% !important;
+  min-width: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  margin: 0 !important;
+  padding: 5px !important;
+  overflow-x: auto !important;
+  border: 1px solid #e5e8ee !important;
+  border-radius: 12px !important;
+  background: #f6f7fa !important;
+  scrollbar-width: none !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-filter-row button {
+  flex: 0 0 auto !important;
+  min-height: 34px !important;
+  padding: 0 13px !important;
+  border: 0 !important;
+  border-radius: 9px !important;
+  color: #697487 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-size: 10.5px !important;
+  font-weight: 760 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-filter-row button:hover {
+  color: var(--studio16-ink) !important;
+  background: rgba(255, 255, 255, 0.72) !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-filter-row button.active {
+  color: #fff !important;
+  background: var(--studio16-navy) !important;
+  box-shadow: 0 6px 13px rgba(7, 29, 50, 0.15) !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v72-format-library.grid,
+html body .automation-page.plan-v70-active .plan-v83-draggable-strip {
+  width: 100% !important;
+  min-width: 0 !important;
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  align-items: stretch !important;
+  gap: 13px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  cursor: default !important;
+  touch-action: auto !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v72-format-card.grid {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  min-height: 245px !important;
+  height: auto !important;
+  display: grid !important;
+  grid-template-rows: 132px minmax(88px, 1fr) !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border: 1px solid #e3e7ed !important;
+  border-radius: 15px !important;
+  color: var(--studio16-ink) !important;
+  background: #fff !important;
+  box-shadow: none !important;
+  text-align: left !important;
+  transition:
+    transform 170ms ease,
+    border-color 170ms ease,
+    box-shadow 170ms ease !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v72-format-card.grid:hover {
+  border-color: #cfd6e0 !important;
+  box-shadow: 0 14px 28px rgba(18, 28, 48, 0.1) !important;
+  transform: translateY(-3px) !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v72-format-card.grid:focus-visible {
+  outline: 3px solid rgba(240, 100, 69, 0.2) !important;
+  outline-offset: 2px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v72-format-art {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 132px !important;
+  min-height: 132px !important;
+  display: flex !important;
+  border: 0 !important;
+  border-bottom: 1px solid #e7eaf0 !important;
+  border-radius: 0 !important;
+  overflow: hidden !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v72-format-art img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v72-format-art-icon {
+  width: 48px !important;
+  height: 48px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 14px !important;
+  background: rgba(255, 255, 255, 0.86) !important;
+  box-shadow: var(--studio16-shadow-soft) !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v72-format-card-copy {
+  min-width: 0 !important;
+  display: block !important;
+  padding: 15px 16px 17px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v72-format-card-copy strong {
+  display: block !important;
+  margin: 0 0 7px !important;
+  color: var(--studio16-ink) !important;
+  font-size: 14px !important;
+  line-height: 1.2 !important;
+  font-weight: 840 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v72-format-card-copy small {
+  display: -webkit-box !important;
+  overflow: hidden !important;
+  color: var(--studio16-muted) !important;
+  font-size: 10.5px !important;
+  line-height: 1.45 !important;
+  -webkit-box-orient: vertical !important;
+  -webkit-line-clamp: 3 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v72-format-card-action {
+  position: absolute !important;
+  right: 12px !important;
+  top: 12px !important;
+  width: 30px !important;
+  height: 30px !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 1px solid rgba(255, 255, 255, 0.72) !important;
+  border-radius: 9px !important;
+  color: var(--studio16-navy) !important;
+  background: rgba(255, 255, 255, 0.88) !important;
+  box-shadow: 0 5px 12px rgba(15, 26, 45, 0.11) !important;
+  opacity: 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v72-format-card:hover .plan-v72-format-card-action {
+  opacity: 1 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-more-formats {
+  min-height: 40px !important;
+  margin: 0 auto !important;
+  padding: 0 15px !important;
+  border: 1px solid var(--studio16-line) !important;
+  border-radius: 10px !important;
+  color: #4f5d72 !important;
+  background: #fff !important;
+  box-shadow: var(--studio16-shadow-soft) !important;
+  font-size: 11px !important;
+  font-weight: 780 !important;
+}
+
+/* Planned content */
+html body .automation-page.plan-v70-active .plan-v70-planned-head {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+  margin: 0 0 16px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-head > div:first-child {
+  gap: 10px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-head > div:first-child > span {
+  min-width: 27px !important;
+  height: 27px !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  color: #fff !important;
+  background: var(--studio16-coral) !important;
+  font-size: 10px !important;
+  font-weight: 850 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-add-button {
+  min-height: 40px !important;
+  padding: 0 14px !important;
+  border: 1px solid var(--studio16-navy) !important;
+  border-radius: 10px !important;
+  color: #fff !important;
+  background: var(--studio16-navy) !important;
+  box-shadow: 0 8px 17px rgba(7, 29, 50, 0.16) !important;
+  font-size: 11px !important;
+  font-weight: 780 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-table {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  border: 1px solid #e5e8ee !important;
+  border-radius: 15px !important;
+  background: #fff !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-table-head,
+html body .automation-page.plan-v70-active .plan-v70-planned-row {
+  min-width: 0 !important;
+  display: grid !important;
+  grid-template-columns:
+    48px
+    minmax(120px, 0.85fr)
+    minmax(220px, 1.65fr)
+    minmax(120px, 0.75fr)
+    minmax(110px, 0.7fr)
+    78px
+    38px !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-table-head {
+  min-height: 45px !important;
+  padding: 0 15px !important;
+  color: #858fa0 !important;
+  background: #f7f8fa !important;
+  border-bottom: 1px solid #e5e8ee !important;
+  font-size: 9px !important;
+  font-weight: 820 !important;
+  letter-spacing: 0.07em !important;
+  text-transform: uppercase !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-row {
+  min-height: 82px !important;
+  padding: 13px 15px !important;
+  border: 0 !important;
+  border-bottom: 1px solid #ebedf2 !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-row:last-child {
+  border-bottom: 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-row:hover {
+  background: #fbfcfd !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v86-planned-visual {
+  width: 40px !important;
+  height: 40px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 11px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-date strong,
+html body .automation-page.plan-v70-active .plan-v70-planned-post strong,
+html body .automation-page.plan-v70-active .plan-v70-planned-format strong {
+  color: var(--studio16-ink) !important;
+  font-size: 11.5px !important;
+  line-height: 1.3 !important;
+  font-weight: 790 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-date span,
+html body .automation-page.plan-v70-active .plan-v70-planned-post span,
+html body .automation-page.plan-v70-active .plan-v70-planned-format span {
+  color: #7d8899 !important;
+  font-size: 9.5px !important;
+  line-height: 1.35 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-status-pill {
+  min-height: 27px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 9px !important;
+  border-radius: 999px !important;
+  color: #316b9e !important;
+  background: #eaf4ff !important;
+  font-size: 9.5px !important;
+  font-weight: 800 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-row-menu {
+  width: 34px !important;
+  height: 34px !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 1px solid var(--studio16-line) !important;
+  border-radius: 9px !important;
+  color: #6e798b !important;
+  background: #fff !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-row-editor {
+  grid-column: 2 / -1 !important;
+  padding: 14px !important;
+  border: 1px solid #e3e7ed !important;
+  border-radius: 12px !important;
+  background: #f8f9fb !important;
+}
+
+/* Continuation and activation */
+html body .automation-page.plan-v70-active .plan-v107-bottom-grid {
+  width: 100% !important;
+  min-width: 0 !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr) !important;
+  align-items: stretch !important;
+  gap: 16px !important;
+  margin: 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v107-bottom-grid.single {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v83-continuation-card,
+html body .automation-page.plan-v70-active .plan-v70-activate-card {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 218px !important;
+  margin: 0 !important;
+  padding: 24px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v83-continuation-card {
+  background: #fff !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v83-continuation-head {
+  display: grid !important;
+  grid-template-columns: 42px minmax(0, 1fr) auto !important;
+  gap: 12px !important;
+  align-items: start !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v83-variation-row,
+html body .automation-page.plan-v70-active .plan-v83-next-cycle {
+  border-color: #e4e8ee !important;
+  border-radius: 12px !important;
+  background: #f8f9fb !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-activate-card {
+  position: relative !important;
+  display: grid !important;
+  grid-template-columns: 48px minmax(0, 1fr) !important;
+  grid-template-rows: auto auto 1fr !important;
+  align-content: start !important;
+  gap: 4px 14px !important;
+  overflow: hidden !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: #fff !important;
+  background:
+    radial-gradient(circle at 94% 18%, rgba(255, 126, 94, 0.27), transparent 31%),
+    linear-gradient(132deg, #071b30, #11314d) !important;
+  box-shadow: 0 20px 40px rgba(7, 27, 48, 0.2) !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-activate-card::after {
+  content: "" !important;
+  position: absolute !important;
+  right: -60px !important;
+  bottom: -90px !important;
+  width: 220px !important;
+  height: 220px !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 50% !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-activate-visual {
+  position: relative !important;
+  z-index: 1 !important;
+  width: 48px !important;
+  height: 48px !important;
+  display: grid !important;
+  place-items: center !important;
+  grid-row: 1 / span 2 !important;
+  border-radius: 14px !important;
+  color: #fff !important;
+  background: var(--studio16-coral) !important;
+  box-shadow: 0 10px 22px rgba(240, 100, 69, 0.28) !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-activate-copy,
+html body .automation-page.plan-v70-active .plan-v70-activate-actions,
+html body .automation-page.plan-v70-active .plan-v74-approval-publishing-note,
+html body .automation-page.plan-v70-active .plan-v70-activate-message {
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-activate-card h2 {
+  color: #fff !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-activate-card p {
+  margin: 5px 0 0 !important;
+  color: rgba(224, 233, 242, 0.76) !important;
+  font-size: 11px !important;
+  line-height: 1.45 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-activate-actions {
+  grid-column: 1 / -1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 7px !important;
+  margin-top: 16px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-activate-actions button {
+  width: 100% !important;
+  min-height: 48px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  border: 0 !important;
+  border-radius: 11px !important;
+  color: var(--studio16-navy) !important;
+  background: #fff !important;
+  box-shadow: 0 9px 20px rgba(0, 0, 0, 0.15) !important;
+  font-size: 12px !important;
+  font-weight: 840 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-activate-actions button:hover:not(:disabled) {
+  color: #fff !important;
+  background: var(--studio16-coral) !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-activate-actions button:disabled {
+  color: #8290a0 !important;
+  background: #dfe4e9 !important;
+  box-shadow: none !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-activate-actions > span {
+  justify-content: center !important;
+  color: rgba(224, 233, 242, 0.7) !important;
+  font-size: 9.5px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v74-approval-publishing-note {
+  grid-column: 1 / -1 !important;
+  margin: 11px 0 0 !important;
+  padding-top: 11px !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: rgba(224, 233, 242, 0.72) !important;
+}
+
+/* Focus and keyboard treatment */
+html body .automation-page.plan-v70-active button:focus-visible,
+html body .automation-page.plan-v70-active a:focus-visible,
+html body .automation-page.plan-v70-active select:focus-visible,
+html body .automation-page.plan-v70-active input:focus-visible {
+  outline: 3px solid rgba(240, 100, 69, 0.22) !important;
+  outline-offset: 2px !important;
+}
+
+@media (max-width: 1180px) {
+  html body .automation-page.plan-v70-active .plan-v14316-command-center {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v14316-summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v72-format-library.grid,
+  html body .automation-page.plan-v70-active .plan-v83-draggable-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-planned-table-head,
+  html body .automation-page.plan-v70-active .plan-v70-planned-row {
+    grid-template-columns:
+      44px
+      minmax(108px, 0.8fr)
+      minmax(190px, 1.5fr)
+      minmax(105px, 0.75fr)
+      minmax(95px, 0.65fr)
+      70px
+      36px !important;
+    gap: 9px !important;
+  }
+}
+
+@media (max-width: 940px) {
+  html body .automation-page.plan-v70-active {
+    padding: 22px 18px 48px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-header {
+    min-height: 215px !important;
+    padding: 30px 30px 72px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-header h1 {
+    font-size: clamp(36px, 6vw, 50px) !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v14316-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v14316-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article,
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:first-child,
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:last-child {
+    min-height: 64px !important;
+    padding: 0 !important;
+    border: 0 !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-planned-table-head {
+    display: none !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-planned-table {
+    display: grid !important;
+    gap: 10px !important;
+    padding: 10px !important;
+    border: 0 !important;
+    background: #f5f7fa !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-planned-row {
+    min-height: 0 !important;
+    display: grid !important;
+    grid-template-columns: 44px minmax(110px, 0.8fr) minmax(0, 1.4fr) 36px !important;
+    gap: 10px !important;
+    padding: 13px !important;
+    border: 1px solid #e3e7ed !important;
+    border-radius: 12px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-planned-format,
+  html body .automation-page.plan-v70-active .plan-v70-planned-channel,
+  html body .automation-page.plan-v70-active .plan-v70-status-pill {
+    grid-row: 2 !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-planned-format {
+    grid-column: 2 !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-planned-channel {
+    grid-column: 3 !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-status-pill {
+    grid-column: 4 !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-row-menu {
+    grid-column: 4 !important;
+    grid-row: 1 !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-row-editor {
+    grid-column: 1 / -1 !important;
+  }
+}
+
+@media (max-width: 760px) {
+  html body .automation-page.plan-v70-active {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 14px 12px 36px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-shell {
+    gap: 13px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-header {
+    min-height: 0 !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 19px !important;
+    padding: 24px 20px 52px !important;
+    border-radius: 20px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-header h1 {
+    width: 100% !important;
+    max-width: none !important;
+    font-size: clamp(32px, 10vw, 43px) !important;
+    line-height: 1 !important;
+    overflow-wrap: normal !important;
+    word-break: normal !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-header p {
+    width: 100% !important;
+    max-width: none !important;
+    font-size: 13px !important;
+    line-height: 1.5 !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v95-header-actions {
+    justify-self: start !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v14316-command-center {
+    width: calc(100% - 16px) !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    gap: 17px !important;
+    margin: -38px 8px 0 !important;
+    padding: 16px !important;
+    border-radius: 16px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v89-settings-section,
+  html body .automation-page.plan-v70-active .plan-v70-formats-card,
+  html body .automation-page.plan-v70-active .plan-v70-planned-card {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    gap: 17px !important;
+    padding: 18px 16px !important;
+    border-radius: 17px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v89-settings-heading {
+    align-items: flex-start !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile {
+    min-height: 128px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v72-format-library.grid,
+  html body .automation-page.plan-v70-active .plan-v83-draggable-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v72-format-card.grid {
+    min-height: 225px !important;
+    grid-template-rows: 118px minmax(88px, 1fr) !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v72-format-art {
+    height: 118px !important;
+    min-height: 118px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v107-bottom-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v83-continuation-card,
+  html body .automation-page.plan-v70-active .plan-v70-activate-card {
+    min-height: 0 !important;
+    padding: 19px !important;
+    border-radius: 17px !important;
+  }
+
+  html body .automation-page.plan-v70-active select,
+  html body .automation-page.plan-v70-active input,
+  html body .automation-page.plan-v70-active textarea {
+    font-size: 16px !important;
+  }
+}
+
+@media (max-width: 520px) {
+  html body .automation-page.plan-v70-active .plan-v14316-header-meta {
+    align-items: stretch !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v14316-header-meta > span {
+    width: 100% !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v95-header-help {
+    width: 100% !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v14316-steps,
+  html body .automation-page.plan-v70-active .plan-v14316-summary-grid,
+  html body .automation-page.plan-v70-active .plan-v72-format-library.grid,
+  html body .automation-page.plan-v70-active .plan-v83-draggable-strip {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v14316-steps a {
+    min-height: 43px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v14316-summary-grid article {
+    min-height: 62px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v89-settings-heading {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v89-settings-heading button {
+    justify-self: start !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-formats-head,
+  html body .automation-page.plan-v70-active .plan-v70-planned-head {
+    align-items: flex-start !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-planned-head {
+    flex-direction: column !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-add-button {
+    width: 100% !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-planned-row {
+    display: grid !important;
+    grid-template-columns: 42px minmax(0, 1fr) 34px !important;
+    gap: 9px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v86-planned-visual {
+    grid-column: 1 !important;
+    grid-row: 1 !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-planned-date {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-planned-post {
+    grid-column: 1 / -1 !important;
+    grid-row: 2 !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-planned-format,
+  html body .automation-page.plan-v70-active .plan-v70-planned-channel,
+  html body .automation-page.plan-v70-active .plan-v70-status-pill {
+    grid-column: 1 / -1 !important;
+    grid-row: auto !important;
+    justify-self: stretch !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-status-pill {
+    min-height: 31px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-row-menu {
+    grid-column: 3 !important;
+    grid-row: 1 !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v83-continuation-head {
+    grid-template-columns: 38px minmax(0, 1fr) !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-inline-toggle {
+    grid-column: 1 / -1 !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-activate-card {
+    grid-template-columns: 42px minmax(0, 1fr) !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-activate-visual {
+    width: 42px !important;
+    height: 42px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html body .automation-page.plan-v70-active *,
+  html body .automation-page.plan-v70-active *::before,
+  html body .automation-page.plan-v70-active *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
