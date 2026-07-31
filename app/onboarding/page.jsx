@@ -95,8 +95,6 @@ const analysisProgressStages = [
   },
 ];
 
-const ANALYSIS_DISPLAY_DURATION_MS = 210000; // 3.5 minutes
-
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -108,21 +106,6 @@ function getCurrentAnalysisStage(progress) {
       .find((stage) => progress >= stage.progress) || analysisProgressStages[0];
 
   return currentStage;
-}
-
-function getSmoothAnalysisProgress(startedAt) {
-  if (!startedAt) {
-    return 1;
-  }
-
-  const elapsedMs = Date.now() - startedAt;
-  const ratio = elapsedMs / ANALYSIS_DISPLAY_DURATION_MS;
-
-  if (ratio >= 1) {
-    return 99;
-  }
-
-  return Math.max(1, Math.min(99, ratio * 99));
 }
 
 function getBrandStorageKey(userId) {
@@ -163,7 +146,7 @@ async function pollAnalysisStatus({
   accessToken,
   jobId,
   runRequest,
-  displayStartedAt,
+  onStatus,
 }) {
   let runFinished = false;
   let runResult = null;
@@ -216,14 +199,11 @@ async function pollAnalysisStatus({
 
     const job = statusResult.job;
 
+    if (job) {
+      onStatus?.(job);
+    }
+
     if (job?.status === "completed") {
-      const remainingMs =
-        ANALYSIS_DISPLAY_DURATION_MS - (Date.now() - displayStartedAt);
-
-      if (remainingMs > 0) {
-        await sleep(remainingMs);
-      }
-
       return job;
     }
 
@@ -402,23 +382,9 @@ export default function OnboardingPage() {
       return;
     }
 
-    const displayStartedAt = Date.now();
-
     setLoading(true);
     setAnalysisProgress(1);
     setMessage("");
-
-    const progressInterval = setInterval(() => {
-      setAnalysisProgress((currentProgress) => {
-        const smoothProgress = getSmoothAnalysisProgress(displayStartedAt);
-
-        if (currentProgress >= 100) {
-          return currentProgress;
-        }
-
-        return Math.max(currentProgress, smoothProgress);
-      });
-    }, 500);
 
     try {
       const alreadyHasBrand = await continueWithExistingBrand(user.id);
@@ -502,7 +468,7 @@ export default function OnboardingPage() {
         throw new Error(t("onboarding.errorAnalyzeBrand"));
       }
 
-      setAnalysisProgress(getSmoothAnalysisProgress(displayStartedAt));
+      setAnalysisProgress(5);
 
       const runRequest = fetch("/api/analyze-brand/run", {
         method: "POST",
@@ -528,7 +494,13 @@ export default function OnboardingPage() {
         accessToken: analysisAccessToken,
         jobId,
         runRequest,
-        displayStartedAt,
+        onStatus: (job) => {
+          const nextProgress = Number(job?.progress || 0);
+
+          if (Number.isFinite(nextProgress)) {
+            setAnalysisProgress(Math.max(1, Math.min(100, nextProgress)));
+          }
+        },
       });
 
       const result = completedJob.result || {};
@@ -545,18 +517,15 @@ export default function OnboardingPage() {
       setAnalysisProgress(100);
       setMessage(t("onboarding.ready"));
 
-      await sleep(500);
-      window.location.href = "/social-channels";
+      await sleep(350);
+      window.location.href = `/onboarding/ready?brandId=${encodeURIComponent(createdBrand.id)}`;
     } catch (error) {
       setMessage(error.message || t("onboarding.errorGeneric"));
       setLoading(false);
-    } finally {
-      clearInterval(progressInterval);
     }
   }
 
   const currentAnalysisStage = getCurrentAnalysisStage(analysisProgress);
-  const CurrentAnalysisIcon = currentAnalysisStage.icon || Sparkles;
   const currentAnalysisStageIndex = analysisProgressStages.findIndex(
     (stage) => stage.titleKey === currentAnalysisStage.titleKey
   );
@@ -644,15 +613,6 @@ export default function OnboardingPage() {
               {loggingOut ? t("onboarding.loggingOut") : t("onboarding.logout")}
             </button>
           </header>
-
-          <div className="onboarding-refresh-progress" aria-label={t("onboarding.step")}>
-            <div className="is-active"><span>1</span></div>
-            <i />
-            <div><span>2</span></div>
-            <i />
-            <div><span>3</span></div>
-            <p>{t("onboarding.step")}</p>
-          </div>
 
           {!loading ? (
             <div className="onboarding-refresh-form-view">
@@ -781,14 +741,6 @@ export default function OnboardingPage() {
 
               <div className="onboarding-refresh-analysis-track">
                 <div style={{ width: `${Math.min(analysisProgress, 98.8)}%` }} />
-              </div>
-
-              <div className="onboarding-refresh-current-stage">
-                <span><CurrentAnalysisIcon size={24} aria-hidden="true" /></span>
-                <div>
-                  <strong>{t(currentAnalysisStage.titleKey)}</strong>
-                  <p>{t(currentAnalysisStage.descriptionKey)}</p>
-                </div>
               </div>
 
               <div className="onboarding-refresh-stage-list">

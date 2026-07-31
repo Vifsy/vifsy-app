@@ -206,11 +206,20 @@ export default function LoginPage() {
     setMessageType("info");
 
     try {
+      const emailRedirectTo =
+        typeof window !== "undefined"
+          ? `${window.location.origin}/login?lang=${encodeURIComponent(locale || "en")}`
+          : undefined;
+
       const { error } = await withTimeout(
         supabase.auth.signInWithOtp({
           email: normalizedEmail,
           options: {
             shouldCreateUser: true,
+            emailRedirectTo,
+            data: {
+              app_locale: locale || "en",
+            },
           },
         })
       );
@@ -474,17 +483,6 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="login-refresh-progress" aria-label={t("login.progressAriaLabel")}>
-            <div className={`login-refresh-progress-step ${!codeSent ? "is-active" : "is-complete"}`}>
-              <span>{codeSent ? <CheckCircle2 size={17} /> : "1"}</span>
-            </div>
-            <i />
-            <div className={`login-refresh-progress-step ${codeSent ? "is-active" : ""}`}>
-              <span>2</span>
-            </div>
-            <p>{codeSent ? t("login.stepTwoOfTwo") : t("login.stepOneOfTwo")}</p>
-          </div>
-
           <div className="login-refresh-language desktop-tablet">
             <label htmlFor="login-language-select">
               <Globe2 size={18} aria-hidden="true" />
@@ -521,7 +519,9 @@ export default function LoginPage() {
             <p className="login-refresh-eyebrow">
               {codeSent ? t("login.confirmCodeEyebrow") : t("login.eyebrow")}
             </p>
-            <h2 id="login-title">{t("login.title")}</h2>
+            <h2 id="login-title">
+              {codeSent ? t("login.codeTitle") : t("login.title")}
+            </h2>
 
             {!codeSent ? (
               <p>{t("login.description")}</p>
