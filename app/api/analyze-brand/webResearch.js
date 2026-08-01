@@ -1,6 +1,8 @@
 import OpenAI from "openai";
 
 const DEFAULT_WEB_RESEARCH_MODEL = "gpt-5.5";
+const DEFAULT_WEB_RESEARCH_OUTPUT_TOKENS = 6000;
+const RETRY_WEB_RESEARCH_OUTPUT_TOKENS = 10000;
 
 function getResearchModel() {
   return (
@@ -43,12 +45,20 @@ function collectResearchSources(response) {
 }
 
 export function isWebResearchTerminalFailure(status) {
-  return ["failed", "cancelled", "incomplete", "expired"].includes(
+  return ["failed", "cancelled", "expired"].includes(
     String(status || "").toLowerCase()
   );
 }
 
-export async function submitBlockedWebsiteResearch({ job }) {
+export function isWebResearchIncomplete(status) {
+  return String(status || "").toLowerCase() === "incomplete";
+}
+
+export async function submitBlockedWebsiteResearch({
+  job,
+  compactRetry = false,
+  previousEvidence = "",
+} = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY is not configured.");
 
@@ -58,6 +68,12 @@ export async function submitBlockedWebsiteResearch({ job }) {
 
   const openai = new OpenAI({ apiKey });
   const model = getResearchModel();
+  const compactRetryInstruction = compactRetry
+    ? "This is a bounded recovery request because an earlier response ended incomplete. Finish the dossier in a compact form. Prioritize factual coverage over explanation, keep every section concise and do not repeat evidence unnecessarily."
+    : "";
+  const previousEvidenceExcerpt = compactRetry
+    ? String(previousEvidence || "").trim().slice(0, 5000)
+    : "";
   const response = await openai.responses.create(
     {
       model,
@@ -71,7 +87,7 @@ export async function submitBlockedWebsiteResearch({ job }) {
         },
       ],
       tool_choice: "required",
-      instructions: `You are Spreelo's careful business-research agent. The customer's website blocks automated page requests, so use web search to research only the official domain ${allowedDomain}. Build a factual evidence dossier for a later brand-analysis model. Do not write social media posts and do not invent facts. Prefer official home, about, product, service, category, contact, delivery, store, booking and campaign pages. Distinguish facts found on official pages from cautious inferences. Include exact official URLs next to important evidence.`,
+      instructions: `You are Spreelo's careful business-research agent. The customer's website blocks automated page requests, so use web search to research only the official domain ${allowedDomain}. Build a factual evidence dossier for a later brand-analysis model. Do not write social media posts and do not invent facts. Prefer official home, about, product, service, category, contact, delivery, store, booking and campaign pages. Distinguish facts found on official pages from cautious inferences. Include exact official URLs next to important evidence. ${compactRetryInstruction}`,
       input: `Research this business using public pages from the official domain only.
 
 Business name: ${job?.business_name || "Not provided"}
@@ -80,6 +96,7 @@ User description: ${job?.brand_description || "Not provided"}
 Selected market: ${job?.content_market || "Not provided"}
 Country code: ${job?.country_code || "Not provided"}
 Preferred customer-facing language: ${job?.content_language || "Infer from official evidence"}
+${previousEvidenceExcerpt ? `\nPartial evidence from the interrupted request (verify it and fill only the missing essentials):\n${previousEvidenceExcerpt}` : ""}
 
 Return a compact but thorough evidence dossier containing:
 1. What the business is and what it offers.
@@ -91,7 +108,9 @@ Return a compact but thorough evidence dossier containing:
 7. A source list of the official URLs used.
 
 Do not create the final campaign calendar. This dossier will be analyzed by Spreelo's existing brand strategy step.`,
-      max_output_tokens: 6000,
+      max_output_tokens: compactRetry
+        ? RETRY_WEB_RESEARCH_OUTPUT_TOKENS
+        : DEFAULT_WEB_RESEARCH_OUTPUT_TOKENS,
     },
     {
       timeout: 30_000,
@@ -106,6 +125,8 @@ Do not create the final campaign calendar. This dossier will be analyzed by Spre
     model,
     responseId: response?.id,
     responseStatus: response?.status,
+    incompleteReason: response?.incomplete_details?.reason || null,
+    compactRetry,
   });
 
   return {
@@ -113,6 +134,8 @@ Do not create the final campaign calendar. This dossier will be analyzed by Spre
     status: String(response?.status || ""),
     evidence: String(response?.output_text || "").trim(),
     sources: collectResearchSources(response),
+    incompleteDetails: response?.incomplete_details || null,
+    error: response?.error || null,
   };
 }
 
@@ -130,6 +153,6 @@ export async function retrieveBlockedWebsiteResearch(responseId) {
     evidence: String(response?.output_text || "").trim(),
     sources: collectResearchSources(response),
     error: response?.error || null,
+    incompleteDetails: response?.incomplete_details || null,
   };
 }
-

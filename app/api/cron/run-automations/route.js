@@ -21350,9 +21350,13 @@ async function discoverProductCandidatesFromStoreSearch({
               });
             }
             renderedSearchPageCount += 1;
-            html = await renderedSearchBrowserSession.renderHtml({
+            const renderedSearchResult = await renderedSearchBrowserSession.renderHtml({
               pageUrl: searchUrl,
             });
+            if (!renderedSearchResult?.html) {
+              throw new Error("Rendered store-search page did not return HTML.");
+            }
+            html = renderedSearchResult.html;
             searchCandidates = extractProductLinksFromDiscoveryPage({
               html,
               pageUrl: searchUrl,
@@ -22369,6 +22373,274 @@ function findMatchingPrimaryWebResearchCandidate(
   );
 }
 
+function getCachedPrimaryWebResearchProduct(
+  candidate,
+  cachedWebsiteItems,
+  websiteUrl
+) {
+  const matched = findMatchingPrimaryWebResearchCandidate(
+    candidate,
+    cachedWebsiteItems,
+    websiteUrl
+  );
+  const matchedUrl =
+    canonicalizeWebsiteProductUrl(
+      matched?.url || matched?.item_url || matched?.product_url,
+      websiteUrl
+    ) || "";
+  const matchedImage = String(
+    matched?.image_url || matched?.item_image_url || ""
+  ).trim();
+
+  if (
+    !matched ||
+    !matchedUrl ||
+    !isHttpUrl(matchedUrl) ||
+    !isSameOrSubdomainUrl(matchedUrl, websiteUrl) ||
+    !matchesConfiguredWebsiteMarket(matchedUrl, websiteUrl) ||
+    isLikelyNonProductUrl(matchedUrl, websiteUrl) ||
+    isLikelyBadDiscoveryPageUrl(matchedUrl, websiteUrl) ||
+    !isHttpUrl(matchedImage) ||
+    isBadProductImageUrl(matchedImage)
+  ) {
+    return null;
+  }
+
+  return {
+    ...matched,
+    url: matchedUrl,
+    image_url: matchedImage,
+  };
+}
+
+function buildPrimaryWebResearchTechnicalRecoveryPrompt(candidates) {
+  const titles = (candidates || [])
+    .map((candidate) => String(candidate?.title || "").trim())
+    .filter(Boolean)
+    .slice(0, CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET);
+
+  return `Product search queries: ${titles.join(" | ")}`;
+}
+
+async function discoverPrimaryWebResearchTechnicalRecoveryCandidates({
+  selectedCandidates,
+  websiteUrl,
+  deadlineMs,
+}) {
+  const campaignPrompt =
+    buildPrimaryWebResearchTechnicalRecoveryPrompt(selectedCandidates);
+  const selectedTitles = (selectedCandidates || [])
+    .map((candidate) => String(candidate?.title || "").trim())
+    .filter(Boolean);
+  const inspectionUrls = Array.from(
+    new Set([websiteUrl, ...getWebsiteSearchBaseUrls(websiteUrl)].filter(Boolean))
+  );
+  let detectedPlatform = "generic";
+  let formSearchUrls = [];
+
+  for (const inspectionUrl of inspectionUrls) {
+    if (Number.isFinite(deadlineMs) && deadlineMs - Date.now() < 25_000) break;
+    try {
+      const html = await fetchHtml(inspectionUrl);
+      const inspectedPlatform = detectCommercePlatform({
+        html,
+        url: inspectionUrl,
+      });
+      if (detectedPlatform === "generic" || inspectedPlatform !== "generic") {
+        detectedPlatform = inspectedPlatform;
+      }
+      formSearchUrls.push(
+        ...extractSearchFormUrlsFromHtml({
+          html,
+          pageUrl: inspectionUrl,
+          campaignPrompt,
+        })
+      );
+    } catch (error) {
+      if (isWebsiteRateLimitError(error)) throw error;
+    }
+  }
+
+  formSearchUrls = Array.from(new Set(formSearchUrls));
+  const fallbackSearchUrls = buildStoreSearchUrls(
+    websiteUrl,
+    campaignPrompt,
+    detectedPlatform
+  );
+  const searchUrls = selectStoreSearchUrlsForFetch(
+    formSearchUrls.length ? formSearchUrls : fallbackSearchUrls,
+    Math.min(
+      CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET,
+      WEBSITE_STORE_SEARCH_FETCH_LIMIT
+    )
+  );
+  const recovered = [];
+  const recoveredSelectedRanks = new Set();
+  let browserSession = null;
+  let renderedPageCount = 0;
+  let renderedUnavailable = false;
+
+  const collectExactMatches = (html, searchUrl) => {
+    const pageCandidates = dedupeUrlItems([
+      ...extractProductCardCandidatesFromHtml({
+        html,
+        pageUrl: searchUrl,
+        websiteUrl,
+        campaignPrompt,
+      }),
+      ...extractJsonLdProductCandidatesFromHtml({
+        html,
+        pageUrl: searchUrl,
+        websiteUrl,
+      }),
+      ...extractProductLinksFromDiscoveryPage({
+        html,
+        pageUrl: searchUrl,
+        websiteUrl,
+        campaignPrompt,
+      }),
+    ]);
+
+    for (const pageCandidate of pageCandidates) {
+      const selectedCandidate = findMatchingPrimaryWebResearchCandidate(
+        pageCandidate,
+        selectedCandidates,
+        websiteUrl
+      );
+      if (!selectedCandidate) continue;
+      const selectedRank = getPrimaryCampaignResearchRank(selectedCandidate);
+      if (recoveredSelectedRanks.has(selectedRank)) continue;
+      const merged = mergePrimaryWebResearchTechnicalRecovery({
+        selectedCandidate,
+        recoveredProduct: pageCandidate,
+        websiteUrl,
+      });
+      if (!merged) continue;
+      recoveredSelectedRanks.add(selectedRank);
+      recovered.push({
+        ...pageCandidate,
+        title: pageCandidate?.title || selectedCandidate?.title,
+        url: merged.url,
+        image_url: merged.image_url,
+      });
+    }
+  };
+
+  try {
+    for (const searchUrl of searchUrls) {
+      if (
+        recoveredSelectedRanks.size >= CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED ||
+        (Number.isFinite(deadlineMs) && deadlineMs - Date.now() < 20_000)
+      ) {
+        break;
+      }
+
+      try {
+        const html = await fetchHtml(searchUrl);
+        const beforeCount = recoveredSelectedRanks.size;
+        collectExactMatches(html, searchUrl);
+
+        if (
+          recoveredSelectedRanks.size === beforeCount &&
+          !renderedUnavailable &&
+          renderedPageCount < 4 &&
+          process.env.DISABLE_RENDERED_STORE_SEARCH !== "1" &&
+          process.env.DISABLE_PRODUCT_IMAGE_BROWSER !== "1" &&
+          (!Number.isFinite(deadlineMs) || deadlineMs - Date.now() >= 25_000)
+        ) {
+          try {
+            if (!browserSession) {
+              browserSession = await createProductImageBrowserSession({
+                validateUrl: assertPublicHttpUrl,
+              });
+            }
+            renderedPageCount += 1;
+            const rendered = await browserSession.renderHtml({
+              pageUrl: searchUrl,
+            });
+            if (rendered?.html) collectExactMatches(rendered.html, searchUrl);
+          } catch (renderError) {
+            renderedUnavailable = true;
+            console.log("Rendered authoritative product identity recovery unavailable", {
+              websiteUrl,
+              searchUrl,
+              message: renderError?.message,
+            });
+          }
+        }
+      } catch (error) {
+        if (isWebsiteRateLimitError(error)) throw error;
+      }
+    }
+  } finally {
+    if (browserSession) await browserSession.close().catch(() => {});
+  }
+
+  console.log("Authoritative product identities searched through the retailer's own search contract", {
+    websiteUrl,
+    selectedTitleCount: selectedTitles.length,
+    searchUrlCount: searchUrls.length,
+    renderedPageCount,
+    recoveredIdentityCount: recovered.length,
+  });
+
+  return recovered;
+}
+
+function mergePrimaryWebResearchTechnicalRecovery({
+  selectedCandidate,
+  recoveredProduct,
+  websiteUrl,
+}) {
+  if (!selectedCandidate || !recoveredProduct) return null;
+
+  const recoveredTitle = String(recoveredProduct?.title || "").trim();
+  const selectedTitle = String(selectedCandidate?.title || "").trim();
+  if (
+    !recoveredTitle ||
+    !selectedTitle ||
+    !haveProductTitlesIdentityAgreement(selectedTitle, recoveredTitle)
+  ) {
+    return null;
+  }
+
+  const recoveredUrl =
+    canonicalizeWebsiteProductUrl(
+      recoveredProduct?.url ||
+        recoveredProduct?.item_url ||
+        recoveredProduct?.product_url,
+      websiteUrl
+    ) || "";
+  const recoveredImage = String(
+    recoveredProduct?.image_url || recoveredProduct?.item_image_url || ""
+  ).trim();
+
+  if (
+    !recoveredUrl ||
+    !isHttpUrl(recoveredUrl) ||
+    !isSameOrSubdomainUrl(recoveredUrl, websiteUrl) ||
+    !matchesConfiguredWebsiteMarket(recoveredUrl, websiteUrl) ||
+    isLikelyNonProductUrl(recoveredUrl, websiteUrl) ||
+    isLikelyBadDiscoveryPageUrl(recoveredUrl, websiteUrl) ||
+    !isHttpUrl(recoveredImage) ||
+    isBadProductImageUrl(recoveredImage)
+  ) {
+    return null;
+  }
+
+  return {
+    ...selectedCandidate,
+    url: recoveredUrl,
+    image_url: recoveredImage,
+    price:
+      String(recoveredProduct?.price || "").trim() ||
+      String(selectedCandidate?.price || "").trim(),
+    technical_identity_recovered: true,
+    technical_identity_recovery_source:
+      recoveredProduct?.campaign_fit_source || "targeted_store_search",
+  };
+}
+
 async function hydrateAuthoritativeWebAgentProduct({
   candidate,
   websiteUrl,
@@ -22706,6 +22978,7 @@ Return the result in the required JSON structure. Keep each reason concise and g
     .slice(0, CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET);
 
   const hydratedProducts = [];
+  const failedHydrationCandidates = [];
   let technicalPageRateLimited = false;
   const cachedItemsByUrl = new Map(
     (cachedWebsiteItems || [])
@@ -22752,13 +23025,20 @@ Return the result in the required JSON structure. Keep each reason concise and g
               canonicalizeWebsiteProductUrl(candidate?.url, websiteUrl) ||
                 candidate?.url
             )
-          ) || null,
+          ) ||
+          getCachedPrimaryWebResearchProduct(
+            candidate,
+            cachedWebsiteItems,
+            websiteUrl
+          ),
       });
       if (hydrated) {
         if (hydrated.technical_page_rate_limited) {
           technicalPageRateLimited = true;
         }
         hydratedProducts.push(hydrated);
+      } else {
+        failedHydrationCandidates.push(candidate);
       }
     } catch (error) {
       if (isWebsiteRateLimitError(error)) {
@@ -22773,6 +23053,80 @@ Return the result in the required JSON structure. Keep each reason concise and g
         continue;
       }
       throw error;
+    }
+  }
+
+  // This recovery is deliberately technical, not editorial. GPT-5.5's
+  // selected identities, reasons, ranks and campaign roles stay unchanged.
+  // It only asks the retailer's own search contract for the current URL and
+  // card image when an otherwise selected product used a stale/bot-only URL.
+  if (
+    hydratedProducts.length < CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED &&
+    failedHydrationCandidates.length &&
+    (!Number.isFinite(deadlineMs) || deadlineMs - Date.now() >= 50_000)
+  ) {
+    try {
+      const technicalRecoveryCandidates =
+        await discoverPrimaryWebResearchTechnicalRecoveryCandidates({
+          selectedCandidates: failedHydrationCandidates,
+          websiteUrl,
+          deadlineMs,
+        });
+      const alreadyHydratedRanks = new Set(
+        hydratedProducts.map(getPrimaryCampaignResearchRank)
+      );
+
+      for (const selectedCandidate of failedHydrationCandidates) {
+        if (
+          hydratedProducts.length >= CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED ||
+          (Number.isFinite(deadlineMs) && deadlineMs - Date.now() < 20_000)
+        ) {
+          break;
+        }
+
+        const selectedRank = getPrimaryCampaignResearchRank(selectedCandidate);
+        if (alreadyHydratedRanks.has(selectedRank)) continue;
+        const recoveredProduct = findMatchingPrimaryWebResearchCandidate(
+          selectedCandidate,
+          technicalRecoveryCandidates,
+          websiteUrl
+        );
+        const recoveredCandidate = mergePrimaryWebResearchTechnicalRecovery({
+          selectedCandidate,
+          recoveredProduct,
+          websiteUrl,
+        });
+        if (!recoveredCandidate) continue;
+
+        const hydrated = await hydrateAuthoritativeWebAgentProduct({
+          candidate: recoveredCandidate,
+          websiteUrl,
+          cachedItem: recoveredProduct,
+        });
+        if (!hydrated) continue;
+        hydratedProducts.push(hydrated);
+        alreadyHydratedRanks.add(selectedRank);
+      }
+
+      console.log("Campaign primary GPT-5.5 technical identity recovery finished", {
+        ruleId: rule?.id,
+        websiteUrl,
+        researchRound,
+        selectedIdentityCount: failedHydrationCandidates.length,
+        retailerSearchCandidateCount: technicalRecoveryCandidates.length,
+        hydratedAfterRecoveryCount: hydratedProducts.length,
+        editorialSelectionChanged: false,
+      });
+    } catch (error) {
+      if (isWebsiteRateLimitError(error)) {
+        technicalPageRateLimited = true;
+      }
+      console.warn("Campaign primary GPT-5.5 technical identity recovery unavailable; preserving the normal bounded replacement round", {
+        ruleId: rule?.id,
+        websiteUrl,
+        researchRound,
+        message: error?.message,
+      });
     }
   }
 

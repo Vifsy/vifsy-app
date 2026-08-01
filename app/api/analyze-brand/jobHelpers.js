@@ -102,6 +102,7 @@ export async function updateBrandAnalysisJob({
   webResearchSources,
   analysisCompletedEmailSentAt,
   analysisCompletedEmailError,
+  attemptCount,
   expectedLeaseToken,
 }) {
   const updatePayload = {
@@ -196,6 +197,10 @@ export async function updateBrandAnalysisJob({
   if (analysisCompletedEmailError !== undefined) {
     updatePayload.analysis_completed_email_error =
       analysisCompletedEmailError;
+  }
+
+  if (attemptCount !== undefined) {
+    updatePayload.attempt_count = Math.max(0, Number(attemptCount) || 0);
   }
 
   let updateQuery = supabase

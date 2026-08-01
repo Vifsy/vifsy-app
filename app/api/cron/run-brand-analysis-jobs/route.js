@@ -7,6 +7,7 @@ import {
   updateBrandAnalysisJob,
 } from "../../analyze-brand/jobHelpers.js";
 import {
+  isWebResearchIncomplete,
   isWebResearchTerminalFailure,
   retrieveBlockedWebsiteResearch,
   submitBlockedWebsiteResearch,
@@ -22,6 +23,8 @@ export const maxDuration = 300;
 const WORKER_LEASE_SECONDS = 330;
 const WEB_RESEARCH_POLL_SECONDS = 25;
 const MAX_ANALYSIS_ATTEMPTS = 5;
+const MAX_WEB_RESEARCH_RECOVERY_SUBMISSIONS = 2;
+const MIN_PARTIAL_WEB_RESEARCH_EVIDENCE_CHARS = 800;
 
 function isAuthorized(request) {
   const cronSecret = process.env.CRON_SECRET;
@@ -189,6 +192,57 @@ async function submitWebResearchAndRelease({ supabase, job, blockError }) {
   return null;
 }
 
+function hasUsableWebResearchEvidence(research, job) {
+  const evidence = String(research?.evidence || "").trim();
+  if (evidence.length < MIN_PARTIAL_WEB_RESEARCH_EVIDENCE_CHARS) return false;
+
+  const sources = Array.isArray(research?.sources) ? research.sources : [];
+  if (sources.some((source) => /^https?:\/\//i.test(String(source?.url || "")))) {
+    return true;
+  }
+
+  try {
+    const hostname = new URL(job?.website_url || "").hostname
+      .replace(/^www\./i, "")
+      .toLowerCase();
+    return Boolean(hostname && evidence.toLowerCase().includes(hostname));
+  } catch {
+    return false;
+  }
+}
+
+async function promoteWebResearchEvidence({ supabase, job, research, partial }) {
+  await updateBrandAnalysisJob({
+    supabase,
+    userId: job.user_id,
+    jobId: job.id,
+    expectedLeaseToken: job.lease_token,
+    status: "running",
+    step: "web_research_ready",
+    progress: 55,
+    userMessageCode: "web_research_completed",
+    userMessage: partial
+      ? "Spreelo recovered sufficient official evidence from an interrupted web-research response and is completing the analysis."
+      : job.user_message,
+    openaiResponseId: research.id || job.openai_response_id,
+    webResearchEvidence: research.evidence,
+    webResearchSources: research.sources,
+    internalError: partial
+      ? `Recovered partial web research (${research?.incompleteDetails?.reason || "unknown reason"}).`
+      : "",
+    lastHeartbeatAt: new Date().toISOString(),
+  });
+
+  return {
+    ...job,
+    step: "web_research_ready",
+    progress: 55,
+    openai_response_id: research.id || job.openai_response_id,
+    web_research_evidence: research.evidence,
+    web_research_sources: research.sources,
+  };
+}
+
 async function resumeWebResearch({ supabase, job }) {
   const research = await retrieveBlockedWebsiteResearch(
     job.openai_response_id
@@ -199,33 +253,106 @@ async function resumeWebResearch({ supabase, job }) {
       throw new Error("Background web research completed without evidence.");
     }
 
-    await updateBrandAnalysisJob({
+    return promoteWebResearchEvidence({
       supabase,
-      userId: job.user_id,
-      jobId: job.id,
-      expectedLeaseToken: job.lease_token,
-      status: "running",
-      step: "web_research_ready",
-      progress: 55,
-      userMessageCode: "web_research_completed",
-      webResearchEvidence: research.evidence,
-      webResearchSources: research.sources,
-      lastHeartbeatAt: new Date().toISOString(),
+      job,
+      research,
+      partial: false,
     });
+  }
 
-    return {
-      ...job,
-      step: "web_research_ready",
-      progress: 55,
-      web_research_evidence: research.evidence,
-      web_research_sources: research.sources,
-    };
+  if (isWebResearchIncomplete(research.status)) {
+    const incompleteReason =
+      research?.incompleteDetails?.reason || "unknown_reason";
+
+    if (hasUsableWebResearchEvidence(research, job)) {
+      console.warn("Incomplete background web research contained sufficient official evidence; continuing analysis", {
+        jobId: job.id,
+        responseId: research.id,
+        incompleteReason,
+        evidenceChars: research.evidence.length,
+        sourceCount: research.sources.length,
+      });
+      return promoteWebResearchEvidence({
+        supabase,
+        job,
+        research,
+        partial: true,
+      });
+    }
+
+    const currentSubmissionCount = Math.max(1, Number(job.attempt_count || 1));
+    if (currentSubmissionCount < MAX_WEB_RESEARCH_RECOVERY_SUBMISSIONS) {
+      const retryResearch = await submitBlockedWebsiteResearch({
+        job,
+        compactRetry: true,
+        previousEvidence: research.evidence,
+      });
+
+      console.warn("Incomplete background web research restarted once with a compact recovery request", {
+        jobId: job.id,
+        previousResponseId: research.id,
+        newResponseId: retryResearch.id,
+        incompleteReason,
+        previousEvidenceChars: research.evidence.length,
+        newStatus: retryResearch.status,
+      });
+
+      if (
+        retryResearch.status === "completed" ||
+        (
+          isWebResearchIncomplete(retryResearch.status) &&
+          hasUsableWebResearchEvidence(retryResearch, job)
+        )
+      ) {
+        return promoteWebResearchEvidence({
+          supabase,
+          job,
+          research: retryResearch,
+          partial: retryResearch.status !== "completed",
+        });
+      }
+
+      if (isWebResearchTerminalFailure(retryResearch.status)) {
+        throw new Error(
+          `Background web research recovery ${retryResearch.status}: ${JSON.stringify(
+            retryResearch.error || retryResearch.incompleteDetails || {}
+          )}`
+        );
+      }
+
+      await releaseJob({
+        supabase,
+        job,
+        updates: {
+          status: "pending",
+          step: "web_research_waiting",
+          progress: 48,
+          attemptCount: currentSubmissionCount + 1,
+          userMessageCode: "website_blocked_background_research",
+          userMessage:
+            "The first secure web-research response was interrupted. Spreelo restarted it in a smaller bounded form and will continue automatically.",
+          openaiResponseId: retryResearch.id,
+          webResearchSources: retryResearch.sources,
+          internalError: `Web research incomplete (${incompleteReason}); compact recovery submitted.`,
+          nextAttemptAt: nextAttemptIso(WEB_RESEARCH_POLL_SECONDS),
+        },
+      });
+
+      return null;
+    }
+
+    throw new Error(
+      `Background web research remained incomplete after bounded recovery: ${JSON.stringify(
+        research.incompleteDetails || {}
+      )}`
+    );
   }
 
   if (isWebResearchTerminalFailure(research.status)) {
     throw new Error(
       `Background web research ${research.status}: ${JSON.stringify(
-        research.error || {}
+        research.error || research.incompleteDetails || {}
       )}`
     );
   }
@@ -251,11 +378,6 @@ async function resumeWebResearch({ supabase, job }) {
 async function processClaimedJob({ supabase, job }) {
   let analysisJob = job;
 
-  if (job.step === "web_research_waiting" && job.openai_response_id) {
-    analysisJob = await resumeWebResearch({ supabase, job });
-    if (!analysisJob) return { deferred: true, reason: "web_research_running" };
-  }
-
   const updateJob = (updates) =>
     updateBrandAnalysisJob({
       supabase,
@@ -267,6 +389,13 @@ async function processClaimedJob({ supabase, job }) {
     });
 
   try {
+    if (job.step === "web_research_waiting" && job.openai_response_id) {
+      analysisJob = await resumeWebResearch({ supabase, job });
+      if (!analysisJob) {
+        return { deferred: true, reason: "web_research_running" };
+      }
+    }
+
     const completedJob = await runBrandAnalysisJob({
       supabase,
       userId: job.user_id,
