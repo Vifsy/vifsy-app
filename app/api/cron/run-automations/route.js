@@ -264,6 +264,15 @@ const CAMPAIGN_PRIMARY_WEB_RESEARCH_TIMEOUT_MS = Math.max(
       60_000
   )
 );
+const CAMPAIGN_PRIMARY_ASSET_REPAIR_TIMEOUT_MS = Math.max(
+  25_000,
+  Math.min(
+    45_000,
+    Number(process.env.CAMPAIGN_PRIMARY_ASSET_REPAIR_TIMEOUT_MS || 35_000) ||
+      35_000
+  )
+);
+const CAMPAIGN_PRIMARY_POST_RESEARCH_RESERVE_MS = 20_000;
 const CAMPAIGN_PRIMARY_WEB_RESEARCH_SOURCE =
   "gpt55_authoritative_domain_web_agent";
 const CAROUSEL_PRODUCT_RESERVE_TARGET = PRODUCT_ENGINE_V2_ENABLED
@@ -5973,6 +5982,12 @@ async function prepareCarouselProductsForRule({
           deadlineMs: productPreparationDeadline,
           researchRound,
         });
+        if (!roundResult?.executed) {
+          // A budget-skipped round did not call GPT-5.5 and must not be
+          // reported as completed. Continuing would only repeat the same
+          // unavailable-budget decision.
+          break;
+        }
         researchRounds.push(roundResult);
         combinedCandidates = dedupeUrlItems([
           ...combinedCandidates,
@@ -22641,6 +22656,284 @@ function mergePrimaryWebResearchTechnicalRecovery({
   };
 }
 
+function getAuthoritativeProductIdentityHints(candidate) {
+  const hints = new Set();
+  const explicitHints = [
+    candidate?.product_identifier,
+    candidate?.product_id,
+    candidate?.sku,
+    candidate?.mpn,
+  ];
+
+  for (const value of explicitHints) {
+    const normalized = normalizeComparableValue(value);
+    if (normalized && normalized.length >= 3) hints.add(normalized);
+  }
+
+  try {
+    const parsed = new URL(String(candidate?.url || ""));
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    const lastSegment = String(segments.at(-1) || "")
+      .replace(/\.(?:html?|php|aspx?)$/i, "")
+      .trim();
+    // Legacy commerce URLs commonly end in a stable SKU/product number even
+    // after the retailer has migrated to a new canonical URL structure.
+    if (/^[a-z0-9][a-z0-9_-]{3,24}$/i.test(lastSegment)) {
+      hints.add(normalizeComparableValue(lastSegment));
+    }
+  } catch (_) {
+    // Other URL guards already handle malformed candidates.
+  }
+
+  return [...hints].filter(Boolean).slice(0, 4);
+}
+
+function isRecoveredAuthoritativeProductIdentity({
+  selectedCandidate,
+  recoveredProduct,
+}) {
+  const selectedTitle = String(selectedCandidate?.title || "").trim();
+  const recoveredTitle = String(
+    recoveredProduct?.current_title || recoveredProduct?.title || ""
+  ).trim();
+  if (
+    selectedTitle &&
+    recoveredTitle &&
+    haveProductTitlesIdentityAgreement(selectedTitle, recoveredTitle)
+  ) {
+    return true;
+  }
+
+  const selectedHints = new Set(
+    getAuthoritativeProductIdentityHints(selectedCandidate)
+  );
+  const returnedHints = [
+    recoveredProduct?.product_identifier,
+    ...(Array.isArray(recoveredProduct?.identity_hints)
+      ? recoveredProduct.identity_hints
+      : []),
+  ]
+    .map(normalizeComparableValue)
+    .filter(Boolean);
+
+  return returnedHints.some((hint) => selectedHints.has(hint));
+}
+
+async function repairAuthoritativeWebAgentProductAssets({
+  openai,
+  selectedCandidates,
+  websiteUrl,
+  deadlineMs,
+  rule,
+  researchRound,
+}) {
+  const startedAt = Date.now();
+  const allowedDomain = getWebsiteFetchDomain(websiteUrl);
+  const remainingBudgetMs = Number.isFinite(deadlineMs)
+    ? Math.max(0, deadlineMs - Date.now())
+    : CAMPAIGN_PRIMARY_ASSET_REPAIR_TIMEOUT_MS +
+      CAMPAIGN_PRIMARY_POST_RESEARCH_RESERVE_MS;
+  const availableRequestMs = Math.min(
+    CAMPAIGN_PRIMARY_ASSET_REPAIR_TIMEOUT_MS,
+    remainingBudgetMs - CAMPAIGN_PRIMARY_POST_RESEARCH_RESERVE_MS
+  );
+  const repairInputs = (selectedCandidates || [])
+    .slice(0, CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET)
+    .map((candidate) => ({
+      original_rank: getPrimaryCampaignResearchRank(candidate),
+      title: String(candidate?.title || "").trim(),
+      stale_or_blocked_url: String(candidate?.url || "").trim(),
+      identity_hints: getAuthoritativeProductIdentityHints(candidate),
+    }))
+    .filter((candidate) => candidate.title && candidate.stale_or_blocked_url);
+
+  if (!allowedDomain || !repairInputs.length || availableRequestMs < 20_000) {
+    console.log("Authoritative product asset repair skipped because its bounded budget was unavailable", {
+      ruleId: rule?.id,
+      websiteUrl,
+      researchRound,
+      selectedIdentityCount: repairInputs.length,
+      remainingBudgetMs,
+      availableRequestMs: Math.max(0, availableRequestMs),
+    });
+    return {
+      executed: false,
+      repairedCandidates: [],
+      elapsedMs: Date.now() - startedAt,
+    };
+  }
+
+  const instructions = `
+You are a technical product-identity and asset repair agent. The senior marketer has already selected and ranked the products. Do not replace, rerank or reinterpret them.
+
+For every supplied product:
+- Search only ${allowedDomain} using exact product-title searches plus every supplied stable identity hint/SKU.
+- Find the CURRENT canonical direct product page for the SAME product in the same country/market as ${websiteUrl}.
+- A stale URL may come from an older commerce platform or search index. Prefer the retailer's current canonical URL structure.
+- Open the current official result and return the best direct product-image file URL that is visibly attached to that exact product.
+- The image must be a real product image, not a logo, icon, placeholder, category banner, editorial hero or guessed URL.
+- Preserve original_rank exactly. Return no row when the same identity cannot be evidenced.
+- Do not substitute a similar product. Color/size variants are acceptable only when they are the same underlying product identity.
+- Keep identity_evidence concise and state the exact title, SKU/product number or other official evidence that proves the match.
+
+Return only the required JSON structure.`.trim();
+
+  console.log("Authoritative GPT-5.5 exact product asset repair started", {
+    ruleId: rule?.id,
+    brandProfileId: rule?.brand_profile_id,
+    websiteUrl,
+    allowedDomain,
+    researchRound,
+    selectedIdentityCount: repairInputs.length,
+    timeoutMs: availableRequestMs,
+  });
+
+  const response = await openai.responses.create(
+    {
+      model: PRODUCT_RESEARCH_MODEL,
+      tools: [
+        {
+          type: "web_search",
+          filters: { allowed_domains: [allowedDomain] },
+          search_context_size: "high",
+        },
+      ],
+      tool_choice: "required",
+      instructions,
+      ...getReasoningOptionsForModel(PRODUCT_RESEARCH_MODEL),
+      max_output_tokens: 4500,
+      text: {
+        format: {
+          type: "json_schema",
+          name: "authoritative_product_asset_repair",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              products: {
+                type: "array",
+                minItems: 0,
+                maxItems: CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    original_rank: { type: "integer", minimum: 1, maximum: 20 },
+                    current_title: { type: "string" },
+                    current_url: { type: "string" },
+                    image_url: { type: "string" },
+                    product_identifier: { type: "string" },
+                    identity_hints: {
+                      type: "array",
+                      items: { type: "string" },
+                      maxItems: 6,
+                    },
+                    identity_evidence: { type: "string" },
+                  },
+                  required: [
+                    "original_rank",
+                    "current_title",
+                    "current_url",
+                    "image_url",
+                    "product_identifier",
+                    "identity_hints",
+                    "identity_evidence",
+                  ],
+                },
+              },
+            },
+            required: ["products"],
+          },
+        },
+      },
+      input: JSON.stringify({ products_to_repair: repairInputs }),
+    },
+    {
+      timeout: availableRequestMs,
+      maxRetries: 0,
+    }
+  );
+
+  const parsed = safeJsonParse(response.output_text || "");
+  const rawRepairs = Array.isArray(parsed?.products) ? parsed.products : [];
+  const selectedByRank = new Map(
+    (selectedCandidates || []).map((candidate) => [
+      getPrimaryCampaignResearchRank(candidate),
+      candidate,
+    ])
+  );
+  const repairedCandidates = [];
+  const repairedRanks = new Set();
+
+  for (const repairedProduct of rawRepairs) {
+    const originalRank = Number(repairedProduct?.original_rank || 0);
+    const selectedCandidate = selectedByRank.get(originalRank);
+    if (!selectedCandidate || repairedRanks.has(originalRank)) continue;
+
+    const currentUrl =
+      canonicalizeWebsiteProductUrl(
+        repairedProduct?.current_url,
+        websiteUrl
+      ) || "";
+    const imageUrl = String(repairedProduct?.image_url || "").trim();
+    if (
+      !currentUrl ||
+      !isHttpUrl(currentUrl) ||
+      !isSameOrSubdomainUrl(currentUrl, websiteUrl) ||
+      !matchesConfiguredWebsiteMarket(currentUrl, websiteUrl) ||
+      isLikelyNonProductUrl(currentUrl, websiteUrl) ||
+      isLikelyBadDiscoveryPageUrl(currentUrl, websiteUrl) ||
+      !isHttpUrl(imageUrl) ||
+      isBadProductImageUrl(imageUrl) ||
+      !isRecoveredAuthoritativeProductIdentity({
+        selectedCandidate,
+        recoveredProduct: repairedProduct,
+      })
+    ) {
+      continue;
+    }
+
+    repairedRanks.add(originalRank);
+    repairedCandidates.push({
+      ...selectedCandidate,
+      title:
+        String(repairedProduct?.current_title || "").trim() ||
+        selectedCandidate.title,
+      url: currentUrl,
+      image_url: imageUrl,
+      product_identifier:
+        String(repairedProduct?.product_identifier || "").trim() ||
+        selectedCandidate?.product_identifier ||
+        "",
+      technical_identity_recovered: true,
+      technical_identity_recovery_source:
+        "gpt55_exact_canonical_asset_repair",
+      technical_identity_evidence: String(
+        repairedProduct?.identity_evidence || ""
+      ).trim(),
+    });
+  }
+
+  console.log("Authoritative GPT-5.5 exact product asset repair finished", {
+    ruleId: rule?.id,
+    brandProfileId: rule?.brand_profile_id,
+    websiteUrl,
+    researchRound,
+    selectedIdentityCount: repairInputs.length,
+    returnedRepairCount: rawRepairs.length,
+    acceptedRepairCount: repairedCandidates.length,
+    editorialSelectionChanged: false,
+    elapsedMs: Date.now() - startedAt,
+  });
+
+  return {
+    executed: true,
+    repairedCandidates,
+    elapsedMs: Date.now() - startedAt,
+  };
+}
+
 async function hydrateAuthoritativeWebAgentProduct({
   candidate,
   websiteUrl,
@@ -22648,10 +22941,12 @@ async function hydrateAuthoritativeWebAgentProduct({
 }) {
   let html = "";
   let technicalPageRateLimited = false;
+  let technicalPageStatus = 0;
   try {
     html = await fetchHtml(candidate.url);
   } catch (error) {
     technicalPageRateLimited = isWebsiteRateLimitError(error);
+    technicalPageStatus = Number(error?.status || 0);
     console.warn("Authoritative GPT-5.5 product page could not be fetched; retaining only web-agent facts", {
       productUrl: candidate?.url,
       title: candidate?.title,
@@ -22742,6 +23037,8 @@ async function hydrateAuthoritativeWebAgentProduct({
     concrete_product_verified: null,
     authoritative_web_agent_selected: true,
     technical_page_rate_limited: technicalPageRateLimited,
+    technical_page_fetched: Boolean(html),
+    technical_page_status: technicalPageStatus,
     campaign_primary_web_researched: true,
     campaign_final_reviewed: true,
     last_verified_at: new Date().toISOString(),
@@ -22763,20 +23060,24 @@ async function findPrimaryCampaignProductsWithWebSearch({
   const remainingBudgetMs = Number.isFinite(deadlineMs)
     ? Math.max(0, deadlineMs - Date.now())
     : CAMPAIGN_PRIMARY_WEB_RESEARCH_TIMEOUT_MS + 60_000;
+  const requestTimeoutMs = Math.min(
+    CAMPAIGN_PRIMARY_WEB_RESEARCH_TIMEOUT_MS,
+    remainingBudgetMs - CAMPAIGN_PRIMARY_POST_RESEARCH_RESERVE_MS
+  );
 
-  if (
-    !allowedDomain ||
-    remainingBudgetMs < CAMPAIGN_PRIMARY_WEB_RESEARCH_TIMEOUT_MS + 30_000
-  ) {
+  if (!allowedDomain || requestTimeoutMs < 25_000) {
     console.log("Campaign primary GPT-5.5 web research skipped because its protected budget was unavailable", {
       ruleId: rule?.id,
       brandProfileId: rule?.brand_profile_id,
       websiteUrl,
       allowedDomain,
       remainingBudgetMs,
-      requiredBudgetMs: CAMPAIGN_PRIMARY_WEB_RESEARCH_TIMEOUT_MS + 30_000,
+      minimumRequestMs: 25_000,
+      postResearchReserveMs: CAMPAIGN_PRIMARY_POST_RESEARCH_RESERVE_MS,
     });
     return {
+      executed: false,
+      skippedForBudget: true,
       candidates: [],
       verifiedProducts: [],
       validProducts: [],
@@ -22895,10 +23196,7 @@ Return the result in the required JSON structure. Keep each reason concise and g
       input: exactTask,
     },
     {
-      timeout: Math.min(
-        CAMPAIGN_PRIMARY_WEB_RESEARCH_TIMEOUT_MS,
-        Math.max(25_000, remainingBudgetMs - 30_000)
-      ),
+      timeout: requestTimeoutMs,
       maxRetries: 0,
     }
   );
@@ -23036,7 +23334,14 @@ Return the result in the required JSON structure. Keep each reason concise and g
         if (hydrated.technical_page_rate_limited) {
           technicalPageRateLimited = true;
         }
-        hydratedProducts.push(hydrated);
+        if ([404, 410].includes(Number(hydrated.technical_page_status || 0))) {
+          // A model-supplied image can still be usable while its indexed
+          // product URL has expired. Do not publish that dead link; repair the
+          // same selected identity below.
+          failedHydrationCandidates.push(candidate);
+        } else {
+          hydratedProducts.push(hydrated);
+        }
       } else {
         failedHydrationCandidates.push(candidate);
       }
@@ -23058,20 +23363,22 @@ Return the result in the required JSON structure. Keep each reason concise and g
 
   // This recovery is deliberately technical, not editorial. GPT-5.5's
   // selected identities, reasons, ranks and campaign roles stay unchanged.
-  // It only asks the retailer's own search contract for the current URL and
-  // card image when an otherwise selected product used a stale/bot-only URL.
+  // One exact web-research request resolves stale canonical URLs and official
+  // product images. It does not call the retailer's rate-limited search API.
   if (
     hydratedProducts.length < CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED &&
     failedHydrationCandidates.length &&
-    (!Number.isFinite(deadlineMs) || deadlineMs - Date.now() >= 50_000)
+    (!Number.isFinite(deadlineMs) || deadlineMs - Date.now() >= 40_000)
   ) {
     try {
-      const technicalRecoveryCandidates =
-        await discoverPrimaryWebResearchTechnicalRecoveryCandidates({
-          selectedCandidates: failedHydrationCandidates,
-          websiteUrl,
-          deadlineMs,
-        });
+      const technicalRepair = await repairAuthoritativeWebAgentProductAssets({
+        openai,
+        selectedCandidates: failedHydrationCandidates,
+        websiteUrl,
+        deadlineMs,
+        rule,
+        researchRound,
+      });
       const alreadyHydratedRanks = new Set(
         hydratedProducts.map(getPrimaryCampaignResearchRank)
       );
@@ -23086,22 +23393,16 @@ Return the result in the required JSON structure. Keep each reason concise and g
 
         const selectedRank = getPrimaryCampaignResearchRank(selectedCandidate);
         if (alreadyHydratedRanks.has(selectedRank)) continue;
-        const recoveredProduct = findMatchingPrimaryWebResearchCandidate(
-          selectedCandidate,
-          technicalRecoveryCandidates,
-          websiteUrl
+        const recoveredCandidate = technicalRepair.repairedCandidates.find(
+          (candidate) =>
+            getPrimaryCampaignResearchRank(candidate) === selectedRank
         );
-        const recoveredCandidate = mergePrimaryWebResearchTechnicalRecovery({
-          selectedCandidate,
-          recoveredProduct,
-          websiteUrl,
-        });
         if (!recoveredCandidate) continue;
 
         const hydrated = await hydrateAuthoritativeWebAgentProduct({
           candidate: recoveredCandidate,
           websiteUrl,
-          cachedItem: recoveredProduct,
+          cachedItem: recoveredCandidate,
         });
         if (!hydrated) continue;
         hydratedProducts.push(hydrated);
@@ -23113,7 +23414,8 @@ Return the result in the required JSON structure. Keep each reason concise and g
         websiteUrl,
         researchRound,
         selectedIdentityCount: failedHydrationCandidates.length,
-        retailerSearchCandidateCount: technicalRecoveryCandidates.length,
+        exactWebRepairExecuted: Boolean(technicalRepair.executed),
+        repairedIdentityCount: technicalRepair.repairedCandidates.length,
         hydratedAfterRecoveryCount: hydratedProducts.length,
         editorialSelectionChanged: false,
       });
@@ -23164,6 +23466,8 @@ Return the result in the required JSON structure. Keep each reason concise and g
   });
 
   return {
+    executed: true,
+    skippedForBudget: false,
     candidates: rankedCandidates,
     verifiedProducts,
     validProducts,

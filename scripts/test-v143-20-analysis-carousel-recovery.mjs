@@ -74,7 +74,7 @@ function testSelectedProductTechnicalRecovery() {
   assert.match(primary, /failedHydrationCandidates/u);
   assert.match(
     primary,
-    /discoverPrimaryWebResearchTechnicalRecoveryCandidates/u
+    /repairAuthoritativeWebAgentProductAssets/u
   );
   assert.match(primary, /editorialSelectionChanged: false/u);
   assert.doesNotMatch(
