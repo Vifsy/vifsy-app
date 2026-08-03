@@ -5983,6 +5983,7 @@ async function prepareCarouselProductsForRule({
       const researchRounds = [];
       let combinedCandidates = [];
       let combinedHydratedProducts = [];
+      let combinedSelectionMode = "varied_categories";
       let researchExclusions = [...recentUsedItems];
 
       for (
@@ -6009,6 +6010,9 @@ async function prepareCarouselProductsForRule({
           break;
         }
         researchRounds.push(roundResult);
+        if (researchRounds.length === 1 && roundResult?.selectionMode) {
+          combinedSelectionMode = roundResult.selectionMode;
+        }
         combinedCandidates = dedupeUrlItems([
           ...combinedCandidates,
           ...(roundResult?.candidates || []),
@@ -6024,7 +6028,11 @@ async function prepareCarouselProductsForRule({
 
         if (
           combinedHydratedProducts.length >=
-          CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED
+            CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED &&
+          hasAdequatePrimaryCampaignCarouselVariety(
+            combinedHydratedProducts,
+            combinedSelectionMode
+          )
         ) {
           break;
         }
@@ -6046,6 +6054,8 @@ async function prepareCarouselProductsForRule({
         campaignTheme:
           firstResearchRound?.campaignTheme ||
           getPrimaryCampaignWebResearchTheme(rule),
+        selectionMode:
+          firstResearchRound?.selectionMode || combinedSelectionMode,
         researchRounds,
         researchRoundCount: researchRounds.length,
         technicalPageRateLimited: researchRounds.some((result) =>
@@ -22559,8 +22569,35 @@ async function discoverPrimaryWebResearchTechnicalRecoveryCandidates({
   let renderedPageCount = 0;
   let renderedUnavailable = false;
 
+  const collectRecoveredProductCandidates = (pageCandidates) => {
+    for (const pageCandidate of dedupeUrlItems(pageCandidates || [])) {
+      const selectedCandidate = findMatchingPrimaryWebResearchCandidate(
+        pageCandidate,
+        selectedCandidates,
+        websiteUrl
+      );
+      if (!selectedCandidate) continue;
+      const selectedRank = getPrimaryCampaignResearchRank(selectedCandidate);
+      if (recoveredSelectedRanks.has(selectedRank)) continue;
+      const merged = mergePrimaryWebResearchTechnicalRecovery({
+        selectedCandidate,
+        recoveredProduct: pageCandidate,
+        websiteUrl,
+      });
+      if (!merged) continue;
+      recoveredSelectedRanks.add(selectedRank);
+      recovered.push({
+        ...pageCandidate,
+        ...merged,
+        title: pageCandidate?.title || selectedCandidate?.title,
+        url: merged.url,
+        image_url: merged.image_url,
+      });
+    }
+  };
+
   const collectExactMatches = (html, searchUrl) => {
-    const pageCandidates = dedupeUrlItems([
+    collectRecoveredProductCandidates([
       ...extractProductCardCandidatesFromHtml({
         html,
         pageUrl: searchUrl,
@@ -22579,31 +22616,46 @@ async function discoverPrimaryWebResearchTechnicalRecoveryCandidates({
         campaignPrompt,
       }),
     ]);
-
-    for (const pageCandidate of pageCandidates) {
-      const selectedCandidate = findMatchingPrimaryWebResearchCandidate(
-        pageCandidate,
-        selectedCandidates,
-        websiteUrl
-      );
-      if (!selectedCandidate) continue;
-      const selectedRank = getPrimaryCampaignResearchRank(selectedCandidate);
-      if (recoveredSelectedRanks.has(selectedRank)) continue;
-      const merged = mergePrimaryWebResearchTechnicalRecovery({
-        selectedCandidate,
-        recoveredProduct: pageCandidate,
-        websiteUrl,
-      });
-      if (!merged) continue;
-      recoveredSelectedRanks.add(selectedRank);
-      recovered.push({
-        ...pageCandidate,
-        title: pageCandidate?.title || selectedCandidate?.title,
-        url: merged.url,
-        image_url: merged.image_url,
-      });
-    }
   };
+
+  // Shopify's public predictive-search contract is a precise, low-cost way to
+  // repair an indexed legacy URL without changing the marketer's selected
+  // product identity. Other platforms continue through their own search form.
+  if (detectedPlatform === "shopify") {
+    const origin = getWebsiteOrigin(websiteUrl);
+    for (const selectedCandidate of selectedCandidates || []) {
+      if (
+        recoveredSelectedRanks.size >= (selectedCandidates || []).length ||
+        (Number.isFinite(deadlineMs) && deadlineMs - Date.now() < 20_000)
+      ) {
+        break;
+      }
+      const title = String(selectedCandidate?.title || "").trim();
+      if (!origin || !title) continue;
+      const suggestUrl = `${origin}/search/suggest.json?q=${encodeURIComponent(
+        title
+      )}&resources[type]=product&resources[limit]=10`;
+      try {
+        const json = await fetchJson(suggestUrl);
+        const products = Array.isArray(json?.resources?.results?.products)
+          ? json.resources.results.products
+          : [];
+        collectRecoveredProductCandidates(
+          products
+            .map((product) =>
+              normalizeStoreSearchProductSuggestion(
+                product,
+                origin,
+                campaignPrompt
+              )
+            )
+            .filter(Boolean)
+        );
+      } catch (error) {
+        if (isWebsiteRateLimitError(error)) throw error;
+      }
+    }
+  }
 
   try {
     for (const searchUrl of searchUrls) {
@@ -23423,18 +23475,21 @@ async function findPrimaryCampaignProductsWithWebSearch({
     .filter(Boolean);
   const exactTask = `Hitta ${CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET} passande produkter från ${allowedDomain} för ${campaignTheme}.`;
   const webAgentInstructions = `
-Act as a careful senior marketer using web search:
+ Act as a careful senior marketer using web search:
 - Search only ${allowedDomain}. Use the site's public search, category and collection pages to find real products, then return the direct product pages.
 - Infer what the campaign really means, who it is for and which complementary product roles make the strongest social-media carousel.
-- Rank exactly ${CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET} concrete purchasable products. Ranks 1-5 must form the strongest varied carousel; ranks 6-10 are ordered reserves.
-- Choose products because they genuinely fit the campaign. The product title does not need to repeat the campaign word when the product is a natural commercial fit.
-- Avoid five near-identical products when the assortment supports useful variation. Do not force irrelevant variation.
+ - Rank exactly ${CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET} concrete purchasable products. Ranks 1-5 must form the strongest carousel; ranks 6-10 are ordered reserves.
+ - Decide whether this campaign is broad enough for complementary product categories (varied_categories) or genuinely focuses on one product category (focused_category). For a broad campaign, ranks 1-5 should normally cover at least four distinct useful product families when the retailer offers them. Use at most one product per family before covering those complementary families. For a focused-category campaign, meaningful variation may instead come from use case, feature or audience.
+ - Choose products because they genuinely fit the campaign. The product title does not need to repeat the campaign word when the product is a natural commercial fit.
+ - Avoid five near-identical products when the assortment supports useful variation. Do not force irrelevant variation.
 - Do not return homepages, search pages, category pages, gift guides, brand pages, images, articles or guessed URLs.
 - Stay in the same country/market version represented by ${websiteUrl}.
 - Open every direct product page during this research and confirm that it currently loads as a purchasable product page. Search-result snippets and old indexed URLs are not proof that a page is live.
 - Do not invent product facts.
-- Return the best direct product-image URL you can actually verify for each product. Use an empty string if the image URL is not visible; never guess it.
-- Return the displayed price only when clearly visible. Otherwise use an empty string.
+ - Every returned product must have at least one official clean catalogue/packshot image visibly available in its product gallery: the product without any person, human body part or animal. This is a publication requirement. Prefer products with several clean gallery images and do not return identities whose official gallery only shows people or animals.
+ - Return the best direct clean product-only image URL you can actually verify for each product. Use an empty string if the image URL is not visible; never guess it.
+ - Return the displayed price only when clearly visible. Otherwise use an empty string.
+ ${researchRound > 1 ? "- This is a bounded diversity/recovery round. The earlier URLs are excluded below; actively look for other complementary product families that can strengthen a complete five-product carousel." : ""}
 ${usedProducts.length ? `- Prefer products not used in recent Spreelo posts. Avoid these unless the site cannot provide ten better choices:\n${usedProducts.join("\n")}` : ""}
 ${blockedProducts.length ? `- HARD TECHNICAL EXCLUSIONS: the following URLs were already returned in an earlier round and could not be opened as current product pages. Never return these URLs again. You may select the same product identity only if you find and open its different, current canonical product URL:\n${blockedProducts.join("\n")}` : ""}
 
@@ -23476,8 +23531,12 @@ Return the result in the required JSON structure. Keep each reason concise and g
           schema: {
             type: "object",
             additionalProperties: false,
-            properties: {
-              products: {
+             properties: {
+              selection_mode: {
+                type: "string",
+                enum: ["varied_categories", "focused_category"],
+              },
+               products: {
                 type: "array",
                 minItems: CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET,
                 maxItems: CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET,
@@ -23489,7 +23548,12 @@ Return the result in the required JSON structure. Keep each reason concise and g
                     title: { type: "string" },
                     url: { type: "string" },
                     reason: { type: "string" },
-                    product_role: { type: "string" },
+                     product_role: { type: "string" },
+                    product_family: {
+                      type: "string",
+                      description:
+                        "A short normalized generic product family in English, such as backpack, sneakers or jacket. Exclude brand, color and audience.",
+                    },
                     image_url: { type: "string" },
                     price: { type: "string" },
                     relevance_class: {
@@ -23502,7 +23566,8 @@ Return the result in the required JSON structure. Keep each reason concise and g
                     "title",
                     "url",
                     "reason",
-                    "product_role",
+                     "product_role",
+                    "product_family",
                     "image_url",
                     "price",
                     "relevance_class",
@@ -23510,7 +23575,7 @@ Return the result in the required JSON structure. Keep each reason concise and g
                 },
               },
             },
-            required: ["products"],
+            required: ["selection_mode", "products"],
           },
         },
       },
@@ -23547,6 +23612,11 @@ Return the result in the required JSON structure. Keep each reason concise and g
 
   const content = response.output_text || "";
   const parsed = safeJsonParse(content);
+  const selectionMode = ["varied_categories", "focused_category"].includes(
+    String(parsed?.selection_mode || "")
+  )
+    ? String(parsed.selection_mode)
+    : "varied_categories";
   const rawProducts = Array.isArray(parsed?.products) ? parsed.products : [];
   const candidates = [];
 
@@ -23581,6 +23651,7 @@ Return the result in the required JSON structure. Keep each reason concise and g
     const fitScore = Math.max(80, 100 - globalRank);
     const reason = String(product?.reason || "").trim();
     const campaignRole = String(product?.product_role || "").trim();
+    const productFamily = String(product?.product_family || "").trim();
     const relevanceClass =
       normalizeCampaignRelevanceClass(product?.relevance_class) ||
       "contextual";
@@ -23597,6 +23668,8 @@ Return the result in the required JSON structure. Keep each reason concise and g
       campaign_research_rank: globalRank,
       campaign_research_round: Math.max(1, Number(researchRound || 1)),
       campaign_role: campaignRole,
+      campaign_product_family: productFamily,
+      campaign_selection_mode: selectionMode,
       campaign_relevance_class: relevanceClass,
       campaign_relevance_evidence: reason ? [reason] : [],
       campaign_fit_source: CAMPAIGN_PRIMARY_WEB_RESEARCH_SOURCE,
@@ -23769,21 +23842,25 @@ Return the result in the required JSON structure. Keep each reason concise and g
     (!Number.isFinite(deadlineMs) || deadlineMs - Date.now() >= 40_000)
   ) {
     try {
-      const technicalRepair = await repairAuthoritativeWebAgentProductAssets({
-        supabase,
-        openai,
-        automationOccurrenceId,
-        selectedCandidates: repairCandidates,
-        websiteUrl,
-        deadlineMs,
-        rule,
-        researchRound,
-      });
       const alreadyHydratedRanks = new Set(
         hydratedProducts.map(getPrimaryCampaignResearchRank)
       );
+      const unresolvedRepairCandidates = [...repairCandidates];
 
-      for (const selectedCandidate of repairCandidates) {
+      const technicalRepair = unresolvedRepairCandidates.length
+        ? await repairAuthoritativeWebAgentProductAssets({
+            supabase,
+            openai,
+            automationOccurrenceId,
+            selectedCandidates: unresolvedRepairCandidates,
+            websiteUrl,
+            deadlineMs,
+            rule,
+            researchRound,
+          })
+        : { executed: false, repairedCandidates: [] };
+
+      for (const selectedCandidate of unresolvedRepairCandidates) {
         const selectedRank = getPrimaryCampaignResearchRank(selectedCandidate);
         const isLockedTopFiveRank =
           selectedRank <= CAROUSEL_PRODUCT_SLIDE_TARGET;
@@ -23867,6 +23944,7 @@ Return the result in the required JSON structure. Keep each reason concise and g
       title: item?.title || null,
       url: item?.url || null,
       role: item?.campaign_role || null,
+      productFamily: item?.campaign_product_family || null,
       relevanceClass: item?.campaign_relevance_class || null,
       reason: item?.reason || null,
       usableImage: Boolean(item?.image_url),
@@ -23885,8 +23963,40 @@ Return the result in the required JSON structure. Keep each reason concise and g
     campaignTheme,
     allowedDomain,
     prompt: exactTask,
+    selectionMode,
     elapsedMs: Date.now() - startedAt,
   };
+}
+
+function getCampaignProductFamilyKey(item) {
+  const explicitFamily = normalizeComparableValue(
+    item?.campaign_product_family || item?.product_family || ""
+  )
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (explicitFamily) {
+    const head = explicitFamily.split(" ").filter(Boolean).at(-1) || explicitFamily;
+    return head.length > 4 ? head.replace(/s$/, "") : head;
+  }
+
+  return normalizeComparableValue(item?.campaign_role || "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function hasAdequatePrimaryCampaignCarouselVariety(
+  products,
+  selectionMode = "varied_categories"
+) {
+  if (selectionMode !== "varied_categories") return true;
+  const families = new Set(
+    (products || [])
+      .map(getCampaignProductFamilyKey)
+      .filter(Boolean)
+  );
+  return families.size >= Math.min(4, CAROUSEL_PRODUCT_SLIDE_TARGET);
 }
 
 function getCampaignRoleTokens(item) {
@@ -23993,6 +24103,72 @@ function selectLockedPrimaryCampaignProducts({ candidates, validProducts }) {
     if (usedRanks.has(rank)) continue;
     selectedProducts.push(product);
     usedRanks.add(rank);
+  }
+
+  const selectionMode = String(
+    rankedCandidates.find((candidate) => candidate?.campaign_selection_mode)
+      ?.campaign_selection_mode || "varied_categories"
+  );
+  if (selectionMode === "varied_categories") {
+    const familyCounts = new Map();
+    for (const product of selectedProducts) {
+      const family = getCampaignProductFamilyKey(product);
+      if (family) familyCounts.set(family, (familyCounts.get(family) || 0) + 1);
+    }
+
+    for (let index = selectedProducts.length - 1; index >= 0; index -= 1) {
+      const duplicateProduct = selectedProducts[index];
+      const duplicateFamily = getCampaignProductFamilyKey(duplicateProduct);
+      if (!duplicateFamily || (familyCounts.get(duplicateFamily) || 0) <= 1) {
+        continue;
+      }
+
+      const usedFamilies = new Set(
+        selectedProducts.map(getCampaignProductFamilyKey).filter(Boolean)
+      );
+      const replacement = rankedValidProducts
+        .filter((product) => {
+          const rank = getPrimaryCampaignResearchRank(product);
+          const family = getCampaignProductFamilyKey(product);
+          return !usedRanks.has(rank) && family && !usedFamilies.has(family);
+        })
+        .map((product) => ({
+          product,
+          score: scoreCampaignRoleReplacement(
+            duplicateProduct,
+            product,
+            selectedProducts
+          ),
+        }))
+        .sort(
+          (left, right) =>
+            right.score - left.score ||
+            getPrimaryCampaignResearchRank(left.product) -
+              getPrimaryCampaignResearchRank(right.product)
+        )[0]?.product;
+      if (!replacement) continue;
+
+      const replacedRank = getPrimaryCampaignResearchRank(duplicateProduct);
+      const replacementRank = getPrimaryCampaignResearchRank(replacement);
+      selectedProducts[index] = {
+        ...replacement,
+        campaign_replacement_for_rank: replacedRank,
+        campaign_replacement_reason: "distinct_family_reserve",
+        campaign_replaced_role:
+          duplicateProduct?.campaign_role || duplicateProduct?.reason || "",
+      };
+      usedRanks.delete(replacedRank);
+      usedRanks.add(replacementRank);
+      familyCounts.set(
+        duplicateFamily,
+        Math.max(0, (familyCounts.get(duplicateFamily) || 1) - 1)
+      );
+      const replacementFamily = getCampaignProductFamilyKey(replacement);
+      familyCounts.set(
+        replacementFamily,
+        (familyCounts.get(replacementFamily) || 0) + 1
+      );
+    }
   }
 
   const reserveProducts = rankedValidProducts.filter(
@@ -24134,12 +24310,17 @@ async function finalizeCarouselFromPrimaryCampaignWebResearch({
     legacy180CandidateFlowSkipped: true,
     productEngineVerificationSkipped: true,
     authoritativeGptRankingPreserved: true,
+    campaignSelectionMode: researchResult?.selectionMode || null,
+    distinctSelectedProductFamilyCount: new Set(
+      selectedProducts.map(getCampaignProductFamilyKey).filter(Boolean)
+    ).size,
     finalSeniorReviewSkippedBecausePrimaryResearchAlreadyRankedSet: true,
     selectedProducts: selectedProducts.map((item) => ({
       rank: getPrimaryCampaignResearchRank(item),
       title: item?.title || null,
       url: item?.url || null,
       role: item?.campaign_role || null,
+      productFamily: item?.campaign_product_family || null,
       reason: item?.reason || null,
     })),
   });
@@ -29381,7 +29562,10 @@ async function reviewCarouselProductOnlyImages({ openai, items, ruleId }) {
         ...candidate,
         url,
       });
-      if (seenUrls.size >= 2) break;
+      // A gallery often leads with a model/lifestyle photo while a clean
+      // product-only packshot is the third or fourth verified image. Review
+      // every bounded resolver candidate before rejecting the product.
+      if (seenUrls.size >= 4) break;
     }
   }
   if (!imageOptions.length) return resolvedItems;

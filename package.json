@@ -48,7 +48,8 @@
     "test:v143.20": "node scripts/test-v143-20-analysis-carousel-recovery.mjs",
     "test:v143.21": "node scripts/test-v143-21-authoritative-asset-repair.mjs",
     "test:v143.22": "node scripts/test-v143-22-durable-carousel-integrity.mjs",
-    "test:v143.23": "node scripts/test-v143-23-canonical-product-recovery.mjs"
+    "test:v143.23": "node scripts/test-v143-23-canonical-product-recovery.mjs",
+    "test:v143.24": "node scripts/test-v143-24-variety-clean-five.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
