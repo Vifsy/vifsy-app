@@ -23099,6 +23099,18 @@ async function hydrateAuthoritativeWebAgentProduct({
     });
   }
 
+  // A model-provided image must never make a known 404 product URL usable.
+  // Temporary fetch failures may retain the web-agent facts, but a confirmed
+  // missing page is a hard technical exclusion from the carousel.
+  if (technicalPageStatus === 404) {
+    console.warn("Authoritative GPT-5.5 product rejected because its direct product page returned 404", {
+      rank: getPrimaryCampaignResearchRank(candidate),
+      productUrl: candidate?.url,
+      title: candidate?.title,
+    });
+    return null;
+  }
+
   const product = html
     ? findBestJsonLdProduct(html, candidate.url, candidate.title)
     : null;
@@ -29526,11 +29538,10 @@ async function resolveLargestProductImagesBeforeGeneration({
     return upgradedItem;
   });
 
-  return reviewCarouselProductOnlyImages({
-    openai,
-    items: resolvedItems,
-    ruleId,
-  });
+  // Identity, resolution, logo and placeholder checks have already run in the
+  // resolver. People and animals are allowed in verified product images, so do
+  // not discard otherwise usable products in a separate motif review.
+  return resolvedItems;
 }
 
 async function reviewCarouselProductOnlyImages({ openai, items, ruleId }) {
