@@ -1450,11 +1450,213 @@ async function extractStrictTransparentProductCutout(sourceImageBuffer) {
   return sharp(normalized).extract(bounds).png().toBuffer();
 }
 
+const CAROUSEL_PRODUCT_LABEL_PLACEMENTS = {
+  top_left: { x: 54, y: 54, width: 430, height: 142 },
+  top_right: { x: 596, y: 54, width: 430, height: 142 },
+  bottom_left: { x: 54, y: 884, width: 430, height: 142 },
+  bottom_right: { x: 596, y: 884, width: 430, height: 142 },
+};
+
+function normalizeCarouselProductLabelAnalysis(value) {
+  const placement = String(value?.placement || "none");
+  const layout = String(value?.layout || "none");
+  const textTone = String(value?.text_tone || "dark");
+  const rawBox = value?.product_bbox || {};
+  const productBox = {
+    x: Math.max(0, Math.min(1000, Number(rawBox.x || 0))),
+    y: Math.max(0, Math.min(1000, Number(rawBox.y || 0))),
+    width: Math.max(0, Math.min(1000, Number(rawBox.width || 0))),
+    height: Math.max(0, Math.min(1000, Number(rawBox.height || 0))),
+  };
+  const confidence = Math.max(0, Math.min(1, Number(value?.confidence || 0)));
+
+  if (
+    !CAROUSEL_PRODUCT_LABEL_PLACEMENTS[placement] ||
+    !["text_only", "compact_card"].includes(layout) ||
+    !["dark", "light"].includes(textTone) ||
+    confidence < 0.7 ||
+    productBox.width <= 0 ||
+    productBox.height <= 0
+  ) {
+    return null;
+  }
+
+  return { placement, layout, textTone, confidence, productBox };
+}
+
+async function analyzeCarouselProductLabelPlacements({ openai, items, ruleId }) {
+  const candidates = (Array.isArray(items) ? items : [])
+    .filter((item) => item?.imageUrl && item?.title)
+    .slice(0, CAROUSEL_PRODUCT_SLIDE_TARGET);
+  if (!openai || !candidates.length) return new Map();
+
+  const content = [
+    {
+      type: "input_text",
+      text: "Analyze all supplied ecommerce images in this single request. For each image, locate the marketed product named in the title and choose a predefined corner only when a product-name label can be placed without covering or touching the marketed product. People and animals are allowed and must not cause rejection, but do not place text over faces or other visually important human or animal areas. Prefer text_only when the chosen area is visually calm with strong readable contrast; otherwise choose compact_card for a small translucent rounded card. Choose none when no corner is safely free, the product is unclear, or confidence is below 0.70. Coordinates are integers from 0 to 1000 relative to the full source image. Return exactly one result for every ID.",
+    },
+  ];
+  for (const candidate of candidates) {
+    content.push({
+      type: "input_text",
+      text: `ID ${candidate.id}; exact product title: ${candidate.title}`,
+    });
+    content.push({ type: "input_image", image_url: candidate.imageUrl, detail: "low" });
+  }
+
+  try {
+    const response = await openai.responses.create(
+      {
+        model: PRODUCT_RESEARCH_FAST_MODEL,
+        input: [{ role: "user", content }],
+        max_output_tokens: 1600,
+        text: {
+          format: {
+            type: "json_schema",
+            name: "carousel_product_label_placements",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                images: {
+                  type: "array",
+                  minItems: candidates.length,
+                  maxItems: candidates.length,
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      id: { type: "string" },
+                      product_bbox: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                          x: { type: "integer", minimum: 0, maximum: 1000 },
+                          y: { type: "integer", minimum: 0, maximum: 1000 },
+                          width: { type: "integer", minimum: 0, maximum: 1000 },
+                          height: { type: "integer", minimum: 0, maximum: 1000 },
+                        },
+                        required: ["x", "y", "width", "height"],
+                      },
+                      placement: {
+                        type: "string",
+                        enum: ["top_left", "top_right", "bottom_left", "bottom_right", "none"],
+                      },
+                      layout: {
+                        type: "string",
+                        enum: ["text_only", "compact_card", "none"],
+                      },
+                      text_tone: { type: "string", enum: ["dark", "light"] },
+                      confidence: { type: "number", minimum: 0, maximum: 1 },
+                    },
+                    required: ["id", "product_bbox", "placement", "layout", "text_tone", "confidence"],
+                  },
+                },
+              },
+              required: ["images"],
+            },
+          },
+        },
+      },
+      { timeout: 20_000, maxRetries: 0 }
+    );
+    const parsed = safeJsonParse(getOpenAiResponseOutputText(response));
+    const allowedIds = new Set(candidates.map((candidate) => String(candidate.id)));
+    return new Map(
+      (Array.isArray(parsed?.images) ? parsed.images : [])
+        .filter((entry) => allowedIds.has(String(entry?.id || "")))
+        .map((entry) => [String(entry.id), normalizeCarouselProductLabelAnalysis(entry)])
+        .filter(([, analysis]) => Boolean(analysis))
+    );
+  } catch (error) {
+    console.warn("Carousel product label analysis skipped; original images will be preserved", {
+      ruleId: ruleId || null,
+      imageCount: candidates.length,
+      message: error?.message || "Unknown placement analysis error",
+    });
+    return new Map();
+  }
+}
+
+function boxesOverlapWithPadding(first, second, padding = 18) {
+  if (!first || !second) return true;
+  return !(
+    first.x + first.width + padding <= second.x ||
+    second.x + second.width + padding <= first.x ||
+    first.y + first.height + padding <= second.y ||
+    second.y + second.height + padding <= first.y
+  );
+}
+
+function mapNormalizedBoxToContainedCanvas(productBox, sourceMetadata, width, height) {
+  let sourceWidth = Number(sourceMetadata?.width || 0);
+  let sourceHeight = Number(sourceMetadata?.height || 0);
+  if ([5, 6, 7, 8].includes(Number(sourceMetadata?.orientation || 0))) {
+    [sourceWidth, sourceHeight] = [sourceHeight, sourceWidth];
+  }
+  if (!sourceWidth || !sourceHeight) return null;
+  const scale = Math.min(width / sourceWidth, height / sourceHeight);
+  const renderedWidth = sourceWidth * scale;
+  const renderedHeight = sourceHeight * scale;
+  return {
+    x: (width - renderedWidth) / 2 + (productBox.x / 1000) * renderedWidth,
+    y: (height - renderedHeight) / 2 + (productBox.y / 1000) * renderedHeight,
+    width: (productBox.width / 1000) * renderedWidth,
+    height: (productBox.height / 1000) * renderedHeight,
+  };
+}
+
+function splitCarouselProductTitleLines(value, maxChars = 20, maxLines = 2) {
+  let remaining = String(value || "").replace(/\s+/g, " ").trim();
+  const lines = [];
+  while (remaining && lines.length < maxLines) {
+    if (remaining.length <= maxChars) {
+      lines.push(remaining);
+      remaining = "";
+      break;
+    }
+    let cutAt = remaining.lastIndexOf(" ", maxChars);
+    if (cutAt < Math.floor(maxChars * 0.55)) cutAt = maxChars;
+    lines.push(remaining.slice(0, cutAt).trim());
+    remaining = remaining.slice(cutAt).trim();
+  }
+  if (remaining && lines.length) {
+    lines[lines.length - 1] = `${lines[lines.length - 1].slice(0, maxChars - 3).trimEnd()}...`;
+  }
+  return lines;
+}
+
+function buildCarouselProductLabelSvg({ title, analysis, productCanvasBox }) {
+  const labelBox = CAROUSEL_PRODUCT_LABEL_PLACEMENTS[analysis?.placement];
+  if (!labelBox || boxesOverlapWithPadding(labelBox, productCanvasBox)) return null;
+  const lines = splitCarouselProductTitleLines(title, 20, 2);
+  if (!lines.length) return null;
+
+  const isLight = analysis.textTone === "light";
+  const textColor = isLight ? "#ffffff" : "#111827";
+  const cardColor = isLight ? "#111827" : "#ffffff";
+  const card = analysis.layout === "compact_card"
+    ? `<rect x="${labelBox.x}" y="${labelBox.y}" width="${labelBox.width}" height="${labelBox.height}" rx="24" fill="${cardColor}" fill-opacity="0.82"/>`
+    : "";
+  const textX = labelBox.x + (analysis.layout === "compact_card" ? 26 : 4);
+  const textY = labelBox.y + (lines.length === 1 ? 88 : 59);
+  const outline = analysis.layout === "text_only"
+    ? `stroke="${isLight ? "#000000" : "#ffffff"}" stroke-opacity="0.34" stroke-width="7" paint-order="stroke"`
+    : "";
+  const spans = lines
+    .map((line, index) => `<tspan x="${textX}" dy="${index === 0 ? 0 : 46}">${escapeSvg(line)}</tspan>`)
+    .join("");
+  return `<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg">${card}<text x="${textX}" y="${textY}" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="700" fill="${textColor}" ${outline}>${spans}</text></svg>`;
+}
+
 async function renderCarouselProductSlideImage({
   sourceImageUrl,
   supabase = null,
   rule = null,
   backgroundSelectionContext = null,
+  productTitle = "",
+  productLabelAnalysis = null,
 }) {
   const width = 1080;
   const height = 1080;
@@ -1467,10 +1669,13 @@ async function renderCarouselProductSlideImage({
       background: { r: 248, g: 246, b: 241, alpha: 1 },
     },
   });
+  let productCanvasBox = null;
+  let productLabelApplied = false;
 
   if (sourceImageUrl) {
     try {
       const sourceBuffer = await fetchImageBufferForOverlay(sourceImageUrl);
+      const sourceMetadata = await sharp(sourceBuffer).metadata();
       let cutoutBuffer = null;
 
       try {
@@ -1540,6 +1745,12 @@ async function renderCarouselProductSlideImage({
         const meta = await sharp(resizedProduct).metadata();
         const productLeft = Math.round((width - Number(meta.width || 0)) / 2);
         const productTop = Math.max(58, Math.round((height - Number(meta.height || 0)) / 2) - 42);
+        productCanvasBox = {
+          x: productLeft,
+          y: productTop,
+          width: Number(meta.width || 0),
+          height: Number(meta.height || 0),
+        };
         const shadowWidth = Math.max(220, Math.round((Number(meta.width || 520)) * 0.62));
         const shadowSvg = `
           <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
@@ -1554,7 +1765,8 @@ async function renderCarouselProductSlideImage({
         composites.push({ input: resizedProduct, top: productTop, left: productLeft });
       } else {
         // No reliable transparency: preserve the website image and its existing
-        // background. Do not add a library background, product label or text.
+        // background. Product text may only be added in a separately verified
+        // safe corner and never changes the source image's size or crop.
         baseCanvas = sharp(sourceBuffer).rotate().resize({
           width,
           height,
@@ -1562,6 +1774,21 @@ async function renderCarouselProductSlideImage({
           background: { r: 255, g: 255, b: 255, alpha: 1 },
           withoutEnlargement: false,
         });
+        productCanvasBox = productLabelAnalysis
+          ? mapNormalizedBoxToContainedCanvas(productLabelAnalysis.productBox, sourceMetadata, width, height)
+          : null;
+      }
+
+      if (productTitle && productLabelAnalysis && productCanvasBox) {
+        const labelSvg = buildCarouselProductLabelSvg({
+          title: productTitle,
+          analysis: productLabelAnalysis,
+          productCanvasBox,
+        });
+        if (labelSvg) {
+          composites.push({ input: Buffer.from(labelSvg), top: 0, left: 0 });
+          productLabelApplied = true;
+        }
       }
     } catch (error) {
       console.error("Product image fetch/render failed", {
@@ -1578,7 +1805,10 @@ async function renderCarouselProductSlideImage({
     .png()
     .toBuffer();
 
-  return { imageBase64: outputBuffer.toString("base64") };
+  return {
+    imageBase64: outputBuffer.toString("base64"),
+    productLabelApplied,
+  };
 }
 
 function getDateYYYYMMDDInTimeZone(
@@ -6092,7 +6322,8 @@ async function prepareCarouselProductsForRule({
       authoritativeResearchError.candidateCount = combinedCandidates.length;
       throw authoritativeResearchError;
     } catch (error) {
-      console.error("Authoritative GPT-5.5 campaign web research failed; legacy product discovery was not allowed to replace its choices", {
+      const isBackgroundPending = error?.code === "CAMPAIGN_RESEARCH_BACKGROUND_PENDING";
+      const logDetails = {
         ruleId: rule?.id,
         brandProfileId: rule?.brand_profile_id,
         websiteUrl,
@@ -6100,7 +6331,21 @@ async function prepareCarouselProductsForRule({
         code: error?.code || null,
         message: error?.message,
         elapsedMs: Date.now() - productPreparationStartedAt,
-      });
+        occurrenceId: automationOccurrenceId || null,
+        openaiResponseId: error?.openaiResponseId || null,
+        pollCount: Number(error?.pollCount || 0),
+      };
+      if (isBackgroundPending) {
+        console.info(
+          "Authoritative GPT-5.5 campaign web research deferred; the same background response will resume automatically",
+          logDetails
+        );
+      } else {
+        console.error(
+          "Authoritative GPT-5.5 campaign web research failed; legacy product discovery was not allowed to replace its choices",
+          logDetails
+        );
+      }
       throw error;
     }
   } else if (isCampaignRule) {
@@ -23206,6 +23451,7 @@ function createCampaignResearchPendingError({
   responseStatus = "in_progress",
   researchRound = 1,
   requestFingerprint = "",
+  pollCount = 0,
 }) {
   const error = new Error(
     "GPT-5.5 campaign web research is still running in the background. Spreelo will resume the same research automatically."
@@ -23215,6 +23461,7 @@ function createCampaignResearchPendingError({
   error.openaiResponseStatus = String(responseStatus || "in_progress");
   error.researchRound = Math.max(1, Number(researchRound || 1));
   error.requestFingerprint = String(requestFingerprint || "");
+  error.pollCount = Math.max(0, Number(pollCount || 0));
   error.retryAfterMs = CAMPAIGN_BACKGROUND_RESEARCH_RETRY_MS;
   return error;
 }
@@ -23314,6 +23561,13 @@ async function getDurableCampaignResearchResponse({
   let responseId = String(job.openai_response_id || "").trim();
 
   if (responseId) {
+    console.info("Campaign primary GPT-5.5 web research resuming existing background response", {
+      ruleId: rule?.id,
+      occurrenceId: automationOccurrenceId,
+      researchRound,
+      openaiResponseId: responseId,
+      pollCount: Number(job.poll_count || 0),
+    });
     response = await openai.responses.retrieve(responseId, {
       timeout: 12_000,
       maxRetries: 0,
@@ -23338,6 +23592,13 @@ async function getDurableCampaignResearchResponse({
       if (!responseId) {
         throw new Error("OpenAI did not return a background response id.");
       }
+      console.info("Campaign primary GPT-5.5 web research started new background response", {
+        ruleId: rule?.id,
+        occurrenceId: automationOccurrenceId,
+        researchRound,
+        openaiResponseId: responseId,
+        pollCount: Number(job.poll_count || 0),
+      });
       const { error } = await supabase
         .from("automation_campaign_research_jobs")
         .update({
@@ -23358,6 +23619,7 @@ async function getDurableCampaignResearchResponse({
           responseStatus: "starting",
           researchRound,
           requestFingerprint,
+          pollCount: Number(job.poll_count || 0),
         });
       }
       throw error;
@@ -23414,6 +23676,7 @@ async function getDurableCampaignResearchResponse({
     responseStatus,
     researchRound,
     requestFingerprint,
+    pollCount: Number(job.poll_count || 0) + localPollCount,
   });
 }
 
@@ -23498,8 +23761,8 @@ async function findPrimaryCampaignProductsWithWebSearch({
 - Stay in the same country/market version represented by ${websiteUrl}.
 - Open every direct product page during this research and confirm that it currently loads as a purchasable product page. Search-result snippets and old indexed URLs are not proof that a page is live.
 - Do not invent product facts.
- - Every returned product must have at least one official clean catalogue/packshot image visibly available in its product gallery: the product without any person, human body part or animal. This is a publication requirement. Prefer products with several clean gallery images and do not return identities whose official gallery only shows people or animals.
- - Return the best direct clean product-only image URL you can actually verify for each product. Use an empty string if the image URL is not visible; never guess it.
+- Every returned product must have at least one official product image visibly available in its product gallery. People, human body parts and animals are allowed when they are part of a genuine product image.
+ - Return the best direct official product image URL you can actually verify for each product. Use an empty string if the image URL is not visible; never guess it.
  - Return the displayed price only when clearly visible. Otherwise use an empty string.
  ${researchRound > 1 ? "- This is a bounded diversity/recovery round. The earlier URLs are excluded below; actively look for other complementary product families that can strengthen a complete five-product carousel." : ""}
 ${usedProducts.length ? `- Prefer products not used in recent Spreelo posts. Avoid these unless the site cannot provide ten better choices:\n${usedProducts.join("\n")}` : ""}
@@ -23508,7 +23771,7 @@ ${blockedProducts.length ? `- HARD TECHNICAL EXCLUSIONS: the following URLs were
 Return the result in the required JSON structure. Keep each reason concise and grounded in the product and campaign.
   `.trim();
 
-  console.log("Campaign primary GPT-5.5 web research started", {
+  console.log("Campaign primary GPT-5.5 web research requested", {
     ruleId: rule?.id,
     brandProfileId: rule?.brand_profile_id,
     websiteUrl,
@@ -26268,6 +26531,26 @@ async function saveCarouselSlidesForPost({
     bufferPromises: new Map(),
     usageCounts: new Map(),
   };
+  const productLabelAnalyses = await analyzeCarouselProductLabelPlacements({
+    openai,
+    ruleId: rule?.id,
+    items: carouselProducts.map((product, index) => ({
+      id: String(index),
+      title: String(product?.title || slides[index]?.product_title || "").trim(),
+      imageUrl:
+        slides[index]?.image_url ||
+        product?.image_url ||
+        (index === 0 ? imageUrl || selectedItem?.image_url : null) ||
+        null,
+    })),
+  });
+  if (includeLogo) {
+    for (const [analysisId, analysis] of productLabelAnalyses) {
+      if (analysis?.placement === "bottom_right") {
+        productLabelAnalyses.delete(analysisId);
+      }
+    }
+  }
 
   async function buildCarouselSlideRow(index) {
     const slide = slides[index] || {};
@@ -26279,15 +26562,20 @@ async function saveCarouselSlidesForPost({
     let generatedImagePrompt = null;
     let slideRenderedBy = 'source_image';
     let productCardRenderError = null;
+    let productLabelApplied = false;
 
     if (!isOutroSlide && sourceSlideImageUrl) {
       try {
-        const { imageBase64 } = await renderCarouselProductSlideImage({
+        const renderedProductSlide = await renderCarouselProductSlideImage({
           sourceImageUrl: sourceSlideImageUrl,
           supabase,
           rule,
           backgroundSelectionContext,
+          productTitle: String(slideProduct?.title || slide.product_title || "").trim(),
+          productLabelAnalysis: productLabelAnalyses.get(String(index)) || null,
         });
+        const { imageBase64 } = renderedProductSlide;
+        productLabelApplied = Boolean(renderedProductSlide.productLabelApplied);
 
         const uploadedImage = await uploadGeneratedImageToStorage({
           supabase,
@@ -26404,6 +26692,13 @@ async function saveCarouselSlidesForPost({
         product_price: getTrustedWebsiteItemPricing(slideProduct || {}).displayPrice || slide.product_price || null,
         product_sale_price: getTrustedWebsiteItemPricing(slideProduct || {}).salePrice || null,
         product_original_price: getTrustedWebsiteItemPricing(slideProduct || {}).originalPrice || null,
+        product_label_applied: productLabelApplied,
+        product_label_layout: productLabelApplied
+          ? productLabelAnalyses.get(String(index))?.layout || null
+          : null,
+        product_label_placement: productLabelApplied
+          ? productLabelAnalyses.get(String(index))?.placement || null
+          : null,
         product_card_render_error: productCardRenderError || null,
       },
     };
@@ -30393,15 +30688,26 @@ function normalizeHashtagLine(value) {
 }
 
 function buildInstagramCaptionFromPostContent(content) {
-  return truncateText(String(content || "").trim(), 2200);
+  const body = String(content || "").trim();
+  if (!body) return "";
+  const markerAndLineBreak = "\u2063\n";
+  const availableBodyLength = 2200 - markerAndLineBreak.length;
+  const boundedBody = body.length <= availableBodyLength
+    ? body
+    : `${body.slice(0, availableBodyLength - 3)}...`;
+  return `${markerAndLineBreak}${boundedBody}`;
 }
 
 
 function buildPlatformApprovalPreviews({ platform, postContent }) {
+  const normalizedPlatform = String(platform || "").toLowerCase();
+  const previewContent = normalizedPlatform.includes("instagram")
+    ? buildInstagramCaptionFromPostContent(postContent)
+    : postContent;
   return [
     {
       label: platform || "Social media",
-      content: postContent,
+      content: previewContent,
     },
   ];
 }
@@ -31639,6 +31945,8 @@ async function runAutomationCron(request, options = {}) {
             openai_response_id: result.responseId,
             openai_response_status: result.responseStatus,
             research_round: result.researchRound,
+            occurrence_id: automationOccurrenceId,
+            poll_count: Number(errorOrMessage?.pollCount || 0),
             terminal_failure: false,
             refunded_credits: 0,
             same_occurrence_preserved: true,
