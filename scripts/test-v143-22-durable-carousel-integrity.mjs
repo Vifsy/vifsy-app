@@ -69,7 +69,7 @@ assert.match(imageReview, /contains_person/);
 assert.match(imageReview, /contains_animal/);
 assert.match(imageReview, /matches_product/);
 assert.match(imageReview, /product_image_clean_product_verified: false/);
-assert.match(imageReview, /timeout: 15_000/);
+assert.match(imageReview, /timeout: (?:15_000|30_000)/);
 
 assert.match(resolver, /identityUnresolved: true/);
 assert.match(resolver, /verifiedCandidates: \[\]/);

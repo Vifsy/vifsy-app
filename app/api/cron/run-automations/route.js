@@ -5997,6 +5997,7 @@ async function prepareCarouselProductsForRule({
           websiteUrl,
           automationOccurrenceId,
           usedWebsiteItems: researchExclusions,
+          blockedWebsiteItems: combinedCandidates,
           cachedWebsiteItems: catalogItems,
           deadlineMs: productPreparationDeadline,
           researchRound,
@@ -6028,16 +6029,12 @@ async function prepareCarouselProductsForRule({
           break;
         }
 
-        // The replacement round uses the same GPT-5.5 web-search method and
-        // explicitly excludes every URL already returned. It does not open the
-        // legacy Store Map, Product Engine queue or 180-candidate fallback.
-        researchExclusions = [
-          ...recentUsedItems,
-          ...combinedCandidates.map((candidate) => ({
-            item_title: candidate?.title || "",
-            item_url: candidate?.url || "",
-          })),
-        ];
+        // The replacement round uses the same GPT-5.5 web-search method. The
+        // already returned URLs are passed separately as hard technical
+        // exclusions, so a long recent-history list cannot push them out of
+        // the prompt. It does not open the legacy Store Map, Product Engine
+        // queue or 180-candidate fallback.
+        researchExclusions = [...recentUsedItems];
       }
 
       const firstResearchRound = researchRounds[0] || {};
@@ -22787,7 +22784,9 @@ function isRecoveredAuthoritativeProductIdentity({
 }
 
 async function repairAuthoritativeWebAgentProductAssets({
+  supabase,
   openai,
+  automationOccurrenceId = null,
   selectedCandidates,
   websiteUrl,
   deadlineMs,
@@ -22837,7 +22836,8 @@ For every supplied product:
 - Search only ${allowedDomain} using exact product-title searches plus every supplied stable identity hint/SKU.
 - Find the CURRENT canonical direct product page for the SAME product in the same country/market as ${websiteUrl}.
 - A stale URL may come from an older commerce platform or search index. Prefer the retailer's current canonical URL structure.
-- Open the current official result and return the best direct product-image file URL that is visibly attached to that exact product.
+- Open the current official result immediately before returning it. Confirm that it loads as a live product page rather than a 404, redirect loop, search result, category or cached snippet.
+- Return the best direct product-image file URL that is visibly attached to that exact product.
 - The image must be a real product image, not a logo, icon, placeholder, category banner, editorial hero or guessed URL.
 - Preserve original_rank exactly. Return no row when the same identity cannot be evidenced.
 - Do not substitute a similar product. Color/size variants are acceptable only when they are the same underlying product identity.
@@ -22855,8 +22855,7 @@ Return only the required JSON structure.`.trim();
     timeoutMs: availableRequestMs,
   });
 
-  const response = await openai.responses.create(
-    {
+  const requestBody = {
       model: PRODUCT_RESEARCH_MODEL,
       tools: [
         {
@@ -22915,12 +22914,35 @@ Return only the required JSON structure.`.trim();
         },
       },
       input: JSON.stringify({ products_to_repair: repairInputs }),
-    },
-    {
+    };
+  const repairResearchSlot =
+    Math.max(1, Number(researchRound || 1)) +
+    CAMPAIGN_PRIMARY_WEB_RESEARCH_MAX_ROUNDS;
+  const requestFingerprint = String(
+    getStableQueueHash(
+      JSON.stringify({
+        occurrenceId: automationOccurrenceId || rule?.id || "direct",
+        repairResearchSlot,
+        allowedDomain,
+        websiteUrl,
+        repairInputs,
+      })
+    )
+  );
+  const response = automationOccurrenceId
+    ? await getDurableCampaignResearchResponse({
+        supabase,
+        openai,
+        automationOccurrenceId,
+        rule,
+        researchRound: repairResearchSlot,
+        requestBody,
+        requestFingerprint,
+      })
+    : await openai.responses.create(requestBody, {
       timeout: availableRequestMs,
       maxRetries: 0,
-    }
-  );
+    });
 
   const parsed = safeJsonParse(response.output_text || "");
   const rawRepairs = Array.isArray(parsed?.products) ? parsed.products : [];
@@ -23014,7 +23036,10 @@ async function hydrateAuthoritativeWebAgentProduct({
   } catch (error) {
     technicalPageRateLimited = isWebsiteRateLimitError(error);
     technicalPageStatus = Number(error?.status || 0);
-    console.warn("Authoritative GPT-5.5 product page could not be fetched; retaining only web-agent facts", {
+    const logProductFetchFailure = technicalPageRateLimited
+      ? console.warn
+      : console.info;
+    logProductFetchFailure("Authoritative GPT-5.5 product page could not be fetched; retaining only web-agent facts", {
       productUrl: candidate?.url,
       title: candidate?.title,
       message: error?.message,
@@ -23077,7 +23102,7 @@ async function hydrateAuthoritativeWebAgentProduct({
   );
 
   if (!normalized?.title || !normalized?.url || !normalized?.image_url) {
-    console.warn("Authoritative GPT-5.5 product lacked a usable technical image asset", {
+    console.info("Authoritative GPT-5.5 product lacked a usable technical image asset", {
       rank: getPrimaryCampaignResearchRank(candidate),
       productUrl: candidate?.url,
       title: candidate?.title,
@@ -23335,6 +23360,7 @@ async function findPrimaryCampaignProductsWithWebSearch({
   websiteUrl,
   automationOccurrenceId = null,
   usedWebsiteItems = [],
+  blockedWebsiteItems = [],
   cachedWebsiteItems = [],
   deadlineMs = Number.POSITIVE_INFINITY,
   researchRound = 1,
@@ -23385,6 +23411,16 @@ async function findPrimaryCampaignProductsWithWebSearch({
       return [title, url].filter(Boolean).join(" | ");
     })
     .filter(Boolean);
+  const blockedProducts = (blockedWebsiteItems || [])
+    .slice(0, CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET * 2)
+    .map((item) => {
+      const title = String(item?.item_title || item?.title || "").trim();
+      const url = String(
+        item?.item_url || item?.product_url || item?.url || ""
+      ).trim();
+      return [title, url].filter(Boolean).join(" | ");
+    })
+    .filter(Boolean);
   const exactTask = `Hitta ${CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET} passande produkter från ${allowedDomain} för ${campaignTheme}.`;
   const webAgentInstructions = `
 Act as a careful senior marketer using web search:
@@ -23395,10 +23431,12 @@ Act as a careful senior marketer using web search:
 - Avoid five near-identical products when the assortment supports useful variation. Do not force irrelevant variation.
 - Do not return homepages, search pages, category pages, gift guides, brand pages, images, articles or guessed URLs.
 - Stay in the same country/market version represented by ${websiteUrl}.
+- Open every direct product page during this research and confirm that it currently loads as a purchasable product page. Search-result snippets and old indexed URLs are not proof that a page is live.
 - Do not invent product facts.
 - Return the best direct product-image URL you can actually verify for each product. Use an empty string if the image URL is not visible; never guess it.
 - Return the displayed price only when clearly visible. Otherwise use an empty string.
 ${usedProducts.length ? `- Prefer products not used in recent Spreelo posts. Avoid these unless the site cannot provide ten better choices:\n${usedProducts.join("\n")}` : ""}
+${blockedProducts.length ? `- HARD TECHNICAL EXCLUSIONS: the following URLs were already returned in an earlier round and could not be opened as current product pages. Never return these URLs again. You may select the same product identity only if you find and open its different, current canonical product URL:\n${blockedProducts.join("\n")}` : ""}
 
 Return the result in the required JSON structure. Keep each reason concise and grounded in the product and campaign.
   `.trim();
@@ -23488,6 +23526,7 @@ Return the result in the required JSON structure. Keep each reason concise and g
         websiteUrl,
         exactTask,
         usedProducts,
+        blockedProducts,
       })
     )
   );
@@ -23731,7 +23770,9 @@ Return the result in the required JSON structure. Keep each reason concise and g
   ) {
     try {
       const technicalRepair = await repairAuthoritativeWebAgentProductAssets({
+        supabase,
         openai,
+        automationOccurrenceId,
         selectedCandidates: repairCandidates,
         websiteUrl,
         deadlineMs,
@@ -23784,6 +23825,9 @@ Return the result in the required JSON structure. Keep each reason concise and g
         editorialSelectionChanged: false,
       });
     } catch (error) {
+      if (error?.code === "CAMPAIGN_RESEARCH_BACKGROUND_PENDING") {
+        throw error;
+      }
       if (isWebsiteRateLimitError(error)) {
         technicalPageRateLimited = true;
       }
@@ -29406,7 +29450,7 @@ async function reviewCarouselProductOnlyImages({ openai, items, ruleId }) {
           },
         },
       },
-      { timeout: 15_000, maxRetries: 0 }
+      { timeout: 30_000, maxRetries: 0 }
     );
     const parsed = safeJsonParse(getOpenAiResponseOutputText(response));
     const reviews = new Map(
