@@ -67,11 +67,11 @@ const finalizerFunction = extractFunction(
   "finalizeCarouselFromPrimaryCampaignWebResearch",
   "findProductUrlWithWebSearch"
 );
-assert.match(finalizerFunction, /const rankedProducts = validProducts;/);
 assert.match(
   finalizerFunction,
-  /selectedProducts = rankedProducts\.slice\(\s*0,\s*CAROUSEL_PRODUCT_SLIDE_TARGET/
+  /selectLockedPrimaryCampaignProducts/
 );
+assert.match(finalizerFunction, /const selectedProducts = lockedSelection\.selectedProducts/);
 assert.match(finalizerFunction, /authoritative_gpt_ranking_preserved: true/);
 assert.match(finalizerFunction, /product_engine_verification_skipped: true/);
 assert.match(finalizerFunction, /legacy_180_candidate_flow_skipped: true/);

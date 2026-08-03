@@ -273,6 +273,16 @@ const CAMPAIGN_PRIMARY_ASSET_REPAIR_TIMEOUT_MS = Math.max(
   )
 );
 const CAMPAIGN_PRIMARY_POST_RESEARCH_RESERVE_MS = 20_000;
+const CAMPAIGN_BACKGROUND_RESEARCH_POLL_BUDGET_MS = Math.max(
+  20_000,
+  Math.min(
+    50_000,
+    Number(
+      process.env.CAMPAIGN_BACKGROUND_RESEARCH_POLL_BUDGET_MS || 40_000
+    ) || 40_000
+  )
+);
+const CAMPAIGN_BACKGROUND_RESEARCH_RETRY_MS = 35_000;
 const CAMPAIGN_PRIMARY_WEB_RESEARCH_SOURCE =
   "gpt55_authoritative_domain_web_agent";
 const CAROUSEL_PRODUCT_RESERVE_TARGET = PRODUCT_ENGINE_V2_ENABLED
@@ -2802,6 +2812,8 @@ function isValidCarouselProduct(item) {
   const pageType = String(item?.page_type || "product").toLowerCase();
   return Boolean(
     pageType === "product" &&
+    item?.product_image_identity_unresolved !== true &&
+    item?.product_image_identity_verified !== false &&
     (item?.product_page_verified !== true ||
       hasConcreteProductPageProof(item)) &&
     item?.title &&
@@ -3174,8 +3186,12 @@ function areSameWebsiteItem(a, b, sourceUrl = "") {
     return true;
   }
 
-  const aImage = normalizeComparableValue(a?.image_url);
-  const bImage = normalizeComparableValue(b?.image_url);
+  const aImage =
+    canonicalProductImageAssetKey(a?.image_url) ||
+    normalizeComparableValue(a?.image_url);
+  const bImage =
+    canonicalProductImageAssetKey(b?.image_url) ||
+    normalizeComparableValue(b?.image_url);
 
   if (aImage && bImage && aImage === bImage) {
     return true;
@@ -5872,6 +5888,7 @@ async function prepareCarouselProductsForRule({
   rule,
   brandProfile,
   summary,
+  automationOccurrenceId = null,
   usedWebsiteImageUrlsThisRun = new Set(),
   resumedAfterWebsiteRateLimit = false,
 }) {
@@ -5974,9 +5991,11 @@ async function prepareCarouselProductsForRule({
         researchRound += 1
       ) {
         const roundResult = await findPrimaryCampaignProductsWithWebSearch({
+          supabase,
           openai,
           rule,
           websiteUrl,
+          automationOccurrenceId,
           usedWebsiteItems: researchExclusions,
           cachedWebsiteItems: catalogItems,
           deadlineMs: productPreparationDeadline,
@@ -10485,6 +10504,54 @@ async function deferAutomationOccurrenceForWebsiteRateLimit({
     retryCount: Number(data?.retry_count || 0),
     status: data?.status || "retry_pending",
     domain: data?.domain || domain || null,
+  };
+}
+
+async function deferAutomationOccurrenceForCampaignResearch({
+  supabase,
+  occurrenceId,
+  errorOrMessage,
+  metadata = {},
+}) {
+  const responseId = String(errorOrMessage?.openaiResponseId || "").trim();
+  const researchRound = Math.max(
+    1,
+    Number(errorOrMessage?.researchRound || 1)
+  );
+  const responseStatus = String(
+    errorOrMessage?.openaiResponseStatus || "in_progress"
+  );
+  const retryAfterMs = Math.max(
+    15_000,
+    Number(
+      errorOrMessage?.retryAfterMs ||
+        CAMPAIGN_BACKGROUND_RESEARCH_RETRY_MS
+    )
+  );
+  const { data, error } = await supabase.rpc(
+    "defer_automation_occurrence_for_campaign_research",
+    {
+      p_occurrence_id: occurrenceId,
+      p_openai_response_id: responseId || null,
+      p_research_round: researchRound,
+      p_response_status: responseStatus,
+      p_retry_after_ms: retryAfterMs,
+      p_metadata: metadata || {},
+    }
+  );
+  if (error) {
+    throw new Error(
+      `The v143.22 database migration is required before background campaign research can resume: ${error.message}`
+    );
+  }
+  return {
+    handled: Boolean(data?.handled),
+    status: data?.status || "retry_pending",
+    retryAt: data?.retry_at || null,
+    retryAfterMs: Number(data?.retry_after_ms || retryAfterMs),
+    responseId: data?.openai_response_id || responseId || null,
+    researchRound: Number(data?.research_round || researchRound),
+    responseStatus,
   };
 }
 
@@ -23045,10 +23112,228 @@ async function hydrateAuthoritativeWebAgentProduct({
   };
 }
 
+function createCampaignResearchPendingError({
+  responseId = "",
+  responseStatus = "in_progress",
+  researchRound = 1,
+  requestFingerprint = "",
+}) {
+  const error = new Error(
+    "GPT-5.5 campaign web research is still running in the background. Spreelo will resume the same research automatically."
+  );
+  error.code = "CAMPAIGN_RESEARCH_BACKGROUND_PENDING";
+  error.openaiResponseId = String(responseId || "").trim();
+  error.openaiResponseStatus = String(responseStatus || "in_progress");
+  error.researchRound = Math.max(1, Number(researchRound || 1));
+  error.requestFingerprint = String(requestFingerprint || "");
+  error.retryAfterMs = CAMPAIGN_BACKGROUND_RESEARCH_RETRY_MS;
+  return error;
+}
+
+function getOpenAiResponseOutputText(response) {
+  if (typeof response?.output_text === "string") {
+    return response.output_text;
+  }
+  return (response?.output || [])
+    .flatMap((entry) => (Array.isArray(entry?.content) ? entry.content : []))
+    .map((entry) => String(entry?.text || ""))
+    .filter(Boolean)
+    .join("\n");
+}
+
+async function getDurableCampaignResearchResponse({
+  supabase,
+  openai,
+  automationOccurrenceId,
+  rule,
+  researchRound,
+  requestBody,
+  requestFingerprint,
+}) {
+  if (!automationOccurrenceId || !supabase) {
+    return openai.responses.create(requestBody, {
+      timeout: CAMPAIGN_PRIMARY_WEB_RESEARCH_TIMEOUT_MS,
+      maxRetries: 0,
+    });
+  }
+
+  const selectJob = async () => {
+    const { data, error } = await supabase
+      .from("automation_campaign_research_jobs")
+      .select("*")
+      .eq("occurrence_id", automationOccurrenceId)
+      .eq("research_round", researchRound)
+      .maybeSingle();
+    if (error) {
+      throw new Error(
+        `The v143.22 database migration is required before durable campaign research can run: ${error.message}`
+      );
+    }
+    return data || null;
+  };
+
+  let job = await selectJob();
+  if (job?.request_fingerprint && job.request_fingerprint !== requestFingerprint) {
+    throw new Error(
+      "The saved campaign research does not match this automation occurrence."
+    );
+  }
+
+  if (!job) {
+    const { data, error } = await supabase
+      .from("automation_campaign_research_jobs")
+      .insert({
+        occurrence_id: automationOccurrenceId,
+        automation_rule_id: rule.id,
+        user_id: rule.user_id,
+        brand_profile_id: rule.brand_profile_id || null,
+        research_round: researchRound,
+        model: PRODUCT_RESEARCH_MODEL,
+        request_fingerprint: requestFingerprint,
+        status: "starting",
+      })
+      .select("*")
+      .single();
+    if (error) {
+      job = await selectJob();
+      if (!job) {
+        throw new Error(
+          `Could not create the durable campaign research job: ${error.message}`
+        );
+      }
+    } else {
+      job = data;
+    }
+  }
+
+  if (job.status === "completed" && job.output_text) {
+    console.log("Campaign primary GPT-5.5 web research resumed from completed background response", {
+      ruleId: rule?.id,
+      occurrenceId: automationOccurrenceId,
+      researchRound,
+      openaiResponseId: job.openai_response_id || null,
+      pollCount: Number(job.poll_count || 0),
+    });
+    return {
+      id: job.openai_response_id || null,
+      status: "completed",
+      output_text: job.output_text,
+    };
+  }
+
+  let response = null;
+  let responseId = String(job.openai_response_id || "").trim();
+
+  if (responseId) {
+    response = await openai.responses.retrieve(responseId, {
+      timeout: 12_000,
+      maxRetries: 0,
+    });
+  } else {
+    try {
+      response = await openai.responses.create(
+        {
+          ...requestBody,
+          background: true,
+          store: true,
+        },
+        {
+          timeout: 20_000,
+          maxRetries: 0,
+          headers: {
+            "Idempotency-Key": `spreelo-campaign-${requestFingerprint}`,
+          },
+        }
+      );
+      responseId = String(response?.id || "").trim();
+      if (!responseId) {
+        throw new Error("OpenAI did not return a background response id.");
+      }
+      const { error } = await supabase
+        .from("automation_campaign_research_jobs")
+        .update({
+          openai_response_id: responseId,
+          status: ["queued", "in_progress", "completed"].includes(response?.status)
+            ? response.status
+            : "in_progress",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", job.id);
+      if (error) {
+        throw new Error(`Could not save the OpenAI background response id: ${error.message}`);
+      }
+    } catch (error) {
+      if (/timed? out|timeout|connection|socket/i.test(String(error?.message || ""))) {
+        throw createCampaignResearchPendingError({
+          responseId,
+          responseStatus: "starting",
+          researchRound,
+          requestFingerprint,
+        });
+      }
+      throw error;
+    }
+  }
+
+  const pollDeadline = Date.now() + CAMPAIGN_BACKGROUND_RESEARCH_POLL_BUDGET_MS;
+  let localPollCount = 0;
+  while (
+    response &&
+    ["queued", "in_progress"].includes(response.status) &&
+    Date.now() < pollDeadline
+  ) {
+    await sleepMs(2_000);
+    response = await openai.responses.retrieve(responseId, {
+      timeout: 12_000,
+      maxRetries: 0,
+    });
+    localPollCount += 1;
+  }
+
+  const outputText = getOpenAiResponseOutputText(response);
+  const responseStatus = String(response?.status || "in_progress");
+  const completed = responseStatus === "completed" && Boolean(outputText);
+  const failed = ["failed", "cancelled", "incomplete"].includes(responseStatus);
+  const { error: updateError } = await supabase
+    .from("automation_campaign_research_jobs")
+    .update({
+      openai_response_id: responseId || null,
+      status: completed ? "completed" : failed ? "failed" : responseStatus,
+      output_text: completed ? outputText : null,
+      poll_count: Number(job.poll_count || 0) + localPollCount,
+      last_error: failed
+        ? String(response?.error?.message || response?.incomplete_details?.reason || responseStatus)
+        : null,
+      completed_at: completed ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", job.id);
+  if (updateError) {
+    throw new Error(`Could not persist the campaign research response: ${updateError.message}`);
+  }
+
+  if (completed) {
+    return { ...response, output_text: outputText };
+  }
+  if (failed) {
+    throw new Error(
+      `OpenAI background campaign research ended with status ${responseStatus}: ${response?.error?.message || response?.incomplete_details?.reason || "no result"}`
+    );
+  }
+  throw createCampaignResearchPendingError({
+    responseId,
+    responseStatus,
+    researchRound,
+    requestFingerprint,
+  });
+}
+
 async function findPrimaryCampaignProductsWithWebSearch({
+  supabase,
   openai,
   rule,
   websiteUrl,
+  automationOccurrenceId = null,
   usedWebsiteItems = [],
   cachedWebsiteItems = [],
   deadlineMs = Number.POSITIVE_INFINITY,
@@ -23130,9 +23415,8 @@ Return the result in the required JSON structure. Keep each reason concise and g
     researchRound,
   });
 
-  const response = await openai.responses.create(
-    {
-      model: PRODUCT_RESEARCH_MODEL,
+  const requestBody = {
+    model: PRODUCT_RESEARCH_MODEL,
       tools: [
         {
           type: "web_search",
@@ -23192,14 +23476,35 @@ Return the result in the required JSON structure. Keep each reason concise and g
           },
         },
       },
-      // Keep the actual user task identical to the successful manual test.
-      input: exactTask,
-    },
-    {
-      timeout: requestTimeoutMs,
-      maxRetries: 0,
-    }
+    // Keep the actual user task identical to the successful manual test.
+    input: exactTask,
+  };
+  const requestFingerprint = String(
+    getStableQueueHash(
+      JSON.stringify({
+        occurrenceId: automationOccurrenceId || rule?.id || "direct",
+        researchRound,
+        allowedDomain,
+        websiteUrl,
+        exactTask,
+        usedProducts,
+      })
+    )
   );
+  const response = automationOccurrenceId
+    ? await getDurableCampaignResearchResponse({
+        supabase,
+        openai,
+        automationOccurrenceId,
+        rule,
+        researchRound,
+        requestBody,
+        requestFingerprint,
+      })
+    : await openai.responses.create(requestBody, {
+        timeout: requestTimeoutMs,
+        maxRetries: 0,
+      });
 
   const content = response.output_text || "";
   const parsed = safeJsonParse(content);
@@ -23361,19 +23666,73 @@ Return the result in the required JSON structure. Keep each reason concise and g
     }
   }
 
+  // Generic metadata can point several different product pages at the same
+  // logo or placeholder. Never let that shared asset occupy two locked
+  // top-five slots: keep the first and repair the later selected identity.
+  const topFiveImageRanks = new Map();
+  const duplicateTopFiveRanks = new Set();
+  for (const product of hydratedProducts) {
+    const rank = getPrimaryCampaignResearchRank(product);
+    if (rank > CAROUSEL_PRODUCT_SLIDE_TARGET) continue;
+    const assetKey = canonicalProductImageAssetKey(product?.image_url);
+    if (!assetKey) continue;
+    if (topFiveImageRanks.has(assetKey)) {
+      duplicateTopFiveRanks.add(rank);
+    } else {
+      topFiveImageRanks.set(assetKey, rank);
+    }
+  }
+  if (duplicateTopFiveRanks.size) {
+    for (let index = hydratedProducts.length - 1; index >= 0; index -= 1) {
+      const rank = getPrimaryCampaignResearchRank(hydratedProducts[index]);
+      if (!duplicateTopFiveRanks.has(rank)) continue;
+      hydratedProducts.splice(index, 1);
+      const selectedCandidate = rankedCandidates.find(
+        (candidate) => getPrimaryCampaignResearchRank(candidate) === rank
+      );
+      if (selectedCandidate) failedHydrationCandidates.push(selectedCandidate);
+    }
+    console.warn("Duplicate primary image triggered exact selected-product repair", {
+      ruleId: rule?.id,
+      websiteUrl,
+      researchRound,
+      duplicateSelectedRanks: [...duplicateTopFiveRanks],
+    });
+  }
+
+  const failedByRank = new Map();
+  for (const candidate of failedHydrationCandidates) {
+    const rank = getPrimaryCampaignResearchRank(candidate);
+    if (rank > 0 && !failedByRank.has(rank)) failedByRank.set(rank, candidate);
+  }
+  const failedTopFiveCandidates = [...failedByRank.values()].filter(
+    (candidate) =>
+      getPrimaryCampaignResearchRank(candidate) <=
+      CAROUSEL_PRODUCT_SLIDE_TARGET
+  );
+  const repairCandidates = [
+    ...failedTopFiveCandidates,
+    ...[...failedByRank.values()].filter(
+      (candidate) =>
+        getPrimaryCampaignResearchRank(candidate) >
+        CAROUSEL_PRODUCT_SLIDE_TARGET
+    ),
+  ];
+
   // This recovery is deliberately technical, not editorial. GPT-5.5's
   // selected identities, reasons, ranks and campaign roles stay unchanged.
   // One exact web-research request resolves stale canonical URLs and official
   // product images. It does not call the retailer's rate-limited search API.
   if (
-    hydratedProducts.length < CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED &&
-    failedHydrationCandidates.length &&
+    repairCandidates.length &&
+    (failedTopFiveCandidates.length > 0 ||
+      hydratedProducts.length < CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED) &&
     (!Number.isFinite(deadlineMs) || deadlineMs - Date.now() >= 40_000)
   ) {
     try {
       const technicalRepair = await repairAuthoritativeWebAgentProductAssets({
         openai,
-        selectedCandidates: failedHydrationCandidates,
+        selectedCandidates: repairCandidates,
         websiteUrl,
         deadlineMs,
         rule,
@@ -23383,15 +23742,19 @@ Return the result in the required JSON structure. Keep each reason concise and g
         hydratedProducts.map(getPrimaryCampaignResearchRank)
       );
 
-      for (const selectedCandidate of failedHydrationCandidates) {
+      for (const selectedCandidate of repairCandidates) {
+        const selectedRank = getPrimaryCampaignResearchRank(selectedCandidate);
+        const isLockedTopFiveRank =
+          selectedRank <= CAROUSEL_PRODUCT_SLIDE_TARGET;
         if (
-          hydratedProducts.length >= CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED ||
+          (!isLockedTopFiveRank &&
+            hydratedProducts.length >=
+              CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED) ||
           (Number.isFinite(deadlineMs) && deadlineMs - Date.now() < 20_000)
         ) {
           break;
         }
 
-        const selectedRank = getPrimaryCampaignResearchRank(selectedCandidate);
         if (alreadyHydratedRanks.has(selectedRank)) continue;
         const recoveredCandidate = technicalRepair.repairedCandidates.find(
           (candidate) =>
@@ -23413,7 +23776,8 @@ Return the result in the required JSON structure. Keep each reason concise and g
         ruleId: rule?.id,
         websiteUrl,
         researchRound,
-        selectedIdentityCount: failedHydrationCandidates.length,
+        selectedIdentityCount: repairCandidates.length,
+        lockedTopFiveRepairCount: failedTopFiveCandidates.length,
         exactWebRepairExecuted: Boolean(technicalRepair.executed),
         repairedIdentityCount: technicalRepair.repairedCandidates.length,
         hydratedAfterRecoveryCount: hydratedProducts.length,
@@ -23481,6 +23845,118 @@ Return the result in the required JSON structure. Keep each reason concise and g
   };
 }
 
+function getCampaignRoleTokens(item) {
+  return new Set(
+    normalizeComparableValue(
+      [item?.campaign_role, item?.reason, item?.title]
+        .filter(Boolean)
+        .join(" ")
+    )
+      .split(/[^a-z0-9]+/i)
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 3)
+  );
+}
+
+function scoreCampaignRoleReplacement(desiredProduct, reserveProduct, selected) {
+  const desiredTokens = getCampaignRoleTokens(desiredProduct);
+  const reserveTokens = getCampaignRoleTokens(reserveProduct);
+  const overlap = [...desiredTokens].filter((token) => reserveTokens.has(token));
+  const unionSize = new Set([...desiredTokens, ...reserveTokens]).size || 1;
+  const desiredRole = normalizeComparableValue(desiredProduct?.campaign_role);
+  const reserveRole = normalizeComparableValue(reserveProduct?.campaign_role);
+  let score = (overlap.length / unionSize) * 100;
+  if (desiredRole && desiredRole === reserveRole) score += 120;
+  if (desiredRole && reserveRole && (desiredRole.includes(reserveRole) || reserveRole.includes(desiredRole))) {
+    score += 45;
+  }
+  const reserveTokensKey = [...reserveTokens].sort().join("|");
+  for (const selectedProduct of selected) {
+    const selectedTokensKey = [...getCampaignRoleTokens(selectedProduct)]
+      .sort()
+      .join("|");
+    if (reserveTokensKey && reserveTokensKey === selectedTokensKey) score -= 35;
+  }
+  score -= getPrimaryCampaignResearchRank(reserveProduct) / 100;
+  return score;
+}
+
+function selectLockedPrimaryCampaignProducts({ candidates, validProducts }) {
+  const rankedCandidates = [...(candidates || [])].sort(
+    (left, right) =>
+      getPrimaryCampaignResearchRank(left) -
+      getPrimaryCampaignResearchRank(right)
+  );
+  const rankedValidProducts = [...(validProducts || [])].sort(
+    (left, right) =>
+      getPrimaryCampaignResearchRank(left) -
+      getPrimaryCampaignResearchRank(right)
+  );
+  const validByRank = new Map(
+    rankedValidProducts.map((product) => [
+      getPrimaryCampaignResearchRank(product),
+      product,
+    ])
+  );
+  const intendedTopFive = rankedCandidates
+    .filter(
+      (candidate) =>
+        getPrimaryCampaignResearchRank(candidate) <=
+        CAROUSEL_PRODUCT_SLIDE_TARGET
+    )
+    .slice(0, CAROUSEL_PRODUCT_SLIDE_TARGET);
+  const selectedProducts = [];
+  const usedRanks = new Set();
+
+  for (const intendedProduct of intendedTopFive) {
+    const intendedRank = getPrimaryCampaignResearchRank(intendedProduct);
+    const exactProduct = validByRank.get(intendedRank);
+    if (exactProduct && !usedRanks.has(intendedRank)) {
+      selectedProducts.push(exactProduct);
+      usedRanks.add(intendedRank);
+      continue;
+    }
+
+    const replacement = rankedValidProducts
+      .filter((product) => {
+        const rank = getPrimaryCampaignResearchRank(product);
+        return rank > CAROUSEL_PRODUCT_SLIDE_TARGET && !usedRanks.has(rank);
+      })
+      .map((product) => ({
+        product,
+        score: scoreCampaignRoleReplacement(
+          intendedProduct,
+          product,
+          selectedProducts
+        ),
+      }))
+      .sort((left, right) => right.score - left.score)[0]?.product;
+    if (!replacement) continue;
+    const replacementRank = getPrimaryCampaignResearchRank(replacement);
+    selectedProducts.push({
+      ...replacement,
+      campaign_replacement_for_rank: intendedRank,
+      campaign_replacement_reason: "role_matched_reserve",
+      campaign_replaced_role:
+        intendedProduct?.campaign_role || intendedProduct?.reason || "",
+    });
+    usedRanks.add(replacementRank);
+  }
+
+  for (const product of rankedValidProducts) {
+    if (selectedProducts.length >= CAROUSEL_PRODUCT_SLIDE_TARGET) break;
+    const rank = getPrimaryCampaignResearchRank(product);
+    if (usedRanks.has(rank)) continue;
+    selectedProducts.push(product);
+    usedRanks.add(rank);
+  }
+
+  const reserveProducts = rankedValidProducts.filter(
+    (product) => !usedRanks.has(getPrimaryCampaignResearchRank(product))
+  );
+  return { selectedProducts, reserveProducts };
+}
+
 async function finalizeCarouselFromPrimaryCampaignWebResearch({
   supabase,
   rule,
@@ -23508,14 +23984,18 @@ async function finalizeCarouselFromPrimaryCampaignWebResearch({
   // GPT-5.5 already received the recent-product exclusions and ranked the
   // final set. Preserve that order verbatim; no local freshness or score pass
   // may move a product ahead of another one here.
-  const rankedProducts = validProducts;
-  const selectedProducts = rankedProducts.slice(
+  const lockedSelection = selectLockedPrimaryCampaignProducts({
+    candidates: researchResult?.candidates || [],
+    validProducts,
+  });
+  const selectedProducts = lockedSelection.selectedProducts;
+  const reserveProducts = lockedSelection.reserveProducts.slice(
     0,
-    CAROUSEL_PRODUCT_SLIDE_TARGET
+    CAROUSEL_PRODUCT_RESERVE_TARGET
   );
-  const reserveProducts = rankedProducts
-    .slice(CAROUSEL_PRODUCT_SLIDE_TARGET)
-    .slice(0, CAROUSEL_PRODUCT_RESERVE_TARGET);
+  if (selectedProducts.length < CAROUSEL_PRODUCT_SLIDE_TARGET) {
+    return null;
+  }
   const cycleNumber = await getCurrentWebsiteCycle({
     supabase,
     userId: rule.user_id,
@@ -28621,6 +29101,7 @@ function getProductImageResolverPageUrl(item) {
 async function resolveLargestProductImagesBeforeGeneration({
   items,
   ruleId,
+  openai = null,
 }) {
   const inputItems = Array.isArray(items) ? items.filter(Boolean) : [];
   if (!inputItems.length) return [];
@@ -28762,25 +29243,38 @@ async function resolveLargestProductImagesBeforeGeneration({
     }
   }
 
-  return resolutions.map((resolution) => {
+  const resolvedItems = resolutions.map((resolution) => {
     const selected = resolution.selection?.selected || null;
-    const selectedImageUrl = String(
-      selected?.url ||
-        (resolution.sharedPrimaryImageRejected
-          ? ""
-          : resolution.primaryImageUrl) ||
-        ""
-    ).trim();
-    const smallFallback =
-      !selected || Boolean(resolution.selection?.usedSmallImageFallback);
+    const identityVerified = Boolean(selected?.identityVerified);
+    const selectedImageUrl = identityVerified
+      ? String(selected?.url || "").trim()
+      : "";
+    const smallFallback = Boolean(
+      selected && resolution.selection?.usedSmallImageFallback
+    );
     const upgradedItem = {
       ...resolution.item,
       image_url: selectedImageUrl || null,
-      product_image_source: selected?.source || "existing_small_image_fallback",
+      product_image_source: selected?.source || "identity_unresolved",
       product_image_width: Number(selected?.width || 0) || null,
       product_image_height: Number(selected?.height || 0) || null,
-      product_image_resolution_verified: Boolean(selected),
+      product_image_resolution_verified: identityVerified,
+      product_image_identity_verified: identityVerified,
+      product_image_identity_method: selected?.identityMethod || null,
+      product_image_identity_unresolved: !identityVerified,
       product_image_small_fallback: smallFallback,
+      product_image_verified_candidates: (
+        resolution.selection?.verifiedCandidates || []
+      )
+        .slice(0, 4)
+        .map((candidate) => ({
+          url: candidate?.url || null,
+          source: candidate?.source || null,
+          width: Number(candidate?.width || 0) || null,
+          height: Number(candidate?.height || 0) || null,
+          identityMethod: candidate?.identityMethod || null,
+        }))
+        .filter((candidate) => Boolean(candidate.url)),
     };
 
     console.info("Product image resolver selected largest verified image", {
@@ -28794,7 +29288,7 @@ async function resolveLargestProductImagesBeforeGeneration({
       preferredQuality: Boolean(
         selected && isPreferredProductImage(selected)
       ),
-      identityVerified: Boolean(selected?.identityVerified),
+      identityVerified,
       identityMethod: selected?.identityMethod || null,
       fingerprintSimilarity:
         Number(selected?.fingerprintSimilarity || 0) || null,
@@ -28806,6 +29300,192 @@ async function resolveLargestProductImagesBeforeGeneration({
 
     return upgradedItem;
   });
+
+  return reviewCarouselProductOnlyImages({
+    openai,
+    items: resolvedItems,
+    ruleId,
+  });
+}
+
+async function reviewCarouselProductOnlyImages({ openai, items, ruleId }) {
+  const resolvedItems = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!openai || !resolvedItems.length) return resolvedItems;
+
+  const imageOptions = [];
+  for (let itemIndex = 0; itemIndex < resolvedItems.length; itemIndex += 1) {
+    const item = resolvedItems[itemIndex];
+    const seenUrls = new Set();
+    const candidates = [
+      {
+        url: item?.image_url,
+        source: item?.product_image_source,
+        width: item?.product_image_width,
+        height: item?.product_image_height,
+        identityMethod: item?.product_image_identity_method,
+      },
+      ...(item?.product_image_verified_candidates || []),
+    ];
+    for (const candidate of candidates) {
+      const url = String(candidate?.url || "").trim();
+      if (!url || seenUrls.has(url)) continue;
+      seenUrls.add(url);
+      imageOptions.push({
+        id: `${itemIndex}:${seenUrls.size - 1}`,
+        itemIndex,
+        title: String(item?.title || item?.item_title || "").trim(),
+        ...candidate,
+        url,
+      });
+      if (seenUrls.size >= 2) break;
+    }
+  }
+  if (!imageOptions.length) return resolvedItems;
+
+  const content = [
+    {
+      type: "input_text",
+      text:
+        "Review these ecommerce image options. A clean_product_only image must show the named product clearly as a clean catalogue/packshot image, with no visible person, human body part, hand, animal, logo-only placeholder, unrelated product or editorial lifestyle scene. Be conservative. Return one result for every supplied id.",
+    },
+  ];
+  for (const option of imageOptions) {
+    content.push({
+      type: "input_text",
+      text: `ID ${option.id}; product title: ${option.title}`,
+    });
+    content.push({
+      type: "input_image",
+      image_url: option.url,
+      detail: "low",
+    });
+  }
+
+  try {
+    const response = await openai.responses.create(
+      {
+        model: PRODUCT_RESEARCH_FAST_MODEL,
+        input: [{ role: "user", content }],
+        max_output_tokens: 1800,
+        text: {
+          format: {
+            type: "json_schema",
+            name: "clean_product_image_review",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                images: {
+                  type: "array",
+                  maxItems: 20,
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      id: { type: "string" },
+                      clean_product_only: { type: "boolean" },
+                      contains_person: { type: "boolean" },
+                      contains_animal: { type: "boolean" },
+                      matches_product: { type: "boolean" },
+                      confidence: { type: "number", minimum: 0, maximum: 1 },
+                    },
+                    required: [
+                      "id",
+                      "clean_product_only",
+                      "contains_person",
+                      "contains_animal",
+                      "matches_product",
+                      "confidence",
+                    ],
+                  },
+                },
+              },
+              required: ["images"],
+            },
+          },
+        },
+      },
+      { timeout: 15_000, maxRetries: 0 }
+    );
+    const parsed = safeJsonParse(getOpenAiResponseOutputText(response));
+    const reviews = new Map(
+      (Array.isArray(parsed?.images) ? parsed.images : []).map((review) => [
+        String(review?.id || ""),
+        review,
+      ])
+    );
+
+    return resolvedItems.map((item, itemIndex) => {
+      const options = imageOptions.filter(
+        (option) => option.itemIndex === itemIndex
+      );
+      const reviewedOptions = options
+        .map((option) => ({ option, review: reviews.get(option.id) }))
+        .filter(({ review }) => Boolean(review));
+      if (!reviewedOptions.length) {
+        const { product_image_verified_candidates, ...unchanged } = item;
+        return {
+          ...unchanged,
+          product_image_clean_product_verified: null,
+        };
+      }
+      const accepted = reviewedOptions.find(
+        ({ review }) =>
+          review.clean_product_only === true &&
+          review.contains_person === false &&
+          review.contains_animal === false &&
+          review.matches_product === true &&
+          Number(review.confidence || 0) >= 0.65
+      );
+      const { product_image_verified_candidates, ...cleanItem } = item;
+      if (!accepted) {
+        console.warn("Product image rejected by final clean-product review", {
+          ruleId,
+          productUrl: getProductImageResolverPageUrl(item) || null,
+          productTitle: item?.title || null,
+          reviewedOptionCount: reviewedOptions.length,
+          personDetected: reviewedOptions.some(
+            ({ review }) => review?.contains_person === true
+          ),
+          animalDetected: reviewedOptions.some(
+            ({ review }) => review?.contains_animal === true
+          ),
+        });
+        return {
+          ...cleanItem,
+          image_url: null,
+          product_image_clean_product_verified: false,
+          product_image_identity_unresolved: true,
+        };
+      }
+      return {
+        ...cleanItem,
+        image_url: accepted.option.url,
+        product_image_source: accepted.option.source || item.product_image_source,
+        product_image_width: Number(accepted.option.width || 0) || item.product_image_width,
+        product_image_height: Number(accepted.option.height || 0) || item.product_image_height,
+        product_image_identity_method:
+          accepted.option.identityMethod || item.product_image_identity_method,
+        product_image_clean_product_verified: true,
+        product_image_contains_person: false,
+        product_image_contains_animal: false,
+      };
+    });
+  } catch (error) {
+    console.warn("Final clean-product image review was unavailable; keeping only identity-verified images", {
+      ruleId,
+      imageOptionCount: imageOptions.length,
+      message: error?.message || String(error),
+    });
+    return resolvedItems.map((item) => {
+      const { product_image_verified_candidates, ...cleanItem } = item;
+      return {
+        ...cleanItem,
+        product_image_clean_product_verified: null,
+      };
+    });
+  }
 }
 
 async function fetchImageBufferForOverlay(imageUrl) {
@@ -30699,6 +31379,39 @@ async function runAutomationCron(request, options = {}) {
         return { ...result, terminal: false };
       };
 
+      const deferCurrentOccurrenceForCampaignResearch = async (
+        errorOrMessage,
+        extraSummary = {}
+      ) => {
+        const result = await deferAutomationOccurrenceForCampaignResearch({
+          supabase,
+          occurrenceId: automationOccurrenceId,
+          errorOrMessage,
+          metadata: extraSummary,
+        });
+        await finishRunLog(
+          "skipped",
+          "GPT-5.5 campaign research is still running and will resume automatically.",
+          {
+            stage: "campaign_web_research",
+            automatic_retry_scheduled: true,
+            retry_at: result.retryAt,
+            retry_after_ms: result.retryAfterMs,
+            openai_response_id: result.responseId,
+            openai_response_status: result.responseStatus,
+            research_round: result.researchRound,
+            terminal_failure: false,
+            refunded_credits: 0,
+            same_occurrence_preserved: true,
+            same_credit_reservation_preserved: true,
+            ...extraSummary,
+          }
+        );
+        summary.campaign_background_research_deferred =
+          Number(summary.campaign_background_research_deferred || 0) + 1;
+        return result;
+      };
+
       try {
         if (hasAlreadyRunToday(rule, now)) {
           summary.skipped += 1;
@@ -31039,6 +31752,7 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
               rule,
               brandProfile,
               summary,
+              automationOccurrenceId,
               usedWebsiteImageUrlsThisRun,
               resumedAfterWebsiteRateLimit:
                 automationOccurrenceResumedAfterWebsiteRateLimit,
@@ -31069,6 +31783,22 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
               .slice(0, CAROUSEL_PRODUCT_SLIDE_TARGET);
             automationRunProductEngineDiagnostics =
               carouselError?.productEngineDiagnostics || null;
+
+            if (
+              carouselError?.code ===
+              "CAMPAIGN_RESEARCH_BACKGROUND_PENDING"
+            ) {
+              await deferCurrentOccurrenceForCampaignResearch(
+                carouselError,
+                {
+                  product_engine_v2: PRODUCT_ENGINE_V2_ENABLED,
+                  request_fingerprint:
+                    carouselError?.requestFingerprint || null,
+                }
+              );
+              summary.skipped += 1;
+              continue;
+            }
 
             const canUseCampaignDeliveryFallback =
               isCarouselRule(rule) &&
@@ -31241,6 +31971,7 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
           const resolvedItems = await resolveLargestProductImagesBeforeGeneration({
             items: [...primaryItems, ...additionalItems],
             ruleId: rule.id,
+            openai,
           });
 
           if (isCarouselRule(websitePreparedRule)) {
@@ -31268,6 +31999,7 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
               ? await resolveLargestProductImagesBeforeGeneration({
                   items: reserveCandidates,
                   ruleId: rule.id,
+                  openai,
                 })
               : [];
 

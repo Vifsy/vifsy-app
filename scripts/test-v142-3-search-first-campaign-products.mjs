@@ -49,7 +49,7 @@ assert.match(
 
 const prepareStart = route.indexOf("async function prepareCarouselProductsForRule");
 const primarySearchMarker = route.indexOf(
-  "The retailer's own search is the primary campaign retrieval path",
+  "v143.10 fallback: this retailer-search path runs only when the primary",
   prepareStart
 );
 const directSearch = route.indexOf(

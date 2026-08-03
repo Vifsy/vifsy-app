@@ -49,7 +49,7 @@ assert.match(primaryResearchFunction, /tool_choice: "required"/);
 assert.match(primaryResearchFunction, /type: "json_schema"/);
 assert.match(
   primaryResearchFunction,
-  /verifyDiscoveredWebsiteProductCandidates/
+  /hydrateAuthoritativeWebAgentProduct/
 );
 assert.doesNotMatch(
   primaryResearchFunction,
@@ -67,7 +67,7 @@ assert.match(
 );
 assert.match(
   finalizerFunction,
-  /selectedProducts = rankedProducts\.slice\(\s*0,\s*CAROUSEL_PRODUCT_SLIDE_TARGET/
+  /selectLockedPrimaryCampaignProducts/
 );
 assert.match(
   finalizerFunction,
@@ -108,7 +108,7 @@ assert.match(
 );
 assert.match(
   preparation,
-  /continuing with the unchanged v143\.8 fallback flow/
+  /The legacy candidate flow was deliberately not used/
 );
 
 const signalFunction = extractFunction(
