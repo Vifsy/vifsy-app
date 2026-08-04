@@ -78,6 +78,11 @@ import {
   resolveCampaignThemeEvidence,
   selectCampaignThemeDeliveryEntries,
 } from "../../../../lib/campaignThemeDelivery.js";
+import {
+  bundledProductFontStatus,
+  escapeProductSvg,
+  layoutProductTitle,
+} from "../../../../lib/globalProductTypography.js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -1451,10 +1456,12 @@ async function extractStrictTransparentProductCutout(sourceImageBuffer) {
 }
 
 const CAROUSEL_PRODUCT_LABEL_PLACEMENTS = {
-  top_left: { x: 54, y: 54, width: 430, height: 142 },
-  top_right: { x: 596, y: 54, width: 430, height: 142 },
-  bottom_left: { x: 54, y: 884, width: 430, height: 142 },
-  bottom_right: { x: 596, y: 884, width: 430, height: 142 },
+  top_left: { x: 52, y: 48, width: 390, height: 184 },
+  top_right: { x: 638, y: 48, width: 390, height: 184 },
+  middle_left: { x: 52, y: 448, width: 360, height: 184 },
+  middle_right: { x: 668, y: 448, width: 360, height: 184 },
+  bottom_left: { x: 52, y: 848, width: 390, height: 184 },
+  bottom_right: { x: 638, y: 848, width: 390, height: 184 },
 };
 
 function normalizeCarouselProductLabelAnalysis(value) {
@@ -1493,7 +1500,7 @@ async function analyzeCarouselProductLabelPlacements({ openai, items, ruleId }) 
   const content = [
     {
       type: "input_text",
-      text: "Analyze all supplied ecommerce images in this single request. For each image, locate the marketed product named in the title and choose a predefined corner only when a product-name label can be placed without covering or touching the marketed product. People and animals are allowed and must not cause rejection, but do not place text over faces or other visually important human or animal areas. Prefer text_only when the chosen area is visually calm with strong readable contrast; otherwise choose compact_card for a small translucent rounded card. Choose none when no corner is safely free, the product is unclear, or confidence is below 0.70. Coordinates are integers from 0 to 1000 relative to the full source image. Return exactly one result for every ID.",
+      text: "Analyze all supplied ecommerce images in this single request. For each image, locate the marketed product named in the title and choose one predefined free area only when a product-name label can be placed without covering or touching the marketed product. People and animals are allowed and must not cause rejection, but do not place text over faces or other visually important human or animal areas. Prefer text_only when the chosen area is visually calm with strong readable contrast; otherwise choose compact_card for a small translucent rounded card. Available areas are top_left, top_right, middle_left, middle_right, bottom_left, and bottom_right. Choose none only when none of these areas is safe, the product is unclear, or confidence is below 0.70. Coordinates are integers from 0 to 1000 relative to the full source image. Return exactly one result for every ID.",
     },
   ];
   for (const candidate of candidates) {
@@ -1541,7 +1548,7 @@ async function analyzeCarouselProductLabelPlacements({ openai, items, ruleId }) 
                       },
                       placement: {
                         type: "string",
-                        enum: ["top_left", "top_right", "bottom_left", "bottom_right", "none"],
+                        enum: ["top_left", "top_right", "middle_left", "middle_right", "bottom_left", "bottom_right", "none"],
                       },
                       layout: {
                         type: "string",
@@ -1559,23 +1566,39 @@ async function analyzeCarouselProductLabelPlacements({ openai, items, ruleId }) 
           },
         },
       },
-      { timeout: 20_000, maxRetries: 0 }
+      { timeout: 45_000, maxRetries: 0 }
     );
     const parsed = safeJsonParse(getOpenAiResponseOutputText(response));
     const allowedIds = new Set(candidates.map((candidate) => String(candidate.id)));
-    return new Map(
+    const result = new Map(
       (Array.isArray(parsed?.images) ? parsed.images : [])
         .filter((entry) => allowedIds.has(String(entry?.id || "")))
         .map((entry) => [String(entry.id), normalizeCarouselProductLabelAnalysis(entry)])
         .filter(([, analysis]) => Boolean(analysis))
     );
+    result.analysisStatus = "completed";
+    result.requestedCount = candidates.length;
+    console.info("Carousel product label analysis completed", {
+      ruleId: ruleId || null,
+      imageCount: candidates.length,
+      safePlacementCount: result.size,
+      timeoutMs: 45_000,
+    });
+    return result;
   } catch (error) {
-    console.warn("Carousel product label analysis skipped; original images will be preserved", {
+    const result = new Map();
+    const isTimeout = /timed?\s*out|timeout|deadline/i.test(String(error?.message || ""));
+    result.analysisStatus = isTimeout ? "timed_out" : "failed";
+    result.requestedCount = candidates.length;
+    console.warn("Carousel product label analysis unavailable; safe local placement will be attempted", {
       ruleId: ruleId || null,
       imageCount: candidates.length,
       message: error?.message || "Unknown placement analysis error",
+      analysisStatus: result.analysisStatus,
+      timeoutMs: 45_000,
+      automaticRetryCount: 0,
     });
-    return new Map();
+    return result;
   }
 }
 
@@ -1607,30 +1630,118 @@ function mapNormalizedBoxToContainedCanvas(productBox, sourceMetadata, width, he
   };
 }
 
-function splitCarouselProductTitleLines(value, maxChars = 20, maxLines = 2) {
-  let remaining = String(value || "").replace(/\s+/g, " ").trim();
-  const lines = [];
-  while (remaining && lines.length < maxLines) {
-    if (remaining.length <= maxChars) {
-      lines.push(remaining);
-      remaining = "";
-      break;
-    }
-    let cutAt = remaining.lastIndexOf(" ", maxChars);
-    if (cutAt < Math.floor(maxChars * 0.55)) cutAt = maxChars;
-    lines.push(remaining.slice(0, cutAt).trim());
-    remaining = remaining.slice(cutAt).trim();
-  }
-  if (remaining && lines.length) {
-    lines[lines.length - 1] = `${lines[lines.length - 1].slice(0, maxChars - 3).trimEnd()}...`;
-  }
-  return lines;
+function colorDistance(first, second) {
+  return Math.sqrt(
+    ((first?.[0] || 0) - (second?.[0] || 0)) ** 2 +
+    ((first?.[1] || 0) - (second?.[1] || 0)) ** 2 +
+    ((first?.[2] || 0) - (second?.[2] || 0)) ** 2
+  );
 }
 
-function buildCarouselProductLabelSvg({ title, analysis, productCanvasBox }) {
+function chooseNonOverlappingProductLabelPlacement(productCanvasBox, { includeLogo = false } = {}) {
+  const preferred = ["top_left", "top_right", "middle_left", "middle_right", "bottom_left", "bottom_right"];
+  return preferred.find((placement) => {
+    if (includeLogo && placement === "bottom_right") return false;
+    return !boxesOverlapWithPadding(CAROUSEL_PRODUCT_LABEL_PLACEMENTS[placement], productCanvasBox, 22);
+  }) || null;
+}
+
+async function deriveLocalPackshotLabelAnalysis(sourceBuffer, { includeLogo = false } = {}) {
+  const sampleSize = 180;
+  const { data, info } = await sharp(sourceBuffer)
+    .rotate()
+    .resize({ width: sampleSize, height: sampleSize, fit: "contain", background: "#ffffff" })
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  if (info.channels < 3) return null;
+
+  const readPixel = (x, y) => {
+    const offset = (Math.max(0, Math.min(info.height - 1, y)) * info.width + Math.max(0, Math.min(info.width - 1, x))) * info.channels;
+    return [data[offset], data[offset + 1], data[offset + 2]];
+  };
+  const cornerPoints = [[4, 4], [info.width - 5, 4], [4, info.height - 5], [info.width - 5, info.height - 5]];
+  const corners = cornerPoints.map(([x, y]) => readPixel(x, y));
+  const background = [0, 1, 2].map((channel) => Math.round(corners.reduce((sum, color) => sum + color[channel], 0) / corners.length));
+  const cornerSpread = Math.max(...corners.map((color) => colorDistance(color, background)));
+  if (cornerSpread > 42) return null;
+
+  let minX = info.width;
+  let minY = info.height;
+  let maxX = -1;
+  let maxY = -1;
+  let foregroundPixels = 0;
+  for (let y = 0; y < info.height; y += 1) {
+    for (let x = 0; x < info.width; x += 1) {
+      if (colorDistance(readPixel(x, y), background) < 54) continue;
+      foregroundPixels += 1;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  const foregroundRatio = foregroundPixels / Math.max(1, info.width * info.height);
+  if (foregroundRatio < 0.015 || foregroundRatio > 0.78 || maxX < minX || maxY < minY) return null;
+  const scale = 1080 / sampleSize;
+  const productCanvasBox = {
+    x: minX * scale,
+    y: minY * scale,
+    width: (maxX - minX + 1) * scale,
+    height: (maxY - minY + 1) * scale,
+  };
+
+  const candidates = Object.entries(CAROUSEL_PRODUCT_LABEL_PLACEMENTS)
+    .filter(([placement, box]) => !(includeLogo && placement === "bottom_right") && !boxesOverlapWithPadding(box, productCanvasBox, 18))
+    .map(([placement, box]) => {
+      const sx0 = Math.max(0, Math.floor((box.x / 1080) * sampleSize));
+      const sy0 = Math.max(0, Math.floor((box.y / 1080) * sampleSize));
+      const sx1 = Math.min(info.width, Math.ceil(((box.x + box.width) / 1080) * sampleSize));
+      const sy1 = Math.min(info.height, Math.ceil(((box.y + box.height) / 1080) * sampleSize));
+      let occupancy = 0;
+      let luminanceTotal = 0;
+      let luminanceSqTotal = 0;
+      let pixels = 0;
+      for (let y = sy0; y < sy1; y += 1) {
+        for (let x = sx0; x < sx1; x += 1) {
+          const color = readPixel(x, y);
+          if (colorDistance(color, background) >= 54) occupancy += 1;
+          const luminance = color[0] * 0.2126 + color[1] * 0.7152 + color[2] * 0.0722;
+          luminanceTotal += luminance;
+          luminanceSqTotal += luminance * luminance;
+          pixels += 1;
+        }
+      }
+      const occupancyRatio = occupancy / Math.max(1, pixels);
+      const mean = luminanceTotal / Math.max(1, pixels);
+      const variance = Math.max(0, luminanceSqTotal / Math.max(1, pixels) - mean * mean);
+      return { placement, occupancyRatio, mean, variance };
+    })
+    .filter((candidate) => candidate.occupancyRatio <= 0.035)
+    .sort((a, b) => (a.occupancyRatio + a.variance / 20_000) - (b.occupancyRatio + b.variance / 20_000));
+  const best = candidates[0];
+  if (!best) return null;
+  return {
+    analysis: {
+      placement: best.placement,
+      layout: best.variance < 180 ? "text_only" : "compact_card",
+      textTone: best.mean < 120 ? "light" : "dark",
+      confidence: 0.82,
+      productBox: null,
+    },
+    productCanvasBox,
+  };
+}
+
+function buildCarouselProductLabelSvg({ title, analysis, productCanvasBox, languageHint = "" }) {
   const labelBox = CAROUSEL_PRODUCT_LABEL_PLACEMENTS[analysis?.placement];
   if (!labelBox || boxesOverlapWithPadding(labelBox, productCanvasBox)) return null;
-  const lines = splitCarouselProductTitleLines(title, 20, 2);
+  const typography = layoutProductTitle(title, {
+    maxWidth: labelBox.width,
+    maxHeight: labelBox.height,
+    languageHint,
+  });
+  const lines = typography.lines;
   if (!lines.length) return null;
 
   const isLight = analysis.textTone === "light";
@@ -1639,15 +1750,23 @@ function buildCarouselProductLabelSvg({ title, analysis, productCanvasBox }) {
   const card = analysis.layout === "compact_card"
     ? `<rect x="${labelBox.x}" y="${labelBox.y}" width="${labelBox.width}" height="${labelBox.height}" rx="24" fill="${cardColor}" fill-opacity="0.82"/>`
     : "";
-  const textX = labelBox.x + (analysis.layout === "compact_card" ? 26 : 4);
-  const textY = labelBox.y + (lines.length === 1 ? 88 : 59);
+  const horizontalPadding = analysis.layout === "compact_card" ? 24 : 6;
+  const isRtl = typography.profile.direction === "rtl";
+  const textX = isRtl
+    ? labelBox.x + labelBox.width - horizontalPadding
+    : labelBox.x + horizontalPadding;
+  const totalTextHeight = typography.lineHeight * lines.length;
+  const textY = labelBox.y + Math.max(typography.fontSize, Math.round((labelBox.height - totalTextHeight) / 2 + typography.fontSize));
   const outline = analysis.layout === "text_only"
     ? `stroke="${isLight ? "#000000" : "#ffffff"}" stroke-opacity="0.34" stroke-width="7" paint-order="stroke"`
     : "";
   const spans = lines
-    .map((line, index) => `<tspan x="${textX}" dy="${index === 0 ? 0 : 46}">${escapeSvg(line)}</tspan>`)
+    .map((line, index) => `<tspan x="${textX}" dy="${index === 0 ? 0 : typography.lineHeight}">${escapeProductSvg(line)}</tspan>`)
     .join("");
-  return `<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg">${card}<text x="${textX}" y="${textY}" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="700" fill="${textColor}" ${outline}>${spans}</text></svg>`;
+  return {
+    svg: `<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg">${card}<text x="${textX}" y="${textY}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="${typography.fontSize}" font-weight="700" fill="${textColor}" direction="${typography.profile.direction}" unicode-bidi="plaintext" text-anchor="${isRtl ? "end" : "start"}" ${outline}>${spans}</text></svg>`,
+    typography,
+  };
 }
 
 async function renderCarouselProductSlideImage({
@@ -1657,6 +1776,9 @@ async function renderCarouselProductSlideImage({
   backgroundSelectionContext = null,
   productTitle = "",
   productLabelAnalysis = null,
+  productLabelAnalysisStatus = "not_requested",
+  includeLogo = false,
+  languageHint = "",
 }) {
   const width = 1080;
   const height = 1080;
@@ -1671,6 +1793,10 @@ async function renderCarouselProductSlideImage({
   });
   let productCanvasBox = null;
   let productLabelApplied = false;
+  let productLabelSource = "none";
+  let productLabelReason = productTitle ? "no_safe_space" : "missing_product_title";
+  let appliedLabelAnalysis = null;
+  let appliedTypography = null;
 
   if (sourceImageUrl) {
     try {
@@ -1763,6 +1889,28 @@ async function renderCarouselProductSlideImage({
           </svg>`;
         composites.push({ input: Buffer.from(shadowSvg), top: 0, left: 0 });
         composites.push({ input: resizedProduct, top: productTop, left: productLeft });
+
+        if (productTitle) {
+          const aiPlacement = productLabelAnalysis?.placement;
+          const aiSafe = aiPlacement && !(includeLogo && aiPlacement === "bottom_right") &&
+            !boxesOverlapWithPadding(CAROUSEL_PRODUCT_LABEL_PLACEMENTS[aiPlacement], productCanvasBox, 22);
+          if (aiSafe) {
+            appliedLabelAnalysis = productLabelAnalysis;
+            productLabelSource = "ai_placement";
+          } else {
+            const localPlacement = chooseNonOverlappingProductLabelPlacement(productCanvasBox, { includeLogo });
+            if (localPlacement) {
+              appliedLabelAnalysis = {
+                placement: localPlacement,
+                layout: "compact_card",
+                textTone: "dark",
+                confidence: 1,
+                productBox: null,
+              };
+              productLabelSource = "local_cutout_fallback";
+            }
+          }
+        }
       } else {
         // No reliable transparency: preserve the website image and its existing
         // background. Product text may only be added in a separately verified
@@ -1777,17 +1925,37 @@ async function renderCarouselProductSlideImage({
         productCanvasBox = productLabelAnalysis
           ? mapNormalizedBoxToContainedCanvas(productLabelAnalysis.productBox, sourceMetadata, width, height)
           : null;
+
+        if (productTitle && productLabelAnalysis && productCanvasBox &&
+            !(includeLogo && productLabelAnalysis.placement === "bottom_right")) {
+          appliedLabelAnalysis = productLabelAnalysis;
+          productLabelSource = "ai_placement";
+        } else if (productTitle) {
+          const localPlacement = await deriveLocalPackshotLabelAnalysis(sourceBuffer, { includeLogo });
+          if (localPlacement) {
+            appliedLabelAnalysis = localPlacement.analysis;
+            productCanvasBox = localPlacement.productCanvasBox;
+            productLabelSource = "local_packshot_fallback";
+          }
+        }
       }
 
-      if (productTitle && productLabelAnalysis && productCanvasBox) {
-        const labelSvg = buildCarouselProductLabelSvg({
+      if (productTitle && appliedLabelAnalysis && productCanvasBox) {
+        const labelRender = buildCarouselProductLabelSvg({
           title: productTitle,
-          analysis: productLabelAnalysis,
+          analysis: appliedLabelAnalysis,
           productCanvasBox,
+          languageHint,
         });
-        if (labelSvg) {
-          composites.push({ input: Buffer.from(labelSvg), top: 0, left: 0 });
+        if (labelRender?.svg) {
+          composites.push({ input: Buffer.from(labelRender.svg), top: 0, left: 0 });
           productLabelApplied = true;
+          productLabelReason = productLabelSource.includes("fallback") && productLabelAnalysisStatus === "timed_out"
+            ? "analysis_timeout_local_fallback"
+            : "applied";
+          appliedTypography = labelRender.typography;
+        } else {
+          productLabelReason = "overlap_rejected";
         }
       }
     } catch (error) {
@@ -1808,6 +1976,14 @@ async function renderCarouselProductSlideImage({
   return {
     imageBase64: outputBuffer.toString("base64"),
     productLabelApplied,
+    productLabelSource,
+    productLabelReason,
+    productLabelLayout: productLabelApplied ? appliedLabelAnalysis?.layout || null : null,
+    productLabelPlacement: productLabelApplied ? appliedLabelAnalysis?.placement || null : null,
+    productLabelFontSize: productLabelApplied ? appliedTypography?.fontSize || null : null,
+    productLabelDirection: productLabelApplied ? appliedTypography?.profile?.direction || null : null,
+    productLabelScript: productLabelApplied ? appliedTypography?.profile?.script || null : null,
+    productLabelFontFamily: productLabelApplied ? appliedTypography?.profile?.family || null : null,
   };
 }
 
@@ -26563,6 +26739,16 @@ async function saveCarouselSlidesForPost({
     let slideRenderedBy = 'source_image';
     let productCardRenderError = null;
     let productLabelApplied = false;
+    let productLabelMetadata = {
+      productLabelSource: "none",
+      productLabelReason: "not_rendered",
+      productLabelLayout: null,
+      productLabelPlacement: null,
+      productLabelFontSize: null,
+      productLabelDirection: null,
+      productLabelScript: null,
+      productLabelFontFamily: null,
+    };
 
     if (!isOutroSlide && sourceSlideImageUrl) {
       try {
@@ -26573,9 +26759,26 @@ async function saveCarouselSlidesForPost({
           backgroundSelectionContext,
           productTitle: String(slideProduct?.title || slide.product_title || "").trim(),
           productLabelAnalysis: productLabelAnalyses.get(String(index)) || null,
+          productLabelAnalysisStatus: productLabelAnalyses.analysisStatus || "not_requested",
+          includeLogo,
+          languageHint: rule?.content_language || rule?.language || rule?.brand_profile?.language || "",
         });
         const { imageBase64 } = renderedProductSlide;
         productLabelApplied = Boolean(renderedProductSlide.productLabelApplied);
+        productLabelMetadata = renderedProductSlide;
+        console.info("Carousel product label render decision", {
+          ruleId: rule?.id || null,
+          postId,
+          slideOrder: index + 1,
+          applied: productLabelApplied,
+          source: renderedProductSlide.productLabelSource,
+          reason: renderedProductSlide.productLabelReason,
+          placement: renderedProductSlide.productLabelPlacement,
+          layout: renderedProductSlide.productLabelLayout,
+          fontSize: renderedProductSlide.productLabelFontSize,
+          direction: renderedProductSlide.productLabelDirection,
+          script: renderedProductSlide.productLabelScript,
+        });
 
         const uploadedImage = await uploadGeneratedImageToStorage({
           supabase,
@@ -26693,12 +26896,16 @@ async function saveCarouselSlidesForPost({
         product_sale_price: getTrustedWebsiteItemPricing(slideProduct || {}).salePrice || null,
         product_original_price: getTrustedWebsiteItemPricing(slideProduct || {}).originalPrice || null,
         product_label_applied: productLabelApplied,
-        product_label_layout: productLabelApplied
-          ? productLabelAnalyses.get(String(index))?.layout || null
-          : null,
-        product_label_placement: productLabelApplied
-          ? productLabelAnalyses.get(String(index))?.placement || null
-          : null,
+        product_label_layout: productLabelMetadata.productLabelLayout || null,
+        product_label_placement: productLabelMetadata.productLabelPlacement || null,
+        product_label_source: productLabelMetadata.productLabelSource || "none",
+        product_label_reason: productLabelMetadata.productLabelReason || null,
+        product_label_font_size: productLabelMetadata.productLabelFontSize || null,
+        product_label_direction: productLabelMetadata.productLabelDirection || null,
+        product_label_script: productLabelMetadata.productLabelScript || null,
+        product_label_font_family: productLabelMetadata.productLabelFontFamily || null,
+        product_label_analysis_status: productLabelAnalyses.analysisStatus || "not_requested",
+        bundled_product_fonts_configured: Boolean(bundledProductFontStatus?.configured),
         product_card_render_error: productCardRenderError || null,
       },
     };

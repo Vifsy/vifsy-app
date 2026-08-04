@@ -51,7 +51,8 @@
     "test:v143.23": "node scripts/test-v143-23-canonical-product-recovery.mjs",
     "test:v143.24": "node scripts/test-v143-24-variety-clean-five.mjs",
     "test:v143.25": "node scripts/test-v143-25-live-links-open-images.mjs",
-    "test:v143.26": "node scripts/test-v143-26-adaptive-labels-resume-captions.mjs"
+    "test:v143.26": "node scripts/test-v143-26-adaptive-labels-resume-captions.mjs",
+    "test:v143.27": "node scripts/test-v143-27-global-product-typography.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
