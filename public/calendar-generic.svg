@@ -1,0 +1,7 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs><linearGradient id="g" x1="48" y1="34" x2="466" y2="480" gradientUnits="userSpaceOnUse"><stop stop-color="#FFF0E9"/><stop offset=".5" stop-color="#F6EEFF"/><stop offset="1" stop-color="#EAF6FF"/></linearGradient><filter id="s" x="96" y="94" width="320" height="330" filterUnits="userSpaceOnUse"><feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#572B56" flood-opacity=".16"/></filter></defs>
+  <rect width="512" height="512" rx="88" fill="url(#g)"/>
+  <circle cx="416" cy="92" r="38" fill="#FFD8CA" fill-opacity=".72"/><circle cx="82" cy="408" r="50" fill="#DCCFFF" fill-opacity=".6"/>
+  <g filter="url(#s)"><rect x="126" y="122" width="260" height="260" rx="56" fill="white"/><rect x="126" y="122" width="260" height="76" rx="56" fill="#FF6A4A"/><path d="M126 176H386V198H126V176Z" fill="#FF6A4A"/><rect x="177" y="94" width="26" height="70" rx="13" fill="#172033"/><rect x="309" y="94" width="26" height="70" rx="13" fill="#172033"/><path d="M205 260L241 296L315 222" stroke="#3478F6" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <path d="M404 234L414 258L438 268L414 278L404 302L394 278L370 268L394 258L404 234Z" fill="#FFB43B"/>
+</svg>

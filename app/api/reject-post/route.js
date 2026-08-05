@@ -265,6 +265,12 @@ export async function POST(request) {
     }), 500);
   }
 
+  await context.admin.from("admin_review_cases").update({
+    status: "changes_requested",
+    needs_review: true,
+    updated_at: now,
+  }).eq("post_id", context.post.id);
+
   const brandName = context.brand?.business_name || "Spreelo customer";
   const adminHtml = `<h2>Rejected Spreelo post</h2><p><strong>Customer:</strong> ${escapeHtml(customerEmail || "Unknown")}</p><p><strong>Brand:</strong> ${escapeHtml(brandName)}</p><p><strong>Post:</strong> ${escapeHtml(context.post.post_type || "Post")}</p><p><strong>Category:</strong> ${escapeHtml(reasonCategory)}</p><p><strong>Feedback:</strong></p><p>${escapeHtml(reasonText).replace(/\n/g, "<br>")}</p><p>Review this item in the Spreelo admin approval inbox.</p>`;
   try {

@@ -311,6 +311,8 @@ export default function BrandProfile() {
   const [user, setUser] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [autoAnalyzeRequested, setAutoAnalyzeRequested] = useState(false);
+  const [showAnalysisResult, setShowAnalysisResult] = useState(false);
+  const [analysisResultStep, setAnalysisResultStep] = useState("result");
   const autoAnalysisStartedRef = useRef(false);
 
   const [allBrands, setAllBrands] = useState([]);
@@ -1013,6 +1015,8 @@ export default function BrandProfile() {
               count: result.campaign_opportunities_count || 0,
             })
       );
+      setAnalysisResultStep("result");
+      setShowAnalysisResult(true);
     } catch (error) {
       setMessage(error.message || t("brand.errorAnalyze"));
       setIsEditing(true);
@@ -1683,6 +1687,36 @@ export default function BrandProfile() {
         </section>
 
 
+
+        {showAnalysisResult && (
+          <div className="brand-result-backdrop" role="presentation">
+            <section className="brand-result-modal" role="dialog" aria-modal="true" aria-label={t("brand.result.title")}>
+              <button type="button" className="brand-result-close" onClick={() => setShowAnalysisResult(false)}>×</button>
+              <p className="dashboard-eyebrow">{t("brand.result.eyebrow")}</p>
+              {analysisResultStep === "result" ? (
+                <>
+                  <h2>{t("brand.result.title")}</h2>
+                  <p className="brand-result-lead">{t("brand.result.text")}</p>
+                  <div className="brand-result-grid">
+                    <article><span>{t("brand.industry")}</span><strong>{industry || "—"}</strong></article>
+                    <article><span>{t("brand.targetAudience")}</span><strong>{targetAudience || "—"}</strong></article>
+                    <article><span>{t("brand.campaignMarket")}</span><strong>{contentMarket || "—"}</strong></article>
+                    <article><span>{t("brand.postLanguage")}</span><strong>{normalizedContentLanguage || "English"}</strong></article>
+                  </div>
+                  <button type="button" className="brand-result-primary" onClick={() => setAnalysisResultStep("channels")}>{t("brand.result.addChannels")}</button>
+                </>
+              ) : (
+                <>
+                  <h2>{t("brand.result.channelsTitle")}</h2>
+                  <p className="brand-result-lead">{t("brand.result.channelsText")}</p>
+                  <div className="brand-result-channel-list"><span>Instagram</span><span>Facebook</span><span>LinkedIn</span></div>
+                  <button type="button" className="brand-result-secondary" onClick={() => window.open("/social-channels", "_blank", "noopener,noreferrer")}>{t("brand.result.connectChannels")}</button>
+                  <button type="button" className="brand-result-primary" onClick={() => { setShowAnalysisResult(false); window.location.href = "/automation"; }}>{t("brand.result.planPosts")}</button>
+                </>
+              )}
+            </section>
+          </div>
+        )}
 
         {showLogoModal && (
           <div className="brand-logo-modal-backdrop" role="presentation">

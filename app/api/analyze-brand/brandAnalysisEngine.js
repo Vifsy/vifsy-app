@@ -2539,7 +2539,22 @@ export async function replaceBrandCampaignOpportunities({
 
   const now = new Date().toISOString();
 
-  const rows = safeOpportunities.map((opportunity) => ({
+  const { data: visualAssets } = await supabase
+    .from("calendar_visual_assets")
+    .select("id, image_url, theme_tags, is_generic, use_count")
+    .order("use_count", { ascending: true })
+    .limit(150);
+  const reusableVisuals = visualAssets || [];
+  const genericVisual = reusableVisuals.find((asset) => asset.is_generic) || null;
+  const getVisualMatch = (opportunity) => {
+    const haystack = [opportunity.slug, opportunity.title, opportunity.event_type, opportunity.campaign_category]
+      .filter(Boolean).join(" ").toLowerCase();
+    return reusableVisuals.find((asset) => !asset.is_generic && (asset.theme_tags || []).some((tag) => haystack.includes(String(tag || "").toLowerCase()))) || genericVisual;
+  };
+
+  const rows = safeOpportunities.map((opportunity) => {
+    const visual = getVisualMatch(opportunity);
+    return ({
     user_id: userId,
     brand_profile_id: brandProfileId,
 
@@ -2584,6 +2599,8 @@ export async function replaceBrandCampaignOpportunities({
     cta_guidance: opportunity.cta_guidance,
     image_guidance: opportunity.image_guidance,
     campaign_blueprint: opportunity.campaign_blueprint,
+    visual_asset_id: visual?.id || null,
+    visual_image_url: visual?.image_url || null,
 
     is_ai_generated: true,
     is_hidden: false,
@@ -2593,7 +2610,8 @@ export async function replaceBrandCampaignOpportunities({
     generated_at: now,
     created_at: now,
     updated_at: now,
-  }));
+  });
+  });
 
   const { data, error } = await supabase
     .from("brand_campaign_opportunities")
@@ -2604,6 +2622,19 @@ export async function replaceBrandCampaignOpportunities({
 
   if (error) {
     throw new Error(error.message || "Could not save campaign opportunities.");
+  }
+
+  const missingVisualRequests = safeOpportunities
+    .filter((opportunity) => !getVisualMatch(opportunity) || getVisualMatch(opportunity)?.is_generic)
+    .map((opportunity) => ({
+      theme_key: String(opportunity.slug || opportunity.title || "campaign").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 120),
+      prompt: `A polished, friendly 1:1 editorial campaign-calendar icon for ${opportunity.title}. Soft dimensional illustration, simple centered object, pastel gradient tile, no text, no logo, clean SaaS design.`,
+      status: "queued",
+      updated_at: now,
+    }))
+    .filter((item) => item.theme_key);
+  if (missingVisualRequests.length) {
+    await supabase.from("calendar_visual_requests").upsert(missingVisualRequests, { onConflict: "theme_key", ignoreDuplicates: true });
   }
 
   return data || [];

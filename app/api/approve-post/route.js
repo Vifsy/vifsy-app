@@ -359,6 +359,12 @@ export async function GET(request) {
       });
     }
 
+    await supabase.from("admin_review_cases").update({
+      status: "customer_approved",
+      needs_review: false,
+      updated_at: approvedAt,
+    }).eq("post_id", post.id);
+
     return htmlResponse({
       title: translator.t(isCarouselPost ? "approvePages.carouselApprovedV2.title" : "approvePages.approved.title"),
       message: translator.t(isCarouselPost ? "approvePages.carouselApprovedV2.message" : "approvePages.approved.message"),

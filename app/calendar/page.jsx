@@ -1071,7 +1071,7 @@ export default function Calendar() {
       const { data, error } = await supabase
         .from("brand_campaign_opportunities")
         .select(
-          "id, brand_profile_id, title, slug, description, country_code, market, language, industry, event_type, event_date, event_year, start_date, end_date, relevance_reason, relevance_score, sales_score, engagement_score, recommended_post_count, prompt_context, campaign_angles, post_plan, date_confidence, is_ai_generated, is_hidden, is_active, is_archived, generated_at, created_at, updated_at"
+          "id, brand_profile_id, title, slug, description, country_code, market, language, industry, event_type, event_date, event_year, start_date, end_date, relevance_reason, relevance_score, sales_score, engagement_score, recommended_post_count, prompt_context, campaign_angles, post_plan, date_confidence, visual_asset_id, visual_image_url, is_ai_generated, is_hidden, is_active, is_archived, generated_at, created_at, updated_at"
         )
         .eq("user_id", user.id)
         .eq("brand_profile_id", brandToLoad.id)
@@ -1353,7 +1353,9 @@ export default function Calendar() {
                           }
                           aria-expanded={isSelected}
                         >
-                          <CampaignGlyph campaign={campaign} />
+                          {campaign.visual_image_url ? (
+                            <span className="campaign-calendar-visual"><img src={campaign.visual_image_url} alt="" /></span>
+                          ) : <CampaignGlyph campaign={campaign} />}
 
                           <div className="campaign-calendar-v132-row-copy campaign-calendar-v133-row-copy">
                             <div>

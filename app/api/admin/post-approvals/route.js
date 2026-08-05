@@ -1,8 +1,9 @@
 import { adminContextError, getAdminContext } from "../../../../lib/adminAuth";
+import { sendApprovalEmail } from "../../cron/run-automations/route.js";
 
 export const dynamic = "force-dynamic";
 
-const VISIBLE_STATUSES = new Set(["pending_approval", "approved", "rejected", "failed"]);
+const VISIBLE_STATUSES = new Set(["pending_approval", "approved", "rejected", "failed", "creating"]);
 const REVIEW_STATUSES = new Set(["new", "reviewing", "resolved"]);
 const REFUND_STATUSES = new Set(["pending_review", "approved", "declined", "credited"]);
 
@@ -16,9 +17,10 @@ export async function GET(request) {
   let query = context.admin
     .from("posts")
     .select(
-      "id, user_id, brand_profile_id, automation_rule_id, status, content, platform, post_type, content_format, image_url, video_url, image_status, video_status, video_error, scheduled_for, created_at, updated_at, approved_at, approval_token, approval_email_sent_at, admin_review_status, admin_reviewed_at, admin_review_note"
+      "id, user_id, brand_profile_id, automation_rule_id, status, content, platform, post_type, content_format, image_url, video_url, image_status, video_status, video_error, scheduled_for, created_at, updated_at, approved_at, approval_token, approval_email_sent_at, admin_review_status, admin_reviewed_at, admin_review_note, admin_product_items, admin_archived_at"
     )
     .in("status", Array.from(VISIBLE_STATUSES))
+    .is("admin_archived_at", null)
     .order("created_at", { ascending: false })
     .limit(150);
 
@@ -30,15 +32,22 @@ export async function GET(request) {
   }
 
   const postRows = posts || [];
-  const { data: failedOccurrences } = ["all", "failed"].includes(status)
+  const occurrenceResult = ["all", "failed", "creating"].includes(status)
     ? await context.admin
         .from("automation_occurrences")
-        .select("id, post_id, user_id, brand_profile_id, automation_rule_id, scheduled_for, content_type_label, content_format, campaign_title, started_at, finished_at, failure_code, failure_stage, failure_message_internal, failure_message_customer, refunded_credits, metadata")
-        .eq("status", "failed_terminal")
+        .select("id, post_id, user_id, brand_profile_id, automation_rule_id, status, scheduled_for, content_type_label, content_format, campaign_title, started_at, finished_at, failure_code, failure_stage, failure_message_internal, failure_message_customer, refunded_credits, metadata")
         .order("started_at", { ascending: false })
-        .limit(100)
-    : { data: [] };
-  const orphanFailures = (failedOccurrences || []).filter(
+        .limit(200)
+    : { data: [], error: null };
+  if (occurrenceResult.error) {
+    return Response.json({ ok: false, error: occurrenceResult.error.message }, { status: 500 });
+  }
+  const occurrenceRows = (occurrenceResult.data || []).filter((occurrence) => {
+    if (status === "failed") return occurrence.status === "failed_terminal";
+    if (status === "creating") return !["completed", "failed_terminal"].includes(occurrence.status);
+    return true;
+  });
+  const orphanFailures = occurrenceRows.filter(
     (occurrence) => !occurrence.post_id || !postRows.some((post) => post.id === occurrence.post_id)
   );
   const brandIds = Array.from(new Set([...postRows, ...orphanFailures].map((item) => item.brand_profile_id).filter(Boolean)));
@@ -47,7 +56,7 @@ export async function GET(request) {
 
   const [{ data: brands }, { data: feedbackRows }, { data: slideRows }] = await Promise.all([
     brandIds.length
-      ? context.admin.from("brand_profiles").select("id, business_name").in("id", brandIds)
+      ? context.admin.from("brand_profiles").select("id, business_name, admin_review_required").in("id", brandIds)
       : Promise.resolve({ data: [] }),
     postIds.length
       ? context.admin
@@ -91,16 +100,17 @@ export async function GET(request) {
     posts: [...postRows.map((item) => ({
       ...item,
       brand_name: brandMap[item.brand_profile_id] || "",
+      brand_admin_review_required: brands?.find((brand) => brand.id === item.brand_profile_id)?.admin_review_required ?? null,
       customer_email: userMap[item.user_id] || "",
       rejection: feedbackMap[item.id] || null,
       slides: slidesMap[item.id] || [],
     })), ...orphanFailures.map((occurrence) => ({
-      id: `failure-${occurrence.id}`,
+      id: `occurrence-${occurrence.id}`,
       occurrence_id: occurrence.id,
       user_id: occurrence.user_id,
       brand_profile_id: occurrence.brand_profile_id,
       automation_rule_id: occurrence.automation_rule_id,
-      status: "failed",
+      status: occurrence.status === "failed_terminal" ? "failed" : "creating",
       content: occurrence.campaign_title || occurrence.content_type_label || "",
       platform: null,
       post_type: occurrence.content_type_label || "Generation",
@@ -113,7 +123,9 @@ export async function GET(request) {
       scheduled_for: occurrence.scheduled_for,
       created_at: occurrence.started_at,
       updated_at: occurrence.finished_at || occurrence.started_at,
-      admin_review_status: "failure",
+      admin_review_status: occurrence.status === "failed_terminal" ? "needs_repair" : "creating",
+      admin_product_items: occurrence.metadata?.admin_product_items || occurrence.metadata?.partial_products || [],
+      brand_admin_review_required: brands?.find((brand) => brand.id === occurrence.brand_profile_id)?.admin_review_required ?? null,
       brand_name: brandMap[occurrence.brand_profile_id] || "",
       customer_email: userMap[occurrence.user_id] || "",
       rejection: null,
@@ -130,6 +142,15 @@ export async function PATCH(request) {
   const body = await request.json().catch(() => ({}));
   if (body?.action === "release_to_customer") {
     return releasePostToCustomer({ context, body });
+  }
+  if (body?.action === "set_brand_review_policy") {
+    return setBrandReviewPolicy({ context, body });
+  }
+  if (body?.action === "save_materials") {
+    return saveAdminMaterials({ context, body });
+  }
+  if (body?.action === "archive" || body?.action === "bulk_archive") {
+    return archivePosts({ context, body });
   }
   const feedbackId = String(body?.feedback_id || "").trim();
   if (!feedbackId) {
@@ -239,6 +260,71 @@ export async function PATCH(request) {
   return Response.json({ ok: true, feedback: data });
 }
 
+async function setBrandReviewPolicy({ context, body }) {
+  const brandProfileId = String(body?.brand_profile_id || "").trim();
+  if (!brandProfileId) return Response.json({ ok: false, error: "Brand profile ID is required." }, { status: 400 });
+  const value = body?.admin_review_required === null ? null : Boolean(body?.admin_review_required);
+  const { data, error } = await context.admin
+    .from("brand_profiles")
+    .update({ admin_review_required: value, updated_at: new Date().toISOString() })
+    .eq("id", brandProfileId)
+    .select("id, admin_review_required")
+    .single();
+  if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
+  return Response.json({ ok: true, brand: data });
+}
+
+function normalizeProductItems(items) {
+  return (Array.isArray(items) ? items : []).slice(0, 10).map((item) => ({
+    title: String(item?.title || "").trim().slice(0, 240),
+    description: String(item?.description || "").trim().slice(0, 3000),
+    url: String(item?.url || "").trim().slice(0, 2000),
+    image_url: String(item?.image_url || "").trim().slice(0, 3000),
+  }));
+}
+
+async function saveAdminMaterials({ context, body }) {
+  const postId = String(body?.post_id || "").trim();
+  const occurrenceId = String(body?.occurrence_id || "").trim();
+  const productItems = normalizeProductItems(body?.product_items);
+  const content = String(body?.content || "").trim().slice(0, 12000);
+  if (!postId && !occurrenceId) return Response.json({ ok: false, error: "Post or occurrence ID is required." }, { status: 400 });
+
+  if (postId) {
+    const { error } = await context.admin.from("posts").update({
+      admin_product_items: productItems,
+      ...(content ? { content } : {}),
+      admin_review_status: "pending",
+      updated_at: new Date().toISOString(),
+    }).eq("id", postId);
+    if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
+  }
+  if (occurrenceId) {
+    const { data: occurrence, error: loadError } = await context.admin
+      .from("automation_occurrences").select("metadata").eq("id", occurrenceId).single();
+    if (loadError) return Response.json({ ok: false, error: loadError.message }, { status: 500 });
+    const { error } = await context.admin.from("automation_occurrences").update({
+      metadata: { ...(occurrence?.metadata || {}), admin_product_items: productItems, admin_content: content || null },
+    }).eq("id", occurrenceId);
+    if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
+  }
+  return Response.json({ ok: true, product_items: productItems });
+}
+
+async function archivePosts({ context, body }) {
+  const ids = Array.from(new Set((body?.post_ids || [body?.post_id]).map((value) => String(value || "").trim()).filter(Boolean)));
+  if (!ids.length) return Response.json({ ok: false, error: "At least one post ID is required." }, { status: 400 });
+  const now = new Date().toISOString();
+  const { error } = await context.admin.from("posts").update({
+    admin_archived_at: now,
+    admin_archived_by: context.user.id,
+    admin_review_status: "archived",
+    updated_at: now,
+  }).in("id", ids);
+  if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
+  return Response.json({ ok: true, archived: ids.length });
+}
+
 function escapeHtml(value) {
   return String(value || "")
     .replace(/&/g, "&amp;")
@@ -254,7 +340,7 @@ async function releasePostToCustomer({ context, body }) {
 
   const { data: post, error: postError } = await context.admin
     .from("posts")
-    .select("id, user_id, brand_profile_id, status, content, platform, post_type, content_format, image_url, video_url, approval_token, scheduled_for, admin_review_status")
+    .select("id, user_id, brand_profile_id, automation_rule_id, status, content, platform, post_type, content_format, image_url, video_url, approval_token, scheduled_for, admin_review_status, language")
     .eq("id", postId)
     .single();
   if (postError || !post) {
@@ -264,14 +350,19 @@ async function releasePostToCustomer({ context, body }) {
     return Response.json({ ok: false, error: "A failed post must be repaired before it can be released." }, { status: 400 });
   }
 
-  const [{ data: brand }, { data: slides }] = await Promise.all([
-    context.admin.from("brand_profiles").select("business_name").eq("id", post.brand_profile_id).maybeSingle(),
-    context.admin.from("post_slides").select("slide_order, image_url, headline").eq("post_id", post.id).order("slide_order"),
+  const [{ data: brand }, { data: rule }] = await Promise.all([
+    context.admin.from("brand_profiles").select("business_name, content_language").eq("id", post.brand_profile_id).maybeSingle(),
+    post.automation_rule_id
+      ? context.admin.from("automation_rules").select("*").eq("id", post.automation_rule_id).maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
   let customerEmail = "";
+  let userAppLanguage = null;
   try {
     const { data } = await context.admin.auth.admin.getUserById(post.user_id);
     customerEmail = data?.user?.email || "";
+    const metadata = data?.user?.user_metadata || {};
+    userAppLanguage = metadata.app_language || metadata.appLanguage || metadata.ui_language || metadata.locale || null;
   } catch {
     customerEmail = "";
   }
@@ -279,6 +370,51 @@ async function releasePostToCustomer({ context, body }) {
   const resendApiKey = process.env.RESEND_API_KEY;
   if (!resendApiKey) return Response.json({ ok: false, error: "RESEND_API_KEY is not configured." }, { status: 500 });
 
+  try {
+    await sendApprovalEmail({
+      supabase: context.admin,
+      resendApiKey,
+      to: customerEmail,
+      rule: {
+        ...(rule || {}),
+        platform: post.platform || rule?.platform,
+        post_type: post.post_type || rule?.post_type,
+        content_format: post.content_format || rule?.content_format,
+        language: post.language || rule?.language || brand?.content_language,
+        brand_profile: brand || null,
+      },
+      postContent: post.content,
+      approvalToken: post.approval_token,
+      imageUrl: post.content_format === "carousel" ? null : post.image_url,
+      userAppLanguage,
+      postId: post.id,
+      contentFormat: post.content_format,
+    });
+  } catch (emailError) {
+    return Response.json({ ok: false, error: emailError?.message || "Customer email could not be sent." }, { status: 502 });
+  }
+
+  const releasedAt = new Date().toISOString();
+  const { error: releaseUpdateError } = await context.admin.from("posts").update({
+    admin_review_status: "approved_by_spreelo",
+    admin_reviewed_at: releasedAt,
+    admin_reviewed_by: context.user.id,
+    admin_review_note: String(body?.admin_note || "").trim() || null,
+    approval_email_sent_at: releasedAt,
+    updated_at: releasedAt,
+  }).eq("id", post.id);
+  if (releaseUpdateError) return Response.json({ ok: false, error: releaseUpdateError.message }, { status: 500 });
+  await context.admin.from("admin_review_cases").update({
+    status: "approved_by_spreelo",
+    needs_review: false,
+    reviewed_at: releasedAt,
+    reviewed_by: context.user.id,
+    delivered_at: releasedAt,
+    updated_at: releasedAt,
+  }).eq("post_id", post.id);
+  return Response.json({ ok: true, released: true, recipient: customerEmail });
+
+  /* Legacy v143.28 release template retained below only for deployment rollback reference.
   const appUrl = String(process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "https://app.spreelo.com").replace(/\/$/, "");
   const token = encodeURIComponent(post.approval_token || "");
   const approveUrl = `${appUrl}/api/approve-post?token=${token}`;
@@ -316,5 +452,5 @@ async function releasePostToCustomer({ context, body }) {
     updated_at: now,
   }).eq("id", post.id);
   if (updateError) return Response.json({ ok: false, error: updateError.message }, { status: 500 });
-  return Response.json({ ok: true, released: true, recipient: customerEmail });
+  return Response.json({ ok: true, released: true, recipient: customerEmail }); */
 }

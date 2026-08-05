@@ -7974,16 +7974,19 @@ async function applyDynamicAutoPlan({ goalId, postCount }) {
     websiteProductModeAvailable,
   });
 
-  setSelectedContentTypeIds(fallbackTypeIds);
-  setSlots(fallbackSlots);
-
   if (!goalId || !currentBrandId) {
+    setSelectedContentTypeIds(fallbackTypeIds);
+    setSlots(fallbackSlots);
     return;
   }
 
   const requestId = autoPlanRequestIdRef.current + 1;
   autoPlanRequestIdRef.current = requestId;
   setAutoPlanLoading(true);
+  // Do not present a provisional plan that is visibly replaced seconds later.
+  // Keep the schedule empty/skeleton-backed until the authoritative result is final.
+  setSelectedContentTypeIds([]);
+  setSlots([]);
 
   try {
     const { data: sessionData } = await supabase.auth.getSession();
@@ -8013,6 +8016,8 @@ async function applyDynamicAutoPlan({ goalId, postCount }) {
         "Dynamic content strategy could not replace the safe fallback plan",
         payload?.error || response.statusText
       );
+      setSelectedContentTypeIds(fallbackTypeIds);
+      setSlots(fallbackSlots);
       return;
     }
 
@@ -8038,6 +8043,8 @@ async function applyDynamicAutoPlan({ goalId, postCount }) {
         "Dynamic content strategy could not replace the safe fallback plan",
         error
       );
+      setSelectedContentTypeIds(fallbackTypeIds);
+      setSlots(fallbackSlots);
     }
   } finally {
     if (requestId === autoPlanRequestIdRef.current) {

@@ -121,14 +121,14 @@ function getContentPlanStatus(rule, t) {
   if (hasRetryPending) {
     return {
       key: "waiting",
-      label: "Väntar på webbplatsen",
+      label: t("dashboard.planStatus.preparing"),
     };
   }
 
   if (hasTerminalFailure) {
     return {
-      key: "failed",
-      label: "Kunde inte skapas",
+      key: "waiting",
+      label: t("dashboard.planStatus.preparing"),
     };
   }
 
@@ -1122,9 +1122,6 @@ export default function Home() {
                                       </div>
 
                                       <div className="dashboard-plan-actions">
-                                        <a href={`/automation?plan=${encodeURIComponent(rule.primary_rule_id || rule.id)}`}>
-                                          {t("dashboard.manage")}
-                                        </a>
                                         <button type="button" className="dashboard-plan-delete" disabled={contentPlanActionLoading} onClick={() => deleteContentPlans([rule.id])}>
                                           {t("dashboard.delete")}
                                         </button>
@@ -1195,9 +1192,6 @@ export default function Home() {
                                       </div>
 
                                       <div className="dashboard-plan-actions">
-                                        <a href={`/automation?plan=${encodeURIComponent(rule.primary_rule_id || rule.id)}`}>
-                                          {t("dashboard.manage")}
-                                        </a>
                                         <button type="button" className="dashboard-plan-delete" disabled={contentPlanActionLoading} onClick={() => deleteContentPlans([rule.id])}>
                                           {t("dashboard.delete")}
                                         </button>

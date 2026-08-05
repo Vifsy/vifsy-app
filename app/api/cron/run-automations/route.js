@@ -259,7 +259,7 @@ const CAROUSEL_WEB_SEARCH_CANDIDATE_LIMIT = PRODUCT_ENGINE_V2_ENABLED
 // that exact order, but Product Engine must not judge, rerank or replace the
 // web agent's choices with the legacy candidate/store-search pipeline.
 const CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET = 10;
-const CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED = 5;
+const CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED = 3;
 const CAMPAIGN_PRIMARY_WEB_RESEARCH_MAX_ROUNDS = 2;
 const CAMPAIGN_PRIMARY_WEB_RESEARCH_TIMEOUT_MS = Math.max(
   45_000,
@@ -300,7 +300,7 @@ const CAMPAIGN_MINIMUM_PRODUCT_FIT_SCORE = 60;
 const CAMPAIGN_STORE_SEARCH_PRODUCT_FIT_SCORE = 55;
 const CAROUSEL_MIN_PRODUCT_SLIDES = 5;
 const CAROUSEL_PRODUCT_SLIDE_TARGET = 5;
-const CAROUSEL_PLATFORM_MIN_PRODUCT_SLIDES = 2;
+const CAROUSEL_PLATFORM_MIN_PRODUCT_SLIDES = 3;
 const CAROUSEL_OUTRO_SLIDE_COUNT = 1;
 const CAROUSEL_MAX_PRODUCT_SLIDES = CAROUSEL_PRODUCT_SLIDE_TARGET + CAROUSEL_OUTRO_SLIDE_COUNT;
 const CAMPAIGN_LOCKED_SEARCH_POOL_MIN_ITEMS = 15;
@@ -428,6 +428,17 @@ function getWebsiteFetchDomain(value) {
     );
   } catch {
     return normalizeWebsiteFetchDomainHostname(value);
+  }
+}
+
+function isExactConfiguredWebsiteHostUrl(candidateUrl, websiteUrl) {
+  try {
+    return (
+      normalizeWebsiteFetchDomainHostname(new URL(candidateUrl).hostname) ===
+      normalizeWebsiteFetchDomainHostname(new URL(websiteUrl).hostname)
+    );
+  } catch {
+    return false;
   }
 }
 
@@ -1807,7 +1818,7 @@ function buildCarouselProductLabelSvg({ title, eyebrow = "", analysis, productCa
   };
 }
 
-async function renderCarouselProductSlideImage({
+export async function renderCarouselProductSlideImage({
   sourceImageUrl,
   supabase = null,
   rule = null,
@@ -10211,12 +10222,12 @@ function buildApprovalEmailHtml({
                         ${escapeHtml(t(buttonKey))}
                       </a>
                     </td>
-                    <td style="padding:4px;">
-                      <a href="${rejectUrl}" style="display:inline-block;background:#fff7f1;color:#9a412b;border:1px solid #efc6b7;text-decoration:none;font-weight:700;padding:13px 20px;border-radius:11px;">
-                        ${escapeHtml(t("emails.approval.rejectButton"))}
-                      </a>
-                    </td>
                   </tr>
+                  <tr><td align="center" style="padding:12px 4px 0;">
+                    <a href="${rejectUrl}" style="display:inline-block;color:#667085;text-decoration:underline;font-size:13px;font-weight:600;">
+                      ${escapeHtml(t("emails.approval.rejectButton"))}
+                    </a>
+                  </td></tr>
                 </table>
 
                 <p style="margin:18px 0 0;color:#6b7280;font-size:13px;line-height:1.5;">
@@ -11054,6 +11065,22 @@ async function failAutomationOccurrenceTerminal({
   const handled = Boolean(data?.handled);
   const refundedCredits = Math.max(0, Number(data?.refunded_credits || 0));
   let notificationStatus = String(data?.notification_status || "pending");
+
+  await upsertAdminReviewCase(supabase, {
+    occurrence_id: occurrenceId,
+    user_id: rule.user_id,
+    brand_profile_id: rule.brand_profile_id || null,
+    automation_rule_id: rule.id,
+    status: "needs_repair",
+    scheduled_for: scheduledFor || getScheduledPublishAtIso(rule, new Date()),
+    campaign_title: rule.name || rule.campaign_theme || null,
+    content_type_label: rule.content_type_label || rule.post_type || null,
+    content_format: normalizeContentFormat(rule.content_format),
+    failure_code: failure.code,
+    failure_stage: stage || null,
+    failure_message: internalMessage,
+    needs_review: true,
+  });
 
   if (handled) {
     let resolvedBrandProfile = brandProfile;
@@ -23344,14 +23371,13 @@ Return only the required JSON structure.`.trim();
 
   const requestBody = {
       model: PRODUCT_RESEARCH_MODEL,
-      tools: [
+      ...(useVerifiedEditorialPool ? {} : { tools: [
         {
           type: "web_search",
           filters: { allowed_domains: [allowedDomain] },
           search_context_size: "high",
         },
-      ],
-      tool_choice: "required",
+      ], tool_choice: "required" }),
       instructions,
       ...getReasoningOptionsForModel(PRODUCT_RESEARCH_MODEL),
       max_output_tokens: 4500,
@@ -23938,10 +23964,19 @@ async function findPrimaryCampaignProductsWithWebSearch({
       return [title, url].filter(Boolean).join(" | ");
     })
     .filter(Boolean);
-  const exactTask = `Hitta ${CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET} passande produkter från ${allowedDomain} för ${campaignTheme}.`;
+  const verifiedEditorialPool = dedupeWebsiteItemsByUrlTitleAndImage(cachedWebsiteItems || [])
+    .filter((item) => isValidCarouselProduct(item) && isExactConfiguredWebsiteHostUrl(item?.url || item?.item_url || item?.product_url, websiteUrl))
+    .slice(0, 40);
+  const useVerifiedEditorialPool = verifiedEditorialPool.length >= CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET;
+  const verifiedPoolText = verifiedEditorialPool
+    .map((item, index) => `${index + 1}. ${item?.title || item?.item_title || "Product"} | ${item?.url || item?.item_url || item?.product_url} | ${item?.image_url || ""}`)
+    .join("\n");
+  const exactTask = useVerifiedEditorialPool
+    ? `Select and rank the ${CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET} strongest products for ${campaignTheme} only from this live-verified product pool. Preserve every supplied URL and image URL exactly:\n${verifiedPoolText}`
+    : `Hitta ${CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET} passande produkter från ${allowedDomain} för ${campaignTheme}.`;
   const webAgentInstructions = `
- Act as a careful senior marketer using web search:
-- Search only ${allowedDomain}. Use the site's public search, category and collection pages to find real products, then return the direct product pages.
+ Act as a careful senior marketer:
+- ${useVerifiedEditorialPool ? "The product pool in the task has already been live-verified by Spreelo. Select ONLY from that pool; do not search for or invent another URL." : `Search only ${allowedDomain}. Use the site's public search, category and collection pages to find real products, then return the direct product pages.`}
 - Infer what the campaign really means, who it is for and which complementary product roles make the strongest social-media carousel.
  - Rank exactly ${CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET} concrete purchasable products. Ranks 1-5 must form the strongest carousel; ranks 6-10 are ordered reserves.
  - Decide whether this campaign is broad enough for complementary product categories (varied_categories) or genuinely focuses on one product category (focused_category). For a broad campaign, ranks 1-5 should normally cover at least four distinct useful product families when the retailer offers them. Use at most one product per family before covering those complementary families. For a focused-category campaign, meaningful variation may instead come from use case, feature or audience.
@@ -24094,7 +24129,7 @@ Return the result in the required JSON structure. Keep each reason concise and g
     if (
       !productUrl ||
       !isHttpUrl(productUrl) ||
-      !isSameOrSubdomainUrl(productUrl, websiteUrl) ||
+      !isExactConfiguredWebsiteHostUrl(productUrl, websiteUrl) ||
       !matchesConfiguredWebsiteMarket(productUrl, websiteUrl) ||
       isLikelyNonProductUrl(productUrl, websiteUrl) ||
       isLikelyBadDiscoveryPageUrl(productUrl, websiteUrl)
@@ -30483,7 +30518,7 @@ async function getUpcomingPlanUrlForFinalWeeklyRule({ supabase, rule, locale }) 
   }
 }
 
-async function sendApprovalEmail({
+export async function sendApprovalEmail({
   supabase,
   resendApiKey,
   to,
@@ -31908,7 +31943,18 @@ function isAuthorizedCronRequest(request, cronSecret) {
   return authorizationHeader === expectedAuthorizationHeader;
 }
 
-async function getAdminPostReviewGate(supabase) {
+async function getAdminPostReviewGate(supabase, brandProfileId = null) {
+  if (brandProfileId) {
+    const { data: brand, error: brandError } = await supabase
+      .from("brand_profiles")
+      .select("admin_review_required")
+      .eq("id", brandProfileId)
+      .maybeSingle();
+    if (!brandError && typeof brand?.admin_review_required === "boolean") {
+      return brand.admin_review_required;
+    }
+  }
+
   const { data, error } = await supabase
     .from("spreelo_admin_settings")
     .select("require_admin_post_approval")
@@ -31916,13 +31962,31 @@ async function getAdminPostReviewGate(supabase) {
     .maybeSingle();
 
   if (error) {
-    console.warn("Admin post review setting unavailable; using direct customer review", {
+    console.warn("Admin post review setting unavailable; using safe admin review", {
       message: error.message,
     });
-    return false;
+    return true;
   }
 
   return Boolean(data?.require_admin_post_approval);
+}
+
+async function upsertAdminReviewCase(supabase, values) {
+  if (!values?.occurrence_id) return null;
+  const now = new Date().toISOString();
+  const payload = { ...values, updated_at: now };
+  const { data, error } = await supabase
+    .from("admin_review_cases")
+    .upsert(payload, { onConflict: "occurrence_id" })
+    .select("id")
+    .maybeSingle();
+  if (error && !/admin_review_cases|schema cache|does not exist/i.test(String(error.message || ""))) {
+    console.warn("Could not update durable admin review case", {
+      occurrenceId: values.occurrence_id,
+      message: error.message,
+    });
+  }
+  return data || null;
 }
 
 async function runAutomationCron(request, options = {}) {
@@ -31977,7 +32041,6 @@ async function runAutomationCron(request, options = {}) {
     });
 
     const summary = createEmptySummary();
-    const adminPostReviewRequired = await getAdminPostReviewGate(supabase);
     summary.stale_occurrences_finalized = await finalizeStaleAutomationOccurrences({
       supabase,
       resendApiKey,
@@ -32332,6 +32395,23 @@ async function runAutomationCron(request, options = {}) {
             Number(summary.skipped_duplicate_occurrence || 0) + 1;
           continue;
         }
+
+        const adminPostReviewRequired = await getAdminPostReviewGate(
+          supabase,
+          rule.brand_profile_id
+        );
+        await upsertAdminReviewCase(supabase, {
+          occurrence_id: automationOccurrenceId,
+          user_id: rule.user_id,
+          brand_profile_id: rule.brand_profile_id || null,
+          automation_rule_id: rule.id,
+          status: "creating",
+          scheduled_for: scheduledPublishAtIso,
+          campaign_title: rule.name || rule.campaign_theme || null,
+          content_type_label: rule.content_type_label || rule.post_type || null,
+          content_format: normalizeContentFormat(rule.content_format),
+          needs_review: true,
+        });
 
         let automationDrafts = await findAutomationDraftsForRule({
           supabase,
@@ -32997,6 +33077,30 @@ product_research_model_used: websitePreparedRule.uses_website_content
 
         automationRunPostId = post.id;
 
+        const adminProductItems = (Array.isArray(websiteItems) ? websiteItems : websiteItem ? [websiteItem] : [])
+          .map((item) => ({
+            title: item?.title || item?.item_title || "",
+            description: item?.description || item?.body || item?.reason || "",
+            url: item?.url || item?.item_url || item?.product_url || "",
+            image_url: item?.image_url || item?.imageUrl || "",
+          }));
+        await supabase.from("posts").update({ admin_product_items: adminProductItems }).eq("id", post.id);
+        await upsertAdminReviewCase(supabase, {
+          occurrence_id: automationOccurrenceId,
+          post_id: post.id,
+          user_id: rule.user_id,
+          brand_profile_id: rule.brand_profile_id || null,
+          automation_rule_id: rule.id,
+          status: "creating",
+          scheduled_for: scheduledPublishAtIso,
+          campaign_title: rule.name || rule.campaign_theme || null,
+          content_type_label: rule.content_type_label || rule.post_type || null,
+          content_format: normalizeContentFormat(rule.content_format),
+          draft_content: generatedContent,
+          product_items: adminProductItems,
+          needs_review: true,
+        });
+
         let imageUrl = null;
         let imageStoragePath = null;
         let finalImagePrompt = wantsImage ? websitePreparedRule.image_prompt || null : null;
@@ -33628,6 +33732,7 @@ product_research_model_used: websitePreparedRule.uses_website_content
           }
         }
 
+        let sentDirectlyToCustomer = false;
         if (effectivePostStatus === "pending_approval" && !adminPostReviewRequired) {
           if (!resendApiKey) {
             summary.warnings += 1;
@@ -33654,6 +33759,7 @@ product_research_model_used: websitePreparedRule.uses_website_content
                 });
 
                 summary.emails_sent += 1;
+                sentDirectlyToCustomer = true;
               }
             } catch {
               summary.warnings += 1;
@@ -33800,6 +33906,23 @@ product_research_model_used: websitePreparedRule.uses_website_content
             effective_post_status: effectivePostStatus,
             credits_were_reserved: hasReservedCredits,
           },
+        });
+
+        await upsertAdminReviewCase(supabase, {
+          occurrence_id: automationOccurrenceId,
+          post_id: post.id,
+          user_id: rule.user_id,
+          brand_profile_id: rule.brand_profile_id || null,
+          automation_rule_id: rule.id,
+          status: sentDirectlyToCustomer ? "sent_directly" : "awaiting_spreelo",
+          scheduled_for: scheduledPublishAtIso,
+          campaign_title: rule.name || rule.campaign_theme || null,
+          content_type_label: rule.content_type_label || rule.post_type || null,
+          content_format: normalizeContentFormat(rule.content_format),
+          draft_content: generatedContent,
+          product_items: adminProductItems,
+          needs_review: !sentDirectlyToCustomer,
+          delivered_at: sentDirectlyToCustomer ? new Date().toISOString() : null,
         });
 
         await finishRunLog("success", null, {

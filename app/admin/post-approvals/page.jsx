@@ -11,6 +11,9 @@ import {
   LoaderCircle,
   RefreshCw,
   Save,
+  Plus,
+  Trash2,
+  Upload,
   Video,
   X,
   XCircle,
@@ -34,6 +37,10 @@ function formatDate(value) {
 }
 
 function statusMeta(status, t) {
+  if (status === "creating") return { label: t("admin.approvals.statusCreating"), className: "pending", Icon: LoaderCircle };
+  if (status === "needs_repair") return { label: t("admin.approvals.statusNeedsRepair"), className: "failed", Icon: AlertTriangle };
+  if (status === "sent_directly") return { label: t("admin.approvals.statusSentDirectly"), className: "approved", Icon: CheckCircle2 };
+  if (status === "approved_by_spreelo") return { label: t("admin.approvals.statusApprovedBySpreelo"), className: "approved", Icon: CheckCircle2 };
   if (status === "failed") return { label: t("admin.approvals.failed"), className: "failed", Icon: AlertTriangle };
   if (status === "approved") return { label: t("admin.approvals.approved"), className: "approved", Icon: CheckCircle2 };
   if (status === "rejected") return { label: t("admin.approvals.rejected"), className: "rejected", Icon: XCircle };
@@ -86,6 +93,11 @@ export default function AdminPostApprovalsPage() {
   const [reviewGateEnabled, setReviewGateEnabled] = useState(false);
   const [savingReviewGate, setSavingReviewGate] = useState(false);
   const [releasingPostId, setReleasingPostId] = useState("");
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [materials, setMaterials] = useState([]);
+  const [postCopy, setPostCopy] = useState("");
+  const [savingMaterials, setSavingMaterials] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
 
   const selectedPost = useMemo(
     () => posts.find((post) => post.id === selectedPostId) || null,
@@ -100,6 +112,10 @@ export default function AdminPostApprovalsPage() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [selectedPostId]);
+  useEffect(() => {
+    setMaterials(selectedPost?.admin_product_items || []);
+    setPostCopy(selectedPost?.content || "");
+  }, [selectedPost]);
 
   async function loadPosts() {
     setLoading(true);
@@ -181,6 +197,75 @@ export default function AdminPostApprovalsPage() {
     }
   }
 
+  async function runAdminAction(payload) {
+    const headers = await getHeaders();
+    const response = await fetch("/api/admin/post-approvals", { method: "PATCH", headers, body: JSON.stringify(payload) });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result?.error || "The admin action failed.");
+    return result;
+  }
+
+  async function saveMaterials() {
+    if (!selectedPost) return;
+    setSavingMaterials(true);
+    setError("");
+    try {
+      await runAdminAction({
+        action: "save_materials",
+        post_id: selectedPost.status === "failed" ? null : selectedPost.id,
+        occurrence_id: selectedPost.occurrence_id || null,
+        content: postCopy,
+        product_items: materials,
+      });
+      await loadPosts();
+    } catch (actionError) { setError(actionError.message); }
+    finally { setSavingMaterials(false); }
+  }
+
+  async function regenerateFromMaterials() {
+    if (!selectedPost) return;
+    setRegenerating(true); setError("");
+    try {
+      const headers = await getHeaders();
+      const response = await fetch("/api/admin/post-approvals/regenerate", { method: "POST", headers, body: JSON.stringify({ post_id: selectedPost.status === "failed" ? null : selectedPost.id, occurrence_id: selectedPost.occurrence_id || null, content: postCopy, product_items: materials }) });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || "Regeneration failed.");
+      setSelectedPostId(result.post_id); await loadPosts();
+    } catch (actionError) { setError(actionError.message); }
+    finally { setRegenerating(false); }
+  }
+
+  async function uploadProductImage(index, file) {
+    if (!file) return;
+    setError("");
+    try {
+      const headers = await getHeaders();
+      const response = await fetch("/api/admin/post-approvals/upload", { method: "POST", headers, body: JSON.stringify({ content_type: file.type, size: file.size }) });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || "Could not prepare image upload.");
+      const { error: uploadError } = await supabase.storage.from(result.bucket).uploadToSignedUrl(result.path, result.token, file, { contentType: file.type });
+      if (uploadError) throw uploadError;
+      setMaterials((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, image_url: result.public_url } : item));
+    } catch (uploadError) { setError(uploadError.message || "Image upload failed."); }
+  }
+
+  async function archiveSelected(ids) {
+    const postIds = ids.filter((id) => !id.startsWith("occurrence-"));
+    if (!postIds.length) return;
+    try {
+      await runAdminAction({ action: "bulk_archive", post_ids: postIds });
+      setSelectedIds([]); setSelectedPostId(""); await loadPosts();
+    } catch (actionError) { setError(actionError.message); }
+  }
+
+  async function setBrandPolicy(required) {
+    if (!selectedPost?.brand_profile_id) return;
+    try {
+      await runAdminAction({ action: "set_brand_review_policy", brand_profile_id: selectedPost.brand_profile_id, admin_review_required: required });
+      await loadPosts();
+    } catch (actionError) { setError(actionError.message); }
+  }
+
   function updateDraft(id, changes) {
     setDrafts((current) => ({ ...current, [id]: { ...(current[id] || {}), ...changes } }));
   }
@@ -240,6 +325,12 @@ export default function AdminPostApprovalsPage() {
             <button type="button" key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{label}</button>
           ))}
         </div>
+        {selectedIds.length ? (
+          <div className="admin-workbench-bulkbar">
+            <strong>{selectedIds.length} selected</strong>
+            <button type="button" onClick={() => archiveSelected(selectedIds)}><Trash2 size={15} /> Archive selected</button>
+          </div>
+        ) : null}
 
         {error ? <div className="admin-alert error">{error}</div> : null}
 
@@ -257,9 +348,23 @@ export default function AdminPostApprovalsPage() {
               <span />
             </div>
             {posts.map((post) => {
-              const meta = statusMeta(post.status, t);
+              const displayStatus = post.admin_review_status === "approved_by_spreelo"
+                ? "approved_by_spreelo"
+                : post.admin_review_status === "not_required" && post.approval_email_sent_at
+                  ? "sent_directly"
+                  : post.admin_review_status === "needs_repair" || post.admin_review_status === "failure"
+                    ? "needs_repair"
+                    : post.status;
+              const meta = statusMeta(displayStatus, t);
               return (
                 <button type="button" className="admin-v74-approval-row" key={post.id} onClick={() => setSelectedPostId(post.id)}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(post.id)}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={(event) => setSelectedIds((ids) => event.target.checked ? [...ids, post.id] : ids.filter((id) => id !== post.id))}
+                    aria-label="Select post"
+                  />
                   <strong>{post.brand_name || t("admin.approvals.unknownBrand")}</strong>
                   <span>{formatDate(post.created_at)}</span>
                   <span>{formatDate(post.scheduled_for)}</span>
@@ -292,6 +397,31 @@ export default function AdminPostApprovalsPage() {
                     <span>{t("admin.approvals.postCopy")}</span>
                     <p>{selectedPost.content || t("admin.approvals.noContent")}</p>
                   </div>
+                  <section className="admin-material-workbench">
+                    <div className="admin-material-workbench-title">
+                      <div><span>Repair materials</span><strong>Products and post text</strong></div>
+                      <button type="button" onClick={() => setMaterials((items) => [...items, { title: "", description: "", url: "", image_url: "" }])}><Plus size={15} /> Add product</button>
+                    </div>
+                    <label><span>Post text</span><textarea value={postCopy} onChange={(event) => setPostCopy(event.target.value)} /></label>
+                    <div className="admin-material-list">
+                      {materials.map((item, index) => (
+                        <article key={`${selectedPost.id}-material-${index}`}>
+                          <div className="admin-material-image">
+                            {item.image_url ? <img src={item.image_url} alt="" /> : <ImageIcon size={22} />}
+                            <label><Upload size={14} /> Replace image<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => uploadProductImage(index, event.target.files?.[0])} /></label>
+                          </div>
+                          <div className="admin-material-fields">
+                            <input value={item.title || ""} placeholder="Product name" onChange={(event) => setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, title: event.target.value } : row))} />
+                            <textarea value={item.description || ""} placeholder="Product information for caption and hashtags" onChange={(event) => setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, description: event.target.value } : row))} />
+                            <input value={item.url || ""} placeholder="Verified product URL" onChange={(event) => setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, url: event.target.value } : row))} />
+                          </div>
+                          <button type="button" className="admin-material-remove" onClick={() => setMaterials((items) => items.filter((_, rowIndex) => rowIndex !== index))} aria-label="Remove product"><Trash2 size={16} /></button>
+                        </article>
+                      ))}
+                    </div>
+                    <button type="button" className="admin-primary-button" disabled={savingMaterials} onClick={saveMaterials}>{savingMaterials ? <LoaderCircle className="admin-spin" size={16} /> : <Save size={16} />} Save repair materials</button>
+                    <button type="button" className="admin-primary-button admin-regenerate-button" disabled={regenerating || !materials.some((item) => item.title && item.image_url)} onClick={regenerateFromMaterials}>{regenerating ? <LoaderCircle className="admin-spin" size={16} /> : <RefreshCw size={16} />} Regenerate complete post</button>
+                  </section>
                 </div>
 
                 <aside className="admin-v74-detail-meta">
@@ -301,6 +431,11 @@ export default function AdminPostApprovalsPage() {
                     <div><dt>{t("admin.approvals.scheduled")}</dt><dd>{formatDate(selectedPost.scheduled_for)}</dd></div>
                     <div><dt>{t("admin.approvals.platform")}</dt><dd>{selectedPost.platform || "—"}</dd></div>
                   </dl>
+                  <div className="admin-brand-review-policy">
+                    <strong>Brand review policy</strong>
+                    <p>Every post stays visible here. Choose whether complete posts also need Spreelo approval before the customer email.</p>
+                    <label><input type="checkbox" checked={selectedPost.brand_admin_review_required !== false} onChange={(event) => setBrandPolicy(event.target.checked)} /> Require Spreelo review for {selectedPost.brand_name || "this brand"}</label>
+                  </div>
 
                   {selectedPost.status === "failed" ? (
                     <div className="admin-generation-error-card">
@@ -335,6 +470,7 @@ export default function AdminPostApprovalsPage() {
                       {t("admin.approvals.releaseToCustomer")}
                     </button>
                   ) : null}
+                  {!selectedPost.id.startsWith("occurrence-") ? <button type="button" className="admin-archive-button" onClick={() => archiveSelected([selectedPost.id])}><Trash2 size={15} /> Archive post</button> : null}
 
                   {selectedPost.rejection ? (
                     <div className="admin-v74-rejection-review">
