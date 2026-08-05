@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import AppLayout from "../../components/AppLayout";
 import { supabase } from "../../lib/supabaseClient";
 import { getValidAnalysisAccessToken } from "../../lib/analysisSession";
+import { getSmoothAnalysisProgress } from "../../lib/analysisProgress";
 import { useUiText } from "../../lib/i18n/useUiText";
 import { normalizeSingleContentLanguage } from "../../lib/contentLanguage";
 
@@ -117,9 +118,6 @@ const analysisProgressStages = [
 
 const ANALYSIS_STATUS_POLL_INTERVAL_MS = 5000;
 const ANALYSIS_STATUS_MAX_POLLS = 720;
-const ANALYSIS_MAIN_PROGRESS_DURATION_MS = 120000;
-const ANALYSIS_DISPLAY_DURATION_MS = 150000; // Typical analysis reaches 96% after about 2.5 minutes.
-const ANALYSIS_FINAL_CREEP_TIME_CONSTANT_MS = 60000;
 const ANALYSIS_START_REQUEST_TIMEOUT_MS = 45000;
 const ANALYSIS_STATUS_REQUEST_TIMEOUT_MS = 20000;
 const ANALYSIS_SESSION_ATTEMPTS = 3;
@@ -167,37 +165,6 @@ function normalizeWebsiteUrl(value) {
   }
 
   return `https://${trimmedValue}`;
-}
-
-function getSmoothAnalysisProgress(startedAt) {
-  if (!startedAt) {
-    return 1;
-  }
-
-  const elapsedMs = Date.now() - startedAt;
-
-  if (elapsedMs <= ANALYSIS_MAIN_PROGRESS_DURATION_MS) {
-    const ratio = elapsedMs / ANALYSIS_MAIN_PROGRESS_DURATION_MS;
-    return Math.max(1, Math.min(90, 1 + ratio * 89));
-  }
-
-  if (elapsedMs <= ANALYSIS_DISPLAY_DURATION_MS) {
-    const finalStretchRatio =
-      (elapsedMs - ANALYSIS_MAIN_PROGRESS_DURATION_MS) /
-      (ANALYSIS_DISPLAY_DURATION_MS - ANALYSIS_MAIN_PROGRESS_DURATION_MS);
-
-    return Math.min(96, 90 + finalStretchRatio * 6);
-  }
-
-  const finalPhaseElapsedMs = elapsedMs - ANALYSIS_DISPLAY_DURATION_MS;
-  const finalCreep =
-    2.8 *
-    (1 -
-      Math.exp(
-        -finalPhaseElapsedMs / ANALYSIS_FINAL_CREEP_TIME_CONSTANT_MS
-      ));
-
-  return Math.min(98.8, 96 + finalCreep);
 }
 
 async function withTimeout(promise, timeoutMs) {
@@ -543,11 +510,7 @@ export default function BrandProfile() {
       setLastAnalyzedWebsiteUrl(normalizeWebsiteUrl(loadedWebsiteUrl));
       setLastAnalyzedBrandDescription(loadedBrandDescription.trim());
 
-      if (!loadedWebsiteUrl && loadedBrandDescription) {
-        setHasNoWebsite(true);
-      } else {
-        setHasNoWebsite(false);
-      }
+      setHasNoWebsite(false);
 
       if (loadedIndustry || loadedTargetAudience) {
         setShowGeneratedFields(true);
@@ -1497,35 +1460,6 @@ export default function BrandProfile() {
                 disabled={hasNoWebsite || analyzing || saving || deletingBrand}
               />
 
-              <label className="checkbox-row brand-profile-checkbox">
-                <input
-                  type="checkbox"
-                  checked={hasNoWebsite}
-                  onChange={handleNoWebsiteChange}
-                  disabled={analyzing || saving || deletingBrand}
-                />
-                <span>{t("brand.noWebsite")}</span>
-              </label>
-
-              {hasNoWebsite && (
-                <>
-                  <label>{t("brand.describeBusiness")}</label>
-                  <textarea
-                    className="input prompt-textarea"
-                    placeholder={t("brand.describeBusinessPlaceholder")}
-                    value={brandDescription}
-                    onChange={(event) => {
-                      setBrandDescription(event.target.value);
-                      setShowGeneratedFields(false);
-                      setContentSettingsTouched(false);
-                      setIndustry("");
-                      setTargetAudience("");
-                      setMessage("");
-                    }}
-                    disabled={analyzing || saving || deletingBrand}
-                  />
-                </>
-              )}
             </div>
 
             {showGeneratedFields && (
@@ -1689,23 +1623,6 @@ export default function BrandProfile() {
                     {t(getCurrentAnalysisStage(analysisProgress).titleKey)}
                   </strong>
                   <p>{t(getCurrentAnalysisStage(analysisProgress).descriptionKey)}</p>
-                </div>
-
-                <div className="brand-profile-analysis-background" role="status">
-                  <strong>
-                    {analysisNoticeCode === "blocked"
-                      ? t("brand.analysisBlockedTitle")
-                      : analysisNoticeCode === "long"
-                        ? t("brand.analysisLongTitle")
-                        : t("brand.analysisBackgroundTitle")}
-                  </strong>
-                  <p>
-                    {analysisNoticeCode === "blocked"
-                      ? t("brand.analysisBlockedText")
-                      : analysisNoticeCode === "long"
-                        ? t("brand.analysisLongText")
-                        : t("brand.analysisBackgroundText")}
-                  </p>
                 </div>
 
                 <div className="brand-profile-analysis-steps">

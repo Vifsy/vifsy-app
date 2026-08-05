@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   Sparkles,
   CreditCard,
+  Globe2,
   Trash2,
   UserRound,
   WandSparkles,
@@ -130,6 +131,9 @@ export default function AppLayout({ active, children }) {
   const [currentBrandId, setCurrentBrandId] = useState("");
   const [loadingBrands, setLoadingBrands] = useState(true);
   const [creatingBrand, setCreatingBrand] = useState(false);
+  const [showCreateBrandModal, setShowCreateBrandModal] = useState(false);
+  const [newBrandWebsite, setNewBrandWebsite] = useState("");
+  const [newBrandError, setNewBrandError] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -375,16 +379,36 @@ export default function AppLayout({ active, children }) {
     window.location.reload();
   }
 
-  async function handleCreateBrand() {
+  function normalizeBrandWebsite(value) {
+    const trimmed = String(value || "").trim();
+    if (!trimmed) return "";
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  }
+
+  function getBusinessNameFromWebsite(value) {
+    try {
+      const hostname = new URL(value).hostname.replace(/^www\./i, "");
+      const label = hostname.split(".")[0] || hostname;
+      return label
+        .split(/[-_]+/)
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ") || hostname;
+    } catch {
+      return "";
+    }
+  }
+
+  async function handleCreateBrand(event) {
+    event?.preventDefault?.();
     if (!user?.id || creatingBrand) return;
+    const normalizedWebsite = normalizeBrandWebsite(newBrandWebsite);
+    const derivedBrandName = getBusinessNameFromWebsite(normalizedWebsite);
 
-    const brandName = window.prompt(
-      t("layout.createBrandPrompt")
-    );
-
-    const trimmedBrandName = String(brandName || "").trim();
-
-    if (!trimmedBrandName) return;
+    if (!normalizedWebsite || !derivedBrandName) {
+      setNewBrandError(t("layout.createBrandWebsiteInvalid"));
+      return;
+    }
 
     setCreatingBrand(true);
 
@@ -392,8 +416,8 @@ export default function AppLayout({ active, children }) {
       .from("brand_profiles")
       .insert({
         user_id: user.id,
-        business_name: trimmedBrandName,
-        website_url: "",
+        business_name: derivedBrandName,
+        website_url: normalizedWebsite,
         brand_description: "",
         industry: "",
         target_audience: "",
@@ -408,7 +432,7 @@ export default function AppLayout({ active, children }) {
 
     if (error) {
       console.error("Could not create brand:", error);
-      alert(error.message || t("layout.createBrandError"));
+      setNewBrandError(error.message || t("layout.createBrandError"));
       setCreatingBrand(false);
       return;
     }
@@ -423,6 +447,9 @@ export default function AppLayout({ active, children }) {
     }
 
     setCreatingBrand(false);
+    setShowCreateBrandModal(false);
+    setNewBrandWebsite("");
+    setNewBrandError("");
     window.location.href = "/brand";
   }
 
@@ -661,7 +688,11 @@ export default function AppLayout({ active, children }) {
           <button
             type="button"
             className="current-brand-new"
-            onClick={handleCreateBrand}
+            onClick={() => {
+              setNewBrandError("");
+              setShowCreateBrandModal(true);
+              setMobileMenuOpen(false);
+            }}
             disabled={creatingBrand}
           >
             <Plus size={14} strokeWidth={2.2} aria-hidden="true" />
@@ -782,6 +813,74 @@ export default function AppLayout({ active, children }) {
           </button>
         </div>
       </aside>
+
+      {showCreateBrandModal ? (
+        <div
+          className="create-brand-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !creatingBrand) {
+              setShowCreateBrandModal(false);
+            }
+          }}
+        >
+          <section
+            className="create-brand-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-brand-modal-title"
+          >
+            <button
+              type="button"
+              className="create-brand-modal-close"
+              aria-label={t("layout.closeCreateBrand")}
+              onClick={() => setShowCreateBrandModal(false)}
+              disabled={creatingBrand}
+            >
+              <X size={20} />
+            </button>
+
+            <div className="create-brand-modal-icon" aria-hidden="true">
+              <Globe2 size={25} />
+            </div>
+            <p className="create-brand-modal-eyebrow">{t("layout.createBrandEyebrow")}</p>
+            <h2 id="create-brand-modal-title">{t("layout.createBrandTitle")}</h2>
+            <p className="create-brand-modal-lead">{t("layout.createBrandDescription")}</p>
+
+            <form onSubmit={handleCreateBrand}>
+              <label htmlFor="create-brand-website">{t("layout.createBrandWebsiteLabel")}</label>
+              <div className="create-brand-url-field">
+                <Globe2 size={19} aria-hidden="true" />
+                <input
+                  id="create-brand-website"
+                  type="text"
+                  inputMode="url"
+                  autoComplete="url"
+                  autoFocus
+                  placeholder={t("layout.createBrandWebsitePlaceholder")}
+                  value={newBrandWebsite}
+                  onChange={(event) => {
+                    setNewBrandWebsite(event.target.value);
+                    setNewBrandError("");
+                  }}
+                  disabled={creatingBrand}
+                />
+              </div>
+              <small>{t("layout.createBrandWebsiteHelp")}</small>
+              {newBrandError ? <p className="create-brand-modal-error" role="alert">{newBrandError}</p> : null}
+              <div className="create-brand-modal-actions">
+                <button type="button" onClick={() => setShowCreateBrandModal(false)} disabled={creatingBrand}>
+                  {t("layout.cancel")}
+                </button>
+                <button type="submit" className="primary" disabled={creatingBrand || !newBrandWebsite.trim()}>
+                  {creatingBrand ? t("layout.creating") : t("layout.createBrandContinue")}
+                  <ChevronRight size={17} aria-hidden="true" />
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
 
       <section className="content spreelo-content">
         {active !== "settings" && <LanguageSuggestionBanner />}

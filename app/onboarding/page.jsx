@@ -17,13 +17,14 @@ import {
 } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { getValidAnalysisAccessToken } from "../../lib/analysisSession";
+import {
+  ANALYSIS_VISUAL_MAX_PROGRESS,
+  getSmoothAnalysisProgress,
+} from "../../lib/analysisProgress";
 import { useUiText } from "../../lib/i18n/useUiText";
 
 const ANALYSIS_STATUS_POLL_INTERVAL_MS = 5000;
 const ANALYSIS_STATUS_MAX_POLLS = 720;
-const ANALYSIS_VISUAL_DURATION_MS = 5 * 60 * 1000;
-const ANALYSIS_VISUAL_MAX_PROGRESS = 99;
-
 const marketOptions = [
   {
     label: "International / Global",
@@ -299,10 +300,9 @@ export default function OnboardingPage() {
     if (!loading || !analysisStartedAtRef.current) return undefined;
 
     const updateVisualProgress = () => {
-      const elapsedMs = Math.max(0, Date.now() - analysisStartedAtRef.current);
-      const elapsedRatio = Math.min(1, elapsedMs / ANALYSIS_VISUAL_DURATION_MS);
-      const timedProgress =
-        1 + elapsedRatio * (ANALYSIS_VISUAL_MAX_PROGRESS - 1);
+      const timedProgress = getSmoothAnalysisProgress(
+        analysisStartedAtRef.current
+      );
 
       setAnalysisProgress((currentProgress) =>
         Math.max(currentProgress, Math.min(ANALYSIS_VISUAL_MAX_PROGRESS, timedProgress))
@@ -662,43 +662,6 @@ export default function OnboardingPage() {
                   />
                 </div>
 
-                <label className="onboarding-refresh-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={hasNoWebsite}
-                    disabled={loading || loggingOut}
-                    onChange={(event) => {
-                      setHasNoWebsite(event.target.checked);
-                      setMessage("");
-
-                      if (event.target.checked) {
-                        setWebsiteUrl("");
-                      } else {
-                        setBrandDescription("");
-                      }
-                    }}
-                  />
-                  <span>{t("onboarding.noWebsite")}</span>
-                </label>
-
-                {hasNoWebsite && (
-                  <>
-                    <label htmlFor="onboarding-description">{t("onboarding.describeBusiness")}</label>
-                    <textarea
-                      id="onboarding-description"
-                      rows={5}
-                      placeholder={t("onboarding.describeBusinessPlaceholder")}
-                      value={brandDescription}
-                      onChange={(event) => {
-                        setBrandDescription(event.target.value);
-                        setMessage("");
-                      }}
-                      required
-                      disabled={loading || loggingOut}
-                    />
-                  </>
-                )}
-
                 <button
                   className="onboarding-refresh-primary"
                   type="submit"
@@ -775,25 +738,6 @@ export default function OnboardingPage() {
                 })}
               </div>
 
-              <div className="onboarding-refresh-keep-open">
-                <ShieldCheck size={22} aria-hidden="true" />
-                <div>
-                  <strong>
-                    {analysisNoticeCode === "blocked"
-                      ? t("onboarding.analysis.blockedTitle")
-                      : analysisNoticeCode === "long"
-                        ? t("onboarding.analysis.longTitle")
-                        : t("onboarding.analysis.keepOpenTitle")}
-                  </strong>
-                  <p>
-                    {analysisNoticeCode === "blocked"
-                      ? t("onboarding.analysis.blockedText")
-                      : analysisNoticeCode === "long"
-                        ? t("onboarding.analysis.longText")
-                        : t("onboarding.analysis.keepOpenText")}
-                  </p>
-                </div>
-              </div>
             </div>
           )}
         </section>

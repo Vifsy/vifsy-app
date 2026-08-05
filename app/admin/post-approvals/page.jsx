@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  AlertTriangle,
   CheckCircle2,
   ChevronRight,
   Clock3,
@@ -33,12 +34,29 @@ function formatDate(value) {
 }
 
 function statusMeta(status, t) {
+  if (status === "failed") return { label: t("admin.approvals.failed"), className: "failed", Icon: AlertTriangle };
   if (status === "approved") return { label: t("admin.approvals.approved"), className: "approved", Icon: CheckCircle2 };
   if (status === "rejected") return { label: t("admin.approvals.rejected"), className: "rejected", Icon: XCircle };
   return { label: t("admin.approvals.pending"), className: "pending", Icon: Clock3 };
 }
 
 function MediaPreview({ post, t }) {
+  if (post.slides?.length) {
+    return (
+      <div className="admin-v74-slide-grid">
+        {post.slides.map((slide) => (
+          <article key={`${post.id}-${slide.slide_order}`}>
+            {slide.image_url ? <img src={slide.image_url} alt="" /> : <span><ImageIcon size={22} /></span>}
+            <div>
+              <strong>{slide.headline || slide.metadata?.product_title || `Slide ${slide.slide_order}`}</strong>
+              {slide.body ? <p>{slide.body}</p> : null}
+              {slide.cta_text ? <small>{slide.cta_text}</small> : null}
+            </div>
+          </article>
+        ))}
+      </div>
+    );
+  }
   if (post.video_url) {
     return (
       <div className="admin-v74-media-frame">
@@ -50,24 +68,6 @@ function MediaPreview({ post, t }) {
     return (
       <div className="admin-v74-media-frame">
         <img src={post.image_url} alt="" />
-      </div>
-    );
-  }
-  if (post.slides?.length) {
-    return (
-      <div className="admin-v74-slide-grid">
-        {post.slides.map((slide) => (
-          <article key={`${post.id}-${slide.slide_order}`}>
-            {slide.image_url ? <img src={slide.image_url} alt="" /> : <span><ImageIcon size={22} /></span>}
-            {post.content_format !== "carousel" ? (
-              <div>
-                <strong>{slide.headline || `Slide ${slide.slide_order}`}</strong>
-                {slide.body ? <p>{slide.body}</p> : null}
-                {slide.cta_text ? <small>{slide.cta_text}</small> : null}
-              </div>
-            ) : null}
-          </article>
-        ))}
       </div>
     );
   }
@@ -83,6 +83,9 @@ export default function AdminPostApprovalsPage() {
   const [savingId, setSavingId] = useState("");
   const [drafts, setDrafts] = useState({});
   const [selectedPostId, setSelectedPostId] = useState("");
+  const [reviewGateEnabled, setReviewGateEnabled] = useState(false);
+  const [savingReviewGate, setSavingReviewGate] = useState(false);
+  const [releasingPostId, setReleasingPostId] = useState("");
 
   const selectedPost = useMemo(
     () => posts.find((post) => post.id === selectedPostId) || null,
@@ -90,6 +93,7 @@ export default function AdminPostApprovalsPage() {
   );
 
   useEffect(() => { loadPosts(); }, [filter]);
+  useEffect(() => { loadReviewGate(); }, []);
   useEffect(() => {
     if (!selectedPostId) return undefined;
     const onKeyDown = (event) => { if (event.key === "Escape") setSelectedPostId(""); };
@@ -123,6 +127,57 @@ export default function AdminPostApprovalsPage() {
       setError(loadError.message || t("admin.approvals.loadError"));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadReviewGate() {
+    try {
+      const headers = await getHeaders();
+      const response = await fetch("/api/admin/post-review-settings", { headers, cache: "no-store" });
+      const payload = await response.json().catch(() => ({}));
+      if (response.ok) setReviewGateEnabled(Boolean(payload?.requireAdminPostApproval));
+    } catch {
+      // The approval list remains available if this separate setting cannot load.
+    }
+  }
+
+  async function updateReviewGate(enabled) {
+    setSavingReviewGate(true);
+    setError("");
+    try {
+      const headers = await getHeaders();
+      const response = await fetch("/api/admin/post-review-settings", {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ requireAdminPostApproval: enabled }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || t("admin.approvals.settingError"));
+      setReviewGateEnabled(Boolean(payload?.requireAdminPostApproval));
+    } catch (saveError) {
+      setError(saveError.message || t("admin.approvals.settingError"));
+    } finally {
+      setSavingReviewGate(false);
+    }
+  }
+
+  async function releaseToCustomer(postId) {
+    setReleasingPostId(postId);
+    setError("");
+    try {
+      const headers = await getHeaders();
+      const response = await fetch("/api/admin/post-approvals", {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ action: "release_to_customer", post_id: postId }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || t("admin.approvals.releaseError"));
+      await loadPosts();
+    } catch (releaseError) {
+      setError(releaseError.message || t("admin.approvals.releaseError"));
+    } finally {
+      setReleasingPostId("");
     }
   }
 
@@ -164,8 +219,24 @@ export default function AdminPostApprovalsPage() {
           </button>
         </header>
 
+        <section className={`admin-review-gate-card ${reviewGateEnabled ? "enabled" : ""}`}>
+          <div>
+            <span>{t("admin.approvals.reviewGateEyebrow")}</span>
+            <strong>{t("admin.approvals.reviewGateTitle")}</strong>
+            <p>{reviewGateEnabled ? t("admin.approvals.reviewGateOn") : t("admin.approvals.reviewGateOff")}</p>
+          </div>
+          <button
+            type="button"
+            className={`admin-review-gate-switch ${reviewGateEnabled ? "on" : ""}`}
+            aria-pressed={reviewGateEnabled}
+            aria-label={t("admin.approvals.reviewGateTitle")}
+            disabled={savingReviewGate}
+            onClick={() => updateReviewGate(!reviewGateEnabled)}
+          ><span /></button>
+        </section>
+
         <div className="admin-approval-tabs">
-          {[["all", t("admin.approvals.all")], ["pending_approval", t("admin.approvals.pending")], ["approved", t("admin.approvals.approved")], ["rejected", t("admin.approvals.rejected")]].map(([value, label]) => (
+          {[["all", t("admin.approvals.all")], ["pending_approval", t("admin.approvals.pending")], ["failed", t("admin.approvals.failed")], ["approved", t("admin.approvals.approved")], ["rejected", t("admin.approvals.rejected")]].map(([value, label]) => (
             <button type="button" key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{label}</button>
           ))}
         </div>
@@ -230,6 +301,40 @@ export default function AdminPostApprovalsPage() {
                     <div><dt>{t("admin.approvals.scheduled")}</dt><dd>{formatDate(selectedPost.scheduled_for)}</dd></div>
                     <div><dt>{t("admin.approvals.platform")}</dt><dd>{selectedPost.platform || "—"}</dd></div>
                   </dl>
+
+                  {selectedPost.status === "failed" ? (
+                    <div className="admin-generation-error-card">
+                      <AlertTriangle size={20} />
+                      <div>
+                        <strong>{t("admin.approvals.generationFailedTitle")}</strong>
+                        <p>{selectedPost.video_error || `${t("admin.approvals.imageStatus")}: ${selectedPost.image_status || "—"}. ${t("admin.approvals.videoStatus")}: ${selectedPost.video_status || "—"}.`}</p>
+                        <small>{t("admin.approvals.generationFailedHelp")}</small>
+                        {selectedPost.failure ? (
+                          <details className="admin-generation-error-details">
+                            <summary>{t("admin.approvals.failureDetails")}</summary>
+                            <dl>
+                              <div><dt>{t("admin.approvals.failureStage")}</dt><dd>{selectedPost.failure.failure_stage || "—"}</dd></div>
+                              <div><dt>{t("admin.approvals.failureCode")}</dt><dd>{selectedPost.failure.failure_code || "—"}</dd></div>
+                              <div><dt>{t("admin.approvals.contentType")}</dt><dd>{selectedPost.failure.content_type_label || selectedPost.failure.content_format || "—"}</dd></div>
+                            </dl>
+                            <pre>{JSON.stringify(selectedPost.failure, null, 2)}</pre>
+                          </details>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {selectedPost.admin_review_status === "pending" && selectedPost.status !== "failed" ? (
+                    <button
+                      type="button"
+                      className="admin-primary-button admin-release-button"
+                      disabled={releasingPostId === selectedPost.id}
+                      onClick={() => releaseToCustomer(selectedPost.id)}
+                    >
+                      {releasingPostId === selectedPost.id ? <LoaderCircle className="admin-spin" size={16} /> : <CheckCircle2 size={16} />}
+                      {t("admin.approvals.releaseToCustomer")}
+                    </button>
+                  ) : null}
 
                   {selectedPost.rejection ? (
                     <div className="admin-v74-rejection-review">

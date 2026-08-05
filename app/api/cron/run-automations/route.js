@@ -1478,15 +1478,29 @@ function normalizeCarouselProductLabelAnalysis(value) {
   const confidence = Math.max(0, Math.min(1, Number(value?.confidence || 0)));
 
   if (
-    !CAROUSEL_PRODUCT_LABEL_PLACEMENTS[placement] ||
-    !["text_only", "compact_card"].includes(layout) ||
     !["dark", "light"].includes(textTone) ||
-    confidence < 0.7 ||
+    confidence < 0.55 ||
     productBox.width <= 0 ||
     productBox.height <= 0
   ) {
     return null;
   }
+
+  if (placement === "none" || layout === "none") {
+    return {
+      placement: null,
+      layout: "compact_card",
+      textTone,
+      confidence,
+      productBox,
+      needsFallbackPlacement: true,
+    };
+  }
+
+  if (
+    !CAROUSEL_PRODUCT_LABEL_PLACEMENTS[placement] ||
+    !["text_only", "compact_card"].includes(layout)
+  ) return null;
 
   return { placement, layout, textTone, confidence, productBox };
 }
@@ -1646,6 +1660,26 @@ function chooseNonOverlappingProductLabelPlacement(productCanvasBox, { includeLo
   }) || null;
 }
 
+function getBoxOverlapArea(first, second) {
+  if (!first || !second) return 0;
+  const width = Math.max(0, Math.min(first.x + first.width, second.x + second.width) - Math.max(first.x, second.x));
+  const height = Math.max(0, Math.min(first.y + first.height, second.y + second.height) - Math.max(first.y, second.y));
+  return width * height;
+}
+
+function chooseLeastObstructiveProductLabelPlacement(productCanvasBox, { includeLogo = false } = {}) {
+  return Object.entries(CAROUSEL_PRODUCT_LABEL_PLACEMENTS)
+    .filter(([placement]) => !(includeLogo && placement === "bottom_right"))
+    .map(([placement, box]) => ({ placement, overlap: getBoxOverlapArea(box, productCanvasBox) }))
+    .sort((left, right) => left.overlap - right.overlap)[0]?.placement || "top_left";
+}
+
+function getProductLabelEyebrow(rule) {
+  const raw = String(getApprovalCampaignTitle(rule) || "").trim();
+  if (!raw) return "";
+  return normalizeSlideText(raw.split(/\s+[–—-]\s+/)[0], 32);
+}
+
 async function deriveLocalPackshotLabelAnalysis(sourceBuffer, { includeLogo = false } = {}) {
   const sampleSize = 180;
   const { data, info } = await sharp(sourceBuffer)
@@ -1733,12 +1767,12 @@ async function deriveLocalPackshotLabelAnalysis(sourceBuffer, { includeLogo = fa
   };
 }
 
-function buildCarouselProductLabelSvg({ title, analysis, productCanvasBox, languageHint = "" }) {
+function buildCarouselProductLabelSvg({ title, eyebrow = "", analysis, productCanvasBox, languageHint = "" }) {
   const labelBox = CAROUSEL_PRODUCT_LABEL_PLACEMENTS[analysis?.placement];
-  if (!labelBox || boxesOverlapWithPadding(labelBox, productCanvasBox)) return null;
+  if (!labelBox || (!analysis?.allowControlledOverlap && boxesOverlapWithPadding(labelBox, productCanvasBox))) return null;
   const typography = layoutProductTitle(title, {
-    maxWidth: labelBox.width,
-    maxHeight: labelBox.height,
+    maxWidth: labelBox.width - 36,
+    maxHeight: eyebrow ? labelBox.height - 74 : labelBox.height - 24,
     languageHint,
   });
   const lines = typography.lines;
@@ -1748,23 +1782,27 @@ function buildCarouselProductLabelSvg({ title, analysis, productCanvasBox, langu
   const textColor = isLight ? "#ffffff" : "#111827";
   const cardColor = isLight ? "#111827" : "#ffffff";
   const card = analysis.layout === "compact_card"
-    ? `<rect x="${labelBox.x}" y="${labelBox.y}" width="${labelBox.width}" height="${labelBox.height}" rx="24" fill="${cardColor}" fill-opacity="0.82"/>`
+    ? `<defs><filter id="labelShadow" x="-20%" y="-30%" width="140%" height="170%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.18"/></filter></defs><rect x="${labelBox.x}" y="${labelBox.y}" width="${labelBox.width}" height="${labelBox.height}" rx="26" fill="${cardColor}" fill-opacity="0.78" stroke="${isLight ? "#ffffff" : "#dbe4ef"}" stroke-opacity="0.42" filter="url(#labelShadow)"/>`
     : "";
-  const horizontalPadding = analysis.layout === "compact_card" ? 24 : 6;
+  const horizontalPadding = analysis.layout === "compact_card" ? 26 : 6;
   const isRtl = typography.profile.direction === "rtl";
   const textX = isRtl
     ? labelBox.x + labelBox.width - horizontalPadding
     : labelBox.x + horizontalPadding;
+  const eyebrowOffset = eyebrow ? 70 : 0;
   const totalTextHeight = typography.lineHeight * lines.length;
-  const textY = labelBox.y + Math.max(typography.fontSize, Math.round((labelBox.height - totalTextHeight) / 2 + typography.fontSize));
+  const textY = labelBox.y + eyebrowOffset + Math.max(typography.fontSize, Math.round((labelBox.height - eyebrowOffset - totalTextHeight) / 2 + typography.fontSize));
   const outline = analysis.layout === "text_only"
     ? `stroke="${isLight ? "#000000" : "#ffffff"}" stroke-opacity="0.34" stroke-width="7" paint-order="stroke"`
     : "";
   const spans = lines
     .map((line, index) => `<tspan x="${textX}" dy="${index === 0 ? 0 : typography.lineHeight}">${escapeProductSvg(line)}</tspan>`)
     .join("");
+  const eyebrowMarkup = eyebrow
+    ? `<text x="${textX}" y="${labelBox.y + 35}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="17" font-weight="700" letter-spacing="3.2" fill="${textColor}" text-anchor="${isRtl ? "end" : "start"}">${escapeProductSvg(eyebrow.toLocaleUpperCase())}</text><rect x="${isRtl ? textX - 42 : textX}" y="${labelBox.y + 52}" width="42" height="4" rx="2" fill="#3478f6"/>`
+    : "";
   return {
-    svg: `<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg">${card}<text x="${textX}" y="${textY}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="${typography.fontSize}" font-weight="700" fill="${textColor}" direction="${typography.profile.direction}" unicode-bidi="plaintext" text-anchor="${isRtl ? "end" : "start"}" ${outline}>${spans}</text></svg>`,
+    svg: `<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg">${card}${eyebrowMarkup}<text x="${textX}" y="${textY}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="${typography.fontSize}" font-weight="760" fill="${textColor}" direction="${typography.profile.direction}" unicode-bidi="plaintext" text-anchor="${isRtl ? "end" : "start"}" ${outline}>${spans}</text></svg>`,
     typography,
   };
 }
@@ -1908,6 +1946,16 @@ async function renderCarouselProductSlideImage({
                 productBox: null,
               };
               productLabelSource = "local_cutout_fallback";
+            } else {
+              appliedLabelAnalysis = {
+                placement: chooseLeastObstructiveProductLabelPlacement(productCanvasBox, { includeLogo }),
+                layout: "compact_card",
+                textTone: "dark",
+                confidence: 0.7,
+                productBox: null,
+                allowControlledOverlap: true,
+              };
+              productLabelSource = "cutout_glass_fallback";
             }
           }
         }
@@ -1928,14 +1976,35 @@ async function renderCarouselProductSlideImage({
 
         if (productTitle && productLabelAnalysis && productCanvasBox &&
             !(includeLogo && productLabelAnalysis.placement === "bottom_right")) {
-          appliedLabelAnalysis = productLabelAnalysis;
-          productLabelSource = "ai_placement";
+          if (productLabelAnalysis.placement) {
+            appliedLabelAnalysis = productLabelAnalysis;
+            productLabelSource = "ai_placement";
+          } else {
+            appliedLabelAnalysis = {
+              ...productLabelAnalysis,
+              placement: chooseLeastObstructiveProductLabelPlacement(productCanvasBox, { includeLogo }),
+              layout: "compact_card",
+              allowControlledOverlap: true,
+            };
+            productLabelSource = "ai_bbox_glass_fallback";
+          }
         } else if (productTitle) {
           const localPlacement = await deriveLocalPackshotLabelAnalysis(sourceBuffer, { includeLogo });
           if (localPlacement) {
             appliedLabelAnalysis = localPlacement.analysis;
             productCanvasBox = localPlacement.productCanvasBox;
             productLabelSource = "local_packshot_fallback";
+          } else {
+            productCanvasBox = { x: 300, y: 180, width: 480, height: 720 };
+            appliedLabelAnalysis = {
+              placement: chooseLeastObstructiveProductLabelPlacement(productCanvasBox, { includeLogo }),
+              layout: "compact_card",
+              textTone: "dark",
+              confidence: 0.6,
+              productBox: null,
+              allowControlledOverlap: true,
+            };
+            productLabelSource = "universal_glass_fallback";
           }
         }
       }
@@ -1943,6 +2012,7 @@ async function renderCarouselProductSlideImage({
       if (productTitle && appliedLabelAnalysis && productCanvasBox) {
         const labelRender = buildCarouselProductLabelSvg({
           title: productTitle,
+          eyebrow: getProductLabelEyebrow(rule),
           analysis: appliedLabelAnalysis,
           productCanvasBox,
           languageHint,
@@ -10827,76 +10897,20 @@ async function sendAutomationCreationFailureEmail({
 }) {
   if (!occurrenceId) return { status: "suppressed" };
 
-  if (!resendApiKey) {
-    await markAutomationFailureNotification({
-      supabase,
-      occurrenceId,
-      status: "suppressed",
-      errorMessage: "RESEND_API_KEY is not configured.",
-    });
-    return { status: "suppressed" };
-  }
-
-  const userProfile = await getUserAuthProfile(supabase, rule.user_id);
-  if (!userProfile?.email) {
-    await markAutomationFailureNotification({
-      supabase,
-      occurrenceId,
-      status: "failed",
-      errorMessage: "The customer account has no email address.",
-    });
-    return { status: "failed" };
-  }
-
-  const locale = resolveUiLocaleFromLanguageName(userProfile.appLanguage) || "en";
-  const email = buildAutomationFailureEmail({
-    rule,
-    brandProfile,
-    customerMessage,
-    refundedCredits,
-    locale,
+  // Failed generations are internal review cases. Customers are only notified
+  // after an admin has repaired and released a complete post.
+  await markAutomationFailureNotification({
+    supabase,
+    occurrenceId,
+    status: "suppressed",
+    errorMessage: "Held for Spreelo admin review; no customer failure email sent.",
+    metadata: {
+      admin_review_required: true,
+      customer_message: String(customerMessage || "").slice(0, 2000),
+      refunded_credits: Math.max(0, Number(refundedCredits || 0)),
+    },
   });
-
-  try {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${resendApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: RESEND_FROM_EMAIL,
-        to: userProfile.email,
-        subject: email.subject,
-        html: email.html,
-        text: email.text,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error((await response.text()) || "Resend email request failed");
-    }
-
-    await markAutomationFailureNotification({
-      supabase,
-      occurrenceId,
-      status: "sent",
-      recipient: userProfile.email,
-      subject: email.subject,
-      metadata: { refunded_credits: Math.max(0, Number(refundedCredits || 0)) },
-    });
-    return { status: "sent", recipient: userProfile.email };
-  } catch (error) {
-    await markAutomationFailureNotification({
-      supabase,
-      occurrenceId,
-      status: "failed",
-      recipient: userProfile.email,
-      subject: email.subject,
-      errorMessage: error.message,
-    });
-    return { status: "failed", error: error.message };
-  }
+  return { status: "suppressed", reason: "admin_review_required" };
 }
 
 async function deferAutomationOccurrenceForWebsiteRateLimit({
@@ -31894,6 +31908,23 @@ function isAuthorizedCronRequest(request, cronSecret) {
   return authorizationHeader === expectedAuthorizationHeader;
 }
 
+async function getAdminPostReviewGate(supabase) {
+  const { data, error } = await supabase
+    .from("spreelo_admin_settings")
+    .select("require_admin_post_approval")
+    .eq("id", "global")
+    .maybeSingle();
+
+  if (error) {
+    console.warn("Admin post review setting unavailable; using direct customer review", {
+      message: error.message,
+    });
+    return false;
+  }
+
+  return Boolean(data?.require_admin_post_approval);
+}
+
 async function runAutomationCron(request, options = {}) {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -31946,6 +31977,7 @@ async function runAutomationCron(request, options = {}) {
     });
 
     const summary = createEmptySummary();
+    const adminPostReviewRequired = await getAdminPostReviewGate(supabase);
     summary.stale_occurrences_finalized = await finalizeStaleAutomationOccurrences({
       supabase,
       resendApiKey,
@@ -32929,6 +32961,7 @@ const { data: post, error: postError } = await supabase
 approval_required: true,
 approval_token: approvalToken,
 approved_at: null,
+admin_review_status: adminPostReviewRequired ? "pending" : "not_required",
 scheduled_for: scheduledPublishAtIso,
             image_status: wantsImage ? "generating" : "none",
             image_prompt: wantsImage ? websitePreparedRule.image_prompt || null : null,
@@ -33295,13 +33328,24 @@ product_research_model_used: websitePreparedRule.uses_website_content
         } else if (wantsImage && websiteItem?.image_url && useWebsiteImage) {
           imageUrl = websiteItem.image_url;
           finalImagePrompt =
-            "Clean website product image rendered without text. A matching library background is used only when the source contains reliable transparency; otherwise the original website image background is preserved.";
+            "Website product image with an adaptive campaign eyebrow, accent line and verified product name placed in the least obstructive safe area.";
 
           try {
+            const trustedProductTitle = getTrustedProductCardTitle(websiteItem);
+            const singleProductLabelAnalyses = await analyzeCarouselProductLabelPlacements({
+              openai,
+              ruleId: rule?.id,
+              items: [{ id: "0", title: trustedProductTitle, imageUrl: websiteItem.image_url }],
+            });
             const { imageBase64 } = await renderCarouselProductSlideImage({
               sourceImageUrl: websiteItem.image_url,
               supabase,
               rule,
+              productTitle: trustedProductTitle,
+              productLabelAnalysis: singleProductLabelAnalyses.get("0") || null,
+              productLabelAnalysisStatus: singleProductLabelAnalyses.analysisStatus || "not_requested",
+              includeLogo: shouldUseLogoForRule(rule, brandProfile),
+              languageHint: rule?.content_language || rule?.language || brandProfile?.content_language || "",
             });
 
             const uploadedProductCard = await uploadGeneratedImageToStorage({
@@ -33584,7 +33628,7 @@ product_research_model_used: websitePreparedRule.uses_website_content
           }
         }
 
-        if (effectivePostStatus === "pending_approval") {
+        if (effectivePostStatus === "pending_approval" && !adminPostReviewRequired) {
           if (!resendApiKey) {
             summary.warnings += 1;
             summary.emails_failed += 1;
@@ -33762,7 +33806,9 @@ product_research_model_used: websitePreparedRule.uses_website_content
           stage: "completed",
           occurrence_id: automationOccurrenceId,
           effective_post_status: effectivePostStatus,
-          email_expected: effectivePostStatus === "pending_approval",
+          email_expected:
+            effectivePostStatus === "pending_approval" && !adminPostReviewRequired,
+          admin_review_required: adminPostReviewRequired,
           website_source_url: websiteSourceUrl,
           website_cycle_number: websiteCycleNumber,
           use_website_image: useWebsiteImage,

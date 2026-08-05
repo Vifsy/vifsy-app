@@ -22,7 +22,7 @@ const placementAnalysis = extractBetween(
 );
 assert.match(placementAnalysis, /openai\.responses\.create/);
 assert.match(placementAnalysis, /slice\(0, CAROUSEL_PRODUCT_SLIDE_TARGET\)/);
-assert.match(placementAnalysis, /timeout: 20_000, maxRetries: 0/);
+assert.match(placementAnalysis, /timeout: 45_000, maxRetries: 0/);
 assert.match(placementAnalysis, /text_only/);
 assert.match(placementAnalysis, /compact_card/);
 assert.match(placementAnalysis, /People and animals are allowed/);
@@ -41,7 +41,7 @@ const labelRenderer = extractBetween(
   "async function renderCarouselProductSlideImage"
 );
 assert.match(labelRenderer, /boxesOverlapWithPadding/);
-assert.match(labelRenderer, /splitCarouselProductTitleLines/);
+assert.match(labelRenderer, /layoutProductTitle/);
 
 const saveSlides = extractBetween(
   "async function saveCarouselSlidesForPost",
