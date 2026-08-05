@@ -450,7 +450,7 @@ export default function AppLayout({ active, children }) {
     setShowCreateBrandModal(false);
     setNewBrandWebsite("");
     setNewBrandError("");
-    window.location.href = "/brand";
+    window.location.href = `/brand?analyze=1&brand=${encodeURIComponent(data.id)}`;
   }
 
 
@@ -873,7 +873,7 @@ export default function AppLayout({ active, children }) {
                   {t("layout.cancel")}
                 </button>
                 <button type="submit" className="primary" disabled={creatingBrand || !newBrandWebsite.trim()}>
-                  {creatingBrand ? t("layout.creating") : t("layout.createBrandContinue")}
+                  {creatingBrand ? t("layout.creating") : t("layout.analyzeBrandWebsite")}
                   <ChevronRight size={17} aria-hidden="true" />
                 </button>
               </div>

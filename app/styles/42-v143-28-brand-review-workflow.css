@@ -302,3 +302,244 @@
   .admin-review-gate-card { align-items: flex-start; padding: 18px; }
   .admin-v74-slide-grid { grid-template-columns: 1fr; }
 }
+
+/* v143.29 — Brand Profile follows the calmer AI Content Studio canvas. */
+html body .content.spreelo-content:has(.brand-profile-page) {
+  background: #f5f7fb !important;
+}
+
+html body .content.spreelo-content:has(.brand-profile-page)::before {
+  display: none !important;
+}
+
+html body .brand-profile-page {
+  max-width: 1440px !important;
+  padding: clamp(24px, 2.8vw, 44px) clamp(18px, 3vw, 48px) 64px !important;
+}
+
+html body .brand-profile-hero {
+  min-height: 0 !important;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 390px) !important;
+  gap: 36px !important;
+  margin-bottom: 22px !important;
+  padding: clamp(30px, 4vw, 54px) !important;
+  border: 1px solid #e2e7ef !important;
+  border-radius: 24px !important;
+  background: #fff !important;
+  box-shadow: 0 18px 45px rgba(25, 36, 59, .08) !important;
+  backdrop-filter: none !important;
+}
+
+html body .brand-profile-hero h2 {
+  max-width: 720px !important;
+  margin: 8px 0 14px !important;
+  font-size: clamp(38px, 4.3vw, 64px) !important;
+  line-height: 1.02 !important;
+  letter-spacing: -.055em !important;
+}
+
+html body .brand-profile-hero > div:first-child > span {
+  max-width: 720px !important;
+  font-size: clamp(15px, 1.25vw, 17px) !important;
+  line-height: 1.65 !important;
+}
+
+html body .brand-profile-hero-badge {
+  display: flex !important;
+  align-items: center !important;
+  gap: 15px !important;
+  padding: 18px !important;
+  border: 1px solid #e4e9f1 !important;
+  border-radius: 16px !important;
+  background: #f8fafc !important;
+  box-shadow: none !important;
+}
+
+html body .brand-profile-hero-badge.ready {
+  border-color: #cce9da !important;
+  background: #f3fbf7 !important;
+}
+
+.brand-profile-status-icon {
+  display: grid !important;
+  flex: 0 0 46px !important;
+  width: 46px !important;
+  height: 46px !important;
+  place-items: center !important;
+  border-radius: 13px !important;
+  color: #d85336 !important;
+  background: #fff0ea !important;
+}
+
+.brand-profile-hero-badge.ready .brand-profile-status-icon {
+  color: #138557 !important;
+  background: #dff5e9 !important;
+}
+
+html body .brand-profile-hero-badge > div {
+  min-width: 0 !important;
+}
+
+html body .brand-profile-hero-badge strong {
+  display: block !important;
+  margin-bottom: 4px !important;
+  color: #152037 !important;
+  font-size: 16px !important;
+  line-height: 1.3 !important;
+}
+
+html body .brand-profile-hero-badge span:not(.brand-profile-status-icon) {
+  color: #667085 !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+}
+
+html body .brand-profile-layout {
+  display: block !important;
+  max-width: 1180px !important;
+  margin: 0 auto !important;
+}
+
+html body .brand-profile-form-card {
+  padding: clamp(24px, 3.5vw, 44px) !important;
+  border: 1px solid #e2e7ef !important;
+  border-radius: 24px !important;
+  background: #fff !important;
+  box-shadow: 0 16px 38px rgba(25, 36, 59, .07) !important;
+  backdrop-filter: none !important;
+}
+
+html body .brand-profile-form-header {
+  align-items: center !important;
+  margin-bottom: 26px !important;
+  padding-bottom: 24px !important;
+  border-bottom: 1px solid #e8ecf2 !important;
+}
+
+html body .brand-profile-form-header h3 {
+  margin-top: 5px !important;
+  font-size: clamp(28px, 3vw, 40px) !important;
+  letter-spacing: -.035em !important;
+}
+
+.brand-profile-form-intro {
+  max-width: 620px;
+  margin: 8px 0 0;
+  color: #667085;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.brand-profile-edit-button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  min-height: 44px !important;
+  padding: 0 18px !important;
+  border: 1px solid #d9e0ea !important;
+  border-radius: 12px !important;
+  color: #172033 !important;
+  background: #fff !important;
+  box-shadow: 0 5px 14px rgba(25, 36, 59, .06) !important;
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  cursor: pointer !important;
+}
+
+.brand-profile-edit-button:hover {
+  border-color: #ef7a5f !important;
+  color: #c94b30 !important;
+  transform: translateY(-1px);
+}
+
+html body .brand-profile-form-section {
+  margin: 0 0 18px !important;
+  padding: clamp(22px, 2.8vw, 32px) !important;
+  border: 1px solid #e4e9f0 !important;
+  border-radius: 18px !important;
+  background: #f9fafc !important;
+  box-shadow: none !important;
+}
+
+html body .brand-profile-form-section h4 {
+  margin-bottom: 20px !important;
+  font-size: 20px !important;
+}
+
+html body .brand-profile-form-section > label,
+html body .brand-profile-form-section label,
+html body .brand-profile-field-help,
+html body .brand-profile-section-title p,
+html body .brand-profile-disclaimer,
+html body .brand-profile-message {
+  font-size: 14px !important;
+  line-height: 1.55 !important;
+}
+
+html body .brand-profile-page input,
+html body .brand-profile-page textarea,
+html body .brand-profile-page select {
+  min-height: 52px !important;
+  border-color: #d9e0e9 !important;
+  border-radius: 12px !important;
+  background: #fff !important;
+  font-size: 15px !important;
+}
+
+html body .brand-profile-page input:disabled,
+html body .brand-profile-page textarea:disabled,
+html body .brand-profile-page select:disabled {
+  opacity: 1 !important;
+  color: #273349 !important;
+  background: #f3f5f8 !important;
+  cursor: default !important;
+}
+
+html body .brand-profile-primary-button {
+  min-height: 52px !important;
+  margin-top: 8px !important;
+  border-radius: 13px !important;
+  font-size: 15px !important;
+  box-shadow: 0 10px 22px rgba(205, 76, 46, .2) !important;
+}
+
+html body .brand-profile-analysis-card {
+  margin-top: 4px !important;
+  padding: clamp(22px, 3vw, 32px) !important;
+  border: 1px solid #dfe6ef !important;
+  border-radius: 18px !important;
+  background: linear-gradient(135deg, #f8faff, #fff8f4) !important;
+}
+
+html body .brand-profile-analysis-header strong { font-size: 18px !important; }
+html body .brand-profile-analysis-header p,
+html body .brand-profile-analysis-current p { font-size: 14px !important; }
+
+html body .brand-profile-page > .danger-zone-card {
+  max-width: 1180px !important;
+  margin: 24px auto 0 !important;
+  border-radius: 18px !important;
+}
+
+@media (max-width: 900px) {
+  html body .brand-profile-hero {
+    grid-template-columns: 1fr !important;
+    gap: 22px !important;
+  }
+
+  html body .brand-profile-hero-badge {
+    max-width: none !important;
+  }
+}
+
+@media (max-width: 640px) {
+  html body .brand-profile-page { padding: 16px 12px 42px !important; }
+  html body .brand-profile-hero,
+  html body .brand-profile-form-card { padding: 22px 18px !important; border-radius: 18px !important; }
+  html body .brand-profile-hero h2 { font-size: 38px !important; }
+  html body .brand-profile-form-header { align-items: flex-start !important; gap: 16px !important; }
+  .brand-profile-edit-button { width: 100% !important; }
+  html body .brand-profile-form-section { padding: 20px 16px !important; }
+  html body .brand-profile-analysis-steps { grid-template-columns: 1fr !important; }
+}

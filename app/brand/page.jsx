@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CheckCircle2, Pencil, Sparkles } from "lucide-react";
 import AppLayout from "../../components/AppLayout";
 import { supabase } from "../../lib/supabaseClient";
 import { getValidAnalysisAccessToken } from "../../lib/analysisSession";
@@ -308,6 +309,9 @@ export default function BrandProfile() {
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [analysisNoticeCode, setAnalysisNoticeCode] = useState("background");
   const [user, setUser] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [autoAnalyzeRequested, setAutoAnalyzeRequested] = useState(false);
+  const autoAnalysisStartedRef = useRef(false);
 
   const [allBrands, setAllBrands] = useState([]);
   const [deleteStep, setDeleteStep] = useState(false);
@@ -402,8 +406,8 @@ export default function BrandProfile() {
       return t("brand.analyzeDescriptionButton");
     }
 
-    return t("brand.saveButton");
-  }, [t, saving, analyzing, shouldAnalyzeWebsite, shouldAnalyzeDescription]);
+    return isEditing ? t("brand.saveChangesButton") : t("brand.saveButton");
+  }, [t, saving, analyzing, shouldAnalyzeWebsite, shouldAnalyzeDescription, isEditing]);
 
   useEffect(() => {
     async function loadProfile() {
@@ -507,22 +511,59 @@ export default function BrandProfile() {
       setContentLanguage(loadedContentLanguage);
       setContentSettingsTouched(false);
 
-      setLastAnalyzedWebsiteUrl(normalizeWebsiteUrl(loadedWebsiteUrl));
+      const query = typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search)
+        : new URLSearchParams();
+      const requestedBrandId = query.get("brand") || "";
+      const shouldAutoAnalyze =
+        query.get("analyze") === "1" &&
+        (!requestedBrandId || requestedBrandId === data.id) &&
+        Boolean(normalizeWebsiteUrl(loadedWebsiteUrl));
+
+      setLastAnalyzedWebsiteUrl(
+        shouldAutoAnalyze ? "" : normalizeWebsiteUrl(loadedWebsiteUrl)
+      );
       setLastAnalyzedBrandDescription(loadedBrandDescription.trim());
 
       setHasNoWebsite(false);
 
-      if (loadedIndustry || loadedTargetAudience) {
+      const hasGeneratedProfile = Boolean(loadedIndustry || loadedTargetAudience);
+      if (hasGeneratedProfile) {
         setShowGeneratedFields(true);
       } else {
         setShowGeneratedFields(false);
       }
+      setIsEditing(!hasGeneratedProfile && !shouldAutoAnalyze);
+      setAutoAnalyzeRequested(shouldAutoAnalyze);
 
       setLoading(false);
     }
 
     loadProfile();
   }, []);
+
+  useEffect(() => {
+    if (
+      loading ||
+      !autoAnalyzeRequested ||
+      !brandProfileId ||
+      !normalizedWebsiteUrl ||
+      analyzing ||
+      autoAnalysisStartedRef.current
+    ) {
+      return;
+    }
+
+    autoAnalysisStartedRef.current = true;
+    setAutoAnalyzeRequested(false);
+    if (typeof window !== "undefined") {
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete("analyze");
+      cleanUrl.searchParams.delete("brand");
+      window.history.replaceState({}, "", cleanUrl.pathname + cleanUrl.search);
+    }
+    analyzeBrand();
+  }, [loading, autoAnalyzeRequested, brandProfileId, normalizedWebsiteUrl, analyzing]);
 
   function getSafeLogoFileName(fileName) {
     const cleanName = String(fileName || "logo")
@@ -956,6 +997,7 @@ export default function BrandProfile() {
       );
       setContentSettingsTouched(false);
       setShowGeneratedFields(true);
+      setIsEditing(false);
 
       setLastAnalyzedWebsiteUrl(
         hasNoWebsite ? "" : normalizeWebsiteUrl(finalWebsiteUrl)
@@ -973,6 +1015,7 @@ export default function BrandProfile() {
       );
     } catch (error) {
       setMessage(error.message || t("brand.errorAnalyze"));
+      setIsEditing(true);
        } finally {
       clearInterval(progressInterval);
       setAnalyzing(false);
@@ -1028,6 +1071,7 @@ export default function BrandProfile() {
     } else {
       setWebsiteUrl(finalWebsiteUrl);
       setMessage(t("brand.saved"));
+      setIsEditing(false);
     }
 
     setSaving(false);
@@ -1360,72 +1404,52 @@ export default function BrandProfile() {
               isBrandProfileReady ? "ready" : "needs-setup"
             }`}
           >
-            <strong>
-              {isBrandProfileReady ? t("brand.readyBadge") : t("brand.setupNeededBadge")}
-            </strong>
-            <span>
-              {isBrandProfileReady
-                ? t("brand.readyBadgeText")
-                : t("brand.setupNeededBadgeText")}
+            <span className="brand-profile-status-icon">
+              {isBrandProfileReady ? <CheckCircle2 size={22} /> : <Sparkles size={22} />}
             </span>
+            <div>
+              <strong>
+                {analyzing
+                  ? t("brand.analysisTitle")
+                  : isBrandProfileReady
+                    ? t("brand.readyBadge")
+                    : t("brand.setupNeededBadge")}
+              </strong>
+              <span>
+                {analyzing
+                  ? t(getCurrentAnalysisStage(analysisProgress).titleKey)
+                  : isBrandProfileReady
+                    ? t("brand.readyBadgeText")
+                    : t("brand.analysisPendingBadgeText")}
+              </span>
+            </div>
           </div>
         </header>
 
         <section className="brand-profile-layout">
-          <aside className="brand-profile-guide-card">
-            <div className="brand-profile-guide-icon">✦</div>
-
-            <p className="dashboard-eyebrow">{t("brand.setupFlowEyebrow")}</p>
-            <h3>{t("brand.setupFlowTitle")}</h3>
-
-            <div className="brand-profile-step-list">
-              <div>
-                <span>1</span>
-                <div>
-                  <strong>{t("brand.stepBusinessTitle")}</strong>
-                  <p>{t("brand.stepBusinessText")}</p>
-                </div>
-              </div>
-
-              <div>
-                <span>2</span>
-                <div>
-                  <strong>{t("brand.stepCampaignTitle")}</strong>
-                  <p>{t("brand.stepCampaignText")}</p>
-                </div>
-              </div>
-
-              <div>
-                <span>3</span>
-                <div>
-                  <strong>{t("brand.stepAnalysisTitle")}</strong>
-                  <p>{t("brand.stepAnalysisText")}</p>
-                </div>
-              </div>
-
-              <div>
-                <span>4</span>
-                <div>
-                  <strong>{t("brand.stepCreateTitle")}</strong>
-                  <p>{t("brand.stepCreateText")}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="brand-profile-note-card">
-              <strong>{t("brand.automaticSetupTitle")}</strong>
-              <p>{t("brand.automaticSetupText")}</p>
-            </div>
-          </aside>
-
           <section className="brand-profile-form-card">
             <div className="brand-profile-form-header">
               <div>
-                <p className="dashboard-eyebrow">{t("brand.businessContext")}</p>
-                <h3>{t("brand.brandSetup")}</h3>
+                <p className="dashboard-eyebrow">{t("brand.profileOverview")}</p>
+                <h3>{businessName || t("brand.brandSetup")}</h3>
+                <p className="brand-profile-form-intro">{t("brand.profileOverviewText")}</p>
               </div>
 
-              <span>{t("brand.currentBrand")}</span>
+              {showGeneratedFields && !isEditing && !analyzing ? (
+                <button
+                  type="button"
+                  className="brand-profile-edit-button"
+                  onClick={() => {
+                    setIsEditing(true);
+                    setMessage("");
+                  }}
+                >
+                  <Pencil size={16} />
+                  {t("brand.editButton")}
+                </button>
+              ) : (
+                <span>{t("brand.currentBrand")}</span>
+              )}
             </div>
 
             <div className="brand-profile-form-section">
@@ -1440,7 +1464,7 @@ export default function BrandProfile() {
                   setBusinessName(event.target.value);
                   setMessage("");
                 }}
-                disabled={analyzing || saving || deletingBrand}
+                disabled={!isEditing || analyzing || saving || deletingBrand}
               />
 
               <label>{t("brand.websiteUrl")}</label>
@@ -1457,7 +1481,7 @@ export default function BrandProfile() {
                   setTargetAudience("");
                   setMessage("");
                 }}
-                disabled={hasNoWebsite || analyzing || saving || deletingBrand}
+                disabled={!isEditing || hasNoWebsite || analyzing || saving || deletingBrand}
               />
 
             </div>
@@ -1480,7 +1504,7 @@ export default function BrandProfile() {
                       className="input"
                       value={contentMarket}
                       onChange={handleMarketChange}
-                      disabled={analyzing || saving || deletingBrand}
+                      disabled={!isEditing || analyzing || saving || deletingBrand}
                     >
                       {visibleMarketOptions.map((market) => (
                         <option
@@ -1507,7 +1531,7 @@ export default function BrandProfile() {
                         setContentSettingsTouched(true);
                         setMessage("");
                       }}
-                      disabled={analyzing || saving || deletingBrand}
+                      disabled={!isEditing || analyzing || saving || deletingBrand}
                     >
                       {visibleLanguageOptions.map((language) => (
                         <option key={language} value={language}>
@@ -1541,7 +1565,7 @@ export default function BrandProfile() {
                   placeholder={t("brand.industryPlaceholder")}
                   value={industry}
                   onChange={(event) => setIndustry(event.target.value)}
-                  disabled={analyzing || saving || deletingBrand}
+                  disabled={!isEditing || analyzing || saving || deletingBrand}
                 />
 
                 <label>{t("brand.targetAudience")}</label>
@@ -1550,7 +1574,7 @@ export default function BrandProfile() {
                   placeholder={t("brand.targetAudiencePlaceholder")}
                   value={targetAudience}
                   onChange={(event) => setTargetAudience(event.target.value)}
-                  disabled={analyzing || saving || deletingBrand}
+                  disabled={!isEditing || analyzing || saving || deletingBrand}
                 />
               </div>
             )}
@@ -1584,21 +1608,23 @@ export default function BrandProfile() {
                     setLogoMessage("");
                     setShowLogoModal(true);
                   }}
-                  disabled={analyzing || saving || deletingBrand}
+                  disabled={!isEditing || analyzing || saving || deletingBrand}
                 >
                   {logoUrl ? t("brand.logoManageButton") : t("brand.logoAddButton")}
                 </button>
               </div>
             )}
 
-            <button
-              className="brand-profile-primary-button"
-              type="button"
-              onClick={handleMainSave}
-              disabled={saving || analyzing || deletingBrand || !brandProfileId}
-            >
-              {mainButtonLabel}
-            </button>
+            {!analyzing && (isEditing || !showGeneratedFields) && !autoAnalyzeRequested ? (
+              <button
+                className="brand-profile-primary-button"
+                type="button"
+                onClick={handleMainSave}
+                disabled={saving || analyzing || deletingBrand || !brandProfileId}
+              >
+                {mainButtonLabel}
+              </button>
+            ) : null}
 
             {analyzing && (
               <div className="brand-profile-analysis-card">
