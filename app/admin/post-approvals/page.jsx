@@ -11,7 +11,7 @@ import {
   LoaderCircle,
   RefreshCw,
   Save,
-  Plus,
+  Sparkles,
   Trash2,
   Upload,
   Video,
@@ -45,6 +45,18 @@ function statusMeta(status, t) {
   if (status === "approved") return { label: t("admin.approvals.approved"), className: "approved", Icon: CheckCircle2 };
   if (status === "rejected") return { label: t("admin.approvals.rejected"), className: "rejected", Icon: XCircle };
   return { label: t("admin.approvals.pending"), className: "pending", Icon: Clock3 };
+}
+
+const CAROUSEL_PRODUCT_COUNT = 5;
+const emptyCarouselProduct = () => ({ title: "", description: "", url: "", image_url: "", preview_image_url: "" });
+function isCarouselPost(post) {
+  return /carousel/i.test(String(post?.content_format || post?.post_type || ""));
+}
+function getFiveCarouselProducts(items) {
+  return Array.from({ length: CAROUSEL_PRODUCT_COUNT }, (_, index) => ({
+    ...emptyCarouselProduct(),
+    ...(Array.isArray(items) ? items[index] : null),
+  }));
 }
 
 function MediaPreview({ post, t }) {
@@ -96,13 +108,15 @@ export default function AdminPostApprovalsPage() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [materials, setMaterials] = useState([]);
   const [postCopy, setPostCopy] = useState("");
-  const [savingMaterials, setSavingMaterials] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [outroSlide, setOutroSlide] = useState(null);
+  const [outroRemoved, setOutroRemoved] = useState(false);
 
   const selectedPost = useMemo(
     () => posts.find((post) => post.id === selectedPostId) || null,
     [posts, selectedPostId]
   );
+  const carouselReady = isCarouselPost(selectedPost) && materials.length === CAROUSEL_PRODUCT_COUNT && materials.every((item) => item.image_url && item.title?.trim() && item.description?.trim());
 
   useEffect(() => { loadPosts(); }, [filter]);
   useEffect(() => { loadReviewGate(); }, []);
@@ -113,8 +127,10 @@ export default function AdminPostApprovalsPage() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [selectedPostId]);
   useEffect(() => {
-    setMaterials(selectedPost?.admin_product_items || []);
+    setMaterials(isCarouselPost(selectedPost) ? getFiveCarouselProducts(selectedPost?.admin_product_items) : []);
     setPostCopy(selectedPost?.content || "");
+    setOutroSlide(selectedPost?.outro_slide || null);
+    setOutroRemoved(false);
   }, [selectedPost]);
 
   async function loadPosts() {
@@ -205,29 +221,12 @@ export default function AdminPostApprovalsPage() {
     return result;
   }
 
-  async function saveMaterials() {
-    if (!selectedPost) return;
-    setSavingMaterials(true);
-    setError("");
-    try {
-      await runAdminAction({
-        action: "save_materials",
-        post_id: selectedPost.status === "failed" ? null : selectedPost.id,
-        occurrence_id: selectedPost.occurrence_id || null,
-        content: postCopy,
-        product_items: materials,
-      });
-      await loadPosts();
-    } catch (actionError) { setError(actionError.message); }
-    finally { setSavingMaterials(false); }
-  }
-
   async function regenerateFromMaterials() {
     if (!selectedPost) return;
     setRegenerating(true); setError("");
     try {
       const headers = await getHeaders();
-      const response = await fetch("/api/admin/post-approvals/regenerate", { method: "POST", headers, body: JSON.stringify({ post_id: selectedPost.status === "failed" ? null : selectedPost.id, occurrence_id: selectedPost.occurrence_id || null, content: postCopy, product_items: materials }) });
+      const response = await fetch("/api/admin/post-approvals/regenerate", { method: "POST", headers, body: JSON.stringify({ post_id: selectedPost.status === "failed" ? null : selectedPost.id, occurrence_id: selectedPost.occurrence_id || null, content: postCopy, product_items: materials, preserve_outro: !outroRemoved && Boolean(outroSlide?.image_url), outro_slide: !outroRemoved ? outroSlide : null }) });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result?.error || "Regeneration failed.");
       setSelectedPostId(result.post_id); await loadPosts();
@@ -245,7 +244,7 @@ export default function AdminPostApprovalsPage() {
       if (!response.ok) throw new Error(result?.error || "Could not prepare image upload.");
       const { error: uploadError } = await supabase.storage.from(result.bucket).uploadToSignedUrl(result.path, result.token, file, { contentType: file.type });
       if (uploadError) throw uploadError;
-      setMaterials((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, image_url: result.public_url } : item));
+      setMaterials((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, image_url: result.public_url, preview_image_url: "" } : item));
     } catch (uploadError) { setError(uploadError.message || "Image upload failed."); }
   }
 
@@ -392,36 +391,44 @@ export default function AdminPostApprovalsPage() {
                 <div className="admin-v74-email-preview">
                   <div className="admin-v74-email-topline">SPREELO</div>
                   <h3>{selectedPost.post_type || selectedPost.content_format || t("admin.approvals.post")}</h3>
-                  <MediaPreview post={selectedPost} t={t} />
+                  {!isCarouselPost(selectedPost) ? <MediaPreview post={selectedPost} t={t} /> : null}
                   <div className="admin-v74-post-copy">
                     <span>{t("admin.approvals.postCopy")}</span>
                     <p>{selectedPost.content || t("admin.approvals.noContent")}</p>
                   </div>
-                  <section className="admin-material-workbench">
-                    <div className="admin-material-workbench-title">
-                      <div><span>Repair materials</span><strong>Products and post text</strong></div>
-                      <button type="button" onClick={() => setMaterials((items) => [...items, { title: "", description: "", url: "", image_url: "" }])}><Plus size={15} /> Add product</button>
-                    </div>
-                    <label><span>Post text</span><textarea value={postCopy} onChange={(event) => setPostCopy(event.target.value)} /></label>
-                    <div className="admin-material-list">
-                      {materials.map((item, index) => (
-                        <article key={`${selectedPost.id}-material-${index}`}>
-                          <div className="admin-material-image">
-                            {item.image_url ? <img src={item.image_url} alt="" /> : <ImageIcon size={22} />}
-                            <label><Upload size={14} /> Replace image<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => uploadProductImage(index, event.target.files?.[0])} /></label>
+                  {isCarouselPost(selectedPost) ? (
+                    <section className="admin-carousel-editor">
+                      <div className="admin-carousel-editor-heading">
+                        <div><span>Carousel products</span><strong>Exactly five products</strong><p>Replace any product directly in the preview. Caption and hashtags are always regenerated.</p></div>
+                        <b className={carouselReady ? "ready" : ""}>{materials.filter((item) => item.image_url && item.title && item.description).length}/5</b>
+                      </div>
+                      <div className="admin-carousel-product-grid">
+                        {materials.map((item, index) => (
+                          <article className={item.image_url ? "complete" : "empty"} key={`${selectedPost.id}-product-${index}`}>
+                            <span className="admin-carousel-number">{index + 1}</span>
+                            <button type="button" className="admin-carousel-clear" onClick={() => setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? emptyCarouselProduct() : row))} aria-label="Remove product"><X size={16} /></button>
+                            <div className="admin-carousel-product-image">
+                              {(item.preview_image_url || item.image_url) ? <img src={item.preview_image_url || item.image_url} alt="" /> : <ImageIcon size={28} />}
+                              <label><Upload size={15} />{item.image_url ? "Replace image" : "Upload product image"}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => uploadProductImage(index, event.target.files?.[0])} /></label>
+                            </div>
+                            <div className="admin-carousel-product-fields">
+                              <input value={item.title || ""} placeholder="Product name" onChange={(event) => setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, title: event.target.value } : row))} />
+                              <textarea value={item.description || ""} placeholder="Product information for caption and hashtags" onChange={(event) => setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, description: event.target.value } : row))} />
+                              <input value={item.url || ""} placeholder="Product URL (optional)" onChange={(event) => setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, url: event.target.value } : row))} />
+                            </div>
+                          </article>
+                        ))}
+                        <article className={`admin-carousel-outro ${outroSlide?.image_url && !outroRemoved ? "complete" : "empty"}`}>
+                          <span className="admin-carousel-number">AI</span>
+                          {outroSlide?.image_url && !outroRemoved ? <button type="button" className="admin-carousel-clear" onClick={() => setOutroRemoved(true)} aria-label="Create a new AI closing image"><X size={16} /></button> : null}
+                          <div className="admin-carousel-product-image">
+                            {outroSlide?.image_url && !outroRemoved ? <img src={outroSlide.image_url} alt="" /> : <><Sparkles size={30} /><strong>A new AI closing image will be created</strong></>}
                           </div>
-                          <div className="admin-material-fields">
-                            <input value={item.title || ""} placeholder="Product name" onChange={(event) => setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, title: event.target.value } : row))} />
-                            <textarea value={item.description || ""} placeholder="Product information for caption and hashtags" onChange={(event) => setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, description: event.target.value } : row))} />
-                            <input value={item.url || ""} placeholder="Verified product URL" onChange={(event) => setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, url: event.target.value } : row))} />
-                          </div>
-                          <button type="button" className="admin-material-remove" onClick={() => setMaterials((items) => items.filter((_, rowIndex) => rowIndex !== index))} aria-label="Remove product"><Trash2 size={16} /></button>
                         </article>
-                      ))}
-                    </div>
-                    <button type="button" className="admin-primary-button" disabled={savingMaterials} onClick={saveMaterials}>{savingMaterials ? <LoaderCircle className="admin-spin" size={16} /> : <Save size={16} />} Save repair materials</button>
-                    <button type="button" className="admin-primary-button admin-regenerate-button" disabled={regenerating || !materials.some((item) => item.title && item.image_url)} onClick={regenerateFromMaterials}>{regenerating ? <LoaderCircle className="admin-spin" size={16} /> : <RefreshCw size={16} />} Regenerate complete post</button>
-                  </section>
+                      </div>
+                      <button type="button" className="admin-primary-button admin-regenerate-button" disabled={regenerating || !carouselReady} onClick={regenerateFromMaterials}>{regenerating ? <LoaderCircle className="admin-spin" size={16} /> : <RefreshCw size={16} />} Regenerate complete carousel</button>
+                    </section>
+                  ) : null}
                 </div>
 
                 <aside className="admin-v74-detail-meta">

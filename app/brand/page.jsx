@@ -892,6 +892,8 @@ export default function BrandProfile() {
 
     setAnalysisProgress(1);
     setAnalysisNoticeCode("background");
+    setAnalysisResultStep("analyzing");
+    setShowAnalysisResult(true);
     setAnalyzing(true);
 
     const progressInterval = setInterval(() => {
@@ -1020,6 +1022,7 @@ export default function BrandProfile() {
     } catch (error) {
       setMessage(error.message || t("brand.errorAnalyze"));
       setIsEditing(true);
+      setAnalysisResultStep("error");
        } finally {
       clearInterval(progressInterval);
       setAnalyzing(false);
@@ -1691,10 +1694,24 @@ export default function BrandProfile() {
         {showAnalysisResult && (
           <div className="brand-result-backdrop" role="presentation">
             <section className="brand-result-modal" role="dialog" aria-modal="true" aria-label={t("brand.result.title")}>
-              <button type="button" className="brand-result-close" onClick={() => setShowAnalysisResult(false)}>×</button>
-              <p className="dashboard-eyebrow">{t("brand.result.eyebrow")}</p>
-              {analysisResultStep === "result" ? (
+              {!analyzing ? <button type="button" className="brand-result-close" onClick={() => setShowAnalysisResult(false)}>×</button> : null}
+              {analysisResultStep === "analyzing" ? (
+                <div className="brand-result-analysis">
+                  <p className="dashboard-eyebrow">{t("brand.analysisTitle")}</p>
+                  <h2>{t("brand.analysisTitle")}</h2>
+                  <p className="brand-result-lead">{t("brand.analysisText")}</p>
+                  <div className="brand-result-analysis-progress">
+                    <div><strong>{t(getCurrentAnalysisStage(analysisProgress).titleKey)}</strong><span>{Math.min(99, Math.floor(analysisProgress))}%</span></div>
+                    <div className="brand-profile-progress-track"><div className="brand-profile-progress-fill" style={{ width: `${Math.min(analysisProgress, 99)}%` }} /></div>
+                    <p>{t(getCurrentAnalysisStage(analysisProgress).descriptionKey)}</p>
+                  </div>
+                  <div className="brand-result-analysis-steps">
+                    {analysisProgressStages.map((stage) => <span key={stage.titleKey} className={analysisProgress >= stage.progress ? "done" : ""}>{t(stage.titleKey)}</span>)}
+                  </div>
+                </div>
+              ) : analysisResultStep === "result" ? (
                 <>
+                  <p className="dashboard-eyebrow">{t("brand.result.eyebrow")}</p>
                   <h2>{t("brand.result.title")}</h2>
                   <p className="brand-result-lead">{t("brand.result.text")}</p>
                   <div className="brand-result-grid">
@@ -1705,14 +1722,23 @@ export default function BrandProfile() {
                   </div>
                   <button type="button" className="brand-result-primary" onClick={() => setAnalysisResultStep("channels")}>{t("brand.result.addChannels")}</button>
                 </>
-              ) : (
+              ) : analysisResultStep === "channels" ? (
                 <>
+                  <p className="dashboard-eyebrow">{t("brand.result.eyebrow")}</p>
                   <h2>{t("brand.result.channelsTitle")}</h2>
                   <p className="brand-result-lead">{t("brand.result.channelsText")}</p>
-                  <div className="brand-result-channel-list"><span>Instagram</span><span>Facebook</span><span>LinkedIn</span></div>
-                  <button type="button" className="brand-result-secondary" onClick={() => window.open("/social-channels", "_blank", "noopener,noreferrer")}>{t("brand.result.connectChannels")}</button>
-                  <button type="button" className="brand-result-primary" onClick={() => { setShowAnalysisResult(false); window.location.href = "/automation"; }}>{t("brand.result.planPosts")}</button>
+                  <div className="brand-result-channel-list">
+                    {["instagram.png", "facebook.png", "linkedin.png", "tiktok.png", "youtube.png", "pinterest.png", "x.png", "threads.svg"].map((icon) => <span key={icon}><img src={`/social-icons/${icon}`} alt="" /></span>)}
+                  </div>
+                  <button type="button" className="brand-result-primary" onClick={() => { setShowAnalysisResult(false); window.location.href = "/social-channels"; }}>{t("brand.result.connectChannels")}</button>
                 </>
+              ) : (
+                <div className="brand-result-error">
+                  <p className="dashboard-eyebrow">{t("brand.analysisTitle")}</p>
+                  <h2>{t("brand.errorAnalyze")}</h2>
+                  <p className="brand-result-lead">{message}</p>
+                  <button type="button" className="brand-result-primary" onClick={() => setShowAnalysisResult(false)}>{t("common.close")}</button>
+                </div>
               )}
             </section>
           </div>

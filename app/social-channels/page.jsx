@@ -229,6 +229,7 @@ export default function SocialChannelsPage() {
   const [message, setMessage] = useState("");
   const [messageKind, setMessageKind] = useState("info");
   const [connectingPlatform, setConnectingPlatform] = useState("");
+  const [connectionSuccess, setConnectionSuccess] = useState(null);
   const selectedPlatforms = useMemo(() => SOCIAL_PLATFORMS, []);
 
   useEffect(() => {
@@ -332,10 +333,15 @@ export default function SocialChannelsPage() {
     }
 
     setConnectionsByPlatform(getLatestConnectionsByPlatform(connections || []));
+    const connectedPlatformKey = new URLSearchParams(window.location.search).get("connected");
     const urlMessage = getSocialUrlMessage({ t });
     if (urlMessage) {
       setMessage(urlMessage);
       setMessageKind(new URLSearchParams(window.location.search).get("error") ? "error" : "success");
+      if (connectedPlatformKey) {
+        const platform = selectedPlatforms.find((item) => item.key === connectedPlatformKey);
+        if (platform) setConnectionSuccess({ platform, brandName: selectedBrand.business_name || "" });
+      }
       window.history.replaceState({}, "", window.location.pathname);
     }
     setLoading(false);
@@ -458,6 +464,20 @@ export default function SocialChannelsPage() {
             />
           ))}
         </div>
+        {connectionSuccess ? (
+          <div className="social-success-backdrop" role="presentation">
+            <section className="social-success-modal" role="dialog" aria-modal="true" aria-label={t("social.success.title")}>
+              <span className="social-success-icon"><img src={connectionSuccess.platform.iconSrc} alt="" /></span>
+              <p className="social-v74-eyebrow">{t("social.success.eyebrow")}</p>
+              <h2>{t("social.success.title")}</h2>
+              <p>{t("social.success.text", { platform: t(connectionSuccess.platform.eyebrowKey), brandName: connectionSuccess.brandName })}</p>
+              <div className="social-success-actions">
+                <button type="button" onClick={() => setConnectionSuccess(null)}>{t("social.success.addAnother")}</button>
+                <button type="button" className="primary" onClick={() => { window.location.href = "/automation"; }}>{t("social.success.planPosts")}</button>
+              </div>
+            </section>
+          </div>
+        ) : null}
       </div>
     </AppLayout>
   );

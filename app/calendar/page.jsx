@@ -1353,19 +1353,13 @@ export default function Calendar() {
                           }
                           aria-expanded={isSelected}
                         >
-                          {campaign.visual_image_url ? (
+                          {campaign.visual_image_url && !campaign.visual_image_url.endsWith("/calendar-generic.svg") ? (
                             <span className="campaign-calendar-visual"><img src={campaign.visual_image_url} alt="" /></span>
                           ) : <CampaignGlyph campaign={campaign} />}
 
                           <div className="campaign-calendar-v132-row-copy campaign-calendar-v133-row-copy">
                             <div>
                               <span>{getEventTypeLabel(campaign.event_type, t)}</span>
-                              <span
-                                className={`campaign-calendar-v132-status campaign-calendar-v133-status ${statusTone}`}
-                                title={getCampaignStatusTitle(campaign, t)}
-                              >
-                                {getCampaignStatusLabel(campaign, t)}
-                              </span>
                             </div>
                             <h4>{campaign.title}</h4>
                             <p>{campaign.description}</p>
@@ -1387,91 +1381,17 @@ export default function Calendar() {
 
                         {isSelected && (
                           <div className="campaign-calendar-v132-expanded campaign-calendar-v133-expanded">
-                            <div className="campaign-calendar-v133-detail-grid">
-                              <section className="campaign-calendar-v133-detail-section about">
-                                <h5>
-                                  {t("calendar.aboutCampaign")}
-                                </h5>
-                                <p>{campaign.description}</p>
-
-                                <strong>{t("calendar.whyItFits")}</strong>
-                                <p>
-                                  {campaign.relevance_reason || t("calendar.whyItFitsFallback")}
-                                </p>
-                              </section>
-
-                              <section className="campaign-calendar-v133-detail-section ideas">
-                                <h5>
-                                  {t("calendar.campaignIdeas")}
-                                </h5>
-                                <p>
-                                  {campaign.prompt_context ||
-                                    t("calendar.campaignInstructionFallback")}
-                                </p>
-
-                                {Array.isArray(campaign.campaign_angles) &&
-                                  campaign.campaign_angles.length > 0 && (
-                                    <div className="campaign-calendar-v132-angles campaign-calendar-v133-angles">
-                                      {campaign.campaign_angles.slice(0, 5).map((angle, index) => (
-                                        <span key={`${angle}-${index}`}>{angle}</span>
-                                      ))}
-                                    </div>
-                                  )}
-                              </section>
-
-                              <section className="campaign-calendar-v133-detail-section details">
-                                <h5>
-                                  {t("calendar.detailsLabel")}
-                                </h5>
-                                <dl>
-                                  <div>
-                                    <dt>
-                                      {t("calendar.periodLabel")}
-                                    </dt>
-                                    <dd>{getCampaignDateLabel(campaign, t, locale)}</dd>
-                                  </div>
-                                  <div>
-                                    <dt>
-                                      {t("calendar.statusLabel")}
-                                    </dt>
-                                    <dd>
-                                      <span
-                                        className={`campaign-calendar-v133-status ${statusTone}`}
-                                        title={getCampaignStatusTitle(campaign, t)}
-                                      >
-                                        {getCampaignStatusLabel(campaign, t)}
-                                      </span>
-                                    </dd>
-                                  </div>
-                                </dl>
-                              </section>
-
-                              <aside className="campaign-calendar-v133-action-panel">
-                                <div>
-                                  <CalendarRange size={19} aria-hidden="true" />
-                                  <strong>
-                                    {t("calendar.actualPlanTitle")}
-                                  </strong>
-                                  <p>
-                                    {t("calendar.actualPlanText")}
-                                  </p>
-                                </div>
-                                <button
-                                  type="button"
-                                  className="primary"
-                                  onClick={() => handleCreateCampaign(campaign)}
-                                >
-                                  {t("calendar.createCampaignPlan")}
-                                </button>
-                                <button
-                                  type="button"
-                                  className="secondary"
-                                  onClick={() => setSelectedCampaignId("")}
-                                >
-                                  {t("calendar.closeDetails")}
-                                </button>
-                              </aside>
-                            </div>
+                            <section className="campaign-calendar-v143-summary">
+                              <div className="campaign-calendar-v143-summary-copy">
+                                <div><h5>{t("calendar.aboutCampaign")}</h5><p>{campaign.description}</p></div>
+                                <div><strong>{t("calendar.whyItFits")}</strong><p>{campaign.relevance_reason || t("calendar.whyItFitsFallback")}</p></div>
+                              </div>
+                              <div className="campaign-calendar-v143-summary-action">
+                                <span><CalendarRange size={20} aria-hidden="true" /></span>
+                                <div><strong>{t("calendar.actualPlanTitle")}</strong><p>{t("calendar.actualPlanText")}</p></div>
+                                <button type="button" className="primary" onClick={() => handleCreateCampaign(campaign)}>{t("calendar.createCampaignPlan")}</button>
+                              </div>
+                            </section>
                           </div>
                         )}
                       </article>

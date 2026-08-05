@@ -95,15 +95,44 @@ export async function GET(request) {
     return map;
   }, {});
 
+  const getEditableProductItems = (post) => {
+    const slideProducts = (slidesMap[post.id] || [])
+      .filter((slide) => {
+        const role = String(slide?.metadata?.carousel_slide_role || "").toLowerCase();
+        const title = slide?.metadata?.product_title || slide?.headline;
+        return Boolean(title || slide?.product_url) && !role.includes("outro") && !role.includes("cta");
+      })
+      .slice(0, 5)
+      .map((slide) => ({
+        title: String(slide?.metadata?.product_title || slide?.headline || "").trim(),
+        description: String(slide?.metadata?.product_description || slide?.body || "").trim(),
+        url: String(slide?.product_url || "").trim(),
+        image_url: String(slide?.metadata?.source_image_url || slide?.image_url || "").trim(),
+        preview_image_url: String(slide?.image_url || "").trim(),
+        existing_slide_order: slide?.slide_order || null,
+      }));
+    const storedProducts = Array.isArray(post.admin_product_items)
+      ? post.admin_product_items.slice(0, 5)
+      : [];
+    return slideProducts.length > storedProducts.length ? slideProducts : storedProducts;
+  };
+
+  const getOutroSlide = (postId) => (slidesMap[postId] || []).find((slide) => {
+    const role = String(slide?.metadata?.carousel_slide_role || "").toLowerCase();
+    return role.includes("outro") || role.includes("cta") || String(slide?.metadata?.slide_type || "").toLowerCase() === "product_outro";
+  }) || null;
+
   return Response.json({
     ok: true,
     posts: [...postRows.map((item) => ({
       ...item,
+      admin_product_items: getEditableProductItems(item),
       brand_name: brandMap[item.brand_profile_id] || "",
       brand_admin_review_required: brands?.find((brand) => brand.id === item.brand_profile_id)?.admin_review_required ?? null,
       customer_email: userMap[item.user_id] || "",
       rejection: feedbackMap[item.id] || null,
       slides: slidesMap[item.id] || [],
+      outro_slide: getOutroSlide(item.id),
     })), ...orphanFailures.map((occurrence) => ({
       id: `occurrence-${occurrence.id}`,
       occurrence_id: occurrence.id,

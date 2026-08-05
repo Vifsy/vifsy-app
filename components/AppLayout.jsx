@@ -123,7 +123,7 @@ function SpreeloLogo() {
 }
 
 export default function AppLayout({ active, children }) {
-  const { t, locale } = useUiText(["layout"]);
+  const { t, locale, loading: translationsLoading } = useUiText(["layout"]);
   const [user, setUser] = useState(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [sessionCheckError, setSessionCheckError] = useState("");
@@ -547,7 +547,7 @@ export default function AppLayout({ active, children }) {
     window.location.href = "/login";
   }
 
-  if (checkingSession || sessionCheckError) {
+  if (checkingSession || translationsLoading || sessionCheckError) {
     return (
       <main className="workspace-loader-page" aria-live="polite">
         <section className={`workspace-loader-card${sessionCheckError ? " error" : ""}`}>
@@ -559,7 +559,7 @@ export default function AppLayout({ active, children }) {
             />
           </div>
 
-          {checkingSession ? (
+          {checkingSession || translationsLoading ? (
             <>
               <div className="workspace-loader-motion" aria-hidden="true">
                 <span className="workspace-loader-orbit orbit-one" />

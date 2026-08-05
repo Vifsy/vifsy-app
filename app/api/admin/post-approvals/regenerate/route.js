@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import OpenAI from "openai";
 import { adminContextError, getAdminContext } from "../../../../../lib/adminAuth";
-import { renderCarouselProductSlideImage } from "../../../cron/run-automations/route.js";
+import { generateCarouselOutroSlideImage, renderCarouselProductSlideImage } from "../../../cron/run-automations/route.js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,7 +17,7 @@ export async function POST(request) {
     .map((item) => ({ title: String(item?.title || "").trim(), description: String(item?.description || "").trim(), url: String(item?.url || "").trim(), image_url: String(item?.image_url || "").trim() }))
     .filter((item) => item.title && item.image_url)
     .slice(0, 5);
-  if (!products.length) return Response.json({ ok: false, error: "Add at least one product name and image before regenerating." }, { status: 400 });
+  if (products.length !== 5 || products.some((item) => !item.description)) return Response.json({ ok: false, error: "A carousel must contain exactly five complete products with an image, product name and product information." }, { status: 400 });
 
   let post = null;
   let occurrence = null;
@@ -33,11 +33,14 @@ export async function POST(request) {
   }
   const ruleId = post?.automation_rule_id || occurrence?.automation_rule_id;
   const { data: rule } = ruleId ? await context.admin.from("automation_rules").select("*").eq("id", ruleId).maybeSingle() : { data: null };
+  const brandProfileId = post?.brand_profile_id || occurrence?.brand_profile_id || rule?.brand_profile_id;
+  const { data: brandProfile } = brandProfileId ? await context.admin.from("brand_profiles").select("business_name, content_language, website_url").eq("id", brandProfileId).maybeSingle() : { data: null };
   const language = post?.language || rule?.language || "English";
   const campaign = occurrence?.campaign_title || rule?.name || "campaign";
+  const enhancedRule = { ...(rule || {}), brand_profile: brandProfile || null, language, campaign_theme: campaign };
   let content = String(body?.content || "").trim();
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const response = await openai.responses.create({
       model: process.env.POST_TEXT_MODEL || "gpt-5.5",
       input: `Write one polished social-media carousel caption in ${language} for ${campaign}. Use only these supplied, verified products and facts. Do not invent prices, offers or claims. Include a natural CTA and relevant hashtags.\n${JSON.stringify(products)}`,
@@ -81,16 +84,100 @@ export async function POST(request) {
   const slides = [];
   for (let index = 0; index < products.length; index += 1) {
     const product = products[index];
-    const rendered = await renderCarouselProductSlideImage({ sourceImageUrl: product.image_url, supabase: context.admin, rule: { ...(rule || {}), campaign_theme: campaign }, productTitle: product.title, includeLogo: false, languageHint: language });
+    const rendered = await renderCarouselProductSlideImage({ sourceImageUrl: product.image_url, supabase: context.admin, rule: enhancedRule, productTitle: product.title, includeLogo: false, languageHint: language });
     const path = `admin-regenerated/${post.id}/${index + 1}-${crypto.randomUUID()}.png`;
     const upload = await context.admin.storage.from("post-images").upload(path, Buffer.from(rendered.imageBase64, "base64"), { contentType: "image/png", upsert: false });
     if (upload.error) return Response.json({ ok: false, error: upload.error.message }, { status: 500 });
     const { data: publicData } = context.admin.storage.from("post-images").getPublicUrl(path);
-    slides.push({ post_id: post.id, slide_order: index + 1, headline: product.title, body: product.description || null, image_url: publicData.publicUrl, product_url: product.url || null, metadata: { product_title: product.title, admin_regenerated: true, product_label_applied: rendered.productLabelApplied, product_label_placement: rendered.productLabelPlacement, product_label_layout: rendered.productLabelLayout } });
+    slides.push({
+      user_id: post.user_id,
+      post_id: post.id,
+      slide_order: index + 1,
+      slide_type: "content",
+      headline: product.title,
+      body: product.description || null,
+      cta_text: null,
+      image_url: publicData.publicUrl,
+      product_url: product.url || null,
+      logo_enabled: false,
+      metadata: {
+        product_title: product.title,
+        product_description: product.description || null,
+        source_image_url: product.image_url,
+        carousel_slide_role: "product",
+        admin_regenerated: true,
+        product_label_applied: rendered.productLabelApplied,
+        product_label_placement: rendered.productLabelPlacement,
+        product_label_layout: rendered.productLabelLayout,
+      },
+    });
   }
-  await context.admin.from("post_slides").delete().eq("post_id", post.id);
+  const requestedOutro = body?.outro_slide || null;
+  if (body?.preserve_outro && requestedOutro?.image_url) {
+    slides.push({
+      user_id: post.user_id,
+      post_id: post.id,
+      slide_order: 6,
+      slide_type: "product_outro",
+      headline: requestedOutro.headline || brandProfile?.business_name || campaign,
+      body: requestedOutro.body || null,
+      cta_text: requestedOutro.cta_text || null,
+      image_url: requestedOutro.image_url,
+      product_url: requestedOutro.product_url || brandProfile?.website_url || null,
+      logo_enabled: false,
+      metadata: { ...(requestedOutro.metadata || {}), carousel_slide_role: "product_outro", admin_preserved: true },
+    });
+  } else {
+    const outroCopy = {
+      headline: brandProfile?.business_name || campaign,
+      body: content,
+      cta_text: rule?.cta_type || "Explore more",
+    };
+    const generatedOutro = await generateCarouselOutroSlideImage(openai, enhancedRule, outroCopy, products);
+    const outroPath = `admin-regenerated/${post.id}/6-${crypto.randomUUID()}.png`;
+    const outroUpload = await context.admin.storage.from("post-images").upload(outroPath, Buffer.from(generatedOutro.imageBase64, "base64"), { contentType: "image/png", upsert: false });
+    if (outroUpload.error) return Response.json({ ok: false, error: outroUpload.error.message }, { status: 500 });
+    const { data: outroPublicData } = context.admin.storage.from("post-images").getPublicUrl(outroPath);
+    slides.push({
+      user_id: post.user_id,
+      post_id: post.id,
+      slide_order: 6,
+      slide_type: "product_outro",
+      headline: outroCopy.headline,
+      body: outroCopy.body,
+      cta_text: outroCopy.cta_text,
+      image_url: outroPublicData.publicUrl,
+      product_url: brandProfile?.website_url || null,
+      logo_enabled: false,
+      metadata: { carousel_slide_role: "product_outro", admin_regenerated: true, image_prompt: generatedOutro.imagePrompt },
+    });
+  }
+  const { data: previousSlides, error: previousSlidesError } = await context.admin
+    .from("post_slides")
+    .select("*")
+    .eq("post_id", post.id)
+    .order("slide_order", { ascending: true });
+  if (previousSlidesError) return Response.json({ ok: false, error: previousSlidesError.message }, { status: 500 });
+
+  const deleteSlides = await context.admin.from("post_slides").delete().eq("post_id", post.id);
+  if (deleteSlides.error) return Response.json({ ok: false, error: deleteSlides.error.message }, { status: 500 });
   const insertSlides = await context.admin.from("post_slides").insert(slides);
-  if (insertSlides.error) return Response.json({ ok: false, error: insertSlides.error.message }, { status: 500 });
+  if (insertSlides.error) {
+    if (previousSlides?.length) await context.admin.from("post_slides").insert(previousSlides);
+    return Response.json({ ok: false, error: insertSlides.error.message }, { status: 500 });
+  }
+  const postReadyUpdate = await context.admin.from("posts").update({
+    content,
+    status: "pending_approval",
+    admin_review_status: "pending",
+    admin_product_items: products,
+    slide_count: slides.length,
+    slide_generation_status: "ready",
+    slide_render_status: "ready",
+    image_status: "ready",
+    updated_at: now,
+  }).eq("id", post.id);
+  if (postReadyUpdate.error) return Response.json({ ok: false, error: postReadyUpdate.error.message }, { status: 500 });
   if (occurrenceId) await context.admin.from("automation_occurrences").update({ post_id: post.id, metadata: { ...(occurrence?.metadata || {}), admin_product_items: products, admin_regenerated_at: now } }).eq("id", occurrenceId);
   await context.admin.from("admin_review_cases").upsert({ occurrence_id: occurrenceId || null, post_id: post.id, user_id: post.user_id, brand_profile_id: post.brand_profile_id, automation_rule_id: post.automation_rule_id, status: "awaiting_spreelo", draft_content: content, product_items: products, needs_review: true, failure_code: null, failure_stage: null, failure_message: null, updated_at: now }, { onConflict: occurrenceId ? "occurrence_id" : "post_id" });
   return Response.json({ ok: true, post_id: post.id, slide_count: slides.length });

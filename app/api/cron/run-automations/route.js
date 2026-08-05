@@ -1688,7 +1688,8 @@ function chooseLeastObstructiveProductLabelPlacement(productCanvasBox, { include
 function getProductLabelEyebrow(rule) {
   const raw = String(getApprovalCampaignTitle(rule) || "").trim();
   if (!raw) return "";
-  return normalizeSlideText(raw.split(/\s+[–—-]\s+/)[0], 32);
+  const firstPhrase = raw.split(/\s+[–—-]\s+/u)[0].replace(/\s+/gu, " ").trim();
+  return firstPhrase.split(" ").filter(Boolean).slice(0, 4).join(" ");
 }
 
 async function deriveLocalPackshotLabelAnalysis(sourceBuffer, { includeLogo = false } = {}) {
@@ -1810,10 +1811,10 @@ function buildCarouselProductLabelSvg({ title, eyebrow = "", analysis, productCa
     .map((line, index) => `<tspan x="${textX}" dy="${index === 0 ? 0 : typography.lineHeight}">${escapeProductSvg(line)}</tspan>`)
     .join("");
   const eyebrowMarkup = eyebrow
-    ? `<text x="${textX}" y="${labelBox.y + 35}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="17" font-weight="700" letter-spacing="3.2" fill="${textColor}" text-anchor="${isRtl ? "end" : "start"}">${escapeProductSvg(eyebrow.toLocaleUpperCase())}</text><rect x="${isRtl ? textX - 42 : textX}" y="${labelBox.y + 52}" width="42" height="4" rx="2" fill="#3478f6"/>`
+    ? `<text x="${textX}" y="${labelBox.y + 35}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="${Array.from(eyebrow).length > 30 ? 12 : Array.from(eyebrow).length > 24 ? 14 : 17}" font-weight="760" letter-spacing="${Array.from(eyebrow).length > 24 ? 1.5 : 3.2}" fill="${textColor}" text-anchor="${isRtl ? "end" : "start"}">${escapeProductSvg(eyebrow.toLocaleUpperCase())}</text><rect x="${isRtl ? textX - 42 : textX}" y="${labelBox.y + 52}" width="42" height="4" rx="2" fill="#3478f6"/>`
     : "";
   return {
-    svg: `<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg">${card}${eyebrowMarkup}<text x="${textX}" y="${textY}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="${typography.fontSize}" font-weight="760" fill="${textColor}" direction="${typography.profile.direction}" unicode-bidi="plaintext" text-anchor="${isRtl ? "end" : "start"}" ${outline}>${spans}</text></svg>`,
+    svg: `<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg">${card}${eyebrowMarkup}<text x="${textX}" y="${textY}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="${typography.fontSize}" font-weight="820" fill="${textColor}" direction="${typography.profile.direction}" unicode-bidi="plaintext" text-anchor="${isRtl ? "end" : "start"}" ${outline}>${spans}</text></svg>`,
     typography,
   };
 }
@@ -26561,7 +26562,7 @@ function buildCarouselOutroImagePrompt(rule, outroSlide, products) {
   return `Create a premium square closing slide for a social media carousel. This is the final CTA slide after product slides for ${brandName}. Use a clean, polished marketing design with a subtle modern background and clear readable text overlay. Write the overlaid text in ${language}. Main overlay text: "${headline}". Supporting overlay text: "${supportingText}". ${campaignVisualContext}. ${offerVisualRule} If this carousel is connected to a campaign, holiday, season, shopping event or theme, the closing image must clearly match that theme and must not look generic or unrelated. The slide should feel like a professional final call-to-action and may use abstract shapes, elegant composition, soft shadows, geometric shapes, or a tasteful category-inspired scene. If you include any product-like objects, they must be generic, unbranded, non-specific, and not directly identifiable as exact products from the store. Never invent or depict specific catalog items, exact product prints, poster motifs, readable slogan text on products, apparel graphics, packaging artwork, or branded product designs. Do not place the store name or brand logo onto any depicted product. Avoid close-up hero shots of a single product. For stores that sell printed or text-based products such as posters, apparel, mugs, or accessories, do not generate new readable product text or new product artwork. Keep all non-overlay product details subtle, generic, and secondary to the CTA message. Do not use crowded text. Products featured earlier in the carousel: ${productNames || "selected website products"}.`;
 }
 
-async function generateCarouselOutroSlideImage(openai, rule, outroSlide, products) {
+export async function generateCarouselOutroSlideImage(openai, rule, outroSlide, products) {
   const imagePrompt = buildCarouselOutroImagePrompt(rule, outroSlide, products);
   const response = await openai.images.generate({
     model: IMAGE_MODEL,

@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
-  Bookmark,
   BookOpen,
   CalendarClock,
   CalendarDays,
@@ -7974,19 +7973,42 @@ async function applyDynamicAutoPlan({ goalId, postCount }) {
     websiteProductModeAvailable,
   });
 
-  if (!goalId || !currentBrandId) {
-    setSelectedContentTypeIds(fallbackTypeIds);
-    setSlots(fallbackSlots);
-    return;
+  const cacheKey = currentBrandId && goalId
+    ? `spreelo_plan_recommendation_${currentBrandId}_${goalId}_${safePostCount}`
+    : "";
+  let instantSlots = fallbackSlots;
+
+  if (cacheKey && typeof window !== "undefined") {
+    try {
+      const cachedPlan = JSON.parse(window.localStorage.getItem(cacheKey) || "null");
+      const cachedSlots = createDynamicRecommendedSlots({
+        plan: cachedPlan,
+        startDate: planStartDate,
+        timeZone,
+        autoPlanGoal: goalId,
+        firstPublishTime: defaultPublishTime,
+        postCount: safePostCount,
+        websiteProductModeAvailable,
+      });
+      if (cachedSlots.length === safePostCount) instantSlots = cachedSlots;
+    } catch {
+      window.localStorage.removeItem(cacheKey);
+    }
   }
+
+  // The customer always sees a complete, goal-specific plan immediately.
+  // A newer server recommendation is cached for the next selection instead of
+  // replacing rows that are already visible on screen.
+  setSlots(instantSlots);
+  setSelectedContentTypeIds(
+    instantSlots.map((slot) => slot.contentTypeId).filter(Boolean)
+  );
+
+  if (!goalId || !currentBrandId) return;
 
   const requestId = autoPlanRequestIdRef.current + 1;
   autoPlanRequestIdRef.current = requestId;
   setAutoPlanLoading(true);
-  // Do not present a provisional plan that is visibly replaced seconds later.
-  // Keep the schedule empty/skeleton-backed until the authoritative result is final.
-  setSelectedContentTypeIds([]);
-  setSlots([]);
 
   try {
     const { data: sessionData } = await supabase.auth.getSession();
@@ -8016,8 +8038,6 @@ async function applyDynamicAutoPlan({ goalId, postCount }) {
         "Dynamic content strategy could not replace the safe fallback plan",
         payload?.error || response.statusText
       );
-      setSelectedContentTypeIds(fallbackTypeIds);
-      setSlots(fallbackSlots);
       return;
     }
 
@@ -8031,20 +8051,16 @@ async function applyDynamicAutoPlan({ goalId, postCount }) {
       websiteProductModeAvailable,
     });
 
-    if (!dynamicSlots.length) return;
-
-    setSlots(dynamicSlots);
-    setSelectedContentTypeIds(
-      dynamicSlots.map((slot) => slot.contentTypeId).filter(Boolean)
-    );
+    if (dynamicSlots.length === safePostCount && cacheKey && typeof window !== "undefined") {
+      window.localStorage.setItem(cacheKey, JSON.stringify(payload));
+    }
   } catch (error) {
     if (requestId === autoPlanRequestIdRef.current) {
       console.warn(
         "Dynamic content strategy could not replace the safe fallback plan",
         error
       );
-      setSelectedContentTypeIds(fallbackTypeIds);
-      setSlots(fallbackSlots);
+      // The complete instant plan remains visible when background refinement fails.
     }
   } finally {
     if (requestId === autoPlanRequestIdRef.current) {
@@ -9461,19 +9477,10 @@ function blockFormatCardClickAfterDrag(event) {
             <section className="plan-v70-shell">
               <header className="plan-v70-header">
                 <div>
-                  <h1>{t("automation.redesign.title")}</h1>
-                  <p>{t("automation.redesign.subtitle")}</p>
+                  <h1>{campaignOpportunity?.title || t("automation.redesign.title")}</h1>
+                  <p>{campaignOpportunity?.description || t("automation.redesign.subtitle")}</p>
                 </div>
                 <div className="plan-v95-header-actions">
-                  <button
-                    type="button"
-                    className="plan-v95-template-button"
-                    disabled
-                    title={t("automation.redesign.templateComingSoon")}
-                  >
-                    <Bookmark size={17} aria-hidden="true" />
-                    <span>{t("automation.redesign.saveTemplate")}</span>
-                  </button>
                   <button
                     type="button"
                     className="plan-v95-header-help"
@@ -9618,6 +9625,26 @@ function blockFormatCardClickAfterDrag(event) {
                       weekdayLabels={weekdayLabels}
                       locale={locale}
                     />
+                    <label className="plan-v143-timezone-inline">
+                      <Clock3 size={14} aria-hidden="true" />
+                      <span className="sr-only">{t("automation.timezone")}</span>
+                      <select value={timeZone} onChange={(event) => setTimeZone(event.target.value)}>
+                        {Array.from(new Set([
+                          timeZone,
+                          getBrowserTimeZone(),
+                          "UTC",
+                          "Europe/Stockholm",
+                          "Europe/London",
+                          "America/New_York",
+                          "America/Los_Angeles",
+                          "Asia/Dubai",
+                          "Asia/Kolkata",
+                          "Asia/Shanghai",
+                          "Asia/Tokyo",
+                          "Australia/Sydney",
+                        ].filter(Boolean))).map((zone) => <option key={zone} value={zone}>{zone}</option>)}
+                      </select>
+                    </label>
                   </div>
 
                   <label className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile">
@@ -10174,7 +10201,7 @@ function blockFormatCardClickAfterDrag(event) {
                       <Rocket size={17} />
                       {saving ? t("automation.saving") : t("automation.startActivatePlan")}
                     </button>
-                    <span><ShieldCheck size={14} /> {t("automation.redesign.pauseAnytime")}</span>
+                    <span><ShieldCheck size={14} /> {t("automation.redesign.pauseOrEndAnytime")}</span>
                   </div>
                 )}
                 {!savedPlanSummary ? (
