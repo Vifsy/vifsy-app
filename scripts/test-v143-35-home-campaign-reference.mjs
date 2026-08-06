@@ -12,11 +12,16 @@ const [home, automation, css, labels, globals] = await Promise.all([
 assert.match(home, /home-v14335-hero/);
 assert.match(home, /home-v14335-coach/);
 assert.match(home, /home-v14335-activity/);
+assert.match(home, /Number\.isFinite\(date\.getTime\(\)\)/);
+assert.match(home, /dashboardText/);
 assert.match(automation, /campaign-v14335-hero/);
 assert.match(automation, /campaign-v14335-benefits/);
 assert.match(automation, /campaign-v14335-slot-list/);
 assert.match(automation, /campaign-v14335-rationale/);
 assert.match(automation, /campaign-v14335-activate/);
+assert.match(automation, /\{!campaignOpportunity \? \(/);
+assert.match(automation, /campaignOpportunity \? \([\s\S]*campaign-v14335-shell/);
+assert.match(css, /color: white !important/);
 assert.match(css, /@media \(max-width: 760px\)/);
 assert.match(css, /spreelo-ai-coach-v143-35\.png/);
 assert.match(css, /spreelo-campaign-shopping-v143-35\.png/);

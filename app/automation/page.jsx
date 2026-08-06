@@ -10330,6 +10330,8 @@ function blockFormatCardClickAfterDrag(event) {
               </div>
             ) : null}
 
+            {!campaignOpportunity ? (
+              <>
      <header className="planner-hero planner-hero-final">
   <div className="planner-hero-copy">
     <h2>
@@ -11746,6 +11748,8 @@ function blockFormatCardClickAfterDrag(event) {
                 </>
               )}
             </section>
+              </>
+            ) : null}
           </main>
 
 

@@ -33,21 +33,35 @@ function getBrandStorageKey(userId) {
 function formatDate(value, t) {
   if (!value) return t("dashboard.notSet");
 
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return t("dashboard.notSet");
+
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(date);
+  } catch {
+    return t("dashboard.notSet");
+  }
 }
 
 function formatShortDate(value, t) {
   if (!value) return t("dashboard.notSet");
 
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return t("dashboard.notSet");
+
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date);
+  } catch {
+    return t("dashboard.notSet");
+  }
 }
 
 function formatCampaignDate(campaign, t) {
@@ -61,6 +75,14 @@ function formatCampaignDate(campaign, t) {
   }
 
   return formatShortDate(campaign.event_date || campaign.start_date, t);
+}
+
+function dashboardText(value, fallback = "") {
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
+
+  return fallback;
 }
 
 function formatStatus(status, t) {
@@ -925,7 +947,7 @@ export default function Home() {
                       {dashboardPreviewPlans.map((plan) => (
                         <a href="/automation" key={plan.id}>
                           <span className="home-v14335-plan-art"><img src="/calendar-generic.svg" alt="" /></span>
-                          <span><strong>{formatPlanName(plan, t)}</strong><small>{getContentPlanSummary(plan, t)}</small></span>
+                          <span><strong>{dashboardText(formatPlanName(plan, t), t("dashboard.contentPlan"))}</strong><small>{dashboardText(getContentPlanSummary(plan, t))}</small></span>
                           <b>{getRulesFromContentPlan(plan).length}<small>{t("dashboard.plannedShort")}</small></b>
                         </a>
                       ))}
@@ -949,7 +971,7 @@ export default function Home() {
                       {dashboardReviewPreview.map((post, index) => (
                         <a href={`/posts/${post.id}`} key={post.id}>
                           <span className={`home-v14335-priority priority-${Math.min(index, 2)}`}><Sparkles /></span>
-                          <span><small>{index === 0 ? t("dashboard.highPriority") : t("dashboard.normalPriority")}</small><strong>{post.idea || post.source_label || formatPostKind(post, t)}</strong><em>{t("dashboard.postForPlatform", { platform: post.platform || t("dashboard.platformNotSet") })}</em></span>
+                          <span><small>{index === 0 ? t("dashboard.highPriority") : t("dashboard.normalPriority")}</small><strong>{dashboardText(post.idea || post.source_label || formatPostKind(post, t), t("dashboard.post"))}</strong><em>{t("dashboard.postForPlatform", { platform: dashboardText(post.platform, t("dashboard.platformNotSet")) })}</em></span>
                           <b>{formatShortDate(post.created_at, t)}</b><ChevronRight />
                         </a>
                       ))}
@@ -969,8 +991,8 @@ export default function Home() {
                       <a href={`/posts/${post.id}`} key={post.id}>
                         <span className={`status-${post.status}`}><Activity /></span>
                         <strong>{formatStatus(post.status, t)}</strong>
-                        <b>{post.idea || formatPostKind(post, t)}</b>
-                        <em>{post.platform || t("dashboard.platformNotSet")}</em>
+                        <b>{dashboardText(post.idea || formatPostKind(post, t), t("dashboard.post"))}</b>
+                        <em>{dashboardText(post.platform, t("dashboard.platformNotSet"))}</em>
                         <small>{formatShortDate(post.created_at, t)}</small>
                         <i>{t("dashboard.view")}</i>
                       </a>
@@ -989,14 +1011,14 @@ export default function Home() {
                   <h3><Bot /> {t("dashboard.whatToDoNow")}</h3>
                   <a href="#pending-review"><Sparkles /><span>{t("dashboard.reviewCount", { count: pendingApprovalPosts.length })}</span><ChevronRight /></a>
                   <a href="/automation"><CalendarDays /><span>{t("dashboard.planNextWeek")}</span><ChevronRight /></a>
-                  <a href={suggestedCampaign ? `/automation?campaign=${suggestedCampaign.id}` : "/calendar"}><Lightbulb /><span>{suggestedCampaign?.title || t("dashboard.reviewCampaignIdeas")}</span><ChevronRight /></a>
+                  <a href={suggestedCampaign ? `/automation?campaign=${suggestedCampaign.id}` : "/calendar"}><Lightbulb /><span>{dashboardText(suggestedCampaign?.title, t("dashboard.reviewCampaignIdeas"))}</span><ChevronRight /></a>
                 </div>
               </section>
 
               <section className="home-v14335-side-card home-v14335-campaign">
                 <div className="home-v14335-side-title"><Gift /><div><h3>{t("dashboard.suggestedCampaign")}</h3><small>{t("dashboard.recommended")}</small></div></div>
                 {suggestedCampaign ? (
-                  <><h2>{suggestedCampaign.title}</h2><strong>{formatCampaignDate(suggestedCampaign, t)}</strong><p>{suggestedCampaign.description}</p><a href={`/automation?campaign=${suggestedCampaign.id}`}>{t("dashboard.createCampaignPlan")} <ArrowRight /></a></>
+                  <><h2>{dashboardText(suggestedCampaign.title, t("dashboard.suggestedCampaign"))}</h2><strong>{formatCampaignDate(suggestedCampaign, t)}</strong><p>{dashboardText(suggestedCampaign.description, t("dashboard.openCalendarText"))}</p><a href={`/automation?campaign=${suggestedCampaign.id}`}>{t("dashboard.createCampaignPlan")} <ArrowRight /></a></>
                 ) : (
                   <><h2>{t("dashboard.noSuggestedCampaign")}</h2><p>{t("dashboard.openCalendarText")}</p><a href="/calendar">{t("dashboard.openCalendar")} <ArrowRight /></a></>
                 )}
