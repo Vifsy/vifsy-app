@@ -11,6 +11,8 @@ export const maxDuration = 300;
 const JOBS_PER_RUN = 4;
 const THEME_ASSET_TARGET = Math.max(1, Math.min(8, Number(process.env.CALENDAR_THEME_ASSET_TARGET || 3)));
 const CLASSIFICATIONS_PER_RUN = 2;
+const CAMPAIGN_CLASSIFICATIONS_PER_RUN = 8;
+const RECONCILIATIONS_PER_RUN = 20;
 const CANONICAL_THEME_KEYS = [
   "christmas", "new_year", "lunar_new_year", "easter", "halloween", "black_friday",
   "cyber_monday", "valentines_day", "mothers_day", "fathers_day", "back_to_school",
@@ -63,9 +65,9 @@ async function syncUntrackedStorageAssets(supabase) {
       theme_tags: canonical.tags,
       is_generic: false,
       metadata_repaired_at: new Date().toISOString(),
-      classification_status: canonical.themeKey === "general" ? "pending" : "ready",
+      classification_status: "pending",
       classification_attempts: 0,
-      classified_by: canonical.themeKey === "general" ? null : "legacy_filename",
+      classified_by: null,
     });
     if (!error) {
       knownPaths.add(path);
@@ -172,6 +174,136 @@ async function classifyUnresolvedAssets(supabase) {
   return Promise.all((assets || []).map((asset) => classifyOneUnresolvedAsset(supabase, asset)));
 }
 
+function campaignSourceText(opportunity) {
+  return [
+    opportunity.title,
+    opportunity.slug,
+    opportunity.description,
+    opportunity.event_type,
+    opportunity.campaign_category,
+    opportunity.image_guidance,
+  ].filter(Boolean).join("\n").slice(0, 6000);
+}
+
+async function classifyUnresolvedCampaigns(supabase) {
+  if (!process.env.OPENAI_API_KEY) return [];
+  const staleBefore = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+  await supabase.from("brand_campaign_opportunities")
+    .update({ visual_theme_classification_status: "pending", updated_at: new Date().toISOString() })
+    .eq("visual_theme_classification_status", "classifying")
+    .lt("updated_at", staleBefore)
+    .lt("visual_theme_classification_attempts", 3);
+
+  const { data: opportunities } = await supabase
+    .from("brand_campaign_opportunities")
+    .select("id, title, slug, description, event_type, campaign_category, image_guidance, visual_theme_classification_status, visual_theme_classification_attempts")
+    .eq("visual_theme_classification_status", "pending")
+    .lt("visual_theme_classification_attempts", 3)
+    .order("created_at")
+    .limit(CAMPAIGN_CLASSIFICATIONS_PER_RUN);
+  if (!opportunities?.length) return [];
+
+  const claimed = [];
+  for (const opportunity of opportunities) {
+    const attempt = Number(opportunity.visual_theme_classification_attempts || 0) + 1;
+    const { data: claim } = await supabase.from("brand_campaign_opportunities")
+      .update({
+        visual_theme_classification_status: "classifying",
+        visual_theme_classification_attempts: attempt,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", opportunity.id)
+      .eq("visual_theme_classification_status", opportunity.visual_theme_classification_status)
+      .select("id")
+      .maybeSingle();
+    if (claim?.id) claimed.push({ ...opportunity, attempt });
+  }
+  if (!claimed.length) return [];
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: process.env.CALENDAR_CLASSIFICATION_MODEL || "gpt-4.1-mini",
+        input: [{
+          role: "user",
+          content: [{
+            type: "input_text",
+            text: `Classify each campaign by meaning, regardless of its language. Return the same id, one language-independent English theme_key from the schema, and 3-8 short lowercase English theme_tags. A Vietnamese Giáng sinh, Hungarian Karácsony, Polish Boże Narodzenie, Swedish Jul or Arabic عيد الميلاد campaign must all resolve to christmas. Campaigns:\n${JSON.stringify(claimed.map((item) => ({ id: item.id, text: campaignSourceText(item) })))}`,
+          }],
+        }],
+        max_output_tokens: 1800,
+        text: {
+          format: {
+            type: "json_schema",
+            name: "calendar_campaign_classification",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                campaigns: {
+                  type: "array",
+                  minItems: 1,
+                  maxItems: CAMPAIGN_CLASSIFICATIONS_PER_RUN,
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      id: { type: "string" },
+                      theme_key: { type: "string", enum: CANONICAL_THEME_KEYS },
+                      theme_tags: { type: "array", minItems: 3, maxItems: 8, items: { type: "string" } },
+                    },
+                    required: ["id", "theme_key", "theme_tags"],
+                  },
+                },
+              },
+              required: ["campaigns"],
+            },
+          },
+        },
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload?.error?.message || "Campaign theme classification failed.");
+    const parsed = JSON.parse(responseOutputText(payload));
+    const byId = new Map((Array.isArray(parsed?.campaigns) ? parsed.campaigns : []).map((item) => [String(item.id), item]));
+    const results = [];
+    for (const opportunity of claimed) {
+      const classified = byId.get(String(opportunity.id));
+      if (!classified) throw new Error(`Campaign classification omitted ${opportunity.id}.`);
+      const canonical = resolveCalendarVisualTheme({ visual_theme_key: classified.theme_key, visual_theme_tags: classified.theme_tags });
+      const now = new Date().toISOString();
+      const { error: opportunityError } = await supabase.from("brand_campaign_opportunities").update({
+        visual_theme_key: canonical.themeKey,
+        visual_theme_tags: canonical.tags,
+        visual_theme_classification_status: "ready",
+        visual_theme_classified_by: "openai_text_once",
+        visual_theme_reconciled_at: null,
+        updated_at: now,
+      }).eq("id", opportunity.id);
+      if (opportunityError) throw opportunityError;
+      const { error: requestError } = await supabase.from("calendar_visual_requests").update({
+        theme_key: canonical.themeKey,
+        theme_tags: canonical.tags,
+        updated_at: now,
+      }).eq("opportunity_id", opportunity.id);
+      if (requestError) throw requestError;
+      results.push({ id: opportunity.id, classified: true, themeKey: canonical.themeKey });
+    }
+    return results;
+  } catch (error) {
+    for (const opportunity of claimed) {
+      await supabase.from("brand_campaign_opportunities").update({
+        visual_theme_classification_status: opportunity.attempt >= 3 ? "failed" : "pending",
+        updated_at: new Date().toISOString(),
+      }).eq("id", opportunity.id).eq("visual_theme_classification_status", "classifying");
+    }
+    return claimed.map((item) => ({ id: item.id, error: error?.message || String(error) }));
+  }
+}
+
 async function themeAssetCount(supabase, job) {
   const canonical = resolveCalendarVisualTheme({
     visual_theme_key: job.theme_key,
@@ -182,7 +314,8 @@ async function themeAssetCount(supabase, job) {
     .from("calendar_visual_assets")
     .select("id", { count: "exact", head: true })
     .eq("theme_key", canonical.themeKey)
-    .eq("is_generic", false);
+    .eq("is_generic", false)
+    .eq("classification_status", "ready");
   return { canonical, count: Number(count || 0) };
 }
 
@@ -205,7 +338,7 @@ async function assignVisualToOpportunity(supabase, job, asset) {
 async function selectReusableAsset(supabase, job) {
   const { data: candidates } = await supabase
     .from("calendar_visual_assets")
-    .select("id, image_url, alt_text, theme_key, theme_tags, use_count, is_generic")
+    .select("id, image_url, alt_text, theme_key, theme_tags, use_count, is_generic, classification_status")
     .limit(150);
   const requestedTheme = resolveCalendarVisualTheme({
     visual_theme_key: job.theme_key,
@@ -214,16 +347,73 @@ async function selectReusableAsset(supabase, job) {
   });
   const generic = (candidates || []).find((asset) => asset.is_generic) || null;
   const ranked = (candidates || [])
-    .filter((asset) => !asset.is_generic)
+    .filter((asset) => !asset.is_generic && asset.classification_status === "ready")
     .map((asset) => ({ ...asset, matchScore: scoreCalendarVisualAsset(asset, requestedTheme) }))
     .filter((asset) => asset.matchScore >= 30)
     .sort((left, right) => right.matchScore - left.matchScore || Number(left.use_count || 0) - Number(right.use_count || 0));
   return ranked[0] || generic;
 }
 
+async function reconcileClassifiedCampaignVisuals(supabase) {
+  const { data: opportunities } = await supabase
+    .from("brand_campaign_opportunities")
+    .select("id, visual_theme_key, visual_theme_tags, title")
+    .eq("visual_theme_classification_status", "ready")
+    .is("visual_theme_reconciled_at", null)
+    .order("updated_at")
+    .limit(RECONCILIATIONS_PER_RUN);
+  const results = [];
+  for (const opportunity of opportunities || []) {
+    const reusable = await selectReusableAsset(supabase, {
+      theme_key: opportunity.visual_theme_key,
+      theme_tags: opportunity.visual_theme_tags,
+      prompt: opportunity.title,
+    });
+    if (!reusable?.id || reusable.is_generic || Number(reusable.matchScore || 0) < 30) continue;
+    const now = new Date().toISOString();
+    const { error } = await supabase.from("brand_campaign_opportunities").update({
+      visual_asset_id: reusable.id,
+      visual_image_url: reusable.image_url,
+      visual_theme_reconciled_at: now,
+      updated_at: now,
+    }).eq("id", opportunity.id);
+    if (error) continue;
+    await supabase.from("calendar_visual_requests").update({
+      asset_id: reusable.id,
+      theme_key: opportunity.visual_theme_key,
+      theme_tags: opportunity.visual_theme_tags,
+      status: "ready",
+      last_error: null,
+      updated_at: now,
+    }).eq("opportunity_id", opportunity.id);
+    await supabase.from("calendar_visual_assets").update({
+      use_count: Number(reusable.use_count || 0) + 1,
+      updated_at: now,
+    }).eq("id", reusable.id);
+    results.push({ opportunityId: opportunity.id, assetId: reusable.id, themeKey: opportunity.visual_theme_key });
+  }
+  return results;
+}
+
 async function reuseExistingAsset(supabase, job) {
   const reusable = await selectReusableAsset(supabase, job);
   if (!reusable?.id) throw new Error("The calendar visual library has no safe reusable image.");
+  if (reusable.is_generic) {
+    const { count: pendingClassifications } = await supabase
+      .from("calendar_visual_assets")
+      .select("id", { count: "exact", head: true })
+      .in("classification_status", ["pending", "classifying"])
+      .eq("is_generic", false);
+    if (Number(pendingClassifications || 0) > 0) {
+      await supabase.from("calendar_visual_requests").update({
+        status: "queued",
+        attempt_count: Math.max(0, Number(job.attempt_count || 0)),
+        last_error: "Waiting for the one-time calendar image reclassification to finish.",
+        updated_at: new Date().toISOString(),
+      }).eq("id", job.id);
+      return { id: job.id, deferred: true, reason: "visual_reclassification_pending" };
+    }
+  }
   await supabase.from("calendar_visual_requests").update({ status: "ready", asset_id: reusable.id, last_error: null, updated_at: new Date().toISOString() }).eq("id", job.id);
   await supabase.from("calendar_visual_assets").update({ use_count: Number(reusable.use_count || 0) + 1, updated_at: new Date().toISOString() }).eq("id", reusable.id);
   await assignVisualToOpportunity(supabase, job, reusable);
@@ -294,6 +484,10 @@ async function processVisualJob(supabase, job) {
         theme_key: canonicalTheme.themeKey,
         theme_tags: canonicalTheme.tags,
         is_generic: false,
+        classification_status: "ready",
+        classification_attempts: 0,
+        classified_by: "generated_canonical_metadata",
+        metadata_repaired_at: new Date().toISOString(),
       })
       .select("id, image_url")
       .single();
@@ -332,7 +526,11 @@ export async function GET(request) {
   } catch (error) {
     console.error("Could not audit untracked calendar Storage objects", { message: error?.message || String(error) });
   }
-  const classifications = await classifyUnresolvedAssets(supabase);
+  const [classifications, campaignClassifications] = await Promise.all([
+    classifyUnresolvedAssets(supabase),
+    classifyUnresolvedCampaigns(supabase),
+  ]);
+  const reconciliations = await reconcileClassifiedCampaignVisuals(supabase);
   const staleBefore = new Date(Date.now() - 20 * 60 * 1000).toISOString();
   await supabase
     .from("calendar_visual_requests")
@@ -348,7 +546,15 @@ export async function GET(request) {
     .order("updated_at")
     .limit(JOBS_PER_RUN);
   if (loadError) return Response.json({ ok: false, error: loadError.message }, { status: 500 });
-  if (!jobs?.length) return Response.json({ ok: true, processed: 0, storageSync, classifications, results: [] });
+  if (!jobs?.length) return Response.json({
+    ok: true,
+    processed: 0,
+    storageSync,
+    classifications,
+    campaignClassifications,
+    reconciliations,
+    results: [],
+  });
 
   const results = await Promise.all(jobs.map((job) => processVisualJob(supabase, job)));
   return Response.json({
@@ -359,6 +565,8 @@ export async function GET(request) {
     errors: results.filter((result) => result.error).length,
     storageSync,
     classifications,
+    campaignClassifications,
+    reconciliations,
     results,
   });
 }
