@@ -9502,6 +9502,7 @@ function blockFormatCardClickAfterDrag(event) {
       >
         <div className="wizard-layout">
           <main className="wizard-main">
+            {!campaignOpportunity ? (
             <section className="plan-v70-shell">
               <header className="plan-v70-header">
                 <div>
@@ -9644,6 +9645,7 @@ function blockFormatCardClickAfterDrag(event) {
                         <small>{plannerSectionCopy.startDateHelp}</small>
                       </div>
                     </div>
+                    <div className="plan-v143-date-time-row">
                     <DatePickerField
                       value={planStartDate}
                       onChange={updatePlanStartDate}
@@ -9655,26 +9657,27 @@ function blockFormatCardClickAfterDrag(event) {
                       weekdayLabels={weekdayLabels}
                       locale={locale}
                     />
-                    <label className="plan-v143-timezone-inline">
-                      <Clock3 size={13} aria-hidden="true" />
-                      <span>{t("automation.timezone")}</span>
-                      <select value={timeZone} onChange={(event) => setTimeZone(event.target.value)}>
-                        {Array.from(new Set([
-                          timeZone,
-                          getBrowserTimeZone(),
-                          "UTC",
-                          "Europe/Stockholm",
-                          "Europe/London",
-                          "America/New_York",
-                          "America/Los_Angeles",
-                          "Asia/Dubai",
-                          "Asia/Kolkata",
-                          "Asia/Shanghai",
-                          "Asia/Tokyo",
-                          "Australia/Sydney",
-                        ].filter(Boolean))).map((zone) => <option key={zone} value={zone}>{zone}</option>)}
-                      </select>
-                    </label>
+                      <label className="plan-v143-timezone-inline">
+                        <Clock3 size={13} aria-hidden="true" />
+                        <span>{t("automation.timezone")}</span>
+                        <select value={timeZone} onChange={(event) => setTimeZone(event.target.value)}>
+                          {Array.from(new Set([
+                            timeZone,
+                            getBrowserTimeZone(),
+                            "UTC",
+                            "Europe/Stockholm",
+                            "Europe/London",
+                            "America/New_York",
+                            "America/Los_Angeles",
+                            "Asia/Dubai",
+                            "Asia/Kolkata",
+                            "Asia/Shanghai",
+                            "Asia/Tokyo",
+                            "Australia/Sydney",
+                          ].filter(Boolean))).map((zone) => <option key={zone} value={zone}>{zone}</option>)}
+                        </select>
+                      </label>
+                    </div>
                   </div>
 
                   <label className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile">
@@ -10245,6 +10248,7 @@ function blockFormatCardClickAfterDrag(event) {
               </section>
               </div>
             </section>
+            ) : null}
 
      <header className="planner-hero planner-hero-final">
   <div className="planner-hero-copy">

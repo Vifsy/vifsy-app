@@ -105,7 +105,13 @@ export async function GET(request) {
       .slice(0, 5)
       .map((slide) => ({
         title: String(slide?.metadata?.product_title || slide?.headline || "").trim(),
-        description: String(slide?.metadata?.product_description || slide?.body || "").trim(),
+        description: String(
+          slide?.metadata?.product_description ||
+          slide?.body ||
+          slide?.metadata?.product_title ||
+          slide?.headline ||
+          ""
+        ).trim(),
         url: String(slide?.product_url || "").trim(),
         image_url: String(slide?.metadata?.source_image_url || slide?.image_url || "").trim(),
         preview_image_url: String(slide?.image_url || "").trim(),
@@ -114,7 +120,26 @@ export async function GET(request) {
     const storedProducts = Array.isArray(post.admin_product_items)
       ? post.admin_product_items.slice(0, 5)
       : [];
-    return slideProducts.length > storedProducts.length ? slideProducts : storedProducts;
+    if (storedProducts.length === 0) return slideProducts;
+
+    const itemCount = Math.max(slideProducts.length, storedProducts.length);
+    return Array.from({ length: itemCount }, (_, index) => {
+      const original = slideProducts[index] || {};
+      const replacement = storedProducts[index] || {};
+      const preferReplacement = (key) => {
+        const replacementValue = String(replacement?.[key] || "").trim();
+        return replacementValue || String(original?.[key] || "").trim();
+      };
+
+      return {
+        ...original,
+        ...replacement,
+        image_url: preferReplacement("image_url"),
+        title: preferReplacement("title"),
+        description: preferReplacement("description"),
+        url: preferReplacement("url"),
+      };
+    });
   };
 
   const getOutroSlide = (postId) => (slidesMap[postId] || []).find((slide) => {

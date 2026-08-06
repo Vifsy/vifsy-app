@@ -56,7 +56,8 @@
     "test:v143.30": "node scripts/test-v143-30-admin-workbench-live-pool.mjs",
     "test:v143.31": "node scripts/test-v143-31-unified-experience.mjs",
     "test:v143.32": "node scripts/test-v143-32-experience-correction.mjs",
-    "test:v143.33": "node scripts/test-v143-33-global-visuals-studio-polish.mjs"
+    "test:v143.33": "node scripts/test-v143-33-global-visuals-studio-polish.mjs",
+    "test:v143.34": "node scripts/test-v143-34-regression-recovery.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

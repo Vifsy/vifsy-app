@@ -1,0 +1,125 @@
+/* Spreelo v143.34 — regression recovery. Structural modes are kept separate. */
+
+/* The timezone is part of the Start date heading, never a floating overlay. */
+html body .plan-v90-setting-tile .plan-v90-setting-head{display:flex!important;align-items:flex-start!important;gap:10px!important}
+html body .plan-v90-setting-tile .plan-v90-setting-copy{min-width:0!important;flex:1 1 auto!important}
+html body .plan-v143-date-time-row{display:grid!important;grid-template-columns:minmax(0,1fr) 158px!important;align-items:stretch!important;gap:7px!important;width:100%!important;min-width:0!important}
+html body .plan-v143-date-time-row>.custom-picker-field{min-width:0!important;width:100%!important}
+html body .plan-v90-setting-tile .plan-v143-timezone-inline{position:static!important;inset:auto!important;z-index:auto!important;display:flex!important;min-width:0!important;align-items:center!important;justify-content:flex-end!important;gap:4px!important;max-width:none!important;margin:0!important;padding:0 6px!important;border:1px solid rgba(211,220,233,.92)!important;border-radius:10px!important;background:rgba(255,255,255,.78)!important;color:#647087!important;overflow:hidden!important}
+html body .plan-v90-setting-tile .plan-v143-timezone-inline>span{font-size:10px!important;font-weight:850!important;white-space:nowrap!important}
+html body .plan-v90-setting-tile .plan-v143-timezone-inline select{width:125px!important;min-width:0!important;max-width:125px!important;height:24px!important;padding:0 16px 0 2px!important;border:0!important;background:transparent!important;box-shadow:none!important;font-size:10px!important;font-weight:800!important;text-overflow:ellipsis!important}
+
+/* Restore the real calendar campaign builder. The regular Content Studio shell is not used in campaign mode. */
+html body .automation-page.campaign-planner-clean .wizard-main>.planner-hero-final{display:grid!important}
+html body .automation-page.campaign-planner-clean .wizard-main>.campaign-mode-banner{display:grid!important}
+html body .automation-page.campaign-planner-clean .wizard-main>.planner-schedule-card,
+html body .automation-page.campaign-planner-clean .wizard-main>.planner-settings-card,
+html body .automation-page.campaign-planner-clean .wizard-main>.planner-includes-preview-card,
+html body .automation-page.campaign-planner-clean .wizard-main>.planner-how-it-works-card,
+html body .automation-page.campaign-planner-clean .wizard-main>.planner-save-card,
+html body .automation-page.campaign-planner-clean .wizard-main>.saved-card{display:block!important}
+html body .automation-page.campaign-planner-clean .wizard-main{display:block!important;width:100%!important;max-width:none!important}
+html body .automation-page.campaign-planner-clean .planner-hero-final,
+html body .automation-page.campaign-planner-clean .campaign-mode-banner,
+html body .automation-page.campaign-planner-clean .planner-schedule-card,
+html body .automation-page.campaign-planner-clean .planner-settings-card,
+html body .automation-page.campaign-planner-clean .planner-how-it-works-card,
+html body .automation-page.campaign-planner-clean .planner-save-card{width:100%!important;max-width:none!important;border:1px solid rgba(255,255,255,.94)!important;border-radius:26px!important;background:linear-gradient(145deg,rgba(255,255,255,.86),rgba(247,250,255,.72))!important;box-shadow:0 22px 58px rgba(25,39,62,.095)!important;backdrop-filter:blur(22px)!important}
+html body .automation-page.campaign-planner-clean .planner-setting-field,
+html body .automation-page.campaign-planner-clean .planner-post-row,
+html body .automation-page.campaign-planner-clean .planner-how-it-works-grid>div{border:1px solid rgba(255,255,255,.94)!important;border-radius:18px!important;background:rgba(255,255,255,.72)!important;box-shadow:0 12px 30px rgba(25,39,62,.065)!important}
+
+/* Dashboard: unmistakably the same rounded layered glass system as Content Studio. */
+html body .content.spreelo-content:has(.dashboard-page),
+html body .content.spreelo-content:has(.social-v74-page),
+html body .content.spreelo-content:has(.brand-profile-page){background:radial-gradient(circle at 14% 0,rgba(209,227,255,.76),transparent 32%),radial-gradient(circle at 92% 0,rgba(255,220,207,.68),transparent 30%),linear-gradient(180deg,#f3f6fb,#edf2f8)!important}
+html body .dashboard-page{width:min(1540px,calc(100% - 42px))!important;padding:32px 0 64px!important}
+html body .dashboard-hero{border-radius:30px!important;background:radial-gradient(circle at 84% 5%,rgba(255,226,215,.5),transparent 32%),rgba(255,255,255,.73)!important;box-shadow:0 24px 64px rgba(25,39,62,.105)!important;backdrop-filter:blur(24px)!important}
+html body .dashboard-stat-grid{gap:16px!important}
+html body .dashboard-page .dashboard-stat-card{border:1px solid rgba(255,255,255,.96)!important;border-radius:25px!important;background:linear-gradient(145deg,rgba(255,255,255,.88),rgba(244,248,255,.7))!important;box-shadow:0 18px 48px rgba(25,39,62,.09)!important;backdrop-filter:blur(20px)!important}
+html body .dashboard-page .dashboard-card,
+html body .dashboard-page .dashboard-side-card{border:1px solid rgba(255,255,255,.96)!important;border-radius:28px!important;background:linear-gradient(145deg,rgba(255,255,255,.84),rgba(247,250,255,.7))!important;box-shadow:0 22px 58px rgba(25,39,62,.095)!important;backdrop-filter:blur(22px)!important;overflow:hidden!important}
+html body .dashboard-page .dashboard-empty,
+html body .dashboard-page .dashboard-plan-hub-section,
+html body .dashboard-page .dashboard-plan-group,
+html body .dashboard-page .dashboard-pending-card{border:1px solid rgba(255,255,255,.93)!important;border-radius:21px!important;background:rgba(255,255,255,.62)!important;box-shadow:0 10px 28px rgba(25,39,62,.055)!important}
+html body .dashboard-page .dashboard-side-card.highlighted{background:radial-gradient(circle at 100% 0,rgba(255,222,184,.72),transparent 43%),rgba(255,255,255,.8)!important}
+
+/* Social channels: shared canvas and genuinely glassy platform surfaces. */
+html body .social-v74-page{width:min(1540px,calc(100% - 42px))!important;max-width:none!important;margin:0 auto!important;padding:32px 0 64px!important;background:transparent!important}
+html body .social-v74-hero{border:1px solid rgba(255,255,255,.96)!important;border-radius:30px!important;background:radial-gradient(circle at 86% 8%,rgba(255,225,214,.54),transparent 31%),rgba(255,255,255,.74)!important;box-shadow:0 24px 64px rgba(25,39,62,.105)!important;backdrop-filter:blur(24px)!important}
+html body .social-v74-hero-summary{border:1px solid rgba(255,255,255,.96)!important;border-radius:22px!important;background:rgba(255,255,255,.66)!important;box-shadow:0 16px 38px rgba(25,39,62,.08)!important;backdrop-filter:blur(18px)!important}
+html body .social-v74-intro-strip{border:1px solid rgba(255,255,255,.95)!important;border-radius:22px!important;background:rgba(255,255,255,.7)!important;box-shadow:0 16px 42px rgba(25,39,62,.075)!important;backdrop-filter:blur(18px)!important}
+html body .social-v74-grid{gap:18px!important}
+html body .social-v74-card{border:1px solid rgba(255,255,255,.97)!important;border-radius:28px!important;background:radial-gradient(circle at 100% 0,rgba(220,230,255,.5),transparent 40%),rgba(255,255,255,.75)!important;box-shadow:0 22px 58px rgba(25,39,62,.1)!important;backdrop-filter:blur(22px)!important;overflow:hidden!important}
+html body .social-v74-card.is-connected{background:radial-gradient(circle at 100% 0,rgba(211,246,226,.6),transparent 42%),rgba(255,255,255,.77)!important}
+html body .social-v74-connected-panel,html body .social-v74-connect-panel{border:1px solid rgba(255,255,255,.96)!important;border-radius:20px!important;background:rgba(255,255,255,.65)!important;box-shadow:0 12px 32px rgba(25,39,62,.065)!important}
+
+/* Brand profile: separated rounded glass cards instead of a joined square table. */
+html body .brand-profile-page{width:min(1540px,calc(100% - 42px))!important;padding:32px 0 64px!important;background:transparent!important}
+html body .brand-profile-hero{border:1px solid rgba(255,255,255,.96)!important;border-radius:30px!important;background:radial-gradient(circle at 86% 7%,rgba(205,246,225,.56),transparent 31%),rgba(255,255,255,.74)!important;box-shadow:0 24px 64px rgba(25,39,62,.105)!important;backdrop-filter:blur(24px)!important}
+html body .brand-profile-layout{width:100%!important;max-width:none!important}
+html body .brand-profile-form-card{width:100%!important;padding:34px!important;border:1px solid rgba(255,255,255,.96)!important;border-radius:30px!important;background:radial-gradient(circle at 96% 0,rgba(255,224,211,.42),transparent 29%),rgba(255,255,255,.74)!important;box-shadow:0 24px 64px rgba(25,39,62,.1)!important;backdrop-filter:blur(24px)!important}
+html body .brand-profile-page .brand-profile-summary-grid{display:grid!important;grid-template-columns:1.25fr .72fr .72fr!important;gap:18px!important}
+html body .brand-profile-page .brand-profile-summary-card{min-height:126px!important;padding:22px!important;border:1px solid rgba(255,255,255,.97)!important;border-radius:24px!important;background:radial-gradient(circle at 100% 0,rgba(220,231,255,.56),transparent 45%),rgba(255,255,255,.69)!important;box-shadow:0 16px 42px rgba(25,39,62,.085)!important;backdrop-filter:blur(18px)!important;overflow:hidden!important}
+html body .brand-profile-page .brand-profile-summary-card:nth-child(2){background:radial-gradient(circle at 100% 0,rgba(231,220,255,.6),transparent 45%),rgba(255,255,255,.69)!important}
+html body .brand-profile-page .brand-profile-summary-card:nth-child(3){background:radial-gradient(circle at 100% 0,rgba(210,247,228,.62),transparent 45%),rgba(255,255,255,.69)!important}
+html body .brand-profile-page .brand-profile-summary-card.narrative{min-height:170px!important}
+html body .brand-profile-page .brand-profile-summary-card.narrative:nth-child(4){grid-column:span 2!important;background:radial-gradient(circle at 100% 0,rgba(255,222,209,.58),transparent 42%),rgba(255,255,255,.7)!important}
+html body .brand-profile-page .brand-profile-summary-card.logo{background:radial-gradient(circle at 100% 0,rgba(255,241,196,.62),transparent 45%),rgba(255,255,255,.7)!important}
+html body .brand-profile-page>.danger-zone-card{border-radius:24px!important;background:rgba(255,239,237,.76)!important;backdrop-filter:blur(18px)!important}
+
+/* Bottom controls use readable product-sized text. */
+html body .plan-v70-bottom-grid p,
+html body .plan-v70-bottom-grid small,
+html body .plan-v70-bottom-grid span,
+html body .plan-v83-variation-copy small,
+html body .plan-v83-next-cycle span{font-size:15px!important;line-height:1.55!important}
+html body .plan-v70-activate-copy h2{font-size:22px!important;line-height:1.18!important;word-break:normal!important}
+html body .plan-v70-activate-copy p{font-size:15px!important;line-height:1.55!important}
+html body .plan-v70-activate-actions>span,html body .plan-v74-approval-publishing-note{font-size:14px!important;line-height:1.55!important}
+
+@media(max-width:1050px){
+  html body .brand-profile-page .brand-profile-summary-grid{grid-template-columns:1fr 1fr!important}
+  html body .brand-profile-page .brand-profile-summary-card.narrative:nth-child(4){grid-column:span 1!important}
+}
+
+@media(max-width:760px){
+  html body .dashboard-page,html body .social-v74-page,html body .brand-profile-page{width:calc(100% - 20px)!important;padding:18px 0 42px!important}
+  html body .dashboard-hero,html body .social-v74-hero,html body .brand-profile-hero,html body .dashboard-page .dashboard-card,html body .social-v74-card,html body .brand-profile-form-card{border-radius:22px!important}
+  html body .brand-profile-page .brand-profile-summary-grid{grid-template-columns:1fr!important}
+  html body .brand-profile-page .brand-profile-summary-card,html body .brand-profile-page .brand-profile-summary-card.narrative:nth-child(4){grid-column:1!important;min-height:0!important;border-radius:20px!important}
+
+  html body .plan-v143-date-time-row{grid-template-columns:minmax(0,1fr) 84px!important;gap:5px!important}
+  html body .plan-v90-setting-tile .plan-v143-timezone-inline{max-width:none!important;padding:0 4px!important}
+  html body .plan-v90-setting-tile .plan-v143-timezone-inline svg,html body .plan-v90-setting-tile .plan-v143-timezone-inline>span{display:none!important}
+  html body .plan-v90-setting-tile .plan-v143-timezone-inline select{width:78px!important;max-width:78px!important;font-size:9px!important}
+
+  html body .plan-v70-planned-row{position:relative!important;display:grid!important;grid-template-columns:48px minmax(0,1fr) 32px!important;grid-template-rows:auto auto auto auto!important;gap:4px 9px!important;min-height:150px!important;padding:9px 9px 10px 0!important;border-radius:18px!important;overflow:hidden!important}
+  html body .plan-v70-planned-row>*{position:static!important;inset:auto!important;min-width:0!important}
+  html body .plan-v86-planned-visual{grid-column:1!important;grid-row:1/5!important;width:48px!important;height:calc(100% + 19px)!important;min-height:150px!important;margin:-9px 0 -10px!important;border-radius:17px 0 0 17px!important}
+  html body .plan-v70-planned-date{grid-column:2!important;grid-row:1!important;display:flex!important;align-items:baseline!important;gap:6px!important;padding:0!important}
+  html body .plan-v70-planned-post{grid-column:2/4!important;grid-row:2!important;padding:0!important}
+  html body .plan-v70-planned-post>div>span{display:block!important;margin-top:3px!important;font-size:11px!important;line-height:1.4!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;-webkit-line-clamp:unset!important}
+  html body .plan-v143-planned-purpose{grid-column:2!important;grid-row:3!important;display:flex!important;align-items:center!important;justify-content:flex-start!important}
+  html body .plan-v143-planned-purpose strong{padding:4px 8px!important;border:0!important;border-radius:999px!important;font-size:10px!important;font-weight:600!important}
+  html body .plan-v143-planned-cost{grid-column:2!important;grid-row:4!important;display:flex!important;align-items:center!important;justify-content:flex-start!important}
+  html body .plan-v143-planned-cost strong{font-size:10.5px!important}
+  html body .plan-v70-planned-channel{grid-column:3!important;grid-row:3/5!important;display:flex!important;align-items:flex-end!important;justify-content:center!important}
+  html body .plan-v70-row-menu{grid-column:3!important;grid-row:1!important;width:30px!important;height:30px!important;padding:0!important;border-radius:10px!important}
+  html body .plan-v70-row-editor{grid-column:1/-1!important;grid-row:5!important;margin:8px!important}
+
+  html body .plan-v70-bottom-grid{display:grid!important;grid-template-columns:1fr!important;gap:14px!important}
+  html body .plan-v70-activate-card{display:grid!important;grid-template-columns:48px minmax(0,1fr)!important;grid-template-rows:auto auto auto!important;gap:12px!important;width:100%!important;padding:20px!important;border-radius:22px!important}
+  html body .plan-v70-activate-visual{grid-column:1!important;grid-row:1!important;width:48px!important;height:48px!important;margin:0!important}
+  html body .plan-v70-activate-copy{grid-column:2!important;grid-row:1!important;display:block!important;width:auto!important;min-width:0!important}
+  html body .plan-v70-activate-copy h2{margin:0 0 5px!important;font-size:21px!important;line-height:1.16!important;word-break:normal!important}
+  html body .plan-v70-activate-copy p{margin:0!important;font-size:14px!important;line-height:1.5!important}
+  html body .plan-v70-activate-actions{grid-column:1/-1!important;grid-row:2!important;width:100%!important;margin:0!important}
+  html body .plan-v74-approval-publishing-note{grid-column:1/-1!important;grid-row:3!important;margin:0!important;font-size:13px!important;line-height:1.5!important;text-align:left!important}
+  html body .plan-v70-bottom-grid p,html body .plan-v70-bottom-grid small,html body .plan-v70-bottom-grid span{font-size:13.5px!important;line-height:1.5!important}
+
+  html body .automation-page.campaign-planner-clean .planner-hero-final,html body .automation-page.campaign-planner-clean .campaign-mode-banner{grid-template-columns:1fr!important;border-radius:22px!important}
+  html body .automation-page.campaign-planner-clean .planner-settings-grid.simple{grid-template-columns:1fr!important}
+  html body .automation-page.campaign-planner-clean .planner-how-it-works-grid{grid-template-columns:1fr!important}
+}
