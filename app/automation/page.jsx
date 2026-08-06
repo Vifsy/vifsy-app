@@ -8,6 +8,7 @@ import {
   CalendarDays,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   CircleHelp,
   Clapperboard,
   Clock3,
@@ -15,12 +16,14 @@ import {
   CreditCard,
   FileSearch,
   HelpCircle,
+  HeartHandshake,
   Info,
   Layers,
   Lightbulb,
   Link2,
   ListChecks,
   MailCheck,
+  MessageCircleHeart,
   MapPin,
   Megaphone,
   Globe2,
@@ -42,10 +45,12 @@ import {
   Tag,
   Target,
   Trophy,
+  TrendingUp,
   Video,
   WandSparkles,
   Wrench,
   X,
+  Zap,
 } from "lucide-react";
 import AppLayout from "../../components/AppLayout";
 import { supabase } from "../../lib/supabaseClient";
@@ -10248,6 +10253,81 @@ function blockFormatCardClickAfterDrag(event) {
               </section>
               </div>
             </section>
+            ) : null}
+
+            {campaignOpportunity ? (
+              <div className="campaign-v14335-shell">
+                <section className="campaign-v14335-hero">
+                  <div className="campaign-v14335-hero-copy">
+                    <p><Sparkles /> {t("automation.campaignExperience.eyebrow")}</p>
+                    <h1>{campaignOpportunity.title}</h1>
+                    <span>{campaignOpportunity.description || t("automation.campaignDescriptionFallback")}</span>
+                    <div>
+                      {savedPlanSummary ? (
+                        <a className="campaign-v14335-primary" href="/calendar"><CheckCircle2 /> {t("automation.planSaved")}</a>
+                      ) : (
+                        <button type="button" className="campaign-v14335-primary" onClick={savePlan} disabled={saving || !hasEnoughCredits || !slots.length}>
+                          <Sparkles /> {saving ? t("automation.saving") : t("automation.campaignExperience.activate")}
+                        </button>
+                      )}
+                      <button type="button" className="campaign-v14335-secondary" onClick={() => document.getElementById("campaign-v14335-preview")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+                        <FileSearch /> {t("automation.campaignExperience.preview")}
+                      </button>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="campaign-v14335-benefits" aria-label={t("automation.campaignExperience.benefitsLabel")}> 
+                  <article><span className="is-blue"><HeartHandshake /></span><h2>{t("automation.campaignExperience.loyaltyTitle")}</h2><p>{t("automation.campaignExperience.loyaltyText")}</p></article>
+                  <article><span className="is-coral"><MessageCircleHeart /></span><h2>{t("automation.campaignExperience.engagementTitle")}</h2><p>{t("automation.campaignExperience.engagementText")}</p></article>
+                  <article><span className="is-green"><TrendingUp /></span><h2>{t("automation.campaignExperience.salesTitle")}</h2><p>{t("automation.campaignExperience.salesText")}</p></article>
+                  <article><span className="is-amber"><Zap /></span><h2>{t("automation.campaignExperience.timeTitle")}</h2><p>{t("automation.campaignExperience.timeText")}</p></article>
+                </section>
+
+                <section className="campaign-v14335-plan" id="campaign-v14335-preview">
+                  <div className="campaign-v14335-plan-heading">
+                    <div><h2>{t("automation.campaignExperience.planTitle")}</h2><p>{t("automation.campaignExperience.planText", { count: slots.length })}</p></div>
+                    <div><small>{t("automation.campaignExperience.typesUsed")}</small><span><Tag /> {t("automation.textImage")}</span><span><Video /> {t("automation.video")}</span><span><GalleryHorizontalEnd /> {t("automation.carousel")}</span><span><Link2 /> {t("automation.website")}</span></div>
+                  </div>
+
+                  <div className="campaign-v14335-slot-list">
+                    {slots.map((slot, index) => (
+                      <article key={slot.id}>
+                        <div className={`campaign-v14335-slot-art art-${index % 5}`}><SlotTypeGlyph slot={slot} /></div>
+                        <div className="campaign-v14335-slot-copy"><h3>{getCustomerSlotLabel(slot)}</h3><p>{getCustomerSlotPurpose(slot)}</p></div>
+                        <div className="campaign-v14335-slot-date"><strong>{formatStartDateLabel(slot.startDate, timeZone, locale)}</strong><span>{t("automation.lockedCampaignDate")}</span></div>
+                        <time>{normalizeTime(slot.publishTime)}</time>
+                        <span className="campaign-v14335-slot-format">{getLocalizedSlotFormatLabel(slot)}</span>
+                        <button type="button" aria-label={t("automation.viewPostDetails")} onClick={() => toggleSlotInstructions(slot.id)}>•••</button>
+                        {expandedInstructionSlotIds.includes(slot.id) ? <div className="campaign-v14335-slot-detail"><strong>{t("automation.whatPostWillBeAbout")}</strong><p>{getSlotContentExplanation(slot)}</p><small>{getSlotCreditLabel(slot)}</small></div> : null}
+                      </article>
+                    ))}
+                  </div>
+                  <button type="button" className="campaign-v14335-show-plan" onClick={() => setShowLearnMoreModal(true)}>{t("automation.campaignExperience.showWholePlan")} <ChevronRight /></button>
+                </section>
+
+                <section className="campaign-v14335-rationale" id="campaign-v14335-details">
+                  <div>
+                    <h2>{t("automation.campaignExperience.whyTitle", { brandName: currentBrandProfile?.business_name || t("automation.yourBusiness") })}</h2>
+                    <ul><li><CheckCircle2 /> {t("automation.campaignExperience.whyOne")}</li><li><CheckCircle2 /> {t("automation.campaignExperience.whyTwo")}</li><li><CheckCircle2 /> {t("automation.campaignExperience.whyThree")}</li><li><CheckCircle2 /> {t("automation.campaignExperience.whyFour")}</li></ul>
+                  </div>
+                  <div>
+                    <h2>{t("automation.campaignExperience.afterTitle")}</h2>
+                    <ol><li><span>1</span>{t("automation.campaignExperience.afterOne")}</li><li><span>2</span>{t("automation.campaignExperience.afterTwo")}</li><li><span>3</span>{t("automation.campaignExperience.afterThree")}</li><li><span>4</span>{t("automation.campaignExperience.afterFour")}</li></ol>
+                  </div>
+                </section>
+
+                <section className="campaign-v14335-activate">
+                  <div><h2>{savedPlanSummary ? t("automation.planSaved") : t("automation.campaignExperience.readyTitle")}</h2><p>{savedPlanSummary ? t("automation.automationPlanReady") : t("automation.campaignExperience.readyText")}</p></div>
+                  {savedPlanSummary ? <a href="/calendar"><CheckCircle2 /> {t("automation.viewContentPlans")}</a> : <button type="button" onClick={savePlan} disabled={saving || !hasEnoughCredits || !slots.length}><Sparkles /> {saving ? t("automation.saving") : t("automation.campaignExperience.activateNow")}</button>}
+                  {message ? <p className="campaign-v14335-message">{message}</p> : null}
+                </section>
+
+                <section className="campaign-v14335-includes">
+                  <h2><Trophy /> {t("automation.campaignExperience.includesTitle")}</h2>
+                  <div><article><CheckCircle2 /><h3>{t("automation.campaignExperience.includesReady")}</h3><p>{t("automation.campaignExperience.includesReadyText")}</p></article><article><CalendarDays /><h3>{t("automation.campaignExperience.includesYear")}</h3><p>{t("automation.campaignExperience.includesYearText")}</p></article><article><SlidersHorizontal /><h3>{t("automation.campaignExperience.includesFlexible")}</h3><p>{t("automation.campaignExperience.includesFlexibleText")}</p></article><article><WandSparkles /><h3>{t("automation.campaignExperience.includesAi")}</h3><p>{t("automation.campaignExperience.includesAiText")}</p></article></div>
+                </section>
+              </div>
             ) : null}
 
      <header className="planner-hero planner-hero-final">

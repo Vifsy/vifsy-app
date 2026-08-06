@@ -2,12 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  Activity,
   ArrowRight,
   BadgeCheck,
+  Bot,
   CalendarClock,
   CalendarDays,
   CheckCircle2,
+  ChevronRight,
   CircleDollarSign,
+  Gift,
   Layers3,
   Lightbulb,
   Plus,
@@ -862,6 +866,164 @@ export default function Home() {
     setBulkActionLoading(false);
     setMessage(t("dashboard.deletedPosts", { count: idsToDelete.length }));
   }
+
+  const dashboardRecentActivity = posts.slice(0, 3);
+  const dashboardPreviewPlans = dashboardContentPlans.slice(0, 4);
+  const dashboardReviewPreview = pendingApprovalPosts.slice(0, 4);
+
+  return (
+    <AppLayout active="dashboard">
+      <div className="home-v14335-page">
+        {message ? <p className="login-message">{message}</p> : null}
+
+        {!loading && !currentBrandId ? (
+          <section className="home-v14335-empty home-v14335-glass">
+            <h1>{t("dashboard.noBrandTitle")}</h1>
+            <p>{t("dashboard.noBrandText")}</p>
+            <a href="/brand">{t("dashboard.openBrandProfile")}</a>
+          </section>
+        ) : (
+          <div className="home-v14335-grid">
+            <main className="home-v14335-main">
+              <header className="home-v14335-hero">
+                <div>
+                  <p>{dashboardEyebrow}</p>
+                  <h1>{t("dashboard.title", { brandName: currentBrandName })}</h1>
+                  <span>{t("dashboard.homeHeroText")}</span>
+                </div>
+              </header>
+
+              <section className="home-v14335-stats" aria-label={t("dashboard.overviewStats")}> 
+                <article>
+                  <span className="is-coral"><CalendarClock /></span>
+                  <div><small>{t("dashboard.stat.plannedPosts")}</small><strong>{activeRules.length + scheduledPosts.length}</strong><p>{t("dashboard.stat.upcomingShort")}</p></div>
+                </article>
+                <article>
+                  <span className="is-violet"><Sparkles /></span>
+                  <div><small>{t("dashboard.stat.pendingApproval")}</small><strong>{pendingApprovalPosts.length}</strong><p>{t("dashboard.stat.reviewShort")}</p></div>
+                </article>
+                <article>
+                  <span className="is-green"><CheckCircle2 /></span>
+                  <div><small>{t("dashboard.stat.publishedThisMonth")}</small><strong>{publishedThisMonthCount}</strong><p>{t("dashboard.stat.publishedShort")}</p></div>
+                </article>
+                <article>
+                  <span className="is-mint"><Layers3 /></span>
+                  <div><small>{t("dashboard.stat.activePlans")}</small><strong>{activeRules.length}</strong><p>{t("dashboard.stat.activeShort")}</p></div>
+                </article>
+              </section>
+
+              <div className="home-v14335-duo">
+                <section className="home-v14335-panel home-v14335-plans">
+                  <div className="home-v14335-panel-heading">
+                    <div><p>{t("dashboard.contentPlansEyebrow")}</p><h2>{t("dashboard.activePlansTitle")}</h2></div>
+                  </div>
+
+                  {loading ? (
+                    <div className="home-v14335-compact-empty">{t("dashboard.loadingContentPlansTitle")}</div>
+                  ) : dashboardPreviewPlans.length ? (
+                    <div className="home-v14335-plan-list">
+                      {dashboardPreviewPlans.map((plan) => (
+                        <a href="/automation" key={plan.id}>
+                          <span className="home-v14335-plan-art"><img src="/calendar-generic.svg" alt="" /></span>
+                          <span><strong>{formatPlanName(plan, t)}</strong><small>{getContentPlanSummary(plan, t)}</small></span>
+                          <b>{getRulesFromContentPlan(plan).length}<small>{t("dashboard.plannedShort")}</small></b>
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="home-v14335-compact-empty"><strong>{t("dashboard.noContentPlansTitle")}</strong><span>{t("dashboard.noContentPlansText")}</span></div>
+                  )}
+                  <a className="home-v14335-panel-link" href="/automation">{t("dashboard.showAllPlans")} <ArrowRight /></a>
+                </section>
+
+                <section className="home-v14335-panel home-v14335-review" id="pending-review">
+                  <div className="home-v14335-panel-heading">
+                    <div><p>{t("dashboard.reviewEyebrow")}</p><h2>{t("dashboard.whatNeedsAttention")}</h2></div>
+                    <a href="#pending-review">{t("dashboard.showAll")}</a>
+                  </div>
+
+                  {loading ? (
+                    <div className="home-v14335-compact-empty">{t("dashboard.loadingReviewTitle")}</div>
+                  ) : dashboardReviewPreview.length ? (
+                    <div className="home-v14335-review-list">
+                      {dashboardReviewPreview.map((post, index) => (
+                        <a href={`/posts/${post.id}`} key={post.id}>
+                          <span className={`home-v14335-priority priority-${Math.min(index, 2)}`}><Sparkles /></span>
+                          <span><small>{index === 0 ? t("dashboard.highPriority") : t("dashboard.normalPriority")}</small><strong>{post.idea || post.source_label || formatPostKind(post, t)}</strong><em>{t("dashboard.postForPlatform", { platform: post.platform || t("dashboard.platformNotSet") })}</em></span>
+                          <b>{formatShortDate(post.created_at, t)}</b><ChevronRight />
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="home-v14335-compact-empty"><strong>{t("dashboard.noApprovalTitle")}</strong><span>{t("dashboard.noApprovalText", { brandName: currentBrandName })}</span></div>
+                  )}
+                  <a className="home-v14335-panel-link" href="#pending-review">{t("dashboard.toReviewQueue")} <ArrowRight /></a>
+                </section>
+              </div>
+
+              <section className="home-v14335-panel home-v14335-activity">
+                <div className="home-v14335-panel-heading"><div><p>{t("dashboard.recentActivity")}</p></div></div>
+                {dashboardRecentActivity.length ? (
+                  <div className="home-v14335-activity-list">
+                    {dashboardRecentActivity.map((post) => (
+                      <a href={`/posts/${post.id}`} key={post.id}>
+                        <span className={`status-${post.status}`}><Activity /></span>
+                        <strong>{formatStatus(post.status, t)}</strong>
+                        <b>{post.idea || formatPostKind(post, t)}</b>
+                        <em>{post.platform || t("dashboard.platformNotSet")}</em>
+                        <small>{formatShortDate(post.created_at, t)}</small>
+                        <i>{t("dashboard.view")}</i>
+                      </a>
+                    ))}
+                  </div>
+                ) : <div className="home-v14335-compact-empty">{t("dashboard.noRecentActivity")}</div>}
+              </section>
+            </main>
+
+            <aside className="home-v14335-aside">
+              <section className="home-v14335-coach">
+                <p>{t("dashboard.aiCoach")}</p>
+                <h2>{t("dashboard.coachGreeting")}</h2>
+                <span>{t("dashboard.coachIntro", { brandName: currentBrandName })}</span>
+                <div className="home-v14335-coach-actions">
+                  <h3><Bot /> {t("dashboard.whatToDoNow")}</h3>
+                  <a href="#pending-review"><Sparkles /><span>{t("dashboard.reviewCount", { count: pendingApprovalPosts.length })}</span><ChevronRight /></a>
+                  <a href="/automation"><CalendarDays /><span>{t("dashboard.planNextWeek")}</span><ChevronRight /></a>
+                  <a href={suggestedCampaign ? `/automation?campaign=${suggestedCampaign.id}` : "/calendar"}><Lightbulb /><span>{suggestedCampaign?.title || t("dashboard.reviewCampaignIdeas")}</span><ChevronRight /></a>
+                </div>
+              </section>
+
+              <section className="home-v14335-side-card home-v14335-campaign">
+                <div className="home-v14335-side-title"><Gift /><div><h3>{t("dashboard.suggestedCampaign")}</h3><small>{t("dashboard.recommended")}</small></div></div>
+                {suggestedCampaign ? (
+                  <><h2>{suggestedCampaign.title}</h2><strong>{formatCampaignDate(suggestedCampaign, t)}</strong><p>{suggestedCampaign.description}</p><a href={`/automation?campaign=${suggestedCampaign.id}`}>{t("dashboard.createCampaignPlan")} <ArrowRight /></a></>
+                ) : (
+                  <><h2>{t("dashboard.noSuggestedCampaign")}</h2><p>{t("dashboard.openCalendarText")}</p><a href="/calendar">{t("dashboard.openCalendar")} <ArrowRight /></a></>
+                )}
+              </section>
+
+              <section className="home-v14335-side-card home-v14335-quality">
+                <div className="home-v14335-side-title"><BadgeCheck /><h3>{t("dashboard.profileQuality")}</h3><strong>{brandCompleteness}%</strong></div>
+                <div><i style={{ width: `${brandCompleteness}%` }} /></div>
+                <p>{brandCompleteness >= 80 ? t("dashboard.profileOptimized") : t("dashboard.brandIncomplete")}</p>
+                <a href="/brand">{t("dashboard.reviewProfile")} <ArrowRight /></a>
+              </section>
+
+              <section className="home-v14335-side-card home-v14335-credits">
+                <div className="home-v14335-side-title"><CircleDollarSign /><h3>{t("dashboard.creditStatus")}</h3></div>
+                <h2>{creditsRemaining}<span>{t("dashboard.creditsLeft", { limit: monthlyCreditLimit || "—" })}</span></h2>
+                <div><i style={{ width: `${creditUsagePercent}%` }} /></div>
+                <p>{creditBalance?.plan_name || "Starter"}</p>
+                <a href="/settings">{t("dashboard.manageCredits")} <ArrowRight /></a>
+              </section>
+            </aside>
+          </div>
+        )}
+      </div>
+    </AppLayout>
+  );
+
+  /* The previous dashboard stays below as a rollback-safe implementation. */
     return (
     <AppLayout active="dashboard">
       <div className="dashboard-page">
