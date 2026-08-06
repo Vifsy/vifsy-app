@@ -9,6 +9,10 @@ import {
   inferMarketSetupFromWebsiteSignals,
   normalizeSingleContentLanguage,
 } from "../../../lib/contentLanguage.js";
+import {
+  resolveCalendarVisualTheme,
+  scoreCalendarVisualAsset,
+} from "../../../lib/calendarVisualThemes.js";
 
 export const WEBSITE_FETCH_TIMEOUT_MS = 12000;
 export const WEBSITE_MAX_TEXT_CHARS = 8000;
@@ -1529,6 +1533,8 @@ export function normalizeCampaignOpportunity(rawOpportunity, fallbackYear) {
       rawOpportunity?.negative_terms
   );
 
+  const visualTheme = resolveCalendarVisualTheme(rawOpportunity);
+
   return {
     title,
     slug,
@@ -1588,6 +1594,8 @@ export function normalizeCampaignOpportunity(rawOpportunity, fallbackYear) {
     tone_guidance: normalizeShortText(rawOpportunity?.tone_guidance, 500),
     cta_guidance: normalizeShortText(rawOpportunity?.cta_guidance, 500),
     image_guidance: normalizeShortText(rawOpportunity?.image_guidance, 500),
+    visual_theme_key: visualTheme.themeKey,
+    visual_theme_tags: visualTheme.tags,
     campaign_blueprint: normalizeCampaignBlueprint(rawOpportunity),
   };
 }
@@ -1945,6 +1953,8 @@ Return JSON only in this exact shape:
       "tone_guidance": "How the campaign should sound and feel",
       "cta_guidance": "How the call to action should develop across the campaign",
       "image_guidance": "What kind of images should support this campaign",
+      "visual_theme_key": "One language-independent English visual theme key such as christmas, lunar_new_year, easter, halloween, black_friday, valentines_day, mothers_day, fathers_day, back_to_school, ramadan, eid, diwali, hanukkah, gaming, sustainability, office, technology, winter, summer, spring, autumn, gifts, sale, health or general",
+      "visual_theme_tags": ["3-8 short English visual tags that describe reusable imagery, never translated"],
       "product_match_terms": ["10-20 compact product/category/use-case/search terms that should identify matching products for this campaign, in the business/customer language plus common local synonyms when useful"],
       "product_search_queries": ["10-12 simple, varied, business-adapted website searches, usually 1-3 words and never more than 4"],
       "product_search_intent": "One short internal sentence describing how this store should be searched for this campaign based on how its products are named and organized",
@@ -1964,6 +1974,7 @@ Return JSON only in this exact shape:
 
 Global rules:
 - Spreelo must work equally well for businesses from any country, language, region or culture.
+- User-facing campaign fields must use the selected customer language, but visual_theme_key and visual_theme_tags must always be language-independent English metadata. For example Vietnamese "Giáng sinh", Swedish "Jul" and Spanish "Navidad" all use visual_theme_key "christmas".
 - Do not assume a European, English-speaking, Swedish-speaking or Western market.
 - If a selected market/country is provided, use it.
 - If no market is provided, infer the most likely market from URL, domain, currency, delivery/service area, address/contact details, language, local context and business content.
@@ -2236,6 +2247,8 @@ Return JSON only in this exact shape:
       "tone_guidance": "How the campaign should sound and feel",
       "cta_guidance": "How the call to action should develop across the campaign",
       "image_guidance": "What kind of images should support this campaign",
+      "visual_theme_key": "One language-independent English visual theme key such as christmas, lunar_new_year, easter, halloween, black_friday, valentines_day, mothers_day, fathers_day, back_to_school, ramadan, eid, diwali, hanukkah, gaming, sustainability, office, technology, winter, summer, spring, autumn, gifts, sale, health or general",
+      "visual_theme_tags": ["3-8 short English visual tags that describe reusable imagery, never translated"],
       "product_match_terms": ["10-20 compact product/category/use-case/search terms that should identify matching products for this campaign, in the business/customer language plus common local synonyms when useful"],
       "product_search_queries": ["10-12 simple, varied, business-adapted website searches, usually 1-3 words and never more than 4"],
       "product_search_intent": "One short internal sentence describing how this store should be searched for this campaign based on how its products are named and organized",
@@ -2255,6 +2268,7 @@ Return JSON only in this exact shape:
 
 Global rules:
 - Spreelo must work equally well for businesses from any country, language, region or culture.
+- User-facing campaign fields must use the selected customer language, but visual_theme_key and visual_theme_tags must always be language-independent English metadata. For example Vietnamese "Giáng sinh", Swedish "Jul" and Spanish "Navidad" all use visual_theme_key "christmas".
 - Do not assume a European, English-speaking, Swedish-speaking or Western market.
 - If a selected market/country is provided, use it.
 - If no market is provided, infer the most likely market from the business description.
@@ -2541,15 +2555,19 @@ export async function replaceBrandCampaignOpportunities({
 
   const { data: visualAssets } = await supabase
     .from("calendar_visual_assets")
-    .select("id, image_url, theme_tags, is_generic, use_count")
+    .select("id, image_url, alt_text, theme_key, theme_tags, is_generic, use_count")
     .order("use_count", { ascending: true })
     .limit(150);
   const reusableVisuals = visualAssets || [];
   const genericVisual = reusableVisuals.find((asset) => asset.is_generic) || null;
   const getVisualMatch = (opportunity) => {
-    const haystack = [opportunity.slug, opportunity.title, opportunity.event_type, opportunity.campaign_category]
-      .filter(Boolean).join(" ").toLowerCase();
-    return reusableVisuals.find((asset) => !asset.is_generic && (asset.theme_tags || []).some((tag) => haystack.includes(String(tag || "").toLowerCase()))) || genericVisual;
+    const requestedTheme = resolveCalendarVisualTheme(opportunity);
+    const ranked = reusableVisuals
+      .filter((asset) => !asset.is_generic)
+      .map((asset) => ({ asset, score: scoreCalendarVisualAsset(asset, requestedTheme) }))
+      .filter((entry) => entry.score >= 30)
+      .sort((left, right) => right.score - left.score || Number(left.asset.use_count || 0) - Number(right.asset.use_count || 0));
+    return ranked[0]?.asset || genericVisual;
   };
 
   const rows = safeOpportunities.map((opportunity) => {
@@ -2598,6 +2616,8 @@ export async function replaceBrandCampaignOpportunities({
     tone_guidance: opportunity.tone_guidance,
     cta_guidance: opportunity.cta_guidance,
     image_guidance: opportunity.image_guidance,
+    visual_theme_key: opportunity.visual_theme_key,
+    visual_theme_tags: opportunity.visual_theme_tags,
     campaign_blueprint: opportunity.campaign_blueprint,
     visual_asset_id: visual?.id || null,
     visual_image_url: visual?.image_url || null,
@@ -2617,7 +2637,7 @@ export async function replaceBrandCampaignOpportunities({
     .from("brand_campaign_opportunities")
     .insert(rows)
     .select(
-      "id, title, event_date, event_year, slug, website_content_fit, website_content_strategy, website_product_selection_hint, campaign_category, campaign_goal, target_customer_need, recommended_angles, product_selection_guidance, campaign_blueprint"
+      "id, title, event_date, event_year, slug, website_content_fit, website_content_strategy, website_product_selection_hint, campaign_category, campaign_goal, target_customer_need, recommended_angles, product_selection_guidance, visual_theme_key, visual_theme_tags, campaign_blueprint"
     );
 
   if (error) {
@@ -2629,8 +2649,9 @@ export async function replaceBrandCampaignOpportunities({
     .filter((opportunity) => !getVisualMatch(opportunity) || getVisualMatch(opportunity)?.is_generic)
     .map((opportunity) => ({
       opportunity_id: insertedBySlug.get(opportunity.slug)?.id || null,
-      theme_key: String(opportunity.slug || opportunity.title || "campaign").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 120),
-      prompt: `Create a unique polished 1:1 campaign-calendar illustration specifically for "${opportunity.title}". Campaign category: ${opportunity.campaign_category || opportunity.event_type || "campaign"}. Visual direction: ${opportunity.image_guidance || opportunity.description || "represent the campaign theme clearly"}. Use one instantly recognizable central object or scene that distinguishes this campaign from other calendar entries. Soft dimensional editorial illustration, refined pastel gradient tile, premium SaaS design, no text, no letters, no logo, no generic calendar icon.`,
+      theme_key: opportunity.visual_theme_key,
+      theme_tags: opportunity.visual_theme_tags,
+      prompt: `Create a unique polished 1:1 campaign-calendar illustration specifically for "${opportunity.title}". Canonical visual theme: ${opportunity.visual_theme_key}. Reusable visual tags: ${opportunity.visual_theme_tags.join(", ")}. Campaign category: ${opportunity.campaign_category || opportunity.event_type || "campaign"}. Visual direction: ${opportunity.image_guidance || opportunity.description || "represent the campaign theme clearly"}. Use one instantly recognizable central object or scene that distinguishes this campaign from other calendar entries. Soft dimensional editorial illustration, refined pastel gradient tile, premium SaaS design, no text, no letters, no logo, no generic calendar icon.`,
       status: "queued",
       updated_at: now,
     }))

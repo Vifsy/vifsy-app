@@ -17,7 +17,7 @@ const i18n = read("lib/i18n/useUiText.js");
 
 expect(planner.includes("spreelo_plan_recommendation_") && planner.includes("setSlots(instantSlots)"), "Goal-specific rows must appear immediately from cache or deterministic recommendations.");
 expect(!planner.includes("plan-v95-template-button"), "Save as template must be removed.");
-expect(planner.includes("plan-v143-timezone-control") && planner.includes("getBrowserTimeZone()"), "The regular studio needs a compact, automatic timezone control.");
+expect(planner.includes("plan-v143-timezone-inline") && planner.includes("getBrowserTimeZone()"), "The regular studio needs a compact, automatic timezone control.");
 expect(brand.includes('setAnalysisResultStep("analyzing")') && brand.includes("brand-result-analysis-progress"), "Brand analysis must use the modal from the beginning.");
 expect(!brand.includes('window.open("/social-channels"'), "Social channels must open in the same tab.");
 expect(social.includes("social-success-modal") && social.includes('window.location.href = "/automation"'), "A successful social connection needs the two-step next-action modal.");

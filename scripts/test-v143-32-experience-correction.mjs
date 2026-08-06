@@ -14,7 +14,7 @@ const builtIn = read("lib/i18n/builtInLocaleLabels.js");
 const i18n = read("lib/i18n/useUiText.js");
 const migration = read("supabase/v143_32_calendar_visual_request_targets.sql");
 
-expect(planner.includes("plan-v143-timezone-control") && !planner.includes("plan-v143-timezone-inline"), "Timezone must sit above the equal-height settings grid.");
+expect(planner.includes("plan-v143-timezone-inline"), "Timezone must stay inside the Start date tile without changing the equal-height settings grid.");
 expect(planner.includes('t("automation.redesign.purpose")') && planner.includes('t("automation.redesign.cost")'), "Plan rows must use purpose and cost instead of format and status.");
 expect(!planner.includes('<span className="plan-v70-status-pill">'), "The redundant planned status must be removed from draft rows.");
 expect(planner.includes("getCustomerSlotMarketingPurpose"), "Each planned post needs a customer-facing strategic purpose.");

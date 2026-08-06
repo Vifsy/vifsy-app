@@ -5657,7 +5657,17 @@ export default function AutomationPage() {
 
   function getCustomerSlotPurpose(slot) {
     const cardId = getContentPreviewCardId(slot?.contentTypeId);
-    return translatePreviewCardDescription(cardId);
+    const description = slot?.contentTypeId === "service_focus"
+      ? t("automation.previewCard.service_focus.description")
+      : translatePreviewCardDescription(cardId);
+    const alreadyMentionsAiVisual = /\bAI\b|AI-|artificial intelligence/i.test(description);
+    const createsStandaloneAiVisual = Boolean(slot?.generateImage)
+      && !slot?.usesWebsiteContent
+      && slot?.contentFormat !== "animated_video"
+      && slot?.contentTypeId !== "animated_website_item";
+    return createsStandaloneAiVisual && !alreadyMentionsAiVisual
+      ? `${description} ${t("automation.previewCard.aiImageSuffix")}`
+      : description;
   }
 
   function getCustomerSlotMarketingPurpose(slot) {
@@ -9553,26 +9563,6 @@ function blockFormatCardClickAfterDrag(event) {
                     <p>{plannerSectionCopy.settingsText}</p>
                   </div>
                   <div className="plan-v143-settings-actions">
-                    <label className="plan-v143-timezone-control">
-                      <Clock3 size={15} aria-hidden="true" />
-                      <span>{t("automation.timezone")}</span>
-                      <select value={timeZone} onChange={(event) => setTimeZone(event.target.value)}>
-                        {Array.from(new Set([
-                          timeZone,
-                          getBrowserTimeZone(),
-                          "UTC",
-                          "Europe/Stockholm",
-                          "Europe/London",
-                          "America/New_York",
-                          "America/Los_Angeles",
-                          "Asia/Dubai",
-                          "Asia/Kolkata",
-                          "Asia/Shanghai",
-                          "Asia/Tokyo",
-                          "Australia/Sydney",
-                        ].filter(Boolean))).map((zone) => <option key={zone} value={zone}>{zone}</option>)}
-                      </select>
-                    </label>
                     <button type="button" onClick={() => setShowGuideInfoModal(true)}>
                       {t("automation.guide.needHelp")} <CircleHelp size={17} aria-hidden="true" />
                     </button>
@@ -9665,6 +9655,26 @@ function blockFormatCardClickAfterDrag(event) {
                       weekdayLabels={weekdayLabels}
                       locale={locale}
                     />
+                    <label className="plan-v143-timezone-inline">
+                      <Clock3 size={13} aria-hidden="true" />
+                      <span>{t("automation.timezone")}</span>
+                      <select value={timeZone} onChange={(event) => setTimeZone(event.target.value)}>
+                        {Array.from(new Set([
+                          timeZone,
+                          getBrowserTimeZone(),
+                          "UTC",
+                          "Europe/Stockholm",
+                          "Europe/London",
+                          "America/New_York",
+                          "America/Los_Angeles",
+                          "Asia/Dubai",
+                          "Asia/Kolkata",
+                          "Asia/Shanghai",
+                          "Asia/Tokyo",
+                          "Australia/Sydney",
+                        ].filter(Boolean))).map((zone) => <option key={zone} value={zone}>{zone}</option>)}
+                      </select>
+                    </label>
                   </div>
 
                   <label className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile">
