@@ -1025,9 +1025,9 @@ export default function Home() {
               </section>
 
               <section className="home-v14335-side-card home-v14335-quality">
-                <div className="home-v14335-side-title"><BadgeCheck /><h3>{t("dashboard.profileQuality")}</h3><strong>{brandCompleteness}%</strong></div>
-                <div><i style={{ width: `${brandCompleteness}%` }} /></div>
-                <p>{brandCompleteness >= 80 ? t("dashboard.profileOptimized") : t("dashboard.brandIncomplete")}</p>
+                <div className="home-v14335-side-title"><BadgeCheck /><h3>{t("dashboard.profileQuality")}</h3><strong>{brandCompleteness.percent}%</strong></div>
+                <div><i style={{ width: `${brandCompleteness.percent}%` }} /></div>
+                <p>{brandCompleteness.percent >= 80 ? t("dashboard.profileOptimized") : t("dashboard.brandIncomplete")}</p>
                 <a href="/brand">{t("dashboard.reviewProfile")} <ArrowRight /></a>
               </section>
 

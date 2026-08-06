@@ -14,6 +14,8 @@ assert.match(home, /home-v14335-coach/);
 assert.match(home, /home-v14335-activity/);
 assert.match(home, /Number\.isFinite\(date\.getTime\(\)\)/);
 assert.match(home, /dashboardText/);
+assert.match(home, /brandCompleteness\.percent/);
+assert.doesNotMatch(home, /\{brandCompleteness\}%/);
 assert.match(automation, /campaign-v14335-hero/);
 assert.match(automation, /campaign-v14335-benefits/);
 assert.match(automation, /campaign-v14335-slot-list/);
