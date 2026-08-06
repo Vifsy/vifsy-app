@@ -8,6 +8,11 @@ export function getCampaignGlyphKind(campaign = {}) {
   const text = `${eventType} ${title}`;
 
   if (/halloween|pumpkin/.test(text)) return "pumpkin";
+  if (/gaming|e-sport|esport|game|spel/.test(text)) return "gaming";
+  if (/recycl|återvinn|sustain|miljö|climate/.test(text)) return "recycle";
+  if (/home office|hemmakontor|distans|remote|office|kontor/.test(text)) return "office";
+  if (/winter|vinter|snow|kyla/.test(text)) return "winter";
+  if (/smart home|smarta hem|technology|teknik|upgrade|uppgrader/.test(text)) return "tech";
   if (/school|skol|student|backpack|ryggs/.test(text)) return "backpack";
   if (/black friday|sale|offer|discount|shopping|retail|tag|erbjud/.test(text)) {
     return "tag";
@@ -93,10 +98,35 @@ function CalendarGlyph() {
   );
 }
 
+function GamingGlyph() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 9h9c2.7 0 4.8 2.1 5 5.3l.2 2.5c.2 2.2-2.4 3.4-3.8 1.7l-2-2.3H8.1l-2 2.3c-1.4 1.7-4 .5-3.8-1.7l.2-2.5C2.7 11.1 4.8 9 7.5 9z"/><path d="M8 12v3M6.5 13.5h3M16.5 12.8h.1M18.5 14.2h.1"/></svg>;
+}
+
+function RecycleGlyph() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 4 2-2 2 2M11 2v5M17.5 8l2.7.7-.7 2.7M20.2 8.7l-4.4 2.5M17 18l-2 2-2-2M15 20v-5M6.5 16l-2.7-.7.7-2.7M3.8 15.3l4.4-2.5"/><path d="M8 7.5A6 6 0 0 1 17 9M17 16.5A6 6 0 0 1 8 15"/></svg>;
+}
+
+function OfficeGlyph() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 6.5h17v10h-17zM8 20h8M12 16.5V20"/><path d="M7 10h4M7 13h7M16.5 9.5h.1"/></svg>;
+}
+
+function WinterGlyph() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M9.8 5.2 12 7.3l2.2-2.1M9.8 18.8l2.2-2.1 2.2 2.1M5.2 10.2l2.9-.8-.7-2.9M18.8 13.8l-2.9.8.7 2.9"/></svg>;
+}
+
+function TechGlyph() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h10v14H7zM10 8h4M9 12h6M10 16h4"/><path d="M4 9v6M20 9v6M10 2v3M14 2v3M10 19v3M14 19v3"/></svg>;
+}
+
 const glyphs = {
   backpack: BackpackGlyph,
   calendar: CalendarGlyph,
   gift: GiftGlyph,
+  gaming: GamingGlyph,
+  recycle: RecycleGlyph,
+  office: OfficeGlyph,
+  winter: WinterGlyph,
+  tech: TechGlyph,
   pumpkin: PumpkinGlyph,
   spark: SparkGlyph,
   tag: TagGlyph,

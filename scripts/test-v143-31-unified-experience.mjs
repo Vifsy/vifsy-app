@@ -17,7 +17,7 @@ const i18n = read("lib/i18n/useUiText.js");
 
 expect(planner.includes("spreelo_plan_recommendation_") && planner.includes("setSlots(instantSlots)"), "Goal-specific rows must appear immediately from cache or deterministic recommendations.");
 expect(!planner.includes("plan-v95-template-button"), "Save as template must be removed.");
-expect(planner.includes("plan-v143-timezone-inline") && planner.includes("getBrowserTimeZone()"), "The regular studio needs a compact, automatic timezone control.");
+expect(planner.includes("plan-v143-timezone-control") && planner.includes("getBrowserTimeZone()"), "The regular studio needs a compact, automatic timezone control.");
 expect(brand.includes('setAnalysisResultStep("analyzing")') && brand.includes("brand-result-analysis-progress"), "Brand analysis must use the modal from the beginning.");
 expect(!brand.includes('window.open("/social-channels"'), "Social channels must open in the same tab.");
 expect(social.includes("social-success-modal") && social.includes('window.location.href = "/automation"'), "A successful social connection needs the two-step next-action modal.");
@@ -30,6 +30,6 @@ expect(regenerate.includes("products.length !== 5") && regenerate.includes("gene
 expect(adminApi.includes("slideProducts.length > storedProducts.length"), "Older carousels must show all slide-derived products rather than a shorter stale material array.");
 expect(automationWorker.includes("font-weight=\"820\"") && automationWorker.includes("slice(0, 4).join"), "Image overlays need heavier multilingual titles and short, untruncated kickers.");
 expect(styles.includes("social-success-backdrop") && styles.includes("admin-carousel-product-grid") && styles.includes("campaign-calendar-v143-summary"), "The unified responsive design layer must cover all new flows.");
-expect(i18n.includes('TRANSLATION_CACHE_VERSION = "v11"'), "The UI translation cache must refresh for the new complete label set.");
+expect(i18n.includes('TRANSLATION_CACHE_VERSION = "v12"'), "The UI translation cache must refresh for the new complete label set.");
 
 console.log("v143.31 unified experience, instant planning, calendar and five-product carousel checks passed.");

@@ -2624,17 +2624,20 @@ export async function replaceBrandCampaignOpportunities({
     throw new Error(error.message || "Could not save campaign opportunities.");
   }
 
+  const insertedBySlug = new Map((data || []).map((item) => [item.slug, item]));
   const missingVisualRequests = safeOpportunities
     .filter((opportunity) => !getVisualMatch(opportunity) || getVisualMatch(opportunity)?.is_generic)
     .map((opportunity) => ({
+      opportunity_id: insertedBySlug.get(opportunity.slug)?.id || null,
       theme_key: String(opportunity.slug || opportunity.title || "campaign").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 120),
-      prompt: `A polished, friendly 1:1 editorial campaign-calendar icon for ${opportunity.title}. Soft dimensional illustration, simple centered object, pastel gradient tile, no text, no logo, clean SaaS design.`,
+      prompt: `Create a unique polished 1:1 campaign-calendar illustration specifically for "${opportunity.title}". Campaign category: ${opportunity.campaign_category || opportunity.event_type || "campaign"}. Visual direction: ${opportunity.image_guidance || opportunity.description || "represent the campaign theme clearly"}. Use one instantly recognizable central object or scene that distinguishes this campaign from other calendar entries. Soft dimensional editorial illustration, refined pastel gradient tile, premium SaaS design, no text, no letters, no logo, no generic calendar icon.`,
       status: "queued",
       updated_at: now,
     }))
+    .filter((item) => item.opportunity_id)
     .filter((item) => item.theme_key);
   if (missingVisualRequests.length) {
-    await supabase.from("calendar_visual_requests").upsert(missingVisualRequests, { onConflict: "theme_key", ignoreDuplicates: true });
+    await supabase.from("calendar_visual_requests").upsert(missingVisualRequests, { onConflict: "opportunity_id", ignoreDuplicates: true });
   }
 
   return data || [];

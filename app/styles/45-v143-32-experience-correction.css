@@ -1,0 +1,77 @@
+/* Spreelo v143.32 — corrected planning, brand intelligence and campaign studio. */
+
+html body .plan-v89-settings-heading{align-items:flex-end!important}
+html body .plan-v143-settings-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+html body .plan-v143-timezone-control{display:flex!important;align-items:center;gap:7px;width:auto!important;min-height:36px;padding:0 10px;border:1px solid rgba(214,221,232,.95);border-radius:10px;background:rgba(255,255,255,.8);color:#5d687d;box-shadow:0 7px 18px rgba(25,39,62,.05)}
+html body .plan-v143-timezone-control>span{font-size:12px;font-weight:800;color:#253149}
+html body .plan-v143-timezone-control select{width:auto!important;min-width:150px;height:32px!important;padding:0 24px 0 4px!important;border:0!important;background-color:transparent!important;box-shadow:none!important;font-size:12px!important;font-weight:750;color:#536075}
+html body .plan-v90-setting-tile{height:112px!important;min-height:112px!important;overflow:visible!important}
+
+html body .plan-v70-planned-table-head,html body .plan-v70-planned-row{grid-template-columns:68px minmax(130px,.7fr) minmax(280px,2.2fr) minmax(150px,.9fr) minmax(145px,.85fr) minmax(90px,.5fr) 46px!important}
+html body .plan-v70-planned-post>div>span{display:block;margin-top:5px;font-size:13.5px!important;line-height:1.48!important;color:#69758a!important}
+html body .plan-v143-planned-purpose{align-items:flex-start!important;justify-content:center!important}
+html body .plan-v143-planned-purpose strong{display:inline-flex!important;width:max-content;max-width:100%;padding:7px 10px;border:1px solid rgba(227,193,236,.9);border-radius:999px;background:linear-gradient(135deg,#faf3ff,#f3f0ff);color:#744b96!important;font-size:11.5px!important;line-height:1.2!important;white-space:normal}
+html body .plan-v143-planned-cost{display:flex;align-items:center;justify-content:flex-start;color:#4f5c70}
+html body .plan-v143-planned-cost strong{font-size:12px;white-space:nowrap}
+html body .plan-v70-planned-table-head span{font-size:11px!important}
+
+html body .plan-v70-bottom-grid{align-items:stretch}
+html body .plan-v70-bottom-grid p,html body .plan-v70-bottom-grid span,html body .plan-v83-variation-copy small,html body .plan-v83-next-cycle span{font-size:13.5px!important;line-height:1.5!important}
+html body .plan-v70-activate-card{border:1px solid rgba(126,207,158,.9)!important;background-color:#edfbf3!important;background-image:radial-gradient(circle at 92% 10%,rgba(114,215,154,.18),transparent 34%),linear-gradient(145deg,rgba(247,255,250,.98),rgba(224,248,234,.95))!important;box-shadow:0 18px 46px rgba(37,128,76,.13)!important}
+html body .plan-v70-activate-copy p,html body .plan-v70-activate-actions>span,html body .plan-v74-approval-publishing-note{font-size:14px!important;line-height:1.55!important;color:#536b5d!important}
+html body .plan-v70-activate-visual{background:#d8f5e4!important;color:#168649!important}
+
+/* The campaign route now uses the same real studio shell instead of the legacy builder. */
+html body .automation-page.campaign-planner-clean .plan-v70-shell{display:flex!important;width:100%!important;max-width:none!important;gap:18px!important}
+html body .automation-page.campaign-planner-clean .wizard-main>.planner-hero,
+html body .automation-page.campaign-planner-clean .wizard-main>.campaign-mode-banner,
+html body .automation-page.campaign-planner-clean .wizard-main>.planner-primary-builder,
+html body .automation-page.campaign-planner-clean .wizard-main>.planner-mode-card,
+html body .automation-page.campaign-planner-clean .wizard-main>.planner-manual-intro-card,
+html body .automation-page.campaign-planner-clean .wizard-main>.planner-schedule-card,
+html body .automation-page.campaign-planner-clean .wizard-main>.planner-settings-card,
+html body .automation-page.campaign-planner-clean .wizard-main>.planner-includes-preview-card,
+html body .automation-page.campaign-planner-clean .wizard-main>.planner-how-it-works-card,
+html body .automation-page.campaign-planner-clean .wizard-main>.planner-save-card,
+html body .automation-page.campaign-planner-clean .wizard-main>.saved-card{display:none!important}
+html body .automation-page.campaign-planner-clean .plan-v70-header{padding:26px 30px!important;border:1px solid rgba(255,255,255,.9)!important;border-radius:22px!important;background:linear-gradient(135deg,rgba(255,255,255,.88),rgba(255,248,244,.82))!important;box-shadow:0 18px 48px rgba(24,39,66,.09)!important;backdrop-filter:blur(18px)}
+html body .automation-page.campaign-planner-clean .plan-v70-header h1{max-width:1050px;font-size:clamp(32px,4vw,52px)!important;line-height:1.02!important}
+html body .automation-page.campaign-planner-clean .plan-v70-header p{max-width:900px;font-size:15px!important;line-height:1.55!important}
+html body .automation-page.campaign-planner-clean .plan-v70-card,html body .automation-page.campaign-planner-clean .plan-v70-settings-card{width:100%!important;border:1px solid rgba(255,255,255,.9)!important;border-radius:22px!important;background:rgba(255,255,255,.78)!important;box-shadow:0 18px 46px rgba(25,39,62,.08)!important;backdrop-filter:blur(18px)}
+html body .automation-page.campaign-planner-clean .plan-v90-setting-tile{height:112px!important;min-height:112px!important}
+
+/* Compact read-only brand profile with a dedicated edit dialog. */
+html body .brand-profile-page{padding-top:24px!important}
+html body .brand-profile-hero{min-height:0!important;padding:26px 32px!important;grid-template-columns:minmax(0,1fr) auto!important}
+html body .brand-profile-hero h2{max-width:none!important;margin:5px 0 6px!important;font-size:clamp(34px,4vw,50px)!important;line-height:1!important}
+html body .brand-profile-hero>div:first-child>span{font-size:14px!important}
+html body .brand-profile-layout{margin-top:18px!important}
+html body .brand-profile-form-card{padding:28px!important}
+html body .brand-profile-form-header{margin-bottom:18px!important;padding-bottom:16px!important}
+html body .brand-profile-form-header h3{font-size:30px!important}
+html body .brand-profile-form-intro{margin-top:4px!important}
+.brand-profile-summary-grid{display:grid;grid-template-columns:1.2fr .65fr .65fr;gap:13px}
+.brand-profile-summary-card{position:relative;display:flex;align-items:flex-start;gap:12px;min-width:0;padding:18px;border:1px solid rgba(218,225,235,.95);border-radius:16px;background:linear-gradient(145deg,rgba(255,255,255,.96),rgba(246,249,253,.9));box-shadow:0 10px 28px rgba(25,39,62,.055)}
+.brand-profile-summary-card>span{display:grid;place-items:center;flex:0 0 38px;width:38px;height:38px;border-radius:12px;background:#fff0e9;color:#df5438}
+.brand-profile-summary-card small{display:block;margin-bottom:6px;color:#a94632;font-size:10.5px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.brand-profile-summary-card strong{display:block;color:#172033;font-size:15px;line-height:1.4}.brand-profile-summary-card a{display:block;margin-top:4px;overflow:hidden;color:#65738a;font-size:12px;text-overflow:ellipsis;white-space:nowrap}.brand-profile-summary-card p{margin:0;color:#28344b;font-size:14px;font-weight:650;line-height:1.6;white-space:pre-wrap}
+.brand-profile-summary-card.narrative{grid-column:span 1;min-height:145px}.brand-profile-summary-card.narrative:first-of-type{grid-column:span 2}.brand-profile-summary-card.logo{align-items:center}.brand-profile-summary-card.logo .brand-logo-compact-thumb{flex:0 0 56px;width:56px;height:56px;margin:0}
+html body .brand-profile-form-card.editing{position:fixed!important;z-index:1450;top:50%;left:50%;width:min(860px,calc(100vw - 32px))!important;max-height:90vh;overflow:auto;transform:translate(-50%,-50%);background:#fff!important;box-shadow:0 0 0 100vmax rgba(8,18,31,.66),0 34px 100px rgba(8,18,31,.38)!important}
+html body .brand-profile-form-card.editing .brand-profile-form-section{margin-bottom:12px!important}
+html body .brand-profile-form-card.editing textarea{min-height:110px!important;height:auto!important}
+.brand-profile-edit-button.subtle{background:#f8fafc!important;color:#536075!important}.brand-profile-reanalysis-note{display:flex;align-items:center;gap:7px;margin:10px 0 0!important;padding:10px;border-radius:10px;background:#fff5e9;color:#8c4b16!important;font-size:12px!important;font-weight:750}
+html body .brand-profile-page>.danger-zone-card{margin-top:16px!important;padding:17px 22px!important}
+
+/* Spreelo brand-analysis experience. */
+.brand-result-backdrop{background:rgba(8,18,31,.7)!important;backdrop-filter:blur(13px)!important}
+.brand-result-modal{width:min(820px,100%)!important;padding:38px!important;border-radius:28px!important;background:radial-gradient(circle at 92% 5%,rgba(255,218,204,.55),transparent 30%),linear-gradient(145deg,#fff,#fbfcff)!important}
+.brand-result-analysis{text-align:center}.brand-analysis-mark{display:grid;place-items:center;width:72px;height:72px;margin:0 auto 14px;border:1px solid rgba(255,255,255,.9);border-radius:23px;background:linear-gradient(145deg,#fff3ed,#ffe4d8);color:#ef5b3f;box-shadow:0 14px 34px rgba(223,84,56,.18);animation:brand-analysis-pulse 2.3s ease-in-out infinite}.brand-result-analysis .brand-result-lead{margin-inline:auto}
+.brand-result-analysis-progress{margin:25px auto 18px!important;padding:20px 22px!important;border-color:#f0d5ca!important;background:rgba(255,250,247,.9)!important;text-align:left}.brand-result-analysis-progress>div:first-child span{color:#df5438;font-size:17px;font-weight:900}.brand-result-analysis-progress .brand-profile-progress-track{height:8px!important;background:#f3dfd7!important}.brand-result-analysis-progress .brand-profile-progress-fill{background:linear-gradient(90deg,#ff805f,#e94e32)!important;box-shadow:0 0 16px rgba(237,87,56,.25)}
+.brand-result-analysis-steps{display:flex!important;flex-wrap:wrap;justify-content:center;gap:9px!important}.brand-result-analysis-steps span{display:flex;align-items:center;gap:7px;width:auto!important;padding:10px 12px!important;border:1px solid #e2e7ef;border-radius:999px!important;background:#f5f7fa!important;color:#7c8799!important;font-size:11.5px!important}.brand-result-analysis-steps span b{display:grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#e8edf3}.brand-result-analysis-steps span.done{border-color:#bfe4ce;background:#ecf9f1!important;color:#187b47!important}.brand-result-analysis-steps span.current{border-color:#f2ae99!important;background:#fff1eb!important;color:#b8442e!important;box-shadow:0 8px 20px rgba(216,77,49,.1)}
+.brand-result-grid article{background:linear-gradient(145deg,#fff,#f6f9fd)!important;box-shadow:0 8px 22px rgba(25,39,62,.05)}.brand-result-grid strong{font-size:14.5px!important;line-height:1.55!important}
+@keyframes brand-analysis-pulse{50%{transform:translateY(-3px);box-shadow:0 18px 44px rgba(223,84,56,.25)}}
+
+html body .campaign-glyph-gaming{background:linear-gradient(145deg,#eee8ff,#dcd0ff)!important;color:#6f46cf!important}html body .campaign-glyph-recycle{background:linear-gradient(145deg,#e7faee,#c8f1d7)!important;color:#238655!important}html body .campaign-glyph-office{background:linear-gradient(145deg,#e8f5ff,#cee8fb)!important;color:#3479a8!important}html body .campaign-glyph-winter{background:linear-gradient(145deg,#edf7ff,#d8eaff)!important;color:#397fc3!important}html body .campaign-glyph-tech{background:linear-gradient(145deg,#f0ecff,#ddd6ff)!important;color:#6951c8!important}
+
+@media(max-width:1050px){html body .plan-v70-planned-table-head{display:none!important}html body .plan-v70-planned-row{grid-template-columns:58px minmax(120px,.75fr) minmax(240px,2fr) minmax(130px,.8fr) minmax(120px,.75fr) 80px 42px!important}.brand-profile-summary-grid{grid-template-columns:1fr 1fr}.brand-profile-summary-card.identity,.brand-profile-summary-card.narrative{grid-column:span 1}}
+@media(max-width:760px){html body .plan-v143-settings-actions{width:100%;justify-content:flex-start}.plan-v143-timezone-control{max-width:100%}.plan-v143-timezone-control select{min-width:0!important}.brand-profile-summary-grid{grid-template-columns:1fr}.brand-profile-summary-card{grid-column:1!important}.brand-result-modal{padding:30px 18px!important}.brand-result-analysis-steps{display:grid!important;grid-template-columns:1fr!important}.brand-result-analysis-steps span{width:100%!important}.brand-profile-hero{grid-template-columns:1fr!important}.brand-profile-hero-badge{width:100%!important}.plan-v70-planned-row{grid-template-columns:46px minmax(0,1fr)!important}.plan-v70-planned-row>*{grid-column:2}.plan-v86-planned-visual{grid-column:1!important;grid-row:1/5}.plan-v70-row-menu{grid-column:1!important;grid-row:5}.plan-v143-planned-cost{justify-content:flex-start}}

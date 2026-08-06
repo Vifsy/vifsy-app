@@ -5660,6 +5660,24 @@ export default function AutomationPage() {
     return translatePreviewCardDescription(cardId);
   }
 
+  function getCustomerSlotMarketingPurpose(slot) {
+    const angle = String(slot?.marketingAngle || "").toLowerCase();
+    const cardId = getContentPreviewCardId(slot?.contentTypeId);
+
+    if (["offer", "product_push", "product_discovery", "urgency"].includes(angle)) {
+      return t("automation.purpose.sales");
+    }
+    if (angle === "engagement") return t("automation.purpose.engagement");
+    if (angle === "trust") return t("automation.purpose.trust");
+    if (["faq", "tips_advice", "mini_guide", "checklist", "problem_solution", "common_mistakes"].includes(cardId)) {
+      return t("automation.purpose.educational");
+    }
+    if (["product_focus", "product_ad", "website_carousel", "animated_product"].includes(cardId)) {
+      return t("automation.purpose.sales");
+    }
+    return t("automation.purpose.relationship");
+  }
+
 
   const weekdayLabels = [
     t("automation.weekday.short.monday"),
@@ -9534,9 +9552,31 @@ function blockFormatCardClickAfterDrag(event) {
                     <h2>{plannerSectionCopy.settingsTitle}</h2>
                     <p>{plannerSectionCopy.settingsText}</p>
                   </div>
-                  <button type="button" onClick={() => setShowGuideInfoModal(true)}>
-                    {t("automation.guide.needHelp")} <CircleHelp size={17} aria-hidden="true" />
-                  </button>
+                  <div className="plan-v143-settings-actions">
+                    <label className="plan-v143-timezone-control">
+                      <Clock3 size={15} aria-hidden="true" />
+                      <span>{t("automation.timezone")}</span>
+                      <select value={timeZone} onChange={(event) => setTimeZone(event.target.value)}>
+                        {Array.from(new Set([
+                          timeZone,
+                          getBrowserTimeZone(),
+                          "UTC",
+                          "Europe/Stockholm",
+                          "Europe/London",
+                          "America/New_York",
+                          "America/Los_Angeles",
+                          "Asia/Dubai",
+                          "Asia/Kolkata",
+                          "Asia/Shanghai",
+                          "Asia/Tokyo",
+                          "Australia/Sydney",
+                        ].filter(Boolean))).map((zone) => <option key={zone} value={zone}>{zone}</option>)}
+                      </select>
+                    </label>
+                    <button type="button" onClick={() => setShowGuideInfoModal(true)}>
+                      {t("automation.guide.needHelp")} <CircleHelp size={17} aria-hidden="true" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="plan-v70-settings-grid plan-v84-settings-grid plan-v89-settings-grid plan-v90-settings-grid">
@@ -9625,26 +9665,6 @@ function blockFormatCardClickAfterDrag(event) {
                       weekdayLabels={weekdayLabels}
                       locale={locale}
                     />
-                    <label className="plan-v143-timezone-inline">
-                      <Clock3 size={14} aria-hidden="true" />
-                      <span className="sr-only">{t("automation.timezone")}</span>
-                      <select value={timeZone} onChange={(event) => setTimeZone(event.target.value)}>
-                        {Array.from(new Set([
-                          timeZone,
-                          getBrowserTimeZone(),
-                          "UTC",
-                          "Europe/Stockholm",
-                          "Europe/London",
-                          "America/New_York",
-                          "America/Los_Angeles",
-                          "Asia/Dubai",
-                          "Asia/Kolkata",
-                          "Asia/Shanghai",
-                          "Asia/Tokyo",
-                          "Australia/Sydney",
-                        ].filter(Boolean))).map((zone) => <option key={zone} value={zone}>{zone}</option>)}
-                      </select>
-                    </label>
                   </div>
 
                   <label className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile">
@@ -9990,9 +10010,9 @@ function blockFormatCardClickAfterDrag(event) {
                       <span />
                       <span>{t("automation.redesign.dateTime")}</span>
                       <span>{t("automation.redesign.post")}</span>
-                      <span>{t("automation.redesign.format")}</span>
+                      <span>{t("automation.redesign.purpose")}</span>
                       <span>{t("automation.redesign.channel")}</span>
-                      <span>{t("automation.redesign.status")}</span>
+                      <span>{t("automation.redesign.cost")}</span>
                       <span />
                     </div>
 
@@ -10034,9 +10054,8 @@ function blockFormatCardClickAfterDrag(event) {
                               <span>{getCustomerSlotPurpose(slot)}</span>
                             </div>
                           </div>
-                          <div className="plan-v70-planned-format">
-                            <strong>{getLocalizedSlotFormatLabel(slot)}</strong>
-                            <span>{getSlotCreditLabel(slot)}</span>
+                          <div className="plan-v70-planned-format plan-v143-planned-purpose">
+                            <strong>{getCustomerSlotMarketingPurpose(slot)}</strong>
                           </div>
                           <div className="plan-v70-planned-channel plan-v74-planned-channels">
                             {selectedPlatformOptions.length > 0 ? (
@@ -10052,7 +10071,9 @@ function blockFormatCardClickAfterDrag(event) {
                               <span>{platformLabel}</span>
                             )}
                           </div>
-                          <span className="plan-v70-status-pill">{t("automation.redesign.planned")}</span>
+                          <div className="plan-v143-planned-cost">
+                            <strong>{getSlotCreditLabel(slot)}</strong>
+                          </div>
                           <button
                             type="button"
                             className="plan-v70-row-menu"

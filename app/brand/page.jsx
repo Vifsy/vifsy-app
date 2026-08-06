@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, Pencil, Sparkles } from "lucide-react";
+import { Building2, Check, CheckCircle2, Globe2, Languages, Pencil, Sparkles, Users, X } from "lucide-react";
 import AppLayout from "../../components/AppLayout";
 import { supabase } from "../../lib/supabaseClient";
 import { getValidAnalysisAccessToken } from "../../lib/analysisSession";
@@ -1434,7 +1434,7 @@ export default function BrandProfile() {
         </header>
 
         <section className="brand-profile-layout">
-          <section className="brand-profile-form-card">
+          <section className={`brand-profile-form-card${isEditing ? " editing" : ""}`}>
             <div className="brand-profile-form-header">
               <div>
                 <p className="dashboard-eyebrow">{t("brand.profileOverview")}</p>
@@ -1454,11 +1454,71 @@ export default function BrandProfile() {
                   <Pencil size={16} />
                   {t("brand.editButton")}
                 </button>
+              ) : isEditing ? (
+                <button
+                  type="button"
+                  className="brand-profile-edit-button subtle"
+                  onClick={() => window.location.reload()}
+                  aria-label={t("common.close")}
+                >
+                  <X size={16} />
+                  {t("common.close")}
+                </button>
               ) : (
                 <span>{t("brand.currentBrand")}</span>
               )}
             </div>
 
+            {showGeneratedFields && !isEditing && !analyzing ? (
+              <div className="brand-profile-summary-grid">
+                <article className="brand-profile-summary-card identity">
+                  <span><Building2 size={19} /></span>
+                  <div>
+                    <small>{t("brand.businessDetails")}</small>
+                    <strong>{businessName || "—"}</strong>
+                    <a href={normalizedWebsiteUrl} target="_blank" rel="noreferrer">{normalizedWebsiteUrl || "—"}</a>
+                  </div>
+                </article>
+                <article className="brand-profile-summary-card compact">
+                  <span><Globe2 size={19} /></span>
+                  <div>
+                    <small>{t("brand.campaignMarket")}</small>
+                    <strong>{getMarketOptionLabel(t, visibleMarketOptions.find((market) => market.label === contentMarket) || { label: contentMarket, countryCode })}</strong>
+                  </div>
+                </article>
+                <article className="brand-profile-summary-card compact">
+                  <span><Languages size={19} /></span>
+                  <div>
+                    <small>{t("brand.postLanguage")}</small>
+                    <strong>{getLanguageOptionLabel(t, normalizedContentLanguage)}</strong>
+                  </div>
+                </article>
+                <article className="brand-profile-summary-card narrative">
+                  <span><Sparkles size={19} /></span>
+                  <div>
+                    <small>{t("brand.industry")}</small>
+                    <p>{industry || "—"}</p>
+                  </div>
+                </article>
+                <article className="brand-profile-summary-card narrative">
+                  <span><Users size={19} /></span>
+                  <div>
+                    <small>{t("brand.targetAudience")}</small>
+                    <p>{targetAudience || "—"}</p>
+                  </div>
+                </article>
+                <article className="brand-profile-summary-card logo">
+                  <div className={`brand-logo-compact-thumb ${logoUrl ? "has-logo" : "empty"}`}>
+                    {logoUrl ? <img src={logoUrl} alt={t("brand.logoPreviewAlt")} /> : <span>PNG</span>}
+                  </div>
+                  <div>
+                    <small>{t("brand.logoCompactTitle")}</small>
+                    <strong>{logoUrl ? t("brand.logoCompactTextReady") : t("brand.logoCompactTextEmpty")}</strong>
+                  </div>
+                </article>
+              </div>
+            ) : (
+              <>
             <div className="brand-profile-form-section">
               <h4>{t("brand.businessDetails")}</h4>
 
@@ -1490,6 +1550,8 @@ export default function BrandProfile() {
                 }}
                 disabled={!isEditing || hasNoWebsite || analyzing || saving || deletingBrand}
               />
+
+              {shouldAnalyzeWebsite ? <p className="brand-profile-reanalysis-note"><Sparkles size={15} />{t("brand.websiteChangeReanalysis")}</p> : null}
 
             </div>
 
@@ -1560,7 +1622,6 @@ export default function BrandProfile() {
                 <div className="brand-profile-section-title">
                   <div>
                     <h4>{t("brand.aiProfileTitle")}</h4>
-                    <p>{t("brand.aiProfileText")}</p>
                   </div>
 
                   <span>{t("brand.generated")}</span>
@@ -1620,6 +1681,8 @@ export default function BrandProfile() {
                   {logoUrl ? t("brand.logoManageButton") : t("brand.logoAddButton")}
                 </button>
               </div>
+            )}
+              </>
             )}
 
             {!analyzing && (isEditing || !showGeneratedFields) && !autoAnalyzeRequested ? (
@@ -1683,9 +1746,7 @@ export default function BrandProfile() {
 
             {message && <p className="brand-profile-message">{message}</p>}
 
-            <p className="brand-profile-disclaimer">
-              {t("brand.disclaimer")}
-            </p>
+            {isEditing || !showGeneratedFields ? <p className="brand-profile-disclaimer">{t("brand.disclaimer")}</p> : null}
           </section>
         </section>
 
@@ -1697,6 +1758,7 @@ export default function BrandProfile() {
               {!analyzing ? <button type="button" className="brand-result-close" onClick={() => setShowAnalysisResult(false)}>×</button> : null}
               {analysisResultStep === "analyzing" ? (
                 <div className="brand-result-analysis">
+                  <div className="brand-analysis-mark"><Sparkles size={30} /></div>
                   <p className="dashboard-eyebrow">{t("brand.analysisTitle")}</p>
                   <h2>{t("brand.analysisTitle")}</h2>
                   <p className="brand-result-lead">{t("brand.analysisText")}</p>
@@ -1706,7 +1768,11 @@ export default function BrandProfile() {
                     <p>{t(getCurrentAnalysisStage(analysisProgress).descriptionKey)}</p>
                   </div>
                   <div className="brand-result-analysis-steps">
-                    {analysisProgressStages.map((stage) => <span key={stage.titleKey} className={analysisProgress >= stage.progress ? "done" : ""}>{t(stage.titleKey)}</span>)}
+                    {analysisProgressStages.map((stage) => {
+                      const done = analysisProgress >= stage.progress;
+                      const current = getCurrentAnalysisStage(analysisProgress).titleKey === stage.titleKey;
+                      return <span key={stage.titleKey} className={`${done ? "done" : ""}${current ? " current" : ""}`}><b>{done ? <Check size={14} /> : null}</b>{t(stage.titleKey)}</span>;
+                    })}
                   </div>
                 </div>
               ) : analysisResultStep === "result" ? (
@@ -1717,8 +1783,8 @@ export default function BrandProfile() {
                   <div className="brand-result-grid">
                     <article><span>{t("brand.industry")}</span><strong>{industry || "—"}</strong></article>
                     <article><span>{t("brand.targetAudience")}</span><strong>{targetAudience || "—"}</strong></article>
-                    <article><span>{t("brand.campaignMarket")}</span><strong>{contentMarket || "—"}</strong></article>
-                    <article><span>{t("brand.postLanguage")}</span><strong>{normalizedContentLanguage || "English"}</strong></article>
+                    <article><span>{t("brand.campaignMarket")}</span><strong>{getMarketOptionLabel(t, visibleMarketOptions.find((market) => market.label === contentMarket) || { label: contentMarket, countryCode })}</strong></article>
+                    <article><span>{t("brand.postLanguage")}</span><strong>{getLanguageOptionLabel(t, normalizedContentLanguage)}</strong></article>
                   </div>
                   <button type="button" className="brand-result-primary" onClick={() => setAnalysisResultStep("channels")}>{t("brand.result.addChannels")}</button>
                 </>
