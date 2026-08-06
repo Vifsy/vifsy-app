@@ -58,7 +58,8 @@
     "test:v143.32": "node scripts/test-v143-32-experience-correction.mjs",
     "test:v143.33": "node scripts/test-v143-33-global-visuals-studio-polish.mjs",
     "test:v143.34": "node scripts/test-v143-34-regression-recovery.mjs",
-    "test:v143.35": "node scripts/test-v143-35-home-campaign-reference.mjs"
+    "test:v143.35": "node scripts/test-v143-35-home-campaign-reference.mjs",
+    "test:v143.36": "node scripts/test-v143-36-calendar-library-repair.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
