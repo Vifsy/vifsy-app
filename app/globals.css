@@ -1,4 +1,6 @@
-/* Ordered global style layers. Later files intentionally contain scoped overrides. */
+/* Spreelo global styles — v143.40 consolidated cascade.
+   Active cascade reduced from 51 imported layers to 18.
+   Historical version layers are archived in app/styles/archive-v143/ and are not loaded. */
 @import "./styles/01-foundation.css";
 @import "./styles/02-campaign-calendar.css";
 @import "./styles/03-planner-builder.css";
@@ -14,54 +16,7 @@
 @import "./styles/13-plan-redesign.css";
 @import "./styles/14-v74-channel-upcoming-admin.css";
 
-@import "./styles/15-v94-reference-master.css";
-@import "./styles/16-v95-exact-create-plan.css";
-@import "./styles/17-v96-reference-visual-correction.css";
-@import "./styles/18-v98-responsive-polish.css";
-@import "./styles/19-v100-campaign-offer-experience.css";
-@import "./styles/20-v101-unified-cards-calendar-form.css";
-@import "./styles/21-v102-i18n-platform-alignment.css";
-@import "./styles/22-v103-review-makeover.css";
-@import "./styles/23-v107-plan-review-final.css";
-
-@import "./styles/24-v110-responsive-unified-review-cards.css";
-
-@import "./styles/25-v111-review-glass-transparency.css";
-
-@import "./styles/26-v114-review-exact-ai-studio-canvas.css";
-
+@import "./styles/15-legacy-overrides-v94-v114.css";
 @import "./styles/27-image-backgrounds-admin.css";
-
-@import "./styles/28-v130-unified-theme-core-pages.css";
-
-@import "./styles/29-v132-calendar-design-only.css";
-
-@import "./styles/30-v133-calendar-ux-exact-design.css";
-
-@import "./styles/31-v134-calendar-hero-today-card.css";
-
-@import "./styles/32-v135-calendar-readability-chronology.css";
-
-@import "./styles/33-v136-calendar-row-fit-tablet-breakpoint.css";
-
-@import "./styles/34-v137-calendar-tools-responsive.css";
-
-@import "./styles/35-v138-calendar-detail-section-tints.css";
-
-@import "./styles/36-v139-calendar-active-row-title-fit.css";
-
-@import "./styles/37-v140-admin-customer-operations.css";
-
-@import "./styles/38-v143-14-dashboard-studio-refresh.css";
-@import "./styles/39-v143-15-studio-pages.css";
-@import "./styles/40-v143-17-onboarding-welcome-flow.css";
-@import "./styles/41-v143-18-onboarding-polish.css";
-@import "./styles/42-v143-28-brand-review-workflow.css";
-@import "./styles/43-v143-30-admin-workbench.css";
-@import "./styles/44-v143-31-unified-experience.css";
-@import "./styles/45-v143-32-experience-correction.css";
-@import "./styles/46-v143-33-global-visuals-studio-polish.css";
-@import "./styles/47-v143-34-regression-recovery.css";
-@import "./styles/48-v143-35-home-campaign-reference.css";
-@import "./styles/49-v143-37-readability-responsive-auth.css";
-@import "./styles/50-v143-38-premium-responsive-experience.css";
+@import "./styles/28-calendar-admin-v130-v140.css";
+@import "./styles/38-current-experience-v143.css";

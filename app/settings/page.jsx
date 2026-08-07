@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AppLayout from "../../components/AppLayout";
 import { supabase } from "../../lib/supabaseClient";
 import { useUiText } from "../../lib/i18n/useUiText";
+import { Bell, CreditCard, Languages, ShieldCheck, UserRound } from "lucide-react";
 import {
   SUPPORTED_UI_LOCALES,
   getUiLanguageName,
@@ -333,9 +334,11 @@ function getDeleteCopy(locale, key, word, fallback) {
 }
 
 export default function Settings() {
-  const { t, locale, setLocale } = useUiText(["settings"]);
+  const { t, locale, setLocale } = useUiText(["settings", "layout"]);
 
   const [currentUserEmail, setCurrentUserEmail] = useState("");
+  const [creditBalance, setCreditBalance] = useState(null);
+  const [loadingCredits, setLoadingCredits] = useState(true);
   const [savingLanguage, setSavingLanguage] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   const [deleteReason, setDeleteReason] = useState("");
@@ -370,10 +373,44 @@ export default function Settings() {
       } = await supabase.auth.getUser();
 
       setCurrentUserEmail(user?.email || "");
+
+      if (user?.id) {
+        setLoadingCredits(true);
+        const { data: creditData } = await supabase
+          .from("user_credit_balances")
+          .select("credits_remaining, monthly_credit_limit, plan_name, subscription_plan, current_period_end, credits_renewed_at")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        setCreditBalance(creditData || null);
+        setLoadingCredits(false);
+      } else {
+        setLoadingCredits(false);
+      }
     }
 
     loadUser();
   }, []);
+
+  const planName = useMemo(() => {
+    const raw = String(creditBalance?.plan_name || creditBalance?.subscription_plan || "Starter").trim();
+    return raw.replace(/^plan\s*:\s*/i, "") || "Starter";
+  }, [creditBalance]);
+
+  const creditRemaining = Number(creditBalance?.credits_remaining || 0);
+  const creditLimit = Number(creditBalance?.monthly_credit_limit || 0);
+  const creditPercent = creditLimit > 0 ? Math.max(0, Math.min(100, (creditRemaining / creditLimit) * 100)) : 0;
+
+  const renewalLabel = useMemo(() => {
+    const value = creditBalance?.current_period_end || creditBalance?.credits_renewed_at;
+    if (!value) return t("settings.renewalUnknown");
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return t("settings.renewalUnknown");
+    try {
+      return new Intl.DateTimeFormat(locale || "en", { day: "numeric", month: "short", year: "numeric" }).format(date);
+    } catch {
+      return date.toLocaleDateString();
+    }
+  }, [creditBalance, locale, t]);
 
   async function handleLanguageChange(nextLocale) {
     if (!nextLocale || savingLanguage) return;
@@ -446,83 +483,101 @@ export default function Settings() {
 
   return (
     <AppLayout active="settings">
-      <div className="settings-v14315-page">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">{t("settings.eyebrow")}</p>
-          <h2>{t("settings.title")}</h2>
-        </div>
-      </header>
-
-      <section className="hero-card">
-        <div>
-          <p className="eyebrow">{t("settings.accountEyebrow")}</p>
-          <h3>{t("settings.accountTitle")}</h3>
-          <p>{t("settings.accountText")}</p>
-        </div>
-
-        <div className="prompt-box">
-          <label>{t("settings.signedInAs")}</label>
-          <div className="input">
-            {currentUserEmail || t("settings.signedInUserFallback")}
+      <div className="settings-v14315-page settings-v14339-page">
+        <header className="settings-v14339-hero">
+          <div>
+            <p className="eyebrow">{t("settings.eyebrow")}</p>
+            <h2>{t("settings.title")}</h2>
+            <p>{t("settings.heroText")}</p>
           </div>
-        </div>
-      </section>
+          <span className="settings-v14339-hero-art" aria-hidden="true" />
+        </header>
 
-      <section className="hero-card">
-        <div>
-          <p className="eyebrow">{t("settings.languageEyebrow")}</p>
-          <h3>{t("settings.languageTitle")}</h3>
-          <p>{t("settings.languageText")}</p>
-        </div>
+        <section className="settings-v14339-grid">
+          <article className="settings-v14339-card">
+            <span className="settings-v14339-icon coral"><UserRound size={20} /></span>
+            <div className="settings-v14339-card-copy">
+              <p className="eyebrow">{t("settings.accountEyebrow")}</p>
+              <h3>{t("settings.accountTitle")}</h3>
+              <p>{t("settings.accountText")}</p>
+              <label>{t("settings.signedInAs")}</label>
+              <div className="settings-v14339-value">{currentUserEmail || t("settings.signedInUserFallback")}</div>
+            </div>
+          </article>
 
-        <div className="prompt-box">
-          <label>{t("settings.appLanguage")}</label>
-          <select
-            className="input"
-            value={recommendedLocale}
-            onChange={(event) => {
-              handleLanguageChange(event.target.value);
-            }}
-            disabled={savingLanguage}
-          >
-            {!recommendedLocale && (
-              <option value="">{getUiLanguageName(locale)}</option>
-            )}
+          <article className="settings-v14339-card">
+            <span className="settings-v14339-icon amber"><Languages size={20} /></span>
+            <div className="settings-v14339-card-copy">
+              <p className="eyebrow">{t("settings.languageEyebrow")}</p>
+              <h3>{t("settings.languageTitle")}</h3>
+              <p>{t("settings.languageText")}</p>
+              <label>{t("settings.appLanguage")}</label>
+              <select className="input" value={recommendedLocale} onChange={(event) => handleLanguageChange(event.target.value)} disabled={savingLanguage}>
+                {!recommendedLocale && <option value="">{getUiLanguageName(locale)}</option>}
+                {SUPPORTED_UI_LOCALES.map((item) => <option key={item.locale} value={item.locale}>{item.nativeName || item.language}</option>)}
+              </select>
+              <small>{t("settings.appLanguageHelp")}</small>
+            </div>
+          </article>
 
-            {SUPPORTED_UI_LOCALES.map((item) => (
-              <option key={item.locale} value={item.locale}>
-                {item.nativeName || item.language}
-              </option>
-            ))}
-          </select>
+          <article className="settings-v14339-card settings-v14339-credit-card">
+            <span className="settings-v14339-icon violet"><CreditCard size={20} /></span>
+            <div className="settings-v14339-card-copy">
+              <p className="eyebrow">{t("settings.planEyebrow")}</p>
+              <h3>{t("settings.planTitle")}</h3>
+              <p>{t("settings.planText")}</p>
+              {loadingCredits ? <div className="settings-v14339-skeleton" /> : (
+                <>
+                  <div className="settings-v14339-plan-row"><span>{t("settings.currentPlan")}</span><strong>{planName}</strong></div>
+                  <div className="settings-v14339-credit-number"><strong>{creditRemaining}</strong><span>/ {creditLimit || "—"} {t("layout.creditsLeft")}</span></div>
+                  <div className="settings-v14339-credit-track"><i style={{ width: `${creditPercent}%` }} /></div>
+                  <div className="settings-v14339-plan-row muted"><span>{t("settings.renews")}</span><strong>{renewalLabel}</strong></div>
+                </>
+              )}
+            </div>
+          </article>
 
+          <article className="settings-v14339-card">
+            <span className="settings-v14339-icon green"><CreditCard size={20} /></span>
+            <div className="settings-v14339-card-copy">
+              <p className="eyebrow">{t("settings.subscriptionEyebrow")}</p>
+              <h3>{t("settings.subscriptionTitle")}</h3>
+              <p>{t("settings.subscriptionText")}</p>
+              <div className="settings-v14339-status"><i />{t("settings.subscriptionActive")}</div>
+              <div className="settings-v14339-plan-row"><span>{t("settings.planStatus")}</span><strong>{planName}</strong></div>
+              <small>{t("settings.billingComingLater")}</small>
+            </div>
+          </article>
 
-          <p>{t("settings.appLanguageHelp")}</p>
-        </div>
-      </section>
+          <article className="settings-v14339-card compact-info">
+            <span className="settings-v14339-icon lavender"><Bell size={20} /></span>
+            <div className="settings-v14339-card-copy">
+              <p className="eyebrow">{t("settings.notificationsEyebrow")}</p>
+              <h3>{t("settings.notificationsTitle")}</h3>
+              <p>{t("settings.notificationsText")}</p>
+            </div>
+          </article>
 
-      <section className="settings-danger-zone settings-danger-zone-compact">
-        <div>
-          <p className="eyebrow danger-eyebrow">
-            {t("settings.dangerEyebrow")}
-          </p>
-          <h3>{t("settings.deleteTitle")}</h3>
-          <p>{t("settings.deleteText")}</p>
-        </div>
+          <article className="settings-v14339-card compact-info">
+            <span className="settings-v14339-icon blue"><ShieldCheck size={20} /></span>
+            <div className="settings-v14339-card-copy">
+              <p className="eyebrow">{t("settings.securityEyebrow")}</p>
+              <h3>{t("settings.securityTitle")}</h3>
+              <p>{t("settings.securityText")}</p>
+            </div>
+          </article>
+        </section>
 
-        <button
-          type="button"
-          className="danger-button compact"
-          onClick={() => {
-            setDeleteMessage("");
-            setDeleteModalOpen(true);
-          }}
-          disabled={deletingAccount}
-        >
-          {getDeleteCopy(locale, "openDeleteDialog", deleteConfirmWord, deleteButtonLabel)}
-        </button>
-      </section>
+        <section className="settings-danger-zone settings-danger-zone-compact settings-v14339-danger">
+          <div>
+            <p className="eyebrow danger-eyebrow">{t("settings.dangerEyebrow")}</p>
+            <h3>{t("settings.deleteTitle")}</h3>
+            <p>{t("settings.deleteText")}</p>
+          </div>
+          <button type="button" className="danger-button compact" onClick={() => { setDeleteMessage(""); setDeleteModalOpen(true); }} disabled={deletingAccount}>
+            {getDeleteCopy(locale, "openDeleteDialog", deleteConfirmWord, deleteButtonLabel)}
+          </button>
+        </section>
 
       {deleteModalOpen && (
         <div className="settings-modal-backdrop" role="presentation">

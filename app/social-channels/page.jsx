@@ -440,30 +440,36 @@ export default function SocialChannelsPage() {
           </div>
         ) : null}
 
-        <section className="social-v74-intro-strip">
-          <div>
-            <strong>{t("social.introTitleV2")}</strong>
-            <p>{t("social.introTextV2")}</p>
+        <section className="social-v14339-connect-shell">
+          <div className="social-v14339-connect-head">
+            <div>
+              <strong>{t("social.introTitleV2")}</strong>
+              <p>{t("social.introTextV2")}</p>
+            </div>
+            <span>{t("social.approvalReminderV2")}</span>
           </div>
-          <span>{t("social.approvalReminderV2")}</span>
-        </section>
 
-        <div className="social-v74-grid">
-          {selectedPlatforms.map((platform) => (
-            <ChannelCard
-              key={platform.key}
-              platform={platform}
-              connection={connectionsByPlatform[platform.key]}
-              currentBrand={currentBrand}
-              currentUser={currentUser}
-              loading={loading}
-              connectingPlatform={connectingPlatform}
-              onConnectStart={handleConnect}
-              onDisconnect={handleDisconnect}
-              t={t}
-            />
-          ))}
-        </div>
+          <div className="social-v74-grid social-v14339-grid">
+            {selectedPlatforms.map((platform) => (
+              <ChannelCard
+                key={platform.key}
+                platform={platform}
+                connection={connectionsByPlatform[platform.key]}
+                currentBrand={currentBrand}
+                currentUser={currentUser}
+                loading={loading}
+                connectingPlatform={connectingPlatform}
+                onConnectStart={handleConnect}
+                onDisconnect={handleDisconnect}
+                t={t}
+              />
+            ))}
+          </div>
+          <div className="social-v14339-security-note">
+            <ShieldCheck size={16} aria-hidden="true" />
+            <span>{t("social.securityNoteV2")}</span>
+          </div>
+        </section>
         {connectionSuccess ? (
           <div className="social-success-backdrop" role="presentation">
             <section className="social-success-modal" role="dialog" aria-modal="true" aria-label={t("social.success.title")}>

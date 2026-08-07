@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Building2, Check, CheckCircle2, Globe2, Languages, Pencil, Sparkles, Users, X } from "lucide-react";
+import { Building2, Check, Globe2, Languages, Pencil, Sparkles, Users, X } from "lucide-react";
 import AppLayout from "../../components/AppLayout";
 import { supabase } from "../../lib/supabaseClient";
 import { getValidAnalysisAccessToken } from "../../lib/analysisSession";
@@ -1406,31 +1406,6 @@ export default function BrandProfile() {
             <span>{t("brand.heroText")}</span>
           </div>
 
-          <div
-            className={`brand-profile-hero-badge ${
-              isBrandProfileReady ? "ready" : "needs-setup"
-            }`}
-          >
-            <span className="brand-profile-status-icon">
-              {isBrandProfileReady ? <CheckCircle2 size={22} /> : <Sparkles size={22} />}
-            </span>
-            <div>
-              <strong>
-                {analyzing
-                  ? t("brand.analysisTitle")
-                  : isBrandProfileReady
-                    ? t("brand.readyBadge")
-                    : t("brand.setupNeededBadge")}
-              </strong>
-              <span>
-                {analyzing
-                  ? t(getCurrentAnalysisStage(analysisProgress).titleKey)
-                  : isBrandProfileReady
-                    ? t("brand.readyBadgeText")
-                    : t("brand.analysisPendingBadgeText")}
-              </span>
-            </div>
-          </div>
         </header>
 
         <section className="brand-profile-layout">

@@ -62,7 +62,9 @@
     "test:v143.36": "node scripts/test-v143-36-calendar-library-repair.mjs",
     "test:v143.36.1": "node scripts/test-v143-36-1-semantic-visual-reclassification.mjs",
     "test:v143.37": "node scripts/test-v143-37-readability-responsive-auth.mjs",
-    "test:v143.38": "node scripts/test-v143-38-premium-responsive-experience.mjs"
+    "test:v143.38": "node scripts/test-v143-38-premium-responsive-experience.mjs",
+    "test:v143.39": "node scripts/test-v143-39-responsive-workspace-refinement.mjs",
+    "test:v143.40": "node scripts/test-v143-40-css-consolidation.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

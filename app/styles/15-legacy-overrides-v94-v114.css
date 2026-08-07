@@ -1,0 +1,2668 @@
+/* Spreelo v143.40 consolidated CSS bundle: 15-legacy-overrides-v94-v114.css.
+   Source order is preserved. Historical source layers are archived in app/styles/archive-v143/.
+   Cleanup removes declarations that are provably dead because the exact same selector,
+   at-rule scope and property are declared again later with equal or stronger cascade priority. */
+
+/* ===== historical source boundary: 15-v94-reference-master.css ===== */
+html body .automation-page.plan-v70-active .plan-v70-shell::before {
+  bottom: auto !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-icon {
+  flex: 0 0 68px !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-collapse {
+  position: absolute !important;
+  top: 9px !important;
+  right: 10px !important;
+  width: 28px !important;
+  height: 28px !important;
+  padding: 0 !important;
+  place-items: center !important;
+  color: #566177 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v73-selected-platform {
+  width: 22px !important;
+  height: 22px !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .platform-icon-img {
+  width: 22px !important;
+  height: 22px !important;
+}
+@media (max-width: 1120px) {
+  html body .automation-page.plan-v70-active .plan-v70-shell::before {
+    top: -38px !important;
+    right: -42px !important;
+    left: -42px !important;
+    height: 520px !important;
+    background-position: 54% top !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-banner.expanded {
+    min-height: 146px !important;
+    padding: 18px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article,
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:first-child,
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:last-child {
+    grid-template-columns: 54px minmax(0, 1fr) !important;
+    min-height: 106px !important;
+    gap: 13px !important;
+    padding: 0 18px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:first-child {
+    padding-left: 2px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-icon {
+    width: 52px !important;
+    height: 52px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-icon svg {
+    width: 22px !important;
+    height: 22px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid h2 {
+    font-size: 16px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid p {
+    font-size: 12px !important;
+    line-height: 1.45 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+@media (max-width: 760px) {
+  html body .automation-page.plan-v70-active .plan-v70-shell::before {
+    top: -18px !important;
+    opacity: .7 !important;
+    background-position: 62% top !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-header h1 {
+    font-size: 27px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-banner.expanded {
+    min-height: auto !important;
+    padding: 15px 14px !important;
+    border-radius: 17px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+    min-height: 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article,
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:first-child,
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:last-child {
+    grid-template-columns: 38px minmax(0, 1fr) !important;
+    min-height: 0 !important;
+    gap: 10px !important;
+    padding: 0 !important;
+    border: 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article + article {
+    border-left: 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-icon {
+    width: 36px !important;
+    height: 36px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-icon svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid h2 {
+    margin-bottom: 2px !important;
+    font-size: 14px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid p {
+    max-width: none !important;
+    font-size: 10.8px !important;
+    line-height: 1.4 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-settings-heading {
+    align-items: flex-start !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-settings-heading button {
+    font-size: 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-settings-heading button svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 9px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile {
+    min-height: 113px !important;
+    height: 113px !important;
+    grid-template-rows: 51px 40px !important;
+    gap: 7px !important;
+    padding: 10px !important;
+    border-radius: 13px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v90-setting-head {
+    grid-template-columns: 28px minmax(0, 1fr) !important;
+    gap: 7px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v90-setting-icon {
+    width: 27px !important;
+    height: 27px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v90-setting-icon svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v90-setting-title {
+    font-size: 11.5px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v90-setting-copy small {
+    font-size: 9.2px !important;
+    white-space: normal !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 2 !important;
+    -webkit-box-orient: vertical !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid select,
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .custom-picker-button,
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .platform-multiselect-button,
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v73-platform-loading,
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v73-connect-platform {
+    min-height: 40px !important;
+    height: 40px !important;
+    padding: 0 10px !important;
+    font-size: 11.5px !important;
+  }
+}
+
+/* ===== historical source boundary: 16-v95-exact-create-plan.css ===== */
+html body .automation-page.plan-v70-active .plan-v70-shell {
+  position: relative !important;
+  isolation: isolate !important;
+  width: 100% !important;
+  max-width: none !important;
+  gap: 15px !important;
+  margin: 0 0 16px !important;
+  overflow: visible !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-shell::before {
+  position: absolute !important;
+  z-index: -2 !important;
+  top: -34px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  opacity: 1 !important;
+  background-image: url("/backgrounds/spreelo-plan-reference-magic-v95.svg") !important;
+  background-repeat: no-repeat !important;
+  pointer-events: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-shell::after {
+  display: none !important;
+  content: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-shell > * {
+  position: relative !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-header {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 24px !important;
+  padding: 1px 6px 0 !important;
+  margin: 0 !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-header h1 {
+  margin: 0 !important;
+  color: #11192d !important;
+  font-size: 26px !important;
+  line-height: 1.08 !important;
+  font-weight: 850 !important;
+  letter-spacing: -.035em !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-header p {
+  margin: 8px 0 0 !important;
+  color: #66738a !important;
+  font-size: 11.5px !important;
+  line-height: 1.4 !important;
+  font-weight: 500 !important;
+}
+html body .automation-page.plan-v70-active .plan-v95-header-actions {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  margin-top: -7px !important;
+}
+html body .automation-page.plan-v70-active .plan-v95-template-button,
+html body .automation-page.plan-v70-active .plan-v95-header-help {
+  height: 35px !important;
+  border: 1px solid rgba(255, 255, 255, .94) !important;
+}
+html body .automation-page.plan-v70-active .plan-v95-template-button {
+  min-width: 137px !important;
+  padding: 0 13px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 9px !important;
+  color: #172035 !important;
+  border-radius: 6px !important;
+  font-size: 11px !important;
+  line-height: 1 !important;
+  font-weight: 750 !important;
+  cursor: default !important;
+}
+html body .automation-page.plan-v70-active .plan-v95-header-help {
+  width: 35px !important;
+  min-width: 35px !important;
+  padding: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  color: #56637a !important;
+  border-radius: 50% !important;
+  cursor: pointer !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-settings-section {
+  display: grid !important;
+  gap: 22px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-banner {
+  position: relative !important;
+  overflow: hidden !important;
+  width: 100% !important;
+  border-radius: 14px !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-banner.expanded {
+  min-height: 161px !important;
+  height: 161px !important;
+  padding: 20px 23px !important;
+  box-sizing: border-box !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-banner.expanded::after {
+  display: none !important;
+  content: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-grid {
+  display: grid !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  height: 119px !important;
+  min-height: 119px !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-grid article,
+html body .automation-page.plan-v70-active .plan-v89-guide-grid article:first-child,
+html body .automation-page.plan-v70-active .plan-v89-guide-grid article:last-child {
+  min-width: 0 !important;
+  min-height: 119px !important;
+  display: grid !important;
+  align-items: center !important;
+  align-content: center !important;
+  gap: 20px !important;
+  padding: 0 24px !important;
+  border: 0 !important;
+  box-sizing: border-box !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-grid article:first-child {
+  padding-left: 1px !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-grid article:last-child {
+  padding-right: 5px !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-grid article + article {
+  border-left: 1px solid rgba(219, 224, 234, .92) !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-icon {
+  width: 70px !important;
+  height: 70px !important;
+  display: grid !important;
+  place-items: center !important;
+  color: #ff642c !important;
+  border: 1px solid rgba(255,255,255,.96) !important;
+  border-radius: 50% !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-icon svg {
+  width: 29px !important;
+  height: 29px !important;
+  stroke-width: 2.05 !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-grid h2 {
+  margin: 0 0 8px !important;
+  color: #10182c !important;
+  line-height: 1.08 !important;
+  font-weight: 850 !important;
+  letter-spacing: -.02em !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-grid p {
+  margin: 0 !important;
+  font-weight: 500 !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-collapse {
+  display: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-settings-heading {
+  display: flex !important;
+  align-items: flex-end !important;
+  justify-content: space-between !important;
+  gap: 18px !important;
+  padding: 0 2px !important;
+  margin: 0 !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-settings-heading h2 {
+  margin: 0 !important;
+  color: #111a30 !important;
+  font-size: 18px !important;
+  line-height: 1.08 !important;
+  font-weight: 850 !important;
+  letter-spacing: -.025em !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-settings-heading p {
+  margin: 4px 0 0 !important;
+  color: #66738a !important;
+  font-size: 11px !important;
+  line-height: 1.25 !important;
+  font-weight: 500 !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-settings-heading button {
+  min-height: 24px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  color: #66738a !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-settings-grid {
+  display: grid !important;
+  gap: 10px 13px !important;
+  width: 100% !important;
+  align-items: stretch !important;
+  margin-top: -15px !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 105px !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: 43px 34px !important;
+  align-content: start !important;
+  align-items: stretch !important;
+  gap: 6px !important;
+  padding: 11px 12px !important;
+  box-sizing: border-box !important;
+  border: 1px solid #e0e5ee !important;
+  border-radius: 12px !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-setting-head {
+  width: 100% !important;
+  min-width: 0 !important;
+  display: grid !important;
+  grid-template-columns: 36px minmax(0, 1fr) !important;
+  align-items: start !important;
+  gap: 10px !important;
+  margin: 0 !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-setting-icon {
+  width: 34px !important;
+  height: 34px !important;
+  display: grid !important;
+  place-items: center !important;
+  color: #ff642c !important;
+  border-radius: 50% !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-setting-icon svg {
+  width: 19px !important;
+  height: 19px !important;
+  stroke-width: 2.1 !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-setting-copy {
+  min-width: 0 !important;
+  padding-top: 1px !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-setting-title {
+  display: block !important;
+  margin: 0 0 4px !important;
+  color: #131b2f !important;
+  line-height: 1.05 !important;
+  font-weight: 825 !important;
+  white-space: nowrap !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-setting-copy small {
+  display: block !important;
+  margin: 0 !important;
+  min-height: 0 !important;
+  color: #77839a !important;
+  font-size: 10px !important;
+  line-height: 1.2 !important;
+  font-weight: 500 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > select,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > .custom-picker-field,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > .platform-multiselect,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > .plan-v73-platform-loading,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > .plan-v73-connect-platform,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .custom-picker-anchor,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .custom-picker-field,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .platform-multiselect {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+  inline-size: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  align-self: stretch !important;
+  justify-self: stretch !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-settings-grid select,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .custom-picker-button,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .platform-multiselect-button,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v73-platform-loading,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v73-connect-platform {
+  width: 100% !important;
+  inline-size: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  min-height: 34px !important;
+  height: 34px !important;
+  margin: 0 !important;
+  padding: 0 12px !important;
+  box-sizing: border-box !important;
+  color: #172035 !important;
+  border: 1px solid #dce2eb !important;
+  border-radius: 7px !important;
+  background: rgba(255,255,255,.98) !important;
+  box-shadow: 0 1px 2px rgba(24, 35, 57, .025) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-settings-grid select {
+  display: block !important;
+  padding-right: 34px !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .custom-picker-button,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .platform-multiselect-button {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .custom-picker-button strong {
+  color: #172035 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .platform-selected-icons {
+  display: flex !important;
+  align-items: center !important;
+  gap: 9px !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v73-selected-platform,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .platform-icon-img {
+  width: 22px !important;
+  height: 22px !important;
+}
+@media (max-width: 860px) {
+  html body .automation-page.plan-v70-active .plan-v95-template-button span {
+    display: none !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v95-template-button {
+    min-width: 35px !important;
+    width: 35px !important;
+    padding: 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-banner.expanded {
+    height: auto !important;
+    min-height: 146px !important;
+    padding: 18px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article,
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:first-child,
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:last-child {
+    gap: 11px !important;
+    padding: 0 13px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-icon {
+    width: 46px !important;
+    height: 46px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-icon svg {
+    width: 21px !important;
+    height: 21px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid h2 {
+    font-size: 14px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid p {
+    font-size: 10.5px !important;
+  }
+}
+@media (max-width: 620px) {
+  html body .automation-page.plan-v70-active .plan-v70-shell::before {
+    top: -18px !important;
+    right: -14px !important;
+    left: -14px !important;
+    height: 300px !important;
+    background-size: auto 300px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-header {
+    min-height: 75px !important;
+    gap: 12px !important;
+    padding: 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-header h1 {
+    font-size: 25px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-header p {
+    font-size: 11.5px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-banner.expanded {
+    padding: 15px 14px !important;
+    border-radius: 13px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article,
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:first-child,
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:last-child {
+    min-height: 0 !important;
+    gap: 10px !important;
+    padding: 0 !important;
+    border: 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-icon {
+    width: 36px !important;
+    height: 36px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-icon svg {
+    width: 17px !important;
+    height: 17px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid h2 {
+    margin-bottom: 2px !important;
+    font-size: 13px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid p {
+    max-width: none !important;
+    font-size: 10.5px !important;
+    line-height: 1.4 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-settings-heading button {
+    font-size: 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid {
+    grid-template-columns: 1fr !important;
+    gap: 9px !important;
+  }
+}
+
+/* ===== historical source boundary: 17-v96-reference-visual-correction.css ===== */
+html body .automation-page.plan-v70-active {
+  padding: 29px 29px 42px !important;
+  background-repeat: no-repeat !important;
+  background-position: center top !important;
+  background-size: 100% auto !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-header {
+  min-height: 58px !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-shell::before {
+  display: none !important;
+  content: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-shell > * {
+  z-index: 1 !important;
+}
+html body .automation-page.plan-v70-active .plan-v95-template-button,
+html body .automation-page.plan-v70-active .plan-v95-header-help {
+  border-color: rgba(255, 255, 255, .96) !important;
+  background: rgba(255, 255, 255, .62) !important;
+  box-shadow: 0 12px 24px rgba(31, 39, 64, .14),
+    inset 0 1px 0 rgba(255, 255, 255, 1) !important;
+  backdrop-filter: blur(16px) saturate(115%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(115%) !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-banner {
+  border: 1px solid rgba(255, 255, 255, .94) !important;
+  background: linear-gradient(108deg, rgba(255, 255, 255, .38) 0%, rgba(250, 250, 254, .28) 54%, rgba(255, 249, 246, .34) 100%) !important;
+  box-shadow: 0 19px 36px rgba(32, 40, 65, .16),
+    0 3px 9px rgba(32, 40, 65, .07),
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(255, 255, 255, .35) !important;
+  backdrop-filter: blur(18px) saturate(118%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(118%) !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-banner::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 0 !important;
+  pointer-events: none !important;
+  background: radial-gradient(ellipse 28% 86% at 14% 76%, rgba(255, 226, 211, .32) 0%, rgba(255, 239, 230, .13) 52%, transparent 100%),
+    radial-gradient(ellipse 34% 90% at 55% 8%, rgba(226, 226, 238, .38) 0%, rgba(243, 243, 249, .12) 60%, transparent 100%),
+    radial-gradient(ellipse 25% 88% at 96% 25%, rgba(255, 229, 216, .27) 0%, rgba(255, 243, 236, .08) 58%, transparent 100%) !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-grid,
+html body .automation-page.plan-v70-active .plan-v89-guide-compact,
+html body .automation-page.plan-v70-active .plan-v89-guide-collapse {
+  position: relative !important;
+  z-index: 1 !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-grid {
+  grid-template-columns: .9fr 1fr 1.1fr !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-grid article,
+html body .automation-page.plan-v70-active .plan-v89-guide-grid article:first-child,
+html body .automation-page.plan-v70-active .plan-v89-guide-grid article:last-child {
+  grid-template-columns: 72px minmax(0, 1fr) !important;
+  justify-content: stretch !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-grid h2 {
+  font-size: 15.5px !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-grid p {
+  width: 100% !important;
+  max-width: 244px !important;
+  color: #303b52 !important;
+  font-size: 11.5px !important;
+  line-height: 1.58 !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-grid article:first-child p {
+  max-width: 182px !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-grid article:nth-child(2) p {
+  max-width: 192px !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-grid article + article {
+  border-left-color: rgba(207, 211, 222, .82) !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-icon {
+  border-color: rgba(255, 255, 255, .98) !important;
+  background: radial-gradient(circle at 45% 35%, rgba(255, 255, 255, .94) 0%, rgba(255, 255, 255, .70) 56%, rgba(255, 247, 243, .60) 100%) !important;
+  box-shadow: 0 13px 25px rgba(35, 42, 68, .14),
+    0 0 24px rgba(255, 229, 214, .34),
+    inset 0 1px 0 rgba(255, 255, 255, 1) !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-banner.collapsed {
+  background: linear-gradient(100deg, rgba(255, 255, 255, .42) 0%, rgba(250, 249, 253, .29) 56%, rgba(255, 242, 234, .39) 100%) !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-settings-grid {
+  grid-template-columns: .95fr .99fr 1.06fr !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile {
+  border-color: rgba(255, 255, 255, .91) !important;
+  background: linear-gradient(116deg, rgba(255, 255, 255, .69) 0%, rgba(251, 251, 254, .50) 56%, rgba(248, 248, 252, .58) 100%) !important;
+  box-shadow: 0 12px 23px rgba(34, 42, 68, .13),
+    0 2px 6px rgba(34, 42, 68, .045),
+    inset 0 1px 0 rgba(255, 255, 255, 1) !important;
+  backdrop-filter: blur(15px) saturate(114%) !important;
+  -webkit-backdrop-filter: blur(15px) saturate(114%) !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-setting-icon {
+  background: rgba(255, 238, 229, .84) !important;
+  box-shadow: 0 5px 12px rgba(226, 105, 63, .08),
+    inset 0 1px 0 rgba(255, 255, 255, .92) !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-setting-title {
+  font-size: 12.5px !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > select,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > input,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile .custom-picker-button,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile .platform-multiselect-button,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile .plan-v73-platform-loading,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile .plan-v73-connect-platform {
+  min-height: 34px !important;
+  height: 34px !important;
+  max-height: 34px !important;
+  border: 1px solid rgba(211, 217, 228, .94) !important;
+  border-radius: 7px !important;
+  background: rgba(255, 255, 255, .64) !important;
+  box-shadow: 0 4px 10px rgba(36, 44, 70, .06),
+    inset 0 1px 0 rgba(255, 255, 255, .95) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  font-size: 12px !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > .custom-picker-field,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > .platform-multiselect,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile .custom-picker-anchor {
+  min-height: 34px !important;
+  height: 34px !important;
+  max-height: 34px !important;
+}
+@media (max-width: 860px) {
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article,
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:first-child,
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:last-child {
+    grid-template-columns: 48px minmax(0, 180px) !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+@media (max-width: 620px) {
+  html body .automation-page.plan-v70-active {
+    padding: 18px 12px 30px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article,
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:first-child,
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:last-child {
+    grid-template-columns: 38px minmax(0, 1fr) !important;
+    justify-content: stretch !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid p,
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:first-child p,
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:nth-child(2) p {
+    max-width: none !important;
+  }
+}
+
+/* ===== historical source boundary: 18-v98-responsive-polish.css ===== */
+html body .automation-page.plan-v70-active {
+  position: relative !important;
+  isolation: isolate !important;
+  background-color: #eef0f5 !important;
+  background-image: none !important;
+}
+html body .automation-page.plan-v70-active::before {
+  content: "" !important;
+  display: block !important;
+  position: absolute !important;
+  z-index: -1 !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 1672 / 941 !important;
+  pointer-events: none !important;
+  background: url("/backgrounds/spreelo-background-v97.png") center top / 100% 100% no-repeat !important;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 72%, rgba(0, 0, 0, .82) 79%, rgba(0, 0, 0, .34) 91%, transparent 100%) !important;
+  mask-image: linear-gradient(to bottom, #000 0%, #000 72%, rgba(0, 0, 0, .82) 79%, rgba(0, 0, 0, .34) 91%, transparent 100%) !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-guide-grid article:last-child {
+  border-left: 1px solid rgba(207, 211, 222, .82) !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-settings-grid select,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .custom-picker-button,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .platform-multiselect-button,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v73-platform-loading,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v73-connect-platform {
+  line-height: 1.25 !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > .plan-v73-connect-platform {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  text-decoration: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-settings-section {
+  container-name: plan-section;
+  container-type: inline-size;
+}
+@container plan-section (max-width: 740px) {
+  html body .automation-page.plan-v70-active .plan-v89-guide-banner.expanded {
+    height: auto !important;
+    min-height: 0 !important;
+    padding: 10px 16px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    height: auto !important;
+    min-height: 0 !important;
+    gap: 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article,
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:first-child,
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:last-child {
+    grid-template-columns: 44px minmax(0, 1fr) !important;
+    min-height: 0 !important;
+    gap: 12px !important;
+    padding: 11px 2px !important;
+    align-items: center !important;
+    border: 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:nth-child(n + 2),
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:last-child {
+    border-top: 1px solid rgba(207, 211, 222, .76) !important;
+    border-left: 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-icon {
+    width: 42px !important;
+    height: 42px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-icon svg {
+    width: 19px !important;
+    height: 19px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid h2 {
+    margin: 0 0 3px !important;
+    font-size: 14px !important;
+    line-height: 1.2 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid p,
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:first-child p,
+  html body .automation-page.plan-v70-active .plan-v89-guide-grid article:nth-child(2) p {
+    width: 100% !important;
+    max-width: none !important;
+    font-size: 11px !important;
+    line-height: 1.48 !important;
+  }
+}
+@media (max-width: 1180px) {
+  html body .automation-page.plan-v70-active .plan-v86-planned-row {
+    overflow: hidden !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v86-planned-visual {
+    align-self: stretch !important;
+    height: 100% !important;
+  }
+}
+@media (max-width: 760px) {
+  html body .automation-page.plan-v70-active .plan-v86-planned-visual {
+    height: calc(100% + 20px) !important;
+    min-height: calc(100% + 20px) !important;
+    margin-top: -10px !important;
+    margin-bottom: -10px !important;
+  }
+}
+html body .automation-page.plan-v70-active .plan-v83-variation-row input:checked + .plan-v70-toggle-track > span {
+  transform: translateX(17px) !important;
+}
+
+/* ===== historical source boundary: 19-v100-campaign-offer-experience.css ===== */
+html body .automation-page.plan-v70-active .plan-v70-offer-builder {
+  padding: 20px !important;
+  box-shadow: 0 14px 32px rgba(74, 46, 35, .08),
+    inset 0 1px 0 rgba(255, 255, 255, .98) !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-offer-heading h2 {
+  font-size: 18px !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-offer-heading p {
+  max-width: 820px !important;
+  font-size: 12px !important;
+  line-height: 1.55 !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-offer-scope {
+  flex-wrap: wrap !important;
+  margin: 17px 0 15px !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-offer-scope button {
+  min-height: 39px !important;
+  color: #26324a !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-offer-scope button.active {
+  color: #b84322 !important;
+  border-color: #f06a48 !important;
+  background: rgba(255, 231, 220, .86) !important;
+  box-shadow: 0 6px 14px rgba(227, 89, 50, .10) !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-offer-grid {
+  grid-template-columns: 1.2fr .72fr .78fr .86fr !important;
+  gap: 12px !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-offer-grid .span-3 {
+  grid-column: 1 / -1 !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-offer-grid label {
+  min-width: 0 !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-offer-grid input,
+html body .automation-page.plan-v70-active .plan-v70-offer-grid select {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 44px !important;
+  height: 44px !important;
+  padding: 0 14px !important;
+  box-sizing: border-box !important;
+  border: 1px solid rgba(209, 216, 228, .98) !important;
+  border-radius: 10px !important;
+  background: rgba(255, 255, 255, .90) !important;
+  color: #172238 !important;
+  font: inherit !important;
+  font-size: 13px !important;
+  line-height: normal !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-offer-grid select {
+  padding-right: 34px !important;
+}
+html body .automation-page.plan-v70-active .plan-v100-discount-input {
+  position: relative !important;
+}
+html body .automation-page.plan-v70-active .plan-v100-discount-input input {
+  padding-right: 64px !important;
+}
+html body .automation-page.plan-v70-active .plan-v100-discount-input > span {
+  position: absolute !important;
+  top: 50% !important;
+  right: 12px !important;
+  transform: translateY(-50%) !important;
+  color: #bd4e2e !important;
+  font-size: 12px !important;
+  font-weight: 850 !important;
+  pointer-events: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v100-currency-note {
+  margin-top: 5px !important;
+  color: #737d91 !important;
+  font-size: 9.5px !important;
+  line-height: 1.35 !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-offer-actions {
+  border-top-color: rgba(231, 180, 154, .48) !important;
+}
+html body .automation-page.plan-v70-active .plan-v100-combined-format-icon {
+  position: relative !important;
+}
+html body .automation-page.plan-v70-active .plan-v100-campaign-icon {
+  position: absolute !important;
+  right: -4px !important;
+  bottom: -4px !important;
+  width: 19px !important;
+  height: 19px !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 2px solid #fff !important;
+  border-radius: 50% !important;
+  color: #c84422 !important;
+  background: #ffe5d8 !important;
+  box-shadow: 0 4px 10px rgba(174, 59, 31, .18) !important;
+}
+html body .automation-page.plan-v70-active .plan-v100-campaign-icon svg {
+  width: 10px !important;
+  height: 10px !important;
+}
+html body .automation-page.plan-v70-active .plan-v100-planned-title-line {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+}
+html body .automation-page.plan-v70-active .plan-v100-campaign-badge {
+  min-height: 20px !important;
+  padding: 2px 7px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  border: 1px solid rgba(239, 105, 68, .30) !important;
+  border-radius: 999px !important;
+  color: #b84526 !important;
+  background: #fff0e9 !important;
+  font-size: 9.5px !important;
+  line-height: 1.2 !important;
+  font-weight: 850 !important;
+  white-space: nowrap !important;
+}
+html body .automation-page.plan-v70-active .planner-post-title-row {
+  flex-wrap: wrap !important;
+}
+html body .automation-page.plan-v70-active .plan-v100-channel-required-actions {
+  margin-top: 22px !important;
+  display: grid !important;
+  grid-template-columns: 1fr 1.4fr !important;
+  gap: 10px !important;
+}
+html body .automation-page.plan-v70-active .plan-v100-channel-required-actions button,
+html body .automation-page.plan-v70-active .plan-v100-channel-required-actions a {
+  min-height: 44px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 10px !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  text-decoration: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v100-channel-required-actions button {
+  border: 1px solid #dfe4ed !important;
+  color: #28334a !important;
+  background: #fff !important;
+}
+html body .automation-page.plan-v70-active .plan-v100-channel-required-actions a {
+  border: 1px solid #ee6846 !important;
+  color: #fff !important;
+  background: linear-gradient(135deg, #f36d4b, #da4d2f) !important;
+  box-shadow: 0 9px 20px rgba(215, 74, 44, .18) !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile {
+  min-height: 110px !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > select,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > input,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile .custom-picker-button,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile .platform-multiselect-button,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile .plan-v73-platform-loading,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile .plan-v73-connect-platform,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > .custom-picker-field,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > .platform-multiselect,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile .custom-picker-anchor {
+  min-height: 38px !important;
+  height: 38px !important;
+  max-height: 38px !important;
+  line-height: normal !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-settings-grid select {
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  line-height: normal !important;
+}
+@media (max-width: 900px) {
+  html body .automation-page.plan-v70-active .plan-v70-offer-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-offer-grid .span-3 {
+    grid-column: 1 / -1 !important;
+  }
+}
+@media (max-width: 760px) {
+  html body .automation-page.plan-v70-active .plan-v70-offer-builder {
+    padding: 17px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-offer-scope {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-offer-scope button {
+    min-width: 0 !important;
+    padding: 7px 8px !important;
+    justify-content: center !important;
+    flex-direction: column !important;
+    text-align: center !important;
+    white-space: normal !important;
+    line-height: 1.25 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-offer-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-offer-grid .span-3,
+  html body .automation-page.plan-v70-active .plan-v100-offer-url-field {
+    grid-column: 1 / -1 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-offer-actions p {
+    font-size: 10px !important;
+  }
+  html body .automation-page.plan-v70-active .add-post-modal:not(.add-post-modal-focus) .plan-v72-all-formats-grid.grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+  html body .automation-page.plan-v70-active .add-post-modal:not(.add-post-modal-focus) .plan-v72-format-card {
+    min-width: 0 !important;
+  }
+  html body .automation-page.plan-v70-active .add-post-modal:not(.add-post-modal-focus) .plan-v72-format-art {
+    min-height: 104px !important;
+    height: 104px !important;
+  }
+  html body .automation-page.plan-v70-active .add-post-modal:not(.add-post-modal-focus) .plan-v72-format-card-copy {
+    padding: 11px !important;
+  }
+  html body .automation-page.plan-v70-active .add-post-modal:not(.add-post-modal-focus) .plan-v72-format-card-copy strong {
+    font-size: 12px !important;
+  }
+  html body .automation-page.plan-v70-active .add-post-modal:not(.add-post-modal-focus) .plan-v72-format-card-copy small {
+    font-size: 10px !important;
+    line-height: 1.4 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v100-campaign-badge {
+    font-size: 8.5px !important;
+    padding-inline: 6px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v100-channel-required-actions {
+    grid-template-columns: 1fr !important;
+  }
+}
+@media (max-width: 430px) {
+  html body .automation-page.plan-v70-active .plan-v70-offer-grid {
+    grid-template-columns: 1fr !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-offer-grid .span-3,
+  html body .automation-page.plan-v70-active .plan-v100-offer-url-field {
+    grid-column: auto !important;
+  }
+}
+@media (max-width: 330px) {
+  html body .automation-page.plan-v70-active .add-post-modal:not(.add-post-modal-focus) .plan-v72-all-formats-grid.grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ===== historical source boundary: 20-v101-unified-cards-calendar-form.css ===== */
+html body .automation-page.plan-v70-active .plan-v89-settings-section {
+  position: relative !important;
+  z-index: 500 !important;
+  overflow: visible !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-settings-grid,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .custom-picker-field,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .custom-picker-anchor {
+  overflow: visible !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-setting-tile:has(.custom-calendar-popover) {
+  position: relative !important;
+  z-index: 600 !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-setting-tile .custom-calendar-popover {
+  z-index: 700 !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-formats-card {
+  z-index: 1 !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-formats-card,
+html body .automation-page.plan-v70-active .plan-v70-planned-card,
+html body .automation-page.plan-v70-active .plan-v83-continuation-card,
+html body .automation-page.plan-v70-active .plan-v70-activate-card,
+html body .automation-page.plan-v70-active .plan-v70-offer-builder {
+  border-color: rgba(255, 255, 255, .91) !important;
+  background: linear-gradient(116deg, rgba(255, 255, 255, .79) 0%, rgba(251, 251, 254, .64) 56%, rgba(248, 248, 252, .72) 100%) !important;
+  box-shadow: 0 16px 30px rgba(34, 42, 68, .12),
+    0 3px 8px rgba(34, 42, 68, .045),
+    inset 0 1px 0 rgba(255, 255, 255, 1) !important;
+  backdrop-filter: blur(15px) saturate(114%) !important;
+  -webkit-backdrop-filter: blur(15px) saturate(114%) !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-offer-builder {
+  border-color: rgba(247, 182, 150, .58) !important;
+  background: linear-gradient(126deg, rgba(255, 250, 247, .91), rgba(255, 241, 233, .78)) !important;
+}
+html body .automation-page.plan-v70-active .plan-v83-continuation-card,
+html body .automation-page.plan-v70-active .plan-v70-activate-card {
+  border-color: rgba(245, 180, 148, .48) !important;
+  background: linear-gradient(126deg, rgba(255, 251, 248, .88), rgba(255, 244, 238, .74)) !important;
+}
+html body .automation-page.plan-v70-active .plan-v72-format-card,
+html body .automation-page.plan-v70-active .plan-v86-planned-row,
+html body .automation-page.plan-v70-active .plan-v83-variation-row,
+html body .automation-page.plan-v70-active .plan-v83-credit-notice {
+  border-color: rgba(220, 225, 235, .86) !important;
+  box-shadow: 0 10px 22px rgba(34, 42, 68, .075),
+    inset 0 1px 0 rgba(255, 255, 255, .98) !important;
+}
+html body .automation-page.plan-v70-active .plan-v86-planned-row,
+html body .automation-page.plan-v70-active .plan-v83-variation-row,
+html body .automation-page.plan-v70-active .plan-v83-credit-notice {
+  background: rgba(255, 255, 255, .76) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+}
+html body .automation-page.plan-v70-active .plan-v72-format-plan-impact {
+  align-items: flex-start !important;
+  gap: 18px !important;
+}
+html body .automation-page.plan-v70-active .plan-v72-format-plan-impact > span {
+  flex: 0 0 126px !important;
+  line-height: 1.45 !important;
+}
+html body .automation-page.plan-v70-active .plan-v72-format-plan-impact > strong {
+  flex: 1 1 auto !important;
+  max-width: 100% !important;
+  line-height: 1.45 !important;
+}
+html body .automation-page.plan-v70-active .plan-v101-offer-dates {
+  grid-column: 1 / -1 !important;
+  min-width: 0 !important;
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+}
+html body .automation-page.plan-v70-active .plan-v101-offer-date-field {
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+html body .automation-page.plan-v70-active .plan-v101-offer-date-field > span {
+  margin-bottom: 6px !important;
+  color: #1e2941 !important;
+  font-size: 12px !important;
+  line-height: 1.3 !important;
+  font-weight: 850 !important;
+}
+html body .automation-page.plan-v70-active .plan-v101-offer-date-field .custom-picker-field,
+html body .automation-page.plan-v70-active .plan-v101-offer-date-field .custom-picker-anchor,
+html body .automation-page.plan-v70-active .plan-v101-offer-date-field .custom-picker-button {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+html body .automation-page.plan-v70-active .plan-v101-offer-date-field .custom-picker-button {
+  min-height: 44px !important;
+  height: 44px !important;
+  max-height: 44px !important;
+  padding: 0 14px !important;
+  border: 1px solid rgba(209, 216, 228, .98) !important;
+  border-radius: 10px !important;
+  color: #172238 !important;
+  background: rgba(255, 255, 255, .90) !important;
+  box-shadow: 0 4px 10px rgba(36, 44, 70, .06),
+    inset 0 1px 0 rgba(255, 255, 255, .95) !important;
+  font-size: 13px !important;
+  line-height: normal !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-offer-builder:has(.custom-calendar-popover) {
+  position: relative !important;
+  z-index: 450 !important;
+  overflow: visible !important;
+}
+html body .automation-page.plan-v70-active .plan-v101-offer-date-field:last-child .custom-calendar-popover {
+  left: auto !important;
+  right: 0 !important;
+}
+html body .automation-page.plan-v70-active .plan-v100-discount-input input {
+  appearance: textfield !important;
+  -moz-appearance: textfield !important;
+}
+html body .automation-page.plan-v70-active .plan-v100-discount-input input::-webkit-inner-spin-button,
+html body .automation-page.plan-v70-active .plan-v100-discount-input input::-webkit-outer-spin-button {
+  margin: 0 !important;
+  -webkit-appearance: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-offer-actions button {
+  min-height: 42px !important;
+  padding: 0 17px !important;
+  border: 0 !important;
+  border-radius: 11px !important;
+  background: linear-gradient(135deg, #f36b49, #dc4d30) !important;
+  box-shadow: 0 10px 22px rgba(215, 74, 44, .23) !important;
+}
+@media (max-width: 760px) {
+  html body .automation-page.plan-v70-active .plan-v72-format-plan-impact {
+    gap: 7px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v72-format-plan-impact > span {
+    flex-basis: auto !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v101-offer-dates {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v101-offer-date-field > span {
+    font-size: 11px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v101-offer-date-field .custom-picker-button {
+    min-height: 50px !important;
+    height: 50px !important;
+    max-height: 50px !important;
+    padding: 0 10px !important;
+    font-size: 11px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-offer-builder .custom-calendar-popover {
+    position: fixed !important;
+    left: 16px !important;
+    right: 16px !important;
+    top: 50% !important;
+    width: auto !important;
+    max-width: none !important;
+    transform: translateY(-50%) !important;
+    z-index: 16000 !important;
+  }
+}
+@media (max-width: 360px) {
+  html body .automation-page.plan-v70-active .plan-v101-offer-date-field .custom-picker-button {
+    font-size: 10px !important;
+  }
+}
+
+/* ===== historical source boundary: 21-v102-i18n-platform-alignment.css ===== */
+html body .automation-page.plan-v70-active .plan-v73-platform-multiselect .platform-multiselect-option,
+html body .automation-page.plan-v70-active .platform-multiselect .platform-multiselect-option {
+  align-items: center !important;
+}
+html body .automation-page.plan-v70-active .plan-v73-platform-multiselect .platform-multiselect-option input[type="checkbox"],
+html body .automation-page.plan-v70-active .platform-multiselect .platform-multiselect-option input[type="checkbox"] {
+  display: block !important;
+  align-self: center !important;
+  justify-self: center !important;
+  margin: 0 !important;
+  transform: translateY(-1px) !important;
+}
+html body .automation-page.plan-v70-active .plan-v73-platform-multiselect .platform-multiselect-option .platform-icon-img,
+html body .automation-page.plan-v70-active .platform-multiselect .platform-multiselect-option .platform-icon-img {
+  display: block !important;
+  align-self: center !important;
+  justify-self: center !important;
+  margin: 0 !important;
+}
+
+/* ===== historical source boundary: 22-v103-review-makeover.css ===== */
+.post-review-page {
+  --review-ink: #111a2d;
+  --review-muted: #647087;
+  --review-accent: #f06445;
+  --review-accent-dark: #c84b31;
+  --review-line: rgba(214, 220, 231, 0.94);
+  --review-surface: rgba(255, 255, 255, 0.94);
+  position: relative;
+  isolation: isolate;
+  margin: 0 auto;
+  padding: 2px 0 42px;
+  color: var(--review-ink);
+}
+.post-review-page::before {
+  content: "";
+  position: absolute;
+  z-index: -2;
+  top: -36px;
+  background: #f5f7fb url("/backgrounds/spreelo-background-v97.png") center top / cover no-repeat;
+  opacity: 0.94;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 72%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 72%, transparent 100%);
+  pointer-events: none;
+}
+.post-review-page::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 110px;
+  right: 3%;
+  width: 360px;
+  height: 360px;
+  border-radius: 50%;
+  background: rgba(255, 224, 213, 0.38);
+  filter: blur(86px);
+  pointer-events: none;
+}
+.post-review-topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 28px;
+}
+.post-review-heading {
+  min-width: 0;
+}
+.post-review-heading .eyebrow,
+.post-review-summary-copy .eyebrow {
+  margin: 0 0 7px;
+  color: #a74431;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.post-review-heading h1 {
+  margin: 0;
+  color: var(--review-ink);
+  letter-spacing: -0.045em;
+  font-weight: 950;
+}
+.post-review-heading > p:last-child {
+  margin: 11px 0 0;
+  max-width: 720px;
+  color: var(--review-muted);
+  line-height: 1.55;
+}
+.post-review-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  max-width: 680px;
+}
+.post-review-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  font: inherit;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+.post-review-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.post-review-button:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+.post-review-button.neutral {
+  color: #172136;
+  box-shadow: 0 8px 22px rgba(26, 36, 55, 0.06);
+}
+.post-review-button.discard {
+  color: #a43d2b;
+}
+.post-review-button.approve {
+  color: #fff;
+}
+.post-review-message {
+  margin: 0 0 18px;
+  padding: 13px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(238, 116, 82, 0.26);
+  border-radius: 13px;
+  background: rgba(255, 248, 244, 0.96);
+  color: #9b4935;
+  font-size: 13px;
+  font-weight: 750;
+  box-shadow: 0 10px 28px rgba(113, 58, 43, 0.07);
+}
+.post-review-summary-card,
+.post-review-meta-card,
+.post-review-preview-card,
+.post-review-editor-card,
+.post-review-idea-card,
+.post-review-footer-actions,
+.post-review-slides-card {
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(16px);
+}
+.post-review-summary-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.post-review-summary-copy {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.post-review-summary-icon {
+  flex: 0 0 52px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(247, 128, 95, 0.22);
+  background: linear-gradient(145deg, #fff9f6, #ffe8df);
+  color: var(--review-accent);
+  box-shadow: 0 10px 24px rgba(218, 96, 65, 0.13);
+}
+.post-review-summary-copy h2 {
+  margin: 0;
+  color: var(--review-ink);
+  line-height: 1.18;
+  font-weight: 900;
+  letter-spacing: -0.025em;
+}
+.post-review-summary-copy > div > p:last-child {
+  margin: 6px 0 0;
+  color: var(--review-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.post-review-statuses {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.post-review-statuses .status-pill {
+  border-radius: 999px !important;
+  line-height: 1 !important;
+  text-transform: none !important;
+}
+.post-review-meta-card {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.post-review-meta-item {
+  min-width: 0;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid rgba(221, 226, 235, 0.82);
+}
+.post-review-meta-item > span {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: #fff0ea;
+  color: var(--review-accent);
+}
+.post-review-meta-item > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.post-review-meta-item small {
+  color: #7b8597;
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 850;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+.post-review-meta-item strong {
+  overflow: hidden;
+  color: #263149;
+  font-size: 12px;
+  line-height: 1.3;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.post-review-meta-note {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  border: 1px solid rgba(242, 152, 113, 0.3);
+  color: #7b493d;
+}
+.post-review-meta-note.danger {
+  border-color: rgba(211, 71, 56, 0.25);
+  background: #fff3f1;
+  color: #973b30;
+}
+.post-review-meta-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+.post-review-meta-note p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.post-review-carousel-banner {
+  margin: 14px 0 0 !important;
+  border-radius: 15px !important;
+}
+.post-review-workspace {
+  display: grid;
+  align-items: start;
+}
+.post-review-preview-card,
+.post-review-editor-card,
+.post-review-idea-card {
+  overflow: hidden;
+  border-radius: 19px;
+}
+.post-review-editor-column {
+  min-width: 0;
+  display: grid;
+  gap: 13px;
+}
+.post-review-card-heading {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+}
+.post-review-card-icon {
+  display: grid;
+  place-items: center;
+}
+.post-review-card-icon.media {
+  background: #fff0e9;
+  color: #ef6546;
+}
+.post-review-card-icon.text {
+  background: #edf0ff;
+  color: #6f63e9;
+}
+.post-review-card-heading h2 {
+  margin: 0;
+  color: var(--review-ink);
+  line-height: 1.2;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+.post-review-card-heading p {
+  margin: 4px 0 0;
+  color: var(--review-muted);
+  font-size: 11.5px;
+  line-height: 1.42;
+}
+.post-review-open-media {
+  padding: 0 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #dde2eb;
+  background: #fff;
+  color: #263249;
+  font-size: 11px;
+  font-weight: 850;
+  text-decoration: none;
+}
+.post-review-social-preview {
+  overflow: hidden;
+  margin: 0 auto;
+  border: 1px solid #dde3ec;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(27, 39, 61, 0.08);
+}
+.post-review-social-heading {
+  padding: 10px 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid #edf0f4;
+}
+.post-review-platform-mark {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #ff795b, #de4f34);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 950;
+  box-shadow: 0 8px 18px rgba(219, 78, 50, 0.22);
+}
+.post-review-social-heading > div {
+  display: grid;
+  gap: 2px;
+}
+.post-review-social-heading strong {
+  color: #172136;
+  font-size: 13px;
+  text-transform: capitalize;
+}
+.post-review-social-heading small {
+  color: #7b8597;
+  font-size: 10px;
+  font-weight: 700;
+}
+.post-review-social-preview > img,
+.post-review-social-preview > video {
+  display: block;
+  width: 100%;
+  max-height: 540px;
+  object-fit: contain;
+  background: #f4f6f9;
+}
+.post-review-media-placeholder {
+  min-height: 260px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  background: linear-gradient(145deg, #f4f6fa, #eef2f8);
+  color: #758097;
+}
+.post-review-media-placeholder strong {
+  font-size: 12px;
+}
+.post-review-published-copy {
+  color: #1e2738;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.post-review-content-textarea {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  border: 1.5px solid #d9dfeb;
+  outline: none;
+  color: #1a2438;
+  font: inherit;
+  resize: vertical;
+  box-shadow: inset 0 1px 2px rgba(31, 42, 65, 0.03);
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+.post-review-content-textarea:focus {
+  border-color: #f07a5d;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(240, 100, 69, 0.11);
+}
+.post-review-editor-help {
+  margin-top: 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: #68738a;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.post-review-editor-help svg {
+  flex: 0 0 auto;
+  color: #e36245;
+  margin-top: 1px;
+}
+.post-review-idea-card {
+  padding: 16px 17px;
+}
+.post-review-idea-card header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.post-review-idea-card header > span {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #fff1e9;
+  color: #ed6547;
+}
+.post-review-idea-card h2 {
+  margin: 0;
+  color: var(--review-ink);
+  font-size: 14px;
+  font-weight: 900;
+}
+.post-review-idea-card p {
+  margin: 10px 0 0;
+  color: #5e6a80;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.post-review-slides-card {
+  margin: 16px 0 0 !important;
+  padding: 18px !important;
+  border-radius: 19px !important;
+}
+.post-review-slides-card .edit-post-slide-card {
+  border-color: #dee3ec;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 8px 20px rgba(26, 38, 59, 0.05);
+}
+.post-review-footer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-top: 3px solid var(--review-accent);
+}
+.post-review-footer-actions > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.post-review-footer-actions p {
+  margin: 0;
+  display: grid;
+  gap: 3px;
+}
+.post-review-footer-actions strong {
+  color: var(--review-ink);
+  font-size: 14px;
+}
+.post-review-footer-actions span {
+  color: var(--review-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.post-review-actions.compact {
+  flex-wrap: nowrap;
+}
+@media (max-width: 1250px) {
+  .post-review-topbar {
+    flex-direction: column;
+  }
+  .post-review-actions {
+    justify-content: flex-start;
+    max-width: none;
+  }
+  .post-review-meta-card {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .post-review-workspace {
+    grid-template-columns: minmax(340px, 0.82fr) minmax(390px, 1.18fr);
+  }
+}
+@media (max-width: 980px) {
+  .post-review-page::before {
+    left: -22px;
+    width: calc(100% + 44px);
+  }
+  .post-review-summary-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .post-review-statuses {
+    justify-content: flex-start;
+  }
+  .post-review-workspace {
+    grid-template-columns: 1fr;
+  }
+  .post-review-social-preview {
+    width: min(100%, 620px);
+  }
+}
+@media (max-width: 700px) {
+  .post-review-page {
+    padding-bottom: 24px;
+  }
+  .post-review-page::before {
+    top: -22px;
+    left: -14px;
+    width: calc(100% + 28px);
+    height: 520px;
+  }
+  .post-review-heading h1 {
+    font-size: 30px;
+  }
+  .post-review-heading > p:last-child {
+    font-size: 12.5px;
+  }
+  .post-review-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .post-review-button {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 10px;
+    font-size: 12px;
+  }
+  .post-review-summary-card,
+  .post-review-preview-card,
+  .post-review-editor-card,
+  .post-review-idea-card,
+  .post-review-footer-actions,
+  .post-review-slides-card {
+    border-radius: 16px !important;
+  }
+  .post-review-summary-card {
+    padding: 17px;
+  }
+  .post-review-summary-copy {
+    align-items: flex-start;
+  }
+  .post-review-summary-icon {
+    width: 44px;
+    height: 44px;
+    flex-basis: 44px;
+  }
+  .post-review-summary-copy h2 {
+    font-size: 18px;
+  }
+  .post-review-meta-card {
+    grid-template-columns: 1fr;
+    padding: 11px;
+  }
+  .post-review-meta-item strong {
+    white-space: normal;
+  }
+  .post-review-preview-card,
+  .post-review-editor-card {
+    padding: 13px;
+  }
+  .post-review-card-heading {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+  .post-review-card-icon {
+    width: 38px;
+    height: 38px;
+  }
+  .post-review-open-media {
+    grid-column: 1 / -1;
+    width: fit-content;
+  }
+  .post-review-social-preview > img,
+  .post-review-social-preview > video {
+    max-height: 470px;
+  }
+  .post-review-published-copy {
+    padding: 15px;
+    font-size: 12.5px;
+  }
+  .post-review-content-textarea {
+    min-height: 280px;
+    padding: 15px;
+    font-size: 13px;
+  }
+  .post-review-footer-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .post-review-actions.compact {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 420px) {
+  .post-review-actions,
+  .post-review-actions.compact {
+    grid-template-columns: 1fr;
+  }
+  .post-review-summary-copy {
+    gap: 11px;
+  }
+  .post-review-summary-icon {
+    display: none;
+  }
+  .post-review-social-heading {
+    min-height: 54px;
+  }
+}
+
+/* ===== historical source boundary: 23-v107-plan-review-final.css ===== */
+html body .automation-page.plan-v70-active .plan-v107-bottom-grid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(390px, .95fr);
+  gap: 14px;
+  align-items: stretch;
+}
+html body .automation-page.plan-v70-active .plan-v107-bottom-grid.single {
+  grid-template-columns: 1fr;
+}
+html body .automation-page.plan-v70-active .plan-v107-bottom-grid > .plan-v83-continuation-card,
+html body .automation-page.plan-v70-active .plan-v107-bottom-grid > .plan-v70-activate-card {
+  min-width: 0;
+  height: 100%;
+  margin: 0 !important;
+  border: 1px solid rgba(218, 224, 234, .96) !important;
+  border-radius: 16px !important;
+  background: rgba(255, 255, 255, .88) !important;
+  box-shadow: 0 12px 26px rgba(27, 38, 59, .075),
+    inset 0 1px 0 rgba(255, 255, 255, .98) !important;
+  backdrop-filter: blur(14px) saturate(112%) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(112%) !important;
+}
+html body .automation-page.plan-v70-active .plan-v107-bottom-grid > .plan-v83-continuation-card {
+  padding: 14px !important;
+  display: grid !important;
+  grid-template-rows: auto auto auto;
+  gap: 9px !important;
+}
+html body .automation-page.plan-v70-active .plan-v83-continuation-head {
+  display: grid !important;
+  grid-template-columns: 34px minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+html body .automation-page.plan-v70-active .plan-v83-continuation-head .plan-v70-icon {
+  width: 34px !important;
+  height: 34px !important;
+  border: 1px solid rgba(241, 113, 80, .16) !important;
+  border-radius: 10px !important;
+  background: #fff3ee !important;
+  color: #e75f40 !important;
+  box-shadow: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v83-continuation-head h2 {
+  margin: 0 !important;
+  color: #142039 !important;
+  font-size: 14px !important;
+  line-height: 1.2 !important;
+  font-weight: 900 !important;
+  letter-spacing: -.015em !important;
+}
+html body .automation-page.plan-v70-active .plan-v83-continuation-head p {
+  margin: 3px 0 0 !important;
+  max-width: 100% !important;
+  color: #68748a !important;
+  font-size: 10.5px !important;
+  line-height: 1.42 !important;
+}
+html body .automation-page.plan-v70-active .plan-v83-continuation-head .plan-v70-inline-toggle {
+  align-self: center !important;
+  padding-left: 8px !important;
+}
+html body .automation-page.plan-v70-active .plan-v83-continuation-head .plan-v70-inline-toggle strong {
+  color: #263149 !important;
+  font-size: 10.5px !important;
+  font-weight: 850 !important;
+}
+html body .automation-page.plan-v70-active .plan-v83-variation-row,
+html body .automation-page.plan-v70-active .plan-v83-next-cycle {
+  min-height: 52px !important;
+  margin: 0 !important;
+  padding: 9px 10px !important;
+  border: 1px solid rgba(221, 226, 235, .92) !important;
+  border-radius: 11px !important;
+  background: rgba(250, 251, 253, .88) !important;
+  box-shadow: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v83-variation-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+html body .automation-page.plan-v70-active .plan-v83-variation-row > label {
+  flex: 1 1 auto !important;
+  grid-template-columns: auto minmax(0, 1fr) !important;
+  gap: 9px !important;
+}
+html body .automation-page.plan-v70-active .plan-v83-variation-copy strong,
+html body .automation-page.plan-v70-active .plan-v83-next-cycle strong {
+  color: #263149 !important;
+  font-size: 11px !important;
+  line-height: 1.32 !important;
+  font-weight: 850 !important;
+}
+html body .automation-page.plan-v70-active .plan-v83-variation-copy small,
+html body .automation-page.plan-v70-active .plan-v83-next-cycle span {
+  margin-top: 2px !important;
+  color: #748096 !important;
+  font-size: 9.5px !important;
+  line-height: 1.38 !important;
+}
+html body .automation-page.plan-v70-active .plan-v83-info-button {
+  width: 30px !important;
+  height: 30px !important;
+  flex-basis: 30px !important;
+  border-color: #dfe4ec !important;
+  border-radius: 9px !important;
+  background: #fff !important;
+  color: #6c778b !important;
+}
+html body .automation-page.plan-v70-active .plan-v83-next-cycle {
+  display: grid !important;
+  grid-template-columns: 24px minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+html body .automation-page.plan-v70-active .plan-v83-next-cycle > svg {
+  margin: 0 !important;
+  color: #ee694a !important;
+}
+html body .automation-page.plan-v70-active .plan-v107-bottom-grid > .plan-v70-activate-card {
+  padding: 14px !important;
+  display: grid !important;
+  grid-template-columns: 42px minmax(0, 1fr) !important;
+  grid-template-rows: auto auto auto !important;
+  align-content: start !important;
+  column-gap: 11px !important;
+  row-gap: 10px !important;
+  border-top-width: 1px !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-activate-visual {
+  width: 42px !important;
+  height: 42px !important;
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  align-self: start !important;
+  border: 1px solid rgba(242, 107, 74, .22) !important;
+  border-radius: 12px !important;
+  background: linear-gradient(145deg, #ff795a, #e45234) !important;
+  color: #fff !important;
+  box-shadow: 0 10px 20px rgba(221, 76, 46, .18) !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-activate-copy {
+  min-width: 0 !important;
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  align-self: center !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-activate-copy h2 {
+  margin: 0 !important;
+  color: #142039 !important;
+  font-size: 15px !important;
+  line-height: 1.2 !important;
+  font-weight: 900 !important;
+  letter-spacing: -.018em !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-activate-copy p {
+  margin: 4px 0 0 !important;
+  color: #68748a !important;
+  font-size: 10.5px !important;
+  line-height: 1.42 !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-activate-actions,
+html body .automation-page.plan-v70-active .plan-v70-success-actions {
+  min-width: 0 !important;
+  width: 100% !important;
+  grid-column: 1 / -1 !important;
+  grid-row: 2 !important;
+  display: grid !important;
+  gap: 7px !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-activate-actions > button,
+html body .automation-page.plan-v70-active .plan-v70-success-actions > button,
+html body .automation-page.plan-v70-active .plan-v70-success-actions > a {
+  width: 100% !important;
+  min-height: 48px !important;
+  padding: 0 18px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  border: 1px solid #0a2239 !important;
+  border-radius: 11px !important;
+  background: linear-gradient(180deg, #102a43 0%, #071d32 100%) !important;
+  color: #fff !important;
+  font-size: 12.5px !important;
+  line-height: 1 !important;
+  font-weight: 900 !important;
+  text-decoration: none !important;
+  box-shadow: 0 12px 24px rgba(5, 28, 49, .2) !important;
+  transition: transform 150ms ease, box-shadow 150ms ease, filter 150ms ease !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-activate-actions > button:hover:not(:disabled),
+html body .automation-page.plan-v70-active .plan-v70-success-actions > button:hover:not(:disabled),
+html body .automation-page.plan-v70-active .plan-v70-success-actions > a:hover {
+  transform: translateY(-1px) !important;
+  filter: brightness(1.06) !important;
+  box-shadow: 0 14px 28px rgba(5, 28, 49, .23),
+    0 0 0 3px rgba(239, 102, 70, .09) !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-activate-actions > button:active:not(:disabled) {
+  transform: translateY(0) !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-activate-actions > span {
+  justify-content: center !important;
+  color: #748096 !important;
+  font-size: 9.5px !important;
+  line-height: 1.35 !important;
+}
+html body .automation-page.plan-v70-active .plan-v74-approval-publishing-note {
+  min-width: 0 !important;
+  grid-column: 1 / -1 !important;
+  grid-row: 3 !important;
+  margin: 0 !important;
+  padding: 8px 0 0 !important;
+  border: 0 !important;
+  border-top: 1px solid rgba(224, 228, 236, .92) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: #748096 !important;
+  font-size: 9px !important;
+  line-height: 1.4 !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-activate-message {
+  grid-column: 1 / -1 !important;
+  margin: 0 !important;
+}
+.post-review-page {
+  width: min(100%, 1510px) !important;
+  padding-top: 0 !important;
+}
+.post-review-topbar {
+  align-items: center !important;
+  margin-bottom: 18px !important;
+}
+.post-review-heading h1 {
+  max-width: 790px !important;
+  font-size: clamp(30px, 3vw, 43px) !important;
+  line-height: 1.04 !important;
+}
+.post-review-heading > p:last-child {
+  margin-top: 8px !important;
+  font-size: 13px !important;
+}
+.post-review-actions {
+  gap: 8px !important;
+}
+.post-review-button {
+  min-height: 40px !important;
+  padding: 0 14px !important;
+  border-radius: 10px !important;
+  font-size: 12px !important;
+  font-weight: 850 !important;
+  box-shadow: 0 7px 18px rgba(27, 38, 59, .055) !important;
+}
+.post-review-button.neutral {
+  border-color: rgba(216, 222, 232, .96) !important;
+  background: rgba(255, 255, 255, .91) !important;
+}
+.post-review-button.save {
+  border-color: rgba(239, 103, 72, .7) !important;
+  background: rgba(255, 255, 255, .9) !important;
+  color: #df5b3e !important;
+  box-shadow: 0 7px 18px rgba(118, 64, 49, .055) !important;
+}
+.post-review-button.save:hover:not(:disabled) {
+  background: #fff6f2 !important;
+  box-shadow: 0 9px 20px rgba(210, 80, 51, .11) !important;
+}
+.post-review-button.discard {
+  border-color: rgba(219, 91, 68, .32) !important;
+  background: rgba(255, 250, 248, .92) !important;
+}
+.post-review-button.approve {
+  border-color: #0a2239 !important;
+  background: linear-gradient(180deg, #102a43, #071d32) !important;
+  box-shadow: 0 10px 22px rgba(5, 28, 49, .2) !important;
+}
+.post-review-summary-card,
+.post-review-meta-card,
+.post-review-preview-card,
+.post-review-editor-card,
+.post-review-idea-card,
+.post-review-footer-actions,
+.post-review-slides-card {
+  border-color: rgba(216, 222, 232, .91) !important;
+  background: rgba(255, 255, 255, .88) !important;
+  box-shadow: 0 13px 30px rgba(29, 41, 64, .075),
+    inset 0 1px 0 rgba(255, 255, 255, .98) !important;
+}
+.post-review-summary-card {
+  padding: 18px 20px !important;
+  border-radius: 17px !important;
+}
+.post-review-summary-icon {
+  width: 46px !important;
+  height: 46px !important;
+  flex-basis: 46px !important;
+  border-radius: 13px !important;
+}
+.post-review-summary-copy h2 {
+  font-size: 20px !important;
+}
+.post-review-statuses .status-pill {
+  min-height: 28px !important;
+  padding: 5px 9px !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+}
+.post-review-meta-card {
+  margin-top: 12px !important;
+  padding: 12px !important;
+  gap: 8px !important;
+  border-radius: 15px !important;
+}
+.post-review-meta-item {
+  min-height: 58px !important;
+  border-radius: 11px !important;
+  background: rgba(249, 250, 252, .82) !important;
+}
+.post-review-meta-note {
+  padding: 9px 11px !important;
+  border-radius: 10px !important;
+  background: rgba(255, 248, 244, .82) !important;
+  font-size: 10px !important;
+}
+.post-review-workspace {
+  margin-top: 14px !important;
+  grid-template-columns: minmax(500px, .98fr) minmax(470px, 1.02fr) !important;
+  gap: 14px !important;
+}
+.post-review-preview-card,
+.post-review-editor-card {
+  padding: 15px !important;
+  border-radius: 17px !important;
+}
+.post-review-card-heading {
+  margin-bottom: 12px !important;
+}
+.post-review-card-icon {
+  width: 38px !important;
+  height: 38px !important;
+  border-radius: 11px !important;
+}
+.post-review-card-heading h2 {
+  font-size: 16px !important;
+}
+.post-review-open-media {
+  min-height: 34px !important;
+  border-radius: 9px !important;
+}
+.post-review-social-preview {
+  width: 100% !important;
+  max-width: 680px !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, .94fr) minmax(245px, 1.06fr) !important;
+  grid-template-rows: auto minmax(280px, auto) !important;
+  align-items: stretch !important;
+  border-radius: 14px !important;
+}
+.post-review-social-heading {
+  grid-column: 1 / -1 !important;
+  grid-row: 1 !important;
+  min-height: 52px !important;
+}
+.post-review-platform-mark.image {
+  overflow: hidden !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.post-review-platform-mark.image img {
+  width: 100% !important;
+  height: 100% !important;
+  display: block !important;
+  object-fit: contain !important;
+}
+.post-review-social-preview > img,
+.post-review-social-preview > video,
+.post-review-social-preview > .post-review-media-placeholder {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 280px !important;
+  max-height: 560px !important;
+  grid-column: 1 !important;
+  grid-row: 2 !important;
+  object-fit: contain !important;
+  border-right: 1px solid #e8ebf1 !important;
+}
+.post-review-published-copy {
+  min-width: 0 !important;
+  min-height: 280px !important;
+  grid-column: 2 !important;
+  grid-row: 2 !important;
+  padding: 17px !important;
+  align-self: stretch !important;
+  border: 0 !important;
+  background: #fff !important;
+  font-size: 12px !important;
+  line-height: 1.62 !important;
+}
+.post-review-content-textarea {
+  min-height: 330px !important;
+  padding: 16px !important;
+  border-width: 1px !important;
+  border-radius: 12px !important;
+  background: rgba(252, 252, 253, .92) !important;
+  font-size: 13px !important;
+  line-height: 1.68 !important;
+}
+.post-review-footer-actions {
+  margin-top: 14px !important;
+  padding: 14px 17px !important;
+  border-top-width: 1px !important;
+  border-radius: 15px !important;
+}
+.post-review-footer-actions > div:first-child {
+  color: #ed6848 !important;
+}
+.post-review-actions.compact .post-review-button {
+  min-width: 128px !important;
+}
+@media (max-width: 1240px) {
+  html body .automation-page.plan-v70-active .plan-v107-bottom-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .post-review-workspace {
+    grid-template-columns: 1fr !important;
+  }
+  .post-review-social-preview {
+    max-width: 760px !important;
+  }
+}
+@media (max-width: 760px) {
+  .post-review-social-preview {
+    display: block !important;
+  }
+  .post-review-social-preview > img,
+  .post-review-social-preview > video,
+  .post-review-social-preview > .post-review-media-placeholder {
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: 470px !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid #e8ebf1 !important;
+  }
+  .post-review-published-copy {
+    min-height: 150px !important;
+  }
+}
+.post-review-page::before {
+  left: -96px !important;
+  width: calc(100% + 192px) !important;
+  height: 690px !important;
+  background-position: center top !important;
+  background-size: cover !important;
+}
+@media (max-width: 760px) {
+  html body .automation-page.plan-v70-active .plan-v70-shell {
+    padding-inline: 10px !important;
+    margin-bottom: 20px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-shell::before {
+    left: -18px !important;
+    right: -18px !important;
+    background-size: cover !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v107-bottom-grid {
+    margin-top: 12px !important;
+    gap: 12px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v107-bottom-grid > .plan-v83-continuation-card,
+  html body .automation-page.plan-v70-active .plan-v107-bottom-grid > .plan-v70-activate-card {
+    padding: 16px !important;
+    border-radius: 16px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v83-continuation-head {
+    grid-template-columns: 34px minmax(0, 1fr) !important;
+    align-items: start !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v83-continuation-head .plan-v70-inline-toggle {
+    grid-column: 1 / -1 !important;
+    padding-left: 0 !important;
+    justify-self: start !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v83-variation-row,
+  html body .automation-page.plan-v70-active .plan-v83-next-cycle {
+    padding: 10px 11px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-activate-card {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto auto auto auto !important;
+    row-gap: 12px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-activate-visual {
+    grid-column: 1 !important;
+    grid-row: 1 !important;
+    margin-bottom: 2px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-activate-copy {
+    grid-column: 1 !important;
+    grid-row: 2 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-activate-copy h2 {
+    font-size: 15px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-activate-actions,
+  html body .automation-page.plan-v70-active .plan-v70-success-actions {
+    grid-column: 1 !important;
+    grid-row: 3 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v74-approval-publishing-note {
+    grid-column: 1 !important;
+    grid-row: 4 !important;
+    padding-top: 10px !important;
+  }
+  .post-review-page {
+    padding-inline: 12px !important;
+    padding-bottom: 28px !important;
+  }
+  .post-review-page::before {
+    left: -24px !important;
+    width: calc(100% + 48px) !important;
+    top: -18px !important;
+    height: 540px !important;
+    background-size: cover !important;
+  }
+  .post-review-summary-card,
+  .post-review-meta-card,
+  .post-review-preview-card,
+  .post-review-editor-card,
+  .post-review-idea-card,
+  .post-review-footer-actions,
+  .post-review-slides-card {
+    border-radius: 16px !important;
+  }
+}
+
+/* ===== historical source boundary: 24-v110-responsive-unified-review-cards.css ===== */
+html body .content.spreelo-content:has(.automation-page.plan-v70-active),
+html body .content.spreelo-content:has(.post-review-page) {
+  background-color: #f5f7fb !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-shell,
+html body .post-review-page {
+  box-sizing: border-box !important;
+  padding-right: clamp(12px, 1.75vw, 28px) !important;
+  padding-left: clamp(12px, 1.75vw, 28px) !important;
+}
+html body .automation-page.plan-v70-active .plan-v70-shell::before {
+  right: auto !important;
+  left: 50% !important;
+  width: 100vw !important;
+  min-width: 100vw !important;
+  height: 620px !important;
+  transform: translateX(-50%) !important;
+  background-color: #f5f7fb !important;
+  background-position: center top !important;
+  background-size: cover !important;
+}
+html body .post-review-page::before {
+  right: auto !important;
+  left: 50% !important;
+  width: 100vw !important;
+  min-width: 100vw !important;
+  height: 700px !important;
+  transform: translateX(-50%) !important;
+  background-color: #f5f7fb !important;
+  background-position: center top !important;
+  background-size: cover !important;
+}
+html body .post-review-summary-card,
+html body .post-review-meta-card,
+html body .post-review-preview-card,
+html body .post-review-editor-card,
+html body .post-review-idea-card,
+html body .post-review-footer-actions,
+html body .post-review-slides-card {
+  border: 1px solid rgba(255, 255, 255, .91) !important;
+  background: linear-gradient(116deg, rgba(255, 255, 255, .79) 0%, rgba(251, 251, 254, .64) 56%, rgba(248, 248, 252, .72) 100%) !important;
+  box-shadow: 0 16px 30px rgba(34, 42, 68, .12),
+    0 3px 8px rgba(34, 42, 68, .045),
+    inset 0 1px 0 rgba(255, 255, 255, 1) !important;
+  backdrop-filter: blur(15px) saturate(114%) !important;
+  -webkit-backdrop-filter: blur(15px) saturate(114%) !important;
+}
+html body .post-review-meta-item {
+  border: 1px solid rgba(255, 255, 255, .91) !important;
+  background: linear-gradient(116deg, rgba(255, 255, 255, .69) 0%, rgba(251, 251, 254, .50) 56%, rgba(248, 248, 252, .58) 100%) !important;
+  box-shadow: 0 12px 23px rgba(34, 42, 68, .13),
+    0 2px 6px rgba(34, 42, 68, .045),
+    inset 0 1px 0 rgba(255, 255, 255, 1) !important;
+  backdrop-filter: blur(15px) saturate(114%) !important;
+  -webkit-backdrop-filter: blur(15px) saturate(114%) !important;
+}
+html body .post-review-summary-card,
+html body .post-review-meta-card,
+html body .post-review-preview-card,
+html body .post-review-editor-card,
+html body .post-review-footer-actions {
+  outline: 0 !important;
+}
+@media (max-width: 1240px) {
+  html body .automation-page.plan-v70-active .plan-v70-shell,
+  html body .post-review-page {
+    padding-right: clamp(16px, 2.25vw, 22px) !important;
+    padding-left: clamp(16px, 2.25vw, 22px) !important;
+  }
+}
+@media (max-width: 760px) {
+  html body .automation-page.plan-v70-active .plan-v70-shell,
+  html body .post-review-page {
+    padding-right: 12px !important;
+    padding-left: 12px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-shell::before {
+    height: 360px !important;
+  }
+  html body .post-review-page::before {
+    height: 560px !important;
+  }
+}
+
+/* ===== historical source boundary: 25-v111-review-glass-transparency.css ===== */
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile,
+html body .post-review-summary-card,
+html body .post-review-preview-card,
+html body .post-review-editor-card,
+html body .post-review-idea-card,
+html body .post-review-footer-actions,
+html body .post-review-slides-card {
+  border-color: rgba(255, 255, 255, .91) !important;
+  background: linear-gradient(116deg, rgba(255, 255, 255, .69) 0%, rgba(251, 251, 254, .50) 56%, rgba(248, 248, 252, .58) 100%) !important;
+  box-shadow: 0 12px 23px rgba(34, 42, 68, .13),
+    0 2px 6px rgba(34, 42, 68, .045),
+    inset 0 1px 0 rgba(255, 255, 255, 1) !important;
+  backdrop-filter: blur(15px) saturate(114%) !important;
+  -webkit-backdrop-filter: blur(15px) saturate(114%) !important;
+  background-clip: padding-box !important;
+}
+html body .post-review-meta-card {
+  border-color: rgba(255, 255, 255, .76) !important;
+  background: linear-gradient(116deg, rgba(255, 255, 255, .22) 0%, rgba(251, 251, 254, .13) 56%, rgba(248, 248, 252, .18) 100%) !important;
+  box-shadow: 0 12px 23px rgba(34, 42, 68, .085),
+    0 2px 6px rgba(34, 42, 68, .03),
+    inset 0 1px 0 rgba(255, 255, 255, .84) !important;
+  backdrop-filter: blur(10px) saturate(108%) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(108%) !important;
+  background-clip: padding-box !important;
+}
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile,
+html body .post-review-meta-item {
+  border-color: rgba(255, 255, 255, .91) !important;
+  background: linear-gradient(116deg, rgba(255, 255, 255, .69) 0%, rgba(251, 251, 254, .50) 56%, rgba(248, 248, 252, .58) 100%) !important;
+  box-shadow: 0 12px 23px rgba(34, 42, 68, .13),
+    0 2px 6px rgba(34, 42, 68, .045),
+    inset 0 1px 0 rgba(255, 255, 255, 1) !important;
+  backdrop-filter: blur(15px) saturate(114%) !important;
+  -webkit-backdrop-filter: blur(15px) saturate(114%) !important;
+  background-clip: padding-box !important;
+}
+html body .post-review-preview-card,
+html body .post-review-editor-card,
+html body .post-review-summary-card,
+html body .post-review-footer-actions {
+  background-color: transparent !important;
+}
+
+/* ===== historical source boundary: 26-v114-review-exact-ai-studio-canvas.css ===== */
+html body .content.spreelo-content:has(.post-review-page) {
+  position: relative !important;
+  isolation: isolate !important;
+  background-color: #eef0f5 !important;
+  background-image: none !important;
+}
+html body .content.spreelo-content:has(.post-review-page)::before {
+  content: "" !important;
+  display: block !important;
+  position: absolute !important;
+  z-index: 0 !important;
+  top: 0 !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 1672 / 941 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  opacity: 1 !important;
+  pointer-events: none !important;
+  background: url("/backgrounds/spreelo-background-v97.png") center top / 100% 100% no-repeat !important;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 72%, rgba(0, 0, 0, .82) 79%, rgba(0, 0, 0, .34) 91%, transparent 100%) !important;
+  mask-image: linear-gradient(to bottom, #000 0%, #000 72%, rgba(0, 0, 0, .82) 79%, rgba(0, 0, 0, .34) 91%, transparent 100%) !important;
+}
+html body .content.spreelo-content:has(.post-review-page) > * {
+  position: relative !important;
+  z-index: 1 !important;
+}
+html body .post-review-page::before,
+html body .post-review-page::after {
+  display: none !important;
+  content: none !important;
+  background: none !important;
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
+}
+html body .post-review-summary-card,
+html body .post-review-preview-card,
+html body .post-review-editor-card,
+html body .post-review-idea-card,
+html body .post-review-footer-actions,
+html body .post-review-slides-card,
+html body .post-review-meta-item {
+  background-color: transparent !important;
+}

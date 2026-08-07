@@ -5452,8 +5452,20 @@ export default function AutomationPage() {
   }
 
   function getSlotContentExplanation(slot) {
-    if (slot?.isCampaignSlot && slot.campaignSummary) {
-      return slot.campaignSummary;
+    if (slot?.isCampaignSlot) {
+      const angle = String(slot?.marketingAngle || slot?.marketing_angle || "main").toLowerCase();
+      const keyByAngle = {
+        awareness: "automation.campaignBrief.awareness",
+        engagement: "automation.campaignBrief.engagement",
+        product_discovery: "automation.campaignBrief.productDiscovery",
+        product_push: "automation.campaignBrief.productPush",
+        trust: "automation.campaignBrief.trust",
+        offer: "automation.campaignBrief.offer",
+        urgency: "automation.campaignBrief.urgency",
+        main: "automation.campaignBrief.main",
+      };
+      const translated = t(keyByAngle[angle] || keyByAngle.main);
+      if (translated && !String(translated).startsWith("automation.")) return translated;
     }
 
     const type = getContentTypeById(slot?.contentTypeId);
