@@ -9521,10 +9521,16 @@ function blockFormatCardClickAfterDrag(event) {
           <main className="wizard-main">
             {!campaignOpportunity ? (
             <section className="plan-v70-shell">
-              <header className="plan-v70-header">
-                <div>
+              <header className="plan-v70-header plan-v14341-studio-hero">
+                <div className="plan-v14341-studio-hero-copy">
                   <h1>{campaignOpportunity?.title || t("automation.redesign.title")}</h1>
                   <p>{campaignOpportunity?.description || t("automation.redesign.subtitle")}</p>
+                </div>
+                <div className="plan-v14341-studio-hero-art" aria-hidden="true">
+                  <picture>
+                    <source media="(max-width: 760px)" srcSet="/backgrounds/spreelo-studio-hero-mobile-v143-39.svg" />
+                    <img src="/backgrounds/spreelo-studio-hero-v143-39.svg" alt="" />
+                  </picture>
                 </div>
                 <div className="plan-v95-header-actions">
                   <button
@@ -9579,11 +9585,6 @@ function blockFormatCardClickAfterDrag(event) {
                   <div>
                     <h2>{plannerSectionCopy.settingsTitle}</h2>
                     <p>{plannerSectionCopy.settingsText}</p>
-                  </div>
-                  <div className="plan-v143-settings-actions">
-                    <button type="button" onClick={() => setShowGuideInfoModal(true)}>
-                      {t("automation.guide.needHelp")} <CircleHelp size={17} aria-hidden="true" />
-                    </button>
                   </div>
                 </div>
 
@@ -9654,30 +9655,21 @@ function blockFormatCardClickAfterDrag(event) {
                     </select>
                   </label>
 
-                  <div className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile">
+                  <div className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile plan-v14341-date-tile">
                     <div className="plan-v90-setting-head">
                       <span className="plan-v90-setting-icon"><CalendarDays size={20} aria-hidden="true" /></span>
                       <div className="plan-v90-setting-copy">
                         <span className="plan-v90-setting-title">{t("automation.startDate")}</span>
                         <small>{plannerSectionCopy.startDateHelp}</small>
                       </div>
-                    </div>
-                    <div className="plan-v143-date-time-row">
-                    <DatePickerField
-                      value={planStartDate}
-                      onChange={updatePlanStartDate}
-                      pickerId="v70-start-date"
-                      openPickerId={openPickerId}
-                      setOpenPickerId={setOpenPickerId}
-                      timeZone={timeZone}
-                      compact
-                      weekdayLabels={weekdayLabels}
-                      locale={locale}
-                    />
-                      <label className="plan-v143-timezone-inline">
-                        <Clock3 size={13} aria-hidden="true" />
+                      <label className="plan-v143-timezone-inline plan-v14341-timezone-pill" title={`${t("automation.timezone")}: ${timeZone}`}>
+                        <Clock3 size={12} aria-hidden="true" />
                         <span>{t("automation.timezone")}</span>
-                        <select value={timeZone} onChange={(event) => setTimeZone(event.target.value)}>
+                        <select
+                          aria-label={t("automation.timezone")}
+                          value={timeZone}
+                          onChange={(event) => setTimeZone(event.target.value)}
+                        >
                           {Array.from(new Set([
                             timeZone,
                             getBrowserTimeZone(),
@@ -9691,9 +9683,26 @@ function blockFormatCardClickAfterDrag(event) {
                             "Asia/Shanghai",
                             "Asia/Tokyo",
                             "Australia/Sydney",
-                          ].filter(Boolean))).map((zone) => <option key={zone} value={zone}>{zone}</option>)}
+                          ].filter(Boolean))).map((zone) => (
+                            <option key={zone} value={zone}>
+                              {zone === "UTC" ? "UTC" : zone.split("/").pop().replaceAll("_", " ")}
+                            </option>
+                          ))}
                         </select>
                       </label>
+                    </div>
+                    <div className="plan-v143-date-time-row plan-v14341-date-only-row">
+                      <DatePickerField
+                        value={planStartDate}
+                        onChange={updatePlanStartDate}
+                        pickerId="v70-start-date"
+                        openPickerId={openPickerId}
+                        setOpenPickerId={setOpenPickerId}
+                        timeZone={timeZone}
+                        compact
+                        weekdayLabels={weekdayLabels}
+                        locale={locale}
+                      />
                     </div>
                   </div>
 

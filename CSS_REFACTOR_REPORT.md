@@ -1,32 +1,29 @@
-# CSS refactor report — v143.40
+# CSS refactor report
 
-Spreelo previously had a chronological CSS cascade with 51 active imports. The structure was safe for rapid iteration, but late versions repeatedly overrode the same components and made responsive regressions harder to reason about.
+This update keeps the existing cascade order but splits the former `app/globals.css` into smaller ordered files under `app/styles/`.
 
-## Active structure now
+## What changed
 
-`app/globals.css` loads 18 stylesheets in chronological cascade order:
+- `app/globals.css` is now only the ordered CSS entrypoint with `@import` statements.
+- The old global CSS was split into six files:
+  - `app/styles/01-foundation.css`
+  - `app/styles/02-campaign-calendar.css`
+  - `app/styles/03-planner-builder.css`
+  - `app/styles/04-theme-shell-brand.css`
+  - `app/styles/05-carousel-campaign-danger.css`
+  - `app/styles/06-premium-workspace.css`
+- Removed safe non-functional CSS comments.
+- Removed exact duplicate top-level CSS blocks where a later identical copy already existed.
+- Preserved cascade order so later override layers still win.
 
-- Core/foundation modules `01`–`14`
-- `15-legacy-overrides-v94-v114.css`
-- `27-image-backgrounds-admin.css`
-- `28-calendar-admin-v130-v140.css`
-- `38-current-experience-v143.css`
+## What was intentionally not removed
 
-The 36 source files that were consolidated remain under `app/styles/archive-v143/`. They are history/reference only and are not imported by the app.
+Potentially unused selectors were not deleted when they could be dynamic, state-based, or only visible in certain UI states. Examples: status classes, modal states, mobile-only controls, generated variants, and historical planner/dashboard states.
 
-## What was removed
+## Validation performed
 
-The cleanup is intentionally cascade-aware rather than a blind minifier. Inside each chronological bundle, an earlier declaration is removed only when:
+- Verified all imported CSS files exist.
+- Verified CSS brace balance for all CSS files.
+- Parsed all CSS files with `tinycss2`; no parse errors found.
 
-1. the selector is exactly the same,
-2. the at-rule scope is exactly the same,
-3. the CSS property is exactly the same, and
-4. a later declaration has equal or stronger cascade priority.
-
-This removed 813 declarations that could no longer affect the final computed style. Animation keyframes were not pruned.
-
-## Verification
-
-A programmatic comparison of the archived source chain against the consolidated bundles confirmed that every final winning exact-selector property value and `!important` state is unchanged. All active stylesheets parse without CSS syntax errors.
-
-The cleanup deliberately does not attempt speculative unused-selector deletion in the foundational modules because many Spreelo classes are state-driven, modal-only, admin-only or responsive-only.
+A full `next build` could not be run in the sandbox because dependencies/node_modules are not included in the uploaded zip.
