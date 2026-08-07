@@ -10257,7 +10257,7 @@ function blockFormatCardClickAfterDrag(event) {
 
             {campaignOpportunity ? (
               <div className="campaign-v14335-shell">
-                <section className="campaign-v14335-hero">
+                <section className={`campaign-v14335-hero ${String(campaignOpportunity?.title || "").length % 2 ? "is-shopping-visual" : "is-calendar-visual"}`}>
                   <div className="campaign-v14335-hero-copy">
                     <p><Sparkles /> {t("automation.campaignExperience.eyebrow")}</p>
                     <h1>{campaignOpportunity.title}</h1>

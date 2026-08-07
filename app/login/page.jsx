@@ -238,22 +238,25 @@ export default function LoginPage() {
             )}${safeNextPath ? `&next=${encodeURIComponent(safeNextPath)}` : ""}`
           : undefined;
 
-      const { error } = await withTimeout(
-        supabase.auth.signInWithOtp({
-          email: normalizedEmail,
-          options: {
-            shouldCreateUser: true,
+      const response = await withTimeout(
+        fetch("/api/auth/send-code", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: normalizedEmail,
+            locale: locale || "en",
             emailRedirectTo,
-            data: {
-              app_locale: locale || "en",
-            },
-          },
+          }),
+        }).then(async (result) => {
+          const payload = await result.json().catch(() => ({}));
+          if (!result.ok || !payload?.ok) {
+            const requestError = new Error(payload?.error || t("common.errorGeneric"));
+            requestError.code = payload?.code || "LOGIN_CODE_REQUEST_FAILED";
+            throw requestError;
+          }
+          return payload;
         })
       );
-
-      if (error) {
-        throw error;
-      }
 
       setEmail(normalizedEmail);
 
@@ -463,7 +466,7 @@ export default function LoginPage() {
             </article>
           </div>
 
-          <div className="login-refresh-saas-preview" aria-hidden="true">
+          <div className={`login-refresh-saas-preview${codeSent ? " is-code-illustration" : ""}`} aria-hidden="true">
             <header>
               <span><Sparkles size={17} /></span>
               <div><strong>SPREELO AI</strong><i /></div>
