@@ -468,9 +468,8 @@ export default function LoginPage() {
 
           <div className={`login-refresh-saas-preview${codeSent ? " is-code-illustration" : ""}`} aria-hidden="true">
             <header>
-              <span><Sparkles size={17} /></span>
               <div><strong>SPREELO AI</strong><i /></div>
-              <b>LIVE</b>
+              <b>{t("login.aiAssistantBadge")}</b>
             </header>
             <div className="login-refresh-saas-metrics">
               <span><i /><i /><i /></span>
@@ -543,6 +542,10 @@ export default function LoginPage() {
               <div className="login-refresh-mobile-hill" />
               <div className="login-refresh-mobile-mug" />
               <div className="login-refresh-mobile-plant"><i /><i /><b /></div>
+            </div>
+            <div className="login-refresh-mobile-ai-label">
+              <strong>SPREELO AI</strong>
+              <b>{t("login.aiAssistantBadge")}</b>
             </div>
           </div>
 

@@ -1,0 +1,443 @@
+/* v143.38 — stable responsive campaign studio, premium brand intelligence and auth. */
+
+/* -------------------------------------------------------------------------- */
+/* Calendar campaign studio                                                    */
+/* -------------------------------------------------------------------------- */
+
+html body .content.spreelo-content:has(.campaign-planner-clean) {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  overflow-x: clip !important;
+}
+
+html body .automation-page.campaign-planner-clean,
+html body .campaign-planner-clean .wizard-layout,
+html body .campaign-planner-clean .wizard-main,
+html body .campaign-v14335-shell {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+}
+
+html body .campaign-v14335-shell {
+  padding: clamp(22px, 2.3vw, 42px) clamp(20px, 2.8vw, 52px) 72px !important;
+  gap: 22px !important;
+}
+
+html body .campaign-v14335-hero {
+  min-height: clamp(370px, 30vw, 500px) !important;
+  padding: clamp(38px, 4.3vw, 72px) !important;
+  border-radius: 30px !important;
+  background-size: cover !important;
+  background-position: center !important;
+}
+
+html body .campaign-v14335-hero-copy { width: min(52%, 760px) !important; }
+html body .campaign-v14335-hero h1 { font-size: clamp(44px, 4.35vw, 72px) !important; }
+html body .campaign-v14335-hero-copy > span { font-size: 16px !important; line-height: 1.56 !important; }
+
+html body .campaign-v14335-benefits,
+html body .campaign-v14335-plan,
+html body .campaign-v14335-rationale,
+html body .campaign-v14335-activate,
+html body .campaign-v14335-includes {
+  border-radius: 26px !important;
+  background: linear-gradient(145deg, rgba(255,255,255,.84), rgba(248,250,255,.70)) !important;
+  box-shadow: 0 20px 52px rgba(25,39,62,.10), inset 0 1px 0 rgba(255,255,255,.92) !important;
+}
+
+/* Tablet uses the compact app header and the complete available width. */
+@media (min-width: 901px) and (max-width: 1180px) {
+  html body .app-shell.spreelo-shell:has(.campaign-planner-clean) {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    min-height: 100dvh !important;
+  }
+
+  html body .spreelo-shell:has(.campaign-planner-clean) > .spreelo-mobile-header {
+    position: fixed !important;
+    inset: 0 0 auto 0 !important;
+    z-index: 120 !important;
+    display: block !important;
+    height: 66px !important;
+    min-height: 66px !important;
+    padding: 0 !important;
+    background: linear-gradient(180deg, rgba(6,16,28,.98), rgba(10,22,37,.98)) !important;
+    box-shadow: 0 14px 34px rgba(5,11,19,.24) !important;
+  }
+
+  html body .spreelo-shell:has(.campaign-planner-clean) .spreelo-mobile-topbar {
+    display: grid !important;
+    grid-template-columns: 1fr 44px !important;
+    align-items: center !important;
+    height: 66px !important;
+    padding: 10px 18px !important;
+  }
+
+  html body .spreelo-shell:has(.campaign-planner-clean) .spreelo-mobile-topbar .spreelo-logo-word { color: white !important; }
+  html body .spreelo-shell:has(.campaign-planner-clean) .spreelo-mobile-brandbar {
+    position: absolute !important;
+    top: 0 !important;
+    right: 82px !important;
+    display: flex !important;
+    align-items: center !important;
+    height: 66px !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+  html body .spreelo-shell:has(.campaign-planner-clean) .spreelo-mobile-brand span { color: rgba(255,255,255,.55) !important; }
+  html body .spreelo-shell:has(.campaign-planner-clean) .spreelo-mobile-brand strong { color: white !important; }
+  html body .spreelo-shell:has(.campaign-planner-clean) .spreelo-mobile-menu-button {
+    width: 42px !important;
+    height: 42px !important;
+    border-color: rgba(255,255,255,.16) !important;
+    background: rgba(255,255,255,.07) !important;
+    color: white !important;
+  }
+
+  html body .spreelo-shell:has(.campaign-planner-clean) > .sidebar.spreelo-sidebar {
+    position: fixed !important;
+    inset: 0 auto 0 0 !important;
+    z-index: 140 !important;
+    width: min(330px, calc(100vw - 36px)) !important;
+    max-width: calc(100vw - 36px) !important;
+    height: 100dvh !important;
+    overflow-y: auto !important;
+    transform: translateX(-106%) !important;
+    transition: transform .18s ease !important;
+    box-shadow: 24px 0 60px rgba(0,0,0,.30) !important;
+  }
+  html body .spreelo-shell:has(.campaign-planner-clean) > .sidebar.spreelo-sidebar.mobile-open { transform: translateX(0) !important; }
+  html body .spreelo-shell:has(.campaign-planner-clean) > .content.spreelo-content { padding-top: 66px !important; }
+
+  html body .campaign-v14335-shell { padding: 22px 22px 62px !important; }
+  html body .campaign-v14335-hero { min-height: 350px !important; padding: 38px !important; }
+  html body .campaign-v14335-hero-copy { width: 56% !important; }
+  html body .campaign-v14335-hero h1 { font-size: clamp(42px, 5.4vw, 58px) !important; }
+  html body .campaign-v14335-benefits { grid-template-columns: repeat(4, minmax(0,1fr)) !important; }
+  html body .campaign-v14335-benefits article { min-height: 154px !important; padding: 18px !important; }
+  html body .campaign-v14335-slot-list article {
+    grid-template-columns: 82px minmax(0,1fr) 148px 48px 128px 36px !important;
+    gap: 10px !important;
+  }
+  html body .campaign-v14335-slot-art { width: 82px !important; }
+}
+
+@media (max-width: 900px) {
+  html body .content.spreelo-content:has(.campaign-planner-clean) {
+    padding-top: var(--spreelo-mobile-header-total, 110px) !important;
+  }
+  html body .campaign-v14335-shell { padding: 14px 14px 72px !important; }
+  html body .campaign-v14335-hero {
+    min-height: 344px !important;
+    padding: 32px !important;
+    background-position: 58% center !important;
+  }
+  html body .campaign-v14335-hero-copy { width: 58% !important; }
+  html body .campaign-v14335-hero h1 { font-size: clamp(38px, 6vw, 52px) !important; }
+  html body .campaign-v14335-hero-copy > span { font-size: 14px !important; }
+  html body .campaign-v14335-benefits { grid-template-columns: repeat(2, minmax(0,1fr)) !important; }
+}
+
+@media (max-width: 620px) {
+  html body .campaign-v14335-shell { gap: 13px !important; padding: 12px 10px 76px !important; }
+  html body .campaign-v14335-hero {
+    min-height: 392px !important;
+    padding: 23px 18px 18px !important;
+    align-items: flex-start !important;
+    border-radius: 22px !important;
+    background-position: 62% center !important;
+  }
+  html body .campaign-v14335-hero::before {
+    background: linear-gradient(180deg, rgba(255,249,246,.95) 0%, rgba(255,249,246,.78) 46%, rgba(255,249,246,.10) 72%) !important;
+  }
+  html body .campaign-v14335-hero-copy { width: 100% !important; }
+  html body .campaign-v14335-hero h1 { max-width: 92% !important; font-size: clamp(33px, 10.5vw, 43px) !important; }
+  html body .campaign-v14335-hero-copy > span { max-width: 94% !important; font-size: 13px !important; line-height: 1.45 !important; }
+  html body .campaign-v14335-hero-copy > div {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+    margin-top: 138px !important;
+  }
+  html body .campaign-v14335-benefits { padding: 9px !important; gap: 8px !important; }
+  html body .campaign-v14335-benefits article { min-height: 148px !important; padding: 14px !important; }
+  html body .campaign-v14335-benefits h2 { font-size: 15px !important; }
+  html body .campaign-v14335-benefits p { font-size: 12px !important; }
+  html body .campaign-v14335-plan { padding: 20px 12px !important; }
+  html body .campaign-v14335-plan-heading h2 { font-size: 24px !important; }
+  html body .campaign-v14335-slot-list article {
+    min-height: 138px !important;
+    grid-template-columns: 64px minmax(0,1fr) 32px !important;
+    grid-template-areas: "art copy menu" "art date menu" "art meta menu" !important;
+    gap: 7px !important;
+    padding: 10px 8px !important;
+  }
+  html body .campaign-v14335-slot-art { width: 64px !important; height: 72px !important; }
+  html body .campaign-v14335-slot-copy p { font-size: 11.5px !important; line-height: 1.4 !important; }
+  html body .campaign-v14335-rationale { grid-template-columns: 1fr !important; padding: 20px 17px !important; }
+  html body .campaign-v14335-rationale > div { padding: 8px 2px !important; }
+  html body .campaign-v14335-rationale > div + div { padding-top: 22px !important; border-top: 1px solid #e1e6ef !important; border-left: 0 !important; }
+  html body .campaign-v14335-activate { grid-template-columns: 1fr !important; padding: 23px 18px !important; }
+  html body .campaign-v14335-includes { padding: 22px 17px !important; }
+  html body .campaign-v14335-includes > div { grid-template-columns: 1fr 1fr !important; gap: 18px 10px !important; }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Brand intelligence                                                         */
+/* -------------------------------------------------------------------------- */
+
+html body .content.spreelo-content:has(.brand-profile-page) {
+  padding: 0 !important;
+  background:
+    radial-gradient(circle at 9% 4%, rgba(207,226,255,.68), transparent 31%),
+    radial-gradient(circle at 93% 2%, rgba(255,219,207,.62), transparent 29%),
+    #edf2f8 !important;
+}
+
+html body .brand-profile-page {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: clamp(22px,2.4vw,42px) clamp(18px,2.8vw,52px) 60px !important;
+}
+
+html body .brand-profile-hero {
+  position: relative !important;
+  min-height: 300px !important;
+  display: block !important;
+  margin: 0 0 20px !important;
+  padding: 42px 46px 36px !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(255,255,255,.93) !important;
+  border-radius: 30px !important;
+  background:
+    linear-gradient(90deg, rgba(250,252,255,.98) 0%, rgba(250,252,255,.91) 43%, rgba(250,252,255,.06) 69%),
+    url("/backgrounds/spreelo-brand-intelligence-v143-38.png") right center / cover no-repeat !important;
+  box-shadow: 0 24px 60px rgba(28,42,72,.13), inset 0 1px 0 white !important;
+}
+
+html body .brand-profile-hero > div:first-child { width: min(52%, 760px) !important; max-width: 760px !important; }
+html body .brand-profile-hero h2 { max-width: 700px !important; font-size: clamp(40px,4.2vw,66px) !important; }
+html body .brand-profile-hero > div:first-child > span { max-width: 620px !important; font-size: 15px !important; }
+html body .brand-profile-hero-badge {
+  position: absolute !important;
+  left: 46px !important;
+  bottom: 32px !important;
+  width: min(430px, 44%) !important;
+  padding: 12px 15px !important;
+  border: 1px solid rgba(132,211,169,.54) !important;
+  border-radius: 16px !important;
+  background: rgba(241,255,248,.74) !important;
+  box-shadow: 0 12px 32px rgba(23,123,73,.10), inset 0 1px 0 rgba(255,255,255,.9) !important;
+  backdrop-filter: blur(14px) saturate(120%) !important;
+}
+html body .brand-profile-hero-badge strong { font-size: 14px !important; }
+html body .brand-profile-hero-badge span { font-size: 12px !important; line-height: 1.4 !important; }
+
+html body .brand-profile-layout { display: block !important; width: 100% !important; margin: 0 !important; }
+html body .brand-profile-guide-card { display: none !important; }
+html body .brand-profile-form-card {
+  width: 100% !important;
+  max-width: none !important;
+  padding: clamp(24px,2.8vw,42px) !important;
+  border: 1px solid rgba(255,255,255,.94) !important;
+  border-radius: 28px !important;
+  background: radial-gradient(circle at 96% 0, rgba(255,224,213,.35), transparent 31%), linear-gradient(145deg, rgba(255,255,255,.86), rgba(246,249,255,.72)) !important;
+  box-shadow: 0 24px 62px rgba(25,39,62,.11), inset 0 1px 0 white !important;
+  backdrop-filter: blur(22px) saturate(120%) !important;
+}
+html body .brand-profile-form-header { margin-bottom: 20px !important; padding-bottom: 20px !important; }
+html body .brand-profile-form-header h3 { font-size: 30px !important; }
+html body .brand-profile-edit-button:not(.subtle) {
+  min-height: 48px !important;
+  padding: 0 20px !important;
+  border: 0 !important;
+  border-radius: 14px !important;
+  color: white !important;
+  background: linear-gradient(135deg,#ff7456,#e84a32) !important;
+  box-shadow: 0 14px 28px rgba(230,75,49,.26), inset 0 1px 0 rgba(255,255,255,.35) !important;
+}
+
+html body .brand-profile-summary-grid {
+  display: grid !important;
+  grid-template-columns: repeat(12, minmax(0,1fr)) !important;
+  gap: 16px !important;
+}
+html body .brand-profile-summary-card {
+  min-height: 126px !important;
+  padding: 22px !important;
+  border: 1px solid rgba(255,255,255,.95) !important;
+  border-radius: 22px !important;
+  background: radial-gradient(circle at 100% 0,rgba(225,233,255,.55),transparent 44%),rgba(255,255,255,.68) !important;
+  box-shadow: 0 16px 38px rgba(29,43,68,.08), inset 0 1px 0 white !important;
+  backdrop-filter: blur(16px) !important;
+}
+html body .brand-profile-summary-card.identity { grid-column: span 6 !important; }
+html body .brand-profile-summary-card.compact { grid-column: span 3 !important; }
+html body .brand-profile-summary-card.narrative { grid-column: span 6 !important; min-height: 168px !important; }
+html body .brand-profile-summary-card.logo {
+  grid-column: 1 / -1 !important;
+  min-height: 112px !important;
+  background: radial-gradient(circle at 100% 0,rgba(221,244,255,.52),transparent 42%),rgba(255,255,255,.70) !important;
+}
+html body .brand-profile-summary-card:nth-child(2) { background: radial-gradient(circle at 100% 0,rgba(231,221,255,.58),transparent 44%),rgba(255,255,255,.68) !important; }
+html body .brand-profile-summary-card:nth-child(3) { background: radial-gradient(circle at 100% 0,rgba(215,247,230,.58),transparent 44%),rgba(255,255,255,.68) !important; }
+html body .brand-profile-summary-card:nth-child(4) { background: radial-gradient(circle at 100% 0,rgba(255,225,214,.58),transparent 42%),rgba(255,255,255,.70) !important; }
+html body .brand-profile-summary-card p { font-size: 14px !important; line-height: 1.65 !important; font-weight: 600 !important; }
+html body .brand-logo-compact-thumb {
+  width: 72px !important;
+  height: 72px !important;
+  border: 1px dashed rgba(78,119,178,.38) !important;
+  border-radius: 18px !important;
+  background: linear-gradient(145deg,#f5faff,#edf5ff) !important;
+}
+html body .brand-profile-page > .danger-zone-card {
+  margin-top: 18px !important;
+  padding: 18px 22px !important;
+  border-radius: 18px !important;
+  opacity: .72 !important;
+  transition: opacity .18s ease !important;
+}
+html body .brand-profile-page > .danger-zone-card:hover,
+html body .brand-profile-page > .danger-zone-card:focus-within { opacity: 1 !important; }
+
+@media (max-width: 1050px) {
+  html body .brand-profile-page { padding-top: 20px !important; }
+  html body .brand-profile-hero { min-height: 280px !important; padding: 32px !important; }
+  html body .brand-profile-hero > div:first-child { width: 58% !important; }
+  html body .brand-profile-hero h2 { font-size: clamp(38px,5vw,54px) !important; }
+  html body .brand-profile-hero-badge { left: 32px !important; bottom: 26px !important; width: 52% !important; }
+  html body .brand-profile-summary-card.identity { grid-column: span 6 !important; }
+  html body .brand-profile-summary-card.compact { grid-column: span 3 !important; }
+  html body .brand-profile-summary-card.narrative { grid-column: span 6 !important; }
+}
+
+@media (max-width: 760px) {
+  html body .content.spreelo-content:has(.brand-profile-page) { padding-top: var(--spreelo-mobile-header-total,106px) !important; }
+  html body .brand-profile-page { width: 100% !important; padding: 12px 10px 48px !important; }
+  html body .brand-profile-hero {
+    min-height: 362px !important;
+    padding: 24px 19px !important;
+    border-radius: 22px !important;
+    background:
+      linear-gradient(180deg,rgba(250,252,255,.97) 0%,rgba(250,252,255,.84) 48%,rgba(250,252,255,.12) 75%),
+      url("/backgrounds/spreelo-brand-intelligence-v143-38.png") 66% center / cover no-repeat !important;
+  }
+  html body .brand-profile-hero > div:first-child { width: 100% !important; }
+  html body .brand-profile-hero h2 { max-width: 96% !important; font-size: clamp(34px,10vw,44px) !important; }
+  html body .brand-profile-hero > div:first-child > span { max-width: 94% !important; font-size: 13px !important; }
+  html body .brand-profile-hero-badge { left: 18px !important; right: 18px !important; bottom: 18px !important; width: auto !important; }
+  html body .brand-profile-form-card { padding: 20px 15px !important; border-radius: 22px !important; }
+  html body .brand-profile-form-header { align-items: flex-start !important; }
+  html body .brand-profile-form-header h3 { font-size: 25px !important; }
+  html body .brand-profile-edit-button { min-height: 44px !important; padding: 0 13px !important; }
+  html body .brand-profile-summary-grid { grid-template-columns: 1fr !important; gap: 11px !important; }
+  html body .brand-profile-summary-card.identity,
+  html body .brand-profile-summary-card.compact,
+  html body .brand-profile-summary-card.narrative,
+  html body .brand-profile-summary-card.logo { grid-column: 1 !important; min-height: 0 !important; padding: 18px !important; border-radius: 18px !important; }
+  html body .brand-profile-page > .danger-zone-card { padding: 16px !important; }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Login: premium AI visual on every viewport                                  */
+/* -------------------------------------------------------------------------- */
+
+html body .login-refresh-saas-preview > * { display: none !important; }
+html body .login-refresh-saas-preview > header {
+  position: absolute !important;
+  inset: 14px 14px auto 14px !important;
+  z-index: 2 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+html body .login-refresh-saas-preview > header > div { display: grid !important; gap: 4px !important; }
+html body .login-refresh-saas-preview > header strong { color: white !important; font-size: 11px !important; letter-spacing: .12em !important; }
+html body .login-refresh-saas-preview > header i { width: 82px !important; height: 4px !important; border-radius: 99px !important; background: rgba(255,255,255,.24) !important; }
+html body .login-refresh-saas-preview > header b {
+  padding: 6px 9px !important;
+  border: 1px solid rgba(98,232,185,.32) !important;
+  border-radius: 999px !important;
+  color: #98f4cf !important;
+  background: rgba(10,99,78,.25) !important;
+  font-size: 9px !important;
+  letter-spacing: .08em !important;
+}
+
+@media (max-width: 1180px) {
+  html body .login-refresh-page { padding: 18px !important; }
+  html body .login-refresh-shell {
+    width: min(100%, 720px) !important;
+    min-height: 0 !important;
+    border-radius: 26px !important;
+    background: linear-gradient(145deg,rgba(255,255,255,.92),rgba(247,249,255,.80)) !important;
+    box-shadow: 0 28px 70px rgba(25,39,62,.15) !important;
+  }
+  html body .login-refresh-mobile-hero {
+    position: relative !important;
+    display: block !important;
+    height: 190px !important;
+    margin: 18px 0 22px !important;
+    overflow: hidden !important;
+    border: 1px solid rgba(94,91,170,.25) !important;
+    border-radius: 22px !important;
+    background:
+      linear-gradient(90deg,rgba(3,17,34,.10),transparent 54%),
+      url("/backgrounds/spreelo-login-ai-assistant-v143-37.png") center 43% / cover no-repeat !important;
+    box-shadow: 0 20px 48px rgba(18,32,69,.19), inset 0 1px 0 rgba(255,255,255,.22) !important;
+  }
+  html body .login-refresh-mobile-hero > *:not(.login-refresh-mobile-ai-label) { display: none !important; }
+  html body .login-refresh-mobile-ai-label {
+    position: absolute !important;
+    inset: 13px 14px auto 17px !important;
+    z-index: 2 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+  html body .login-refresh-mobile-ai-label strong {
+    color: white !important;
+    font-size: 10px !important;
+    font-weight: 900 !important;
+    letter-spacing: .13em !important;
+  }
+  html body .login-refresh-mobile-ai-label b {
+    padding: 5px 8px !important;
+    border: 1px solid rgba(98,232,185,.34) !important;
+    border-radius: 999px !important;
+    color: #9ff2d3 !important;
+    background: rgba(8,80,65,.34) !important;
+    font-size: 8px !important;
+    font-weight: 900 !important;
+    letter-spacing: .08em !important;
+  }
+  html body .login-refresh-heading {
+    margin: 0 0 22px !important;
+    padding-right: 0 !important;
+  }
+  html body .login-refresh-auth { padding: 28px !important; }
+}
+
+@media (max-width: 560px) {
+  html body .login-refresh-page { padding: 0 !important; }
+  html body .login-refresh-shell { width: 100% !important; border-radius: 0 !important; box-shadow: none !important; }
+  html body .login-refresh-auth { padding: 22px 20px 34px !important; }
+  html body .login-refresh-mobile-hero { height: 168px !important; margin: 16px 0 20px !important; border-radius: 19px !important; }
+  html body .login-refresh-auth h1 { font-size: clamp(34px,10vw,43px) !important; }
+  html body .login-refresh-security-card { background: linear-gradient(145deg,rgba(255,255,255,.88),rgba(246,248,255,.74)) !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html body .brand-profile-edit-button,
+  html body .campaign-v14335-primary,
+  html body .campaign-v14335-secondary { transition: none !important; }
+}
