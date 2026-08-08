@@ -68,7 +68,7 @@ const SOCIAL_PLATFORMS = [
 
 function getConnectionStatusKey(status) {
   if (status === "connected") return "social.status.connected";
-  if (status === "expired") return "social.status.expired";
+  if (status === "expired" || status === "needs_reconnect") return "social.status.expired";
   if (status === "error") return "social.status.error";
   if (status === "disconnected") return "social.status.disconnected";
   return "social.status.notConnected";
@@ -76,7 +76,7 @@ function getConnectionStatusKey(status) {
 
 function getStatusClass(status) {
   if (status === "connected") return "connected";
-  if (status === "expired") return "warning";
+  if (status === "expired" || status === "needs_reconnect") return "warning";
   if (status === "error") return "error";
   return "neutral";
 }
@@ -128,6 +128,7 @@ function getSocialUrlMessage({ t }) {
     pinterest_token_failed: "social.errorPinterestToken",
     pinterest_account_failed: "social.errorPinterestAccount",
     pinterest_save_failed: "social.errorPinterestSave",
+    pinterest_schema_missing: "social.errorPinterestSchemaMissing",
   };
 
   return t(knownErrors[error] || "social.errorGenericConnect");
@@ -145,7 +146,7 @@ function formatTokenExpiry(value, t, platformKey) {
   });
 
   if (platformKey === "pinterest") {
-    return t("social.pinterestTokenExpiresAt", { date: formattedDate });
+    return t("social.pinterestAutoRefreshActive");
   }
 
   return t("social.tokenExpiresAtV2", { date: formattedDate });

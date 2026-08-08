@@ -26,7 +26,7 @@ check('Code exchange uses Basic client authentication', pinterest.includes('Auth
 check('Code exchange uses Pinterest v5 token endpoint', pinterest.includes('https://api.pinterest.com/v5/oauth/token'));
 check('Pinterest profile is loaded after OAuth', callback.includes('fetchPinterestUserAccount'));
 check('Pinterest token stays server-side in social_connections', pinterest.includes('page_access_token: accessToken'));
-check('Pending connection requires board choice before connected status', pinterest.includes('status: "pending"'));
+check('Pending connection requires board choice before connected status', pinterest.includes('status: "disconnected"'));
 check('Board list endpoint uses Pinterest v5 boards', pinterest.includes('https://api.pinterest.com/v5/boards'));
 check('Board selection validates board against Pinterest response', boards.includes('boards.find((board) => String(board.id) === boardId)'));
 check('Board selection activates connection', boards.includes('status: "connected"'));

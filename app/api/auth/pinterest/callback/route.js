@@ -5,6 +5,7 @@ import {
   fetchPinterestUserAccount,
   getPinterestEnv,
   savePendingPinterestConnection,
+  isPinterestSchemaError,
   verifyAndDecodePinterestState,
   verifyBrandBelongsToUser,
 } from "../../../../../lib/pinterestOAuth";
@@ -56,7 +57,10 @@ export async function GET(request) {
       brandProfileId: decoded.brandProfileId,
       account,
       accessToken: token.access_token,
+      refreshToken: token.refresh_token,
       expiresIn: token.expires_in,
+      refreshTokenExpiresIn: token.refresh_token_expires_in,
+      refreshTokenExpiresAt: token.refresh_token_expires_at,
       scope: token.scope,
     });
 
@@ -71,9 +75,11 @@ export async function GET(request) {
       ? "pinterest_token_failed"
       : callbackStage === "account"
         ? "pinterest_account_failed"
-        : callbackStage === "save"
-          ? "pinterest_save_failed"
-          : "pinterest_callback_failed";
+        : callbackStage === "save" && isPinterestSchemaError(error)
+          ? "pinterest_schema_missing"
+          : callbackStage === "save"
+            ? "pinterest_save_failed"
+            : "pinterest_callback_failed";
     const response = NextResponse.redirect(`${baseUrl}/social-channels?error=${errorCode}`);
     response.cookies.delete("spreelo_pinterest_oauth_state");
     return response;
