@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import {
+  createPinterestBoard,
+  createPinterestPin,
   createSupabaseAdminClient,
   fetchPinterestBoards,
   getHealthyPinterestAccessToken,
+  getPinterestApiEnvironment,
   isPinterestAuthError,
 } from "../../../../lib/pinterestOAuth";
 
@@ -53,7 +56,7 @@ async function loadBoardsWithAutomaticRefresh({ supabaseAdmin, connection }) {
         last_connection_error: null,
       })
       .eq("id", connection.id);
-    return { boards, connection: healthy.connection };
+    return { boards, connection: healthy.connection, accessToken: healthy.accessToken };
   } catch (error) {
     if (!isPinterestAuthError(error)) throw error;
 
@@ -63,8 +66,85 @@ async function loadBoardsWithAutomaticRefresh({ supabaseAdmin, connection }) {
       forceRefresh: true,
     });
     const boards = await fetchPinterestBoards(healthy.accessToken);
-    return { boards, connection: healthy.connection };
+    return { boards, connection: healthy.connection, accessToken: healthy.accessToken };
   }
+}
+
+async function activatePinterestBoard({
+  supabaseAdmin,
+  userId,
+  connectionId,
+  connection,
+  selected,
+}) {
+  const nowIso = new Date().toISOString();
+
+  // Only retire a previously working board after the replacement has been
+  // validated against the currently selected Pinterest API environment.
+  const { error: disconnectOldError } = await supabaseAdmin
+    .from("social_connections")
+    .update({ status: "disconnected", updated_at: nowIso })
+    .eq("user_id", userId)
+    .eq("brand_profile_id", connection.brand_profile_id)
+    .eq("platform", "pinterest")
+    .eq("status", "connected")
+    .neq("id", connectionId);
+  if (disconnectOldError) throw disconnectOldError;
+
+  const { data: existingBoardConnection, error: existingBoardError } = await supabaseAdmin
+    .from("social_connections")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("platform", "pinterest")
+    .eq("page_id", String(selected.id))
+    .maybeSingle();
+  if (existingBoardError) throw existingBoardError;
+
+  const activePayload = {
+    brand_profile_id: connection.brand_profile_id,
+    page_id: String(selected.id),
+    page_name: selected.name || "Pinterest board",
+    page_access_token: connection.page_access_token,
+    token_expires_at: connection.token_expires_at,
+    refresh_token: connection.refresh_token,
+    refresh_token_expires_at: connection.refresh_token_expires_at,
+    permissions: connection.permissions || [],
+    status: "connected",
+    last_connection_check_at: nowIso,
+    last_connection_error: null,
+    reauth_required_at: null,
+    updated_at: nowIso,
+  };
+
+  if (existingBoardConnection?.id && existingBoardConnection.id !== connectionId) {
+    const { error: moveError } = await supabaseAdmin
+      .from("social_connections")
+      .update(activePayload)
+      .eq("id", existingBoardConnection.id)
+      .eq("user_id", userId);
+    if (moveError) throw moveError;
+
+    const { error: deletePendingError } = await supabaseAdmin
+      .from("social_connections")
+      .delete()
+      .eq("id", connectionId)
+      .eq("user_id", userId)
+      .eq("platform", "pinterest");
+    if (deletePendingError) throw deletePendingError;
+  } else {
+    const { error } = await supabaseAdmin
+      .from("social_connections")
+      .update(activePayload)
+      .eq("id", connectionId)
+      .eq("user_id", userId)
+      .eq("platform", "pinterest");
+    if (error) throw error;
+  }
+
+  return {
+    id: String(selected.id),
+    name: selected.name || "Pinterest board",
+  };
 }
 
 export async function GET(request) {
@@ -92,6 +172,7 @@ export async function GET(request) {
         privacy: board.privacy || "PUBLIC",
       })),
       brand,
+      api_environment: getPinterestApiEnvironment(),
     });
   } catch (error) {
     console.error("Pinterest board list failed", error);
@@ -108,82 +189,97 @@ export async function POST(request) {
     const body = await request.json().catch(() => ({}));
     const connectionId = String(body?.connection_id || "").trim();
     const boardId = String(body?.board_id || "").trim();
-    if (!connectionId || !boardId) return NextResponse.json({ error: "Missing Pinterest board selection" }, { status: 400 });
+    const action = String(body?.action || "select_board").trim();
+    if (!connectionId) return NextResponse.json({ error: "Missing Pinterest connection" }, { status: 400 });
 
     let connection = await getConnection({ supabaseAdmin, connectionId, userId: user.id });
     if (!connection?.page_access_token) return NextResponse.json({ error: "Pinterest connection not found" }, { status: 404 });
 
-    const loaded = await loadBoardsWithAutomaticRefresh({ supabaseAdmin, connection });
-    const boards = loaded.boards;
+    const [loaded, brand] = await Promise.all([
+      loadBoardsWithAutomaticRefresh({ supabaseAdmin, connection }),
+      getBrand({ supabaseAdmin, brandProfileId: connection.brand_profile_id, userId: user.id }),
+    ]);
     connection = loaded.connection;
-    const selected = boards.find((board) => String(board.id) === boardId);
-    if (!selected) return NextResponse.json({ error: "Selected Pinterest board is not available" }, { status: 404 });
 
-    const nowIso = new Date().toISOString();
+    if (action === "create_sandbox_board") {
+      if (getPinterestApiEnvironment() !== "sandbox") {
+        return NextResponse.json({ error: "Sandbox board creation is only available in Pinterest Sandbox" }, { status: 400 });
+      }
 
-    // Keep the currently working board live until the replacement has been validated.
-    // Only now, after Pinterest + board validation succeeded, retire older active boards.
-    const { error: disconnectOldError } = await supabaseAdmin
-      .from("social_connections")
-      .update({ status: "disconnected", updated_at: nowIso })
-      .eq("user_id", user.id)
-      .eq("brand_profile_id", connection.brand_profile_id)
-      .eq("platform", "pinterest")
-      .eq("status", "connected")
-      .neq("id", connectionId);
-    if (disconnectOldError) throw disconnectOldError;
+      const preferredName = "Spreelo Test";
+      let selected = loaded.boards.find(
+        (board) => String(board?.name || "").trim().toLowerCase() === preferredName.toLowerCase()
+      );
 
-    const { data: existingBoardConnection, error: existingBoardError } = await supabaseAdmin
-      .from("social_connections")
-      .select("id")
-      .eq("user_id", user.id)
-      .eq("platform", "pinterest")
-      .eq("page_id", String(selected.id))
-      .maybeSingle();
-    if (existingBoardError) throw existingBoardError;
+      if (!selected) {
+        selected = await createPinterestBoard(loaded.accessToken, {
+          name: preferredName,
+          description: brand?.business_name
+            ? `Testanslagstavla för ${brand.business_name}, skapad av Spreelo i Pinterest Sandbox.`
+            : "Testanslagstavla skapad av Spreelo i Pinterest Sandbox.",
+          privacy: "PUBLIC",
+        });
+      }
 
-    const activePayload = {
-      brand_profile_id: connection.brand_profile_id,
-      page_id: String(selected.id),
-      page_name: selected.name || "Pinterest board",
-      page_access_token: connection.page_access_token,
-      token_expires_at: connection.token_expires_at,
-      refresh_token: connection.refresh_token,
-      refresh_token_expires_at: connection.refresh_token_expires_at,
-      permissions: connection.permissions || [],
-      status: "connected",
-      last_connection_check_at: nowIso,
-      last_connection_error: null,
-      reauth_required_at: null,
-      updated_at: nowIso,
-    };
+      const testImageUrl = new URL(
+        "/backgrounds/spreelo-social-hero-desktop-v143-42.png",
+        request.url
+      ).toString();
 
-    if (existingBoardConnection?.id && existingBoardConnection.id !== connectionId) {
-      const { error: moveError } = await supabaseAdmin
-        .from("social_connections")
-        .update(activePayload)
-        .eq("id", existingBoardConnection.id)
-        .eq("user_id", user.id);
-      if (moveError) throw moveError;
+      const testPin = await createPinterestPin(loaded.accessToken, {
+        board_id: String(selected.id),
+        title: "Spreelo Sandbox-test",
+        description: "Testpin skapad av Spreelo för att verifiera Pinterest-publicering i Sandbox.",
+        media_source: {
+          source_type: "image_url",
+          url: testImageUrl,
+        },
+      });
 
-      const { error: deletePendingError } = await supabaseAdmin
-        .from("social_connections")
-        .delete()
-        .eq("id", connectionId)
-        .eq("user_id", user.id)
-        .eq("platform", "pinterest");
-      if (deletePendingError) throw deletePendingError;
-    } else {
-      const { error } = await supabaseAdmin
-        .from("social_connections")
-        .update(activePayload)
-        .eq("id", connectionId)
-        .eq("user_id", user.id)
-        .eq("platform", "pinterest");
-      if (error) throw error;
+      const board = await activatePinterestBoard({
+        supabaseAdmin,
+        userId: user.id,
+        connectionId,
+        connection,
+        selected,
+      });
+
+      console.info("Pinterest Sandbox board ready", {
+        connectionId,
+        brandProfileId: connection.brand_profile_id,
+        boardId: board.id,
+        boardName: board.name,
+        testPinId: String(testPin.id),
+      });
+
+      return NextResponse.json({
+        ok: true,
+        board,
+        test_pin: { id: String(testPin.id) },
+        connected: true,
+        api_environment: "sandbox",
+      });
     }
 
-    return NextResponse.json({ ok: true, board: { id: String(selected.id), name: selected.name || "Pinterest board" } });
+    if (!boardId) return NextResponse.json({ error: "Missing Pinterest board selection" }, { status: 400 });
+
+    const selected = loaded.boards.find((board) => String(board.id) === boardId);
+    if (!selected) return NextResponse.json({ error: "Selected Pinterest board is not available" }, { status: 404 });
+
+    const board = await activatePinterestBoard({
+      supabaseAdmin,
+      userId: user.id,
+      connectionId,
+      connection,
+      selected,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      board,
+      connected: true,
+      api_environment: getPinterestApiEnvironment(),
+    });
   } catch (error) {
     console.error("Pinterest board selection failed", error);
     return NextResponse.json({ error: error.message || "Could not connect Pinterest board" }, { status: 500 });

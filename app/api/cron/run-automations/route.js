@@ -34264,6 +34264,7 @@ product_research_model_used: websitePreparedRule.uses_website_content
       claimedRules: claimedRulesThisRun,
       generated: summary.generated,
       published: summary.social_published,
+      publishErrors: summary.social_publish_failed,
       skipped: summary.skipped,
       errors: summary.errors,
     });

@@ -12,6 +12,8 @@ export default function SelectPinterestBoard() {
   const [connectionId, setConnectionId] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState("");
+  const [apiEnvironment, setApiEnvironment] = useState("production");
+  const [creatingSandboxBoard, setCreatingSandboxBoard] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -48,7 +50,29 @@ export default function SelectPinterestBoard() {
     }
     setBoards(data.boards || []);
     setBrand(data.brand || null);
+    setApiEnvironment(data.api_environment || "production");
     setLoading(false);
+  }
+
+  async function createSandboxBoard() {
+    setCreatingSandboxBoard(true);
+    setMessage("");
+    const token = await accessToken();
+    if (!token) return (window.location.href = "/login");
+
+    const response = await fetch("/api/pinterest/boards", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ connection_id: connectionId, action: "create_sandbox_board" }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.connected) {
+      setMessage(data?.error || t("social.pinterestErrorCreateSandboxBoard"));
+      setCreatingSandboxBoard(false);
+      return;
+    }
+
+    window.location.href = "/social-channels?connected=pinterest&pinterest_test_pin=1";
   }
 
   async function selectBoard(boardId) {
@@ -115,14 +139,26 @@ export default function SelectPinterestBoard() {
             ) : boards.length === 0 ? (
               <>
                 <div className="facebook-picker-header">
-                  <span>{t("social.pinterestNoBoardsEyebrow")}</span>
-                  <h3>{t("social.pinterestNoBoardsTitle")}</h3>
-                  <p>{t("social.pinterestNoBoardsText")}</p>
+                  <span>{t(apiEnvironment === "sandbox" ? "social.pinterestSandboxEyebrow" : "social.pinterestNoBoardsEyebrow")}</span>
+                  <h3>{t(apiEnvironment === "sandbox" ? "social.pinterestSandboxBoardTitle" : "social.pinterestNoBoardsTitle")}</h3>
+                  <p>{t(apiEnvironment === "sandbox" ? "social.pinterestSandboxBoardText" : "social.pinterestNoBoardsText")}</p>
                 </div>
-                <a className="facebook-cancel-button" href="https://www.pinterest.com/" target="_blank" rel="noreferrer">
-                  {t("social.pinterestOpenPinterest")}
-                </a>
-                <button type="button" className="facebook-cancel-button" onClick={() => loadBoards(connectionId)}>
+                {apiEnvironment === "sandbox" ? (
+                  <button
+                    type="button"
+                    className="social-v74-primary-action pinterest-sandbox-create-button"
+                    onClick={createSandboxBoard}
+                    disabled={creatingSandboxBoard}
+                    aria-busy={creatingSandboxBoard}
+                  >
+                    {creatingSandboxBoard ? t("social.pinterestCreatingSandboxBoard") : t("social.pinterestCreateSandboxBoard")}
+                  </button>
+                ) : (
+                  <a className="facebook-cancel-button" href="https://www.pinterest.com/" target="_blank" rel="noreferrer">
+                    {t("social.pinterestOpenPinterest")}
+                  </a>
+                )}
+                <button type="button" className="facebook-cancel-button" onClick={() => loadBoards(connectionId)} disabled={creatingSandboxBoard}>
                   {t("social.refresh")}
                 </button>
               </>

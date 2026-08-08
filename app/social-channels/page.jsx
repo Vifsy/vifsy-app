@@ -96,7 +96,9 @@ function getSocialUrlMessage({ t }) {
   const searchParams = new URLSearchParams(window.location.search);
   const connected = searchParams.get("connected");
   const error = searchParams.get("error");
+  const pinterestTestPin = searchParams.get("pinterest_test_pin");
 
+  if (connected === "pinterest" && pinterestTestPin === "1") return t("social.pinterestSandboxVerifiedMessage");
   if (connected === "instagram") return t("social.instagramConnectedMessageV2");
   if (connected === "facebook") return t("social.facebookConnectedMessageV2");
   if (connected === "pinterest") return t("social.pinterestConnectedMessageV2");
