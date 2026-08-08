@@ -5588,6 +5588,182 @@ html body .plan-v70-activate-actions>span,html body .plan-v74-approval-publishin
 .home-v14335-panel-link svg {
   width: 14px;
 }
+
+/* v143.47 — Home plan management and richer review context */
+.home-v14347-plan {
+  border-bottom: 1px solid #e8edf6;
+  background: rgba(255,255,255,.22);
+  transition: background .18s ease, box-shadow .18s ease;
+}
+.home-v14347-plan:last-child {
+  border-bottom: 0;
+}
+.home-v14347-plan.is-expanded {
+  background: rgba(255,255,255,.72);
+  box-shadow: inset 0 0 0 1px rgba(111,91,214,.06);
+}
+.home-v14347-plan-row {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 42px;
+  align-items: stretch;
+}
+.home-v14347-plan-toggle {
+  min-width: 0;
+  min-height: 64px;
+  padding: 9px 7px 9px 12px;
+  border: 0;
+  display: grid;
+  grid-template-columns: 45px minmax(0,1fr) auto 18px;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.home-v14347-plan-toggle:hover {
+  background: rgba(247,249,255,.78);
+}
+.home-v14347-plan-copy {
+  min-width: 0;
+}
+.home-v14347-plan-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-v14347-plan-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-v14347-plan-toggle > b {
+  min-width: 42px;
+  color: #152039;
+  text-align: center;
+  font-size: 16px;
+}
+.home-v14347-plan-toggle > b small {
+  display: block;
+  margin-top: 1px;
+  color: #78859b;
+  font-size: 9px;
+  font-weight: 700;
+}
+.home-v14347-plan-chevron {
+  display: grid;
+  place-items: center;
+  color: #7a879b;
+}
+.home-v14347-plan-chevron svg {
+  width: 16px;
+  height: 16px;
+}
+.home-v14347-plan-delete {
+  width: 34px;
+  height: 34px;
+  margin: auto 8px auto 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: #8792a5;
+  background: transparent;
+  cursor: pointer;
+  transition: color .18s ease, background .18s ease, border-color .18s ease, transform .18s ease;
+}
+.home-v14347-plan-delete:hover:not(:disabled) {
+  color: #d94f3d;
+  background: #fff1ed;
+  border-color: #ffd6cc;
+  transform: translateY(-1px);
+}
+.home-v14347-plan-delete:disabled {
+  opacity: .45;
+  cursor: wait;
+}
+.home-v14347-plan-delete svg {
+  width: 16px;
+  height: 16px;
+}
+.home-v14347-plan-details {
+  margin: 0 10px 10px;
+  border: 1px solid #e6eaf3;
+  border-radius: 14px;
+  padding: 12px;
+  background: linear-gradient(180deg,rgba(249,250,255,.96),rgba(255,255,255,.9));
+}
+.home-v14347-plan-details-heading {
+  padding: 0 2px 9px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.home-v14347-plan-details-heading strong {
+  color: #17213a;
+  font-size: 11px;
+}
+.home-v14347-plan-details-heading span {
+  color: #8a95a9;
+  font-size: 9px;
+}
+.home-v14347-plan-detail-list {
+  display: grid;
+  gap: 6px;
+}
+.home-v14347-plan-detail {
+  min-height: 48px;
+  padding: 7px 9px;
+  border: 1px solid #edf0f6;
+  border-radius: 11px;
+  display: grid;
+  grid-template-columns: 30px minmax(0,1fr) auto;
+  align-items: center;
+  gap: 9px;
+  background: rgba(255,255,255,.88);
+}
+.home-v14347-plan-detail-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: #6f5bd6;
+  background: #f0edff;
+}
+.home-v14347-plan-detail-icon svg {
+  width: 14px;
+  height: 14px;
+}
+.home-v14347-plan-detail > span:nth-child(2) strong {
+  display: block;
+  color: #18223a;
+  font-size: 11px;
+}
+.home-v14347-plan-detail > span:nth-child(2) small {
+  display: block;
+  margin-top: 2px;
+  color: #8390a5;
+  font-size: 9px;
+}
+.home-v14347-plan-detail time {
+  color: #536078;
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.home-v14347-show-all {
+  width: 100%;
+  border: 0;
+  cursor: pointer;
+}
+.home-v14335-review-list span > small i {
+  color: #7b879b;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: none;
+}
 .home-v14335-compact-empty {
   min-height: 96px;
   margin-top: 8px;
@@ -6333,6 +6509,32 @@ html body .plan-v70-activate-actions>span,html body .plan-v74-approval-publishin
   }
   .home-v14335-duo {
     grid-template-columns: 1fr;
+  }
+  .home-v14347-plan-row {
+    grid-template-columns: minmax(0,1fr) 40px;
+  }
+  .home-v14347-plan-toggle {
+    grid-template-columns: 42px minmax(0,1fr) auto 16px;
+    gap: 8px;
+    padding-left: 9px;
+  }
+  .home-v14347-plan-delete {
+    margin-right: 5px;
+  }
+  .home-v14347-plan-details {
+    margin: 0 7px 8px;
+    padding: 10px;
+  }
+  .home-v14347-plan-details-heading {
+    display: grid;
+    gap: 3px;
+  }
+  .home-v14347-plan-detail {
+    grid-template-columns: 28px minmax(0,1fr);
+  }
+  .home-v14347-plan-detail time {
+    grid-column: 2;
+    white-space: normal;
   }
   .home-v14335-activity-list a {
     grid-template-columns: 24px minmax(0,1fr) auto;
@@ -9534,5 +9736,131 @@ html body .automation-page.plan-v70-active .plan-v70-activate-card:not(.saved) .
   html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile {
     height: 88px !important;
     min-height: 88px !important;
+  }
+}
+
+/* v143.46 — customer-controlled campaign schedule unlock */
+html body .campaign-v14346-unlock-schedule {
+  display: inline-flex !important;
+  width: auto !important;
+  height: auto !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  margin: 5px 0 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #e4583e !important;
+  font-size: 10px !important;
+  line-height: 1.2 !important;
+  font-weight: 850 !important;
+  text-decoration: underline !important;
+  text-underline-offset: 2px !important;
+  cursor: pointer !important;
+}
+html body .campaign-v14346-unlock-schedule:hover {
+  color: #c9442f !important;
+}
+html body .campaign-v14335-slot-date.is-unlocked {
+  min-width: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  overflow: visible !important;
+}
+html body .campaign-v14335-slot-date.is-unlocked .custom-picker-field,
+html body .campaign-v14346-time-picker .custom-picker-field,
+html body .campaign-v14335-slot-date.is-unlocked .custom-picker-anchor,
+html body .campaign-v14346-time-picker .custom-picker-anchor {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+html body .campaign-v14335-slot-date.is-unlocked .custom-picker-button,
+html body .campaign-v14346-time-picker .custom-picker-button {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 42px !important;
+  height: 42px !important;
+  padding: 0 10px !important;
+  border: 1px solid #dbe4f0 !important;
+  border-radius: 11px !important;
+  background: #fff !important;
+  box-shadow: 0 5px 14px rgba(31, 49, 78, .06) !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+}
+html body .campaign-v14346-time-picker {
+  width: 96px !important;
+  min-width: 0 !important;
+  position: relative !important;
+  z-index: 3 !important;
+}
+html body .campaign-v14335-slot-date.is-unlocked {
+  position: relative !important;
+  z-index: 4 !important;
+}
+html body .campaign-v14335-slot-list article.is-schedule-unlocked {
+  grid-template-columns: 112px minmax(250px, 1fr) 180px 96px 145px 40px !important;
+}
+
+@media (max-width: 1240px) {
+  html body .campaign-v14335-slot-list article.is-schedule-unlocked {
+    grid-template-columns: 92px minmax(190px,1fr) 155px 88px 116px 36px !important;
+  }
+  html body .campaign-v14346-time-picker {
+    width: 88px !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  html body .campaign-v14335-slot-list article.is-schedule-unlocked {
+    min-height: 144px !important;
+    grid-template-columns: 76px minmax(0,1fr) 155px 38px !important;
+    grid-template-areas:
+      "art copy date menu"
+      "art copy time menu"
+      "art copy format menu" !important;
+  }
+  html body .campaign-v14335-slot-list article.is-schedule-unlocked .campaign-v14346-time-picker {
+    grid-area: time !important;
+    justify-self: stretch !important;
+    width: 100% !important;
+  }
+  html body .campaign-v14335-slot-list article.is-schedule-unlocked .campaign-v14335-slot-format {
+    grid-area: format !important;
+    justify-self: start !important;
+  }
+}
+
+@media (max-width: 760px) {
+  html body .campaign-v14335-slot-list article.is-schedule-unlocked {
+    min-height: 190px !important;
+    grid-template-columns: 70px minmax(0,1fr) !important;
+    grid-template-areas:
+      "art copy"
+      "art date"
+      "art time"
+      "art format"
+      "detail detail" !important;
+    overflow: visible !important;
+  }
+  html body .campaign-v14335-slot-list article.is-schedule-unlocked .campaign-v14346-time-picker {
+    grid-area: time !important;
+    width: 100% !important;
+  }
+  html body .campaign-v14335-slot-list article.is-schedule-unlocked .campaign-v14335-slot-format {
+    grid-area: format !important;
+  }
+  html body .campaign-v14335-slot-date.is-unlocked .custom-picker-button,
+  html body .campaign-v14346-time-picker .custom-picker-button {
+    min-height: 40px !important;
+    height: 40px !important;
+    font-size: 10.5px !important;
+  }
+  html body .campaign-v14346-unlock-schedule {
+    margin-top: 2px !important;
+    font-size: 9px !important;
   }
 }

@@ -10312,17 +10312,60 @@ function blockFormatCardClickAfterDrag(event) {
                   </div>
 
                   <div className="campaign-v14335-slot-list">
-                    {slots.map((slot, index) => (
-                      <article key={slot.id}>
+                    {slots.map((slot, index) => {
+                      const scheduleUnlocked = slot.dateLocked === false;
+
+                      return (
+                      <article key={slot.id} className={scheduleUnlocked ? "is-schedule-unlocked" : ""}>
                         <div className={`campaign-v14335-slot-art art-${index % 5}`}><SlotTypeGlyph slot={slot} /></div>
                         <div className="campaign-v14335-slot-copy"><h3>{getCustomerSlotLabel(slot)}</h3><p>{getCustomerSlotPurpose(slot)}</p></div>
-                        <div className="campaign-v14335-slot-date"><strong>{formatStartDateLabel(slot.startDate, timeZone, locale)}</strong><span>{t("automation.lockedCampaignDate")}</span></div>
-                        <time>{normalizeTime(slot.publishTime)}</time>
+                        <div className={`campaign-v14335-slot-date${scheduleUnlocked ? " is-unlocked" : ""}`}>
+                          {scheduleUnlocked ? (
+                            <DatePickerField
+                              value={slot.startDate}
+                              onChange={(value) => updateSlot(slot.id, "startDate", value)}
+                              pickerId={`campaign-slot-date-${slot.id}`}
+                              openPickerId={openPickerId}
+                              setOpenPickerId={setOpenPickerId}
+                              timeZone={timeZone}
+                              compact
+                              weekdayLabels={weekdayLabels}
+                              locale={locale}
+                            />
+                          ) : (
+                            <>
+                              <strong>{formatStartDateLabel(slot.startDate, timeZone, locale)}</strong>
+                              <span>{t("automation.lockedCampaignDate")}</span>
+                              <button
+                                type="button"
+                                className="campaign-v14346-unlock-schedule"
+                                onClick={() => updateSlot(slot.id, "dateLocked", false)}
+                              >
+                                {t("automation.unlock")}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                        {scheduleUnlocked ? (
+                          <div className="campaign-v14346-time-picker">
+                            <TimePickerField
+                              value={slot.publishTime}
+                              onChange={(value) => updateSlot(slot.id, "publishTime", value)}
+                              pickerId={`campaign-slot-time-${slot.id}`}
+                              openPickerId={openPickerId}
+                              setOpenPickerId={setOpenPickerId}
+                              compact
+                            />
+                          </div>
+                        ) : (
+                          <time>{normalizeTime(slot.publishTime)}</time>
+                        )}
                         <span className="campaign-v14335-slot-format">{getLocalizedSlotFormatLabel(slot)}</span>
                         <button type="button" aria-label={t("automation.viewPostDetails")} onClick={() => toggleSlotInstructions(slot.id)}>•••</button>
                         {expandedInstructionSlotIds.includes(slot.id) ? <div className="campaign-v14335-slot-detail"><strong>{t("automation.whatPostWillBeAbout")}</strong><p>{getSlotContentExplanation(slot)}</p><small>{getSlotCreditLabel(slot)}</small></div> : null}
                       </article>
-                    ))}
+                      );
+                    })}
                   </div>
                   <button type="button" className="campaign-v14335-show-plan" onClick={() => setShowLearnMoreModal(true)}>{t("automation.campaignExperience.showWholePlan")} <ChevronRight /></button>
                 </section>
@@ -10984,25 +11027,17 @@ function blockFormatCardClickAfterDrag(event) {
                 )}
               </div>
               <div className="planner-post-date">
-                {slot.dateLocked ? (
+                {slot.isCampaignSlot && slot.dateLocked !== false ? (
                   <div className="locked-campaign-date">
                     <strong>{formatStartDateLabel(slot.startDate, timeZone, locale)}</strong>
                     <span>{t("automation.lockedCampaignDate")}</span>
-
-                    {canManuallyEditCampaignPlan && (
-                      <button
-                        type="button"
-                        className="unlock-campaign-date-button"
-                        onClick={() => updateSlot(slot.id, "dateLocked", false)}
-                      >
-                        {t("automation.unlock")}
-                      </button>
-                    )}
-                  </div>
-                ) : slot.isCampaignSlot && !canManuallyEditCampaignPlan ? (
-                  <div className="locked-campaign-date">
-                    <strong>{formatStartDateLabel(slot.startDate, timeZone, locale)}</strong>
-                    <span>{t("automation.lockedCampaignDate")}</span>
+                    <button
+                      type="button"
+                      className="unlock-campaign-date-button"
+                      onClick={() => updateSlot(slot.id, "dateLocked", false)}
+                    >
+                      {t("automation.unlock")}
+                    </button>
                   </div>
                 ) : (
                   <DatePickerField
@@ -11022,7 +11057,7 @@ function blockFormatCardClickAfterDrag(event) {
               </div>
 
               <div className="planner-post-time">
-                {slot.isCampaignSlot && !canManuallyEditCampaignPlan ? (
+                {slot.isCampaignSlot && slot.dateLocked !== false ? (
                   <div className="fixed-campaign-time">
                     <strong>{getCampaignTimeWindowDisplay(slot.publishTime, locale)}</strong>
                     <span>{t("automation.queuedBySpreelo")}</span>
