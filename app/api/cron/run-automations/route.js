@@ -1808,9 +1808,18 @@ function buildCarouselProductLabelSvg({ title, eyebrow = "", analysis, productCa
   const textX = isRtl
     ? labelBox.x + labelBox.width - horizontalPadding
     : labelBox.x + horizontalPadding;
-  const eyebrowOffset = eyebrow ? 70 : 0;
-  const totalTextHeight = typography.lineHeight * lines.length;
-  const textY = labelBox.y + eyebrowOffset + Math.max(typography.fontSize, Math.round((labelBox.height - eyebrowOffset - totalTextHeight) / 2 + typography.fontSize));
+  // Keep the product name visually centred in the glass card below the blue
+  // eyebrow divider. SVG text uses a baseline, so calculate against the actual
+  // rendered line block instead of just adding a fixed eyebrow offset.
+  const textAreaTop = eyebrow ? labelBox.y + 68 : labelBox.y + 16;
+  const textAreaBottom = labelBox.y + labelBox.height - 18;
+  const renderedTextHeight = typography.fontSize + typography.lineHeight * Math.max(0, lines.length - 1);
+  const textAreaHeight = Math.max(renderedTextHeight, textAreaBottom - textAreaTop);
+  const textY = Math.round(
+    textAreaTop +
+      Math.max(0, (textAreaHeight - renderedTextHeight) / 2) +
+      typography.fontSize
+  );
   const outline = analysis.layout === "text_only"
     ? `stroke="${isLight ? "#000000" : "#ffffff"}" stroke-opacity="0.34" stroke-width="7" paint-order="stroke"`
     : "";
@@ -1821,7 +1830,7 @@ function buildCarouselProductLabelSvg({ title, eyebrow = "", analysis, productCa
     ? `<text x="${textX}" y="${labelBox.y + 35}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="${Array.from(eyebrow).length > 30 ? 12 : Array.from(eyebrow).length > 24 ? 14 : 17}" font-weight="760" letter-spacing="${Array.from(eyebrow).length > 24 ? 1.5 : 3.2}" fill="${textColor}" text-anchor="${isRtl ? "end" : "start"}">${escapeProductSvg(eyebrow.toLocaleUpperCase())}</text><rect x="${isRtl ? textX - 42 : textX}" y="${labelBox.y + 52}" width="42" height="4" rx="2" fill="#3478f6"/>`
     : "";
   return {
-    svg: `<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg">${card}${eyebrowMarkup}<text x="${textX}" y="${textY}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="${typography.fontSize}" font-weight="820" fill="${textColor}" direction="${typography.profile.direction}" unicode-bidi="plaintext" text-anchor="${isRtl ? "end" : "start"}" ${outline}>${spans}</text></svg>`,
+    svg: `<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg">${card}${eyebrowMarkup}<text x="${textX}" y="${textY}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="${typography.fontSize}" font-weight="900" fill="${textColor}" direction="${typography.profile.direction}" unicode-bidi="plaintext" text-anchor="${isRtl ? "end" : "start"}" ${outline}>${spans}</text></svg>`,
     typography,
   };
 }
@@ -31646,7 +31655,19 @@ async function publishPostToPinterest({
     uniqueImageUrls.length >= 2
       ? {
           source_type: "multiple_image_urls",
-          items: uniqueImageUrls.map((url) => ({ url })),
+          // Pinterest supports title/description/link on every image in a
+          // multi-image Pin. Repeat the campaign destination per slide so the
+          // carousel keeps a website click-through instead of behaving like a
+          // save-only gallery. The top-level link is kept as well below.
+          items: uniqueImageUrls.map((url) => {
+            const item = {
+              url,
+              title: copy.title,
+              description: copy.description,
+            };
+            if (copy.link) item.link = copy.link;
+            return item;
+          }),
         }
       : {
           source_type: "image_url",
@@ -31683,6 +31704,15 @@ async function publishPostToPinterest({
       "Pinterest Pin publishing failed"
     );
   }
+
+  console.log("Pinterest Pin payload accepted", {
+    postId: postId || null,
+    pinId: String(data.id),
+    mediaType: uniqueImageUrls.length >= 2 ? "multiple_images" : "image",
+    imageCount: uniqueImageUrls.length,
+    hasDestination: Boolean(copy.link),
+    perImageDestinations: uniqueImageUrls.length >= 2 && copy.link ? uniqueImageUrls.length : 0,
+  });
 
   return data;
 }
