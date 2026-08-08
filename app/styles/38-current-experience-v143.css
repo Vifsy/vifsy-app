@@ -10391,3 +10391,150 @@ html body .campaign-v14348-row-menu > button.is-danger:hover {
     width: min(188px, calc(100vw - 92px)) !important;
   }
 }
+
+/* v143.49 — per-post channel destinations and channel-aware campaign layout */
+html body .campaign-v14335-slot-list article,
+html body .campaign-v14335-slot-list article.is-schedule-unlocked {
+  grid-template-columns: 104px minmax(230px,1fr) 158px 64px 130px minmax(150px,220px) 58px !important;
+}
+html body .campaign-v14349-slot-channels {
+  min-width: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 5px !important;
+  flex-wrap: wrap !important;
+}
+html body .campaign-v14349-channel-chip {
+  min-width: 0 !important;
+  height: 28px !important;
+  padding: 0 8px 0 6px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  border: 1px solid #e0e6ef !important;
+  border-radius: 999px !important;
+  background: rgba(248,250,253,.94) !important;
+  color: #4b5a72 !important;
+  font-size: 10px !important;
+  font-weight: 850 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+html body .campaign-v14349-channel-chip .platform-icon-img {
+  width: 15px !important;
+  height: 15px !important;
+  flex: 0 0 15px !important;
+  object-fit: contain !important;
+}
+html body .campaign-v14349-channel-chip > span:not(.platform-icon-img) {
+  width: 15px !important;
+  height: 15px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 50% !important;
+  background: #eef2f8 !important;
+  font-size: 9px !important;
+}
+html body .campaign-v14349-channel-chip b {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+@media (min-width: 901px) and (max-width: 1240px) {
+  html body .campaign-v14335-slot-list article,
+  html body .campaign-v14335-slot-list article.is-schedule-unlocked {
+    grid-template-columns: 78px minmax(170px,1fr) 138px 64px 108px minmax(110px,160px) 52px !important;
+    gap: 8px !important;
+  }
+  html body .campaign-v14349-channel-chip {
+    width: 27px !important;
+    padding: 0 !important;
+    justify-content: center !important;
+  }
+  html body .campaign-v14349-channel-chip b {
+    display: none !important;
+  }
+}
+
+@media (min-width: 621px) and (max-width: 900px) {
+  html body .campaign-v14335-slot-list article,
+  html body .campaign-v14335-slot-list article.is-schedule-unlocked {
+    grid-template-columns: 72px minmax(0,1fr) 150px 52px !important;
+    grid-template-areas:
+      "art copy date menu"
+      "art copy time menu"
+      "art copy format menu"
+      "art copy channels menu"
+      "detail detail detail detail" !important;
+    min-height: 164px !important;
+  }
+  html body .campaign-v14349-slot-channels {
+    grid-area: channels !important;
+  }
+  html body .campaign-v14349-channel-chip {
+    width: 27px !important;
+    padding: 0 !important;
+    justify-content: center !important;
+  }
+  html body .campaign-v14349-channel-chip b {
+    display: none !important;
+  }
+}
+
+@media (max-width: 620px) {
+  html body .campaign-v14335-slot-list article,
+  html body .campaign-v14335-slot-list article.is-schedule-unlocked {
+    grid-template-areas:
+      "art copy"
+      "art date"
+      "art time"
+      "art format"
+      "art channels"
+      "detail detail" !important;
+    min-height: 202px !important;
+  }
+  html body .campaign-v14349-slot-channels {
+    grid-area: channels !important;
+    padding-top: 2px !important;
+  }
+  html body .campaign-v14349-channel-chip {
+    width: 28px !important;
+    height: 28px !important;
+    padding: 0 !important;
+    justify-content: center !important;
+  }
+  html body .campaign-v14349-channel-chip b {
+    display: none !important;
+  }
+}
+
+/* v143.49 — explain platform adaptation without adding visual weight */
+html body .plan-v14349-platform-adapter-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+  color: rgba(51, 65, 85, 0.74);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+html body .plan-v14349-platform-adapter-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: #f26f5f;
+}
+
+html body .plan-v14349-channel-fallback {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(99, 102, 241, 0.1);
+  color: #4f46e5;
+  font-size: 10px;
+  font-weight: 800;
+}

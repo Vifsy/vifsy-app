@@ -63,6 +63,13 @@ import {
   normalizeContentFormatRows,
 } from "../../lib/contentFormatLibrary";
 import { enforceDirectCalendarCampaignPolicy } from "../../lib/calendarCampaignPolicy";
+import {
+  getContentTypeCoverageScore,
+  getContentTypeDestinationPlatforms,
+  getContentTypePlatformAdaptations,
+  normalizeSpreeloPlatformKey,
+  normalizeSpreeloPlatformList,
+} from "../../lib/platformContentCompatibility";
 
 const DEFAULT_TIME_ZONE = "UTC";
 const SPREELO_INTERNAL_TESTER_EMAIL = "johan@foldern.com";
@@ -1087,13 +1094,242 @@ function getVisibleContentTypes(websiteProductModeAvailable) {
   });
 }
 
+function getSlotDestinationPlatformKeys(slot, selectedPlatforms = []) {
+  const selected = normalizeSpreeloPlatformList(selectedPlatforms);
+  if (!selected.length) return [];
+
+  return getContentTypeDestinationPlatforms({
+    contentTypeId: slot?.contentTypeId,
+    contentFormat: slot?.contentFormat,
+    selectedPlatforms: selected,
+  });
+}
+
+function replaceSlotContentTypeForPlatforms(slot, type) {
+  if (!slot || !type) return slot;
+
+  return {
+    ...slot,
+    prompt: slot.isCampaignSlot ? slot.prompt : type.prompt,
+    imagePrompt: type.imagePrompt || slot.imagePrompt || "",
+    generateImage: true,
+    contentTypeId: type.id,
+    contentTypeLabel: type.label,
+    usesWebsiteContent: Boolean(type.usesWebsiteContent),
+    contentFormat: type.contentFormat || "single_image",
+    animationStyle: type.animationStyle || null,
+  };
+}
+
+function reconcileSlotsForPlatformSelection({
+  currentSlots = [],
+  selectedPlatforms = [],
+  websiteProductModeAvailable = true,
+  ensureChannelCoverage = true,
+}) {
+  const selected = normalizeSpreeloPlatformList(selectedPlatforms);
+  if (!selected.length) {
+    return currentSlots.map((slot) => ({
+      ...slot,
+      destinationPlatforms: [],
+      platformAdaptations: {},
+    }));
+  }
+
+  const candidates = getVisibleContentTypes(websiteProductModeAvailable);
+  const usedTypeIds = new Set();
+
+  const decorateSlot = (slot) => {
+    const destinations = getSlotDestinationPlatformKeys(slot, selected);
+    return {
+      ...slot,
+      destinationPlatforms: destinations,
+      platformAdaptations: getContentTypePlatformAdaptations({
+        contentTypeId: slot?.contentTypeId,
+        contentFormat: slot?.contentFormat,
+        selectedPlatforms: selected,
+      }),
+    };
+  };
+
+  // First repair only posts that have become impossible to publish anywhere
+  // after a channel change. Existing compatible ideas are preserved.
+  let reconciled = currentSlots.map((originalSlot) => {
+    let slot = originalSlot;
+    let destinations = getSlotDestinationPlatformKeys(slot, selected);
+
+    if (!destinations.length) {
+      const rankedCandidates = candidates
+        .map((type) => ({
+          type,
+          coverage: getContentTypeCoverageScore({
+            contentTypeId: type.id,
+            contentFormat: type.contentFormat || "single_image",
+            selectedPlatforms: selected,
+          }),
+          duplicatePenalty: usedTypeIds.has(type.id) ? 2 : 0,
+          productAffinity:
+            Boolean(slot?.usesWebsiteContent) === Boolean(type.usesWebsiteContent) ? 1 : 0,
+        }))
+        .filter((item) => item.coverage > 0)
+        .sort(
+          (a, b) =>
+            b.coverage - a.coverage ||
+            b.productAffinity - a.productAffinity ||
+            a.duplicatePenalty - b.duplicatePenalty ||
+            a.type.id.localeCompare(b.type.id)
+        );
+
+      const replacement = rankedCandidates[0]?.type || null;
+      if (replacement) {
+        slot = replaceSlotContentTypeForPlatforms(slot, replacement);
+        destinations = getSlotDestinationPlatformKeys(slot, selected);
+      }
+    }
+
+    if (slot?.contentTypeId) usedTypeIds.add(slot.contentTypeId);
+    return decorateSlot(slot);
+  });
+
+  // Auto plans and calendar campaigns should not silently leave a selected
+  // channel unused. For plans with several posts, make the smallest possible
+  // rebalance so every selected channel gets useful coverage. We never rebuild
+  // the full plan and we never touch a custom/manual post for this purpose.
+  if (!ensureChannelCoverage || reconciled.length < 2 || selected.length < 2) {
+    return reconciled;
+  }
+
+  const minimumCoveragePerChannel = Math.max(
+    1,
+    Math.min(2, Math.floor(reconciled.length / 4))
+  );
+
+  const countCoverage = (platform) =>
+    reconciled.filter((slot) =>
+      normalizeSpreeloPlatformList(slot?.destinationPlatforms || []).includes(platform)
+    ).length;
+
+  for (const requiredPlatform of selected) {
+    let safety = 0;
+    while (countCoverage(requiredPlatform) < minimumCoveragePerChannel && safety < reconciled.length) {
+      safety += 1;
+
+      const replaceableSlots = reconciled
+        .map((slot, index) => ({
+          slot,
+          index,
+          currentCoverage: normalizeSpreeloPlatformList(slot?.destinationPlatforms || []).length,
+          duplicateCount: reconciled.filter(
+            (candidate) => candidate?.contentTypeId === slot?.contentTypeId
+          ).length,
+        }))
+        .filter(({ slot }) =>
+          slot?.contentTypeId !== "manual_prompt" &&
+          !normalizeSpreeloPlatformList(slot?.destinationPlatforms || []).includes(requiredPlatform)
+        )
+        .sort(
+          (a, b) =>
+            b.duplicateCount - a.duplicateCount ||
+            a.currentCoverage - b.currentCoverage ||
+            a.index - b.index
+        );
+
+      let repaired = false;
+
+      for (const target of replaceableSlots) {
+        const rankedCandidates = candidates
+          .map((type) => {
+            const destinations = getContentTypeDestinationPlatforms({
+              contentTypeId: type.id,
+              contentFormat: type.contentFormat || "single_image",
+              selectedPlatforms: selected,
+            });
+            const coversRequired = destinations.includes(requiredPlatform);
+            const productAffinity =
+              Boolean(target.slot?.usesWebsiteContent) === Boolean(type.usesWebsiteContent) ? 4 : 0;
+            const duplicatePenalty = reconciled.some(
+              (slot, index) => index !== target.index && slot?.contentTypeId === type.id
+            ) ? 2 : 0;
+            const coverage = getContentTypeCoverageScore({
+              contentTypeId: type.id,
+              contentFormat: type.contentFormat || "single_image",
+              selectedPlatforms: selected,
+            });
+
+            return {
+              type,
+              destinations,
+              coversRequired,
+              productAffinity,
+              duplicatePenalty,
+              coverage,
+            };
+          })
+          .filter((item) => item.coversRequired && item.coverage > 0)
+          .sort(
+            (a, b) =>
+              b.productAffinity - a.productAffinity ||
+              b.coverage - a.coverage ||
+              a.duplicatePenalty - b.duplicatePenalty ||
+              a.type.id.localeCompare(b.type.id)
+          );
+
+        const replacement = rankedCandidates[0]?.type || null;
+        if (!replacement) continue;
+
+        const beforeDestinations = normalizeSpreeloPlatformList(
+          target.slot?.destinationPlatforms || []
+        );
+        const nextSlot = decorateSlot(
+          replaceSlotContentTypeForPlatforms(target.slot, replacement)
+        );
+        const nextDestinations = normalizeSpreeloPlatformList(
+          nextSlot?.destinationPlatforms || []
+        );
+
+        // Do not trade away the only remaining post for another selected
+        // channel. This keeps channel coverage stable while filling the gap.
+        const wouldOrphanAnotherChannel = beforeDestinations.some(
+          (platform) =>
+            platform !== requiredPlatform &&
+            countCoverage(platform) <= minimumCoveragePerChannel &&
+            !nextDestinations.includes(platform)
+        );
+        if (wouldOrphanAnotherChannel) continue;
+
+        reconciled = reconciled.map((slot, index) =>
+          index === target.index ? nextSlot : slot
+        );
+        repaired = true;
+        break;
+      }
+
+      if (!repaired) break;
+    }
+  }
+
+  return reconciled;
+}
+
 function buildAdaptiveWeeklyVariants({
   slot,
   goalId,
   slotIndex,
   websiteProductModeAvailable,
+  selectedPlatforms = [],
 }) {
   if (!slot || !goalId) return [];
+
+  const targetPlatforms = normalizeSpreeloPlatformList(selectedPlatforms);
+  const fitsTargetPlatforms = (type) => {
+    if (!targetPlatforms.length || !type) return true;
+    const destinations = getContentTypeDestinationPlatforms({
+      contentTypeId: type.id,
+      contentFormat: type.contentFormat || "single_image",
+      selectedPlatforms: targetPlatforms,
+    });
+    return targetPlatforms.every((platform) => destinations.includes(platform));
+  };
 
   if (Array.isArray(slot.adaptiveVariants) && slot.adaptiveVariants.length > 1) {
     const safeVariants = [];
@@ -1105,7 +1341,12 @@ function buildAdaptiveWeeklyVariants({
         websiteProductModeAvailable
       );
       const type = getContentTypeById(safeTypeId);
-      if (!type || type.id === "manual_prompt" || seenTypeIds.has(type.id)) continue;
+      if (
+        !type ||
+        type.id === "manual_prompt" ||
+        seenTypeIds.has(type.id) ||
+        !fitsTargetPlatforms(type)
+      ) continue;
 
       const draftSlot = {
         ...slot,
@@ -1178,7 +1419,7 @@ function buildAdaptiveWeeklyVariants({
     if (!safeTypeId || seenTypeIds.has(safeTypeId)) continue;
 
     const type = getContentTypeById(safeTypeId);
-    if (!type || type.id === "manual_prompt") continue;
+    if (!type || type.id === "manual_prompt" || !fitsTargetPlatforms(type)) continue;
 
     const draftSlot = {
       ...slot,
@@ -2122,6 +2363,11 @@ contentTypeLabel: overrides.contentTypeLabel || null,
 usesWebsiteContent: Boolean(overrides.usesWebsiteContent),
 contentFormat: overrides.contentFormat || "single_image",
 animationStyle: overrides.animationStyle || null,
+destinationPlatforms: normalizeSpreeloPlatformList(overrides.destinationPlatforms || []),
+platformAdaptations:
+  overrides.platformAdaptations && typeof overrides.platformAdaptations === "object"
+    ? overrides.platformAdaptations
+    : {},
 isCampaignSlot: Boolean(overrides.isCampaignSlot),
 campaignRole: overrides.campaignRole || "",
 campaignSummary: overrides.campaignSummary || "",
@@ -2234,7 +2480,7 @@ function createRecommendedSlots(options = {}) {
     goalId: options.autoPlanGoal || "",
   });
 
-  return types.map((type, index) => {
+  const recommendedSlots = types.map((type, index) => {
     const schedule = smartSchedule[index] || {
       startDate,
       weekday: getWeekdayFromDateString(startDate, timeZone),
@@ -2262,6 +2508,12 @@ function createRecommendedSlots(options = {}) {
       strategyNotes: planningStep.description || "",
       timeZone,
     });
+  });
+
+  return reconcileSlotsForPlatformSelection({
+    currentSlots: recommendedSlots,
+    selectedPlatforms: options.platformKeys || [],
+    websiteProductModeAvailable,
   });
 }
 
@@ -2410,7 +2662,7 @@ function createDynamicRecommendedSlots(options = {}) {
     goalId,
   });
 
-  return planningSteps.map((planningStep, index) => {
+  const dynamicSlots = planningSteps.map((planningStep, index) => {
     const type = getContentTypeById(planningStep.contentTypeId);
     const schedule = smartSchedule[index] || {
       startDate,
@@ -2463,6 +2715,12 @@ function createDynamicRecommendedSlots(options = {}) {
       ...slotDraft,
       adaptiveVariants: variants,
     };
+  });
+
+  return reconcileSlotsForPlatformSelection({
+    currentSlots: dynamicSlots,
+    selectedPlatforms: options.platformKeys || [],
+    websiteProductModeAvailable,
   });
 }
 
@@ -5283,20 +5541,14 @@ const platformIconSources = {
   tiktok: "/social-icons/tiktok.png",
   x: "/social-icons/x.png",
   youtube: "/social-icons/youtube.png",
+  threads: "/social-icons/threads.svg",
 };
 
 function normalizePlatformKey(platformValue) {
+  const normalized = normalizeSpreeloPlatformKey(platformValue);
+  if (normalized) return normalized;
   const value = String(platformValue || "").trim().toLowerCase();
-
-  if (!value) return "";
-  if (value.includes("facebook")) return "facebook";
-  if (value.includes("instagram")) return "instagram";
-  if (value.includes("linkedin") || value.includes("linked in")) return "linkedin";
-  if (value.includes("pinterest")) return "pinterest";
-  if (value.includes("tiktok") || value.includes("tik tok")) return "tiktok";
   if (value === "x" || value.includes("twitter")) return "x";
-  if (value.includes("youtube")) return "youtube";
-
   return value.replace(/[^a-z0-9_-]+/g, "_");
 }
 
@@ -5310,6 +5562,9 @@ function formatConnectedPlatformLabel(platformValue) {
   if (value === "tiktok") return "TikTok";
   if (value === "x") return "X";
   if (value === "youtube") return "YouTube";
+  if (value === "threads") return "Threads";
+  if (value === "snapchat") return "Snapchat";
+  if (value === "weibo") return "Weibo";
 
   return String(platformValue || "").trim() || value;
 }
@@ -5977,6 +6232,29 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
   const visibleContentTypes = useMemo(() => {
     return getVisibleContentTypes(websiteProductModeAvailable);
   }, [websiteProductModeAvailable]);
+
+  const selectedPlatformSignature = selectedPlatformKeys.join("|");
+
+  useEffect(() => {
+    if (!selectedPlatformSignature || editingRuleId || savedPlanSummary) return;
+
+    const activeKeys = selectedPlatformSignature.split("|").filter(Boolean);
+    setSlots((currentSlots) => {
+      if (!currentSlots.length) return currentSlots;
+      return reconcileSlotsForPlatformSelection({
+        currentSlots,
+        selectedPlatforms: activeKeys,
+        websiteProductModeAvailable,
+        ensureChannelCoverage: planCreationMode === "auto" || planCreationMode === "campaign",
+      });
+    });
+  }, [
+    selectedPlatformSignature,
+    websiteProductModeAvailable,
+    editingRuleId,
+    Boolean(savedPlanSummary),
+    planCreationMode,
+  ]);
 
   const displayedAutoPlanPostCountOptions = useMemo(
     () => Array.from(new Set([...autoPlanPostCountOptions, autoPlanPostCount])).sort((a, b) => a - b),
@@ -7809,11 +8087,16 @@ timeZone: selectedTimeZone,
     });
 
 
-    return [...currentSlots, newSlot].sort((a, b) =>
+    const nextSlots = [...currentSlots, newSlot].sort((a, b) =>
       `${a.startDate || ""} ${a.publishTime || ""}`.localeCompare(
         `${b.startDate || ""} ${b.publishTime || ""}`
       )
     );
+    return reconcileSlotsForPlatformSelection({
+      currentSlots: nextSlots,
+      selectedPlatforms: selectedPlatformKeys,
+      websiteProductModeAvailable,
+    });
   });
 }
 function scrollToPlannerSchedule() {
@@ -7863,7 +8146,14 @@ function scrollToPlannerSchedule() {
     usesWebsiteContent: false,
   };
 
-  setSlots((currentSlots) => [...currentSlots, preparedSlot]);
+  setSlots((currentSlots) =>
+    reconcileSlotsForPlatformSelection({
+      currentSlots: [...currentSlots, preparedSlot],
+      selectedPlatforms: selectedPlatformKeys,
+      websiteProductModeAvailable,
+      ensureChannelCoverage: false,
+    })
+  );
   setExpandedInstructionSlotIds((currentIds) => [
     ...currentIds,
     preparedSlot.id,
@@ -7949,7 +8239,12 @@ function addSlot() {
         setExpandedInstructionSlotIds((currentIds) => [...currentIds, newSlot.id]);
       }
 
-      return [...currentSlots, newSlot];
+      return reconcileSlotsForPlatformSelection({
+        currentSlots: [...currentSlots, newSlot],
+        selectedPlatforms: selectedPlatformKeys,
+        websiteProductModeAvailable,
+        ensureChannelCoverage: planCreationMode === "auto",
+      });
     });
 
     setRecentlyAddedContentTypeId(typeId);
@@ -8016,6 +8311,44 @@ function removeCampaignSlot(slotId) {
   removeSlot(slotId);
 }
 
+function applyPlatformSelection(nextPlatformKeys) {
+  const normalizedKeys = normalizeSpreeloPlatformList(nextPlatformKeys);
+  setPlatform(formatPlatformSelectionFromKeys(normalizedKeys, connectedPlatformOptions));
+
+  // Before activation, channel changes update destination badges immediately.
+  // Generated plans/campaigns also make the smallest deterministic format
+  // rebalance needed to keep the newly selected channels represented.
+  if (!editingRuleId && !savedPlanSummary) {
+    setSlots((currentSlots) => {
+      const reconciled = reconcileSlotsForPlatformSelection({
+        currentSlots,
+        selectedPlatforms: normalizedKeys,
+        websiteProductModeAvailable,
+        ensureChannelCoverage: planCreationMode === "auto" || planCreationMode === "campaign",
+      });
+      setSelectedContentTypeIds(
+        reconciled.map((slot) => slot.contentTypeId).filter(Boolean)
+      );
+      return reconciled;
+    });
+  }
+}
+
+function getSlotPlatformOptions(slot) {
+  const explicitDestinations = normalizeSpreeloPlatformList(slot?.destinationPlatforms || []);
+  const destinationKeys = explicitDestinations.length
+    ? explicitDestinations.filter((key) => selectedPlatformKeys.includes(key))
+    : getSlotDestinationPlatformKeys(slot, selectedPlatformKeys);
+
+  return destinationKeys
+    .map((key) => connectedPlatformOptions.find((item) => item.value === key) || {
+      value: key,
+      label: formatConnectedPlatformLabel(key),
+      icon: getPlatformIconSource(key),
+    })
+    .filter(Boolean);
+}
+
 async function applyDynamicAutoPlan({ goalId, postCount }) {
   const safePostCount = Math.max(1, Number(postCount) || DEFAULT_AUTO_PLAN_POST_COUNT);
   const fallbackTypeIds = getGoalContentTypeIds({
@@ -8023,6 +8356,7 @@ async function applyDynamicAutoPlan({ goalId, postCount }) {
     postCount: safePostCount,
     websiteProductModeAvailable,
   });
+  const activePlatformKeys = normalizeSpreeloPlatformList(selectedPlatformKeys);
   const fallbackSlots = createRecommendedSlots({
     startDate: planStartDate,
     timeZone,
@@ -8030,10 +8364,12 @@ async function applyDynamicAutoPlan({ goalId, postCount }) {
     firstPublishTime: defaultPublishTime,
     postCount: safePostCount,
     websiteProductModeAvailable,
+    platformKeys: activePlatformKeys,
   });
 
+  const platformSignature = activePlatformKeys.join("-") || "no-platform";
   const cacheKey = currentBrandId && goalId
-    ? `spreelo_plan_recommendation_${currentBrandId}_${goalId}_${safePostCount}`
+    ? `spreelo_plan_recommendation_${currentBrandId}_${goalId}_${safePostCount}_${platformSignature}`
     : "";
   let instantSlots = fallbackSlots;
 
@@ -8048,6 +8384,7 @@ async function applyDynamicAutoPlan({ goalId, postCount }) {
         firstPublishTime: defaultPublishTime,
         postCount: safePostCount,
         websiteProductModeAvailable,
+        platformKeys: activePlatformKeys,
       });
       if (cachedSlots.length === safePostCount) instantSlots = cachedSlots;
     } catch {
@@ -8086,7 +8423,8 @@ async function applyDynamicAutoPlan({ goalId, postCount }) {
         postCount: safePostCount,
         startDate: planStartDate,
         timeZone,
-        platform,
+        platform: formatPlatformSelectionFromKeys(activePlatformKeys, connectedPlatformOptions) || platform,
+        platforms: activePlatformKeys,
       }),
     });
     const payload = await response.json().catch(() => ({}));
@@ -8108,6 +8446,7 @@ async function applyDynamicAutoPlan({ goalId, postCount }) {
       firstPublishTime: defaultPublishTime,
       postCount: safePostCount,
       websiteProductModeAvailable,
+      platformKeys: activePlatformKeys,
     });
 
     if (dynamicSlots.length === safePostCount && cacheKey && typeof window !== "undefined") {
@@ -8778,6 +9117,15 @@ function toggleContentType(typeId) {
       return;
     }
 
+    const invalidDestinationSlot = slots.find(
+      (slot) => getSlotDestinationPlatformKeys(slot, selectedPlatformKeys).length === 0
+    );
+
+    if (invalidDestinationSlot) {
+      setMessage(t("automation.platformCompatibility.noDestination"));
+      return;
+    }
+
     setSaving(true);
 
     const {
@@ -8908,6 +9256,14 @@ const rows = preparedSlots.map((slot, slotIndex) => {
         selectedTimeZone
       );
       const productMetadata = getSlotProductMetadata(slot);
+      const slotDestinationKeys = getSlotDestinationPlatformKeys(
+        slot,
+        selectedPlatformKeys
+      );
+      const slotPlatform = formatPlatformSelectionFromKeys(
+        slotDestinationKeys,
+        connectedPlatformOptions
+      );
 
       return {
         ...(editingRuleId ? {} : { id: makeAutomationRuleId() }),
@@ -8923,7 +9279,7 @@ const rows = preparedSlots.map((slot, slotIndex) => {
 Post idea visible to customer:
 ${slot.campaignSummary}`
     : slot.prompt,
-        platform,
+        platform: slotPlatform || platform,
         tone,
         language: language === "Auto" ? language : normalizeSingleContentLanguage(language, "English"),
         post_type: postType,
@@ -9024,6 +9380,7 @@ ${slot.campaignSummary}`
                   goalId: autoPlanGoal || "stay_visible",
                   slotIndex,
                   websiteProductModeAvailable,
+                  selectedPlatforms: slotDestinationKeys,
                 }),
               }
             : null
@@ -9269,6 +9626,13 @@ ${slot.campaignSummary}`
 
       setMessage("");
 
+      const actualPlanPlatformKeys = normalizeSpreeloPlatformList(
+        slots.flatMap((slot) => getSlotDestinationPlatformKeys(slot, selectedPlatformKeys))
+      );
+      const actualPlanChannelsLabel =
+        formatPlatformSelectionFromKeys(actualPlanPlatformKeys, connectedPlatformOptions) ||
+        platform;
+
       setSavedPlanSummary({
         name: sharedGeneratedPlanName,
         totalPosts: rows.length,
@@ -9277,6 +9641,7 @@ ${slot.campaignSummary}`
         firstPostLabel,
         credits: plannedCredits,
         method: formatPlanMode(planCreationMode),
+        channels: actualPlanChannelsLabel,
       });
 
       if (planCreationMode === "campaign") {
@@ -9300,9 +9665,7 @@ ${slot.campaignSummary}`
             ? t("automation.redesign.postsPerWeekValue", { count: rows.length })
             : `${rows.length} ${t("automation.redesign.plannedPostsTitle")}`,
         start: firstPostLabel,
-        channels:
-          selectedPlatformOptions.map((item) => item.label).join(", ") ||
-          platform,
+        channels: actualPlanChannelsLabel,
         language: getLanguageDisplayLabel(language),
         credits: `${plannedCredits} ${t("automation.credits")}`,
         formats: Array.from(
@@ -9811,7 +10174,7 @@ function blockFormatCardClickAfterDrag(event) {
                                       const nextKeys = checked
                                         ? selectedPlatformKeys.filter((key) => key !== item.value)
                                         : [...selectedPlatformKeys, item.value];
-                                      setPlatform(formatPlatformSelectionFromKeys(nextKeys, connectedPlatformOptions));
+                                      applyPlatformSelection(nextKeys);
                                     }}
                                   />
                                   <img src={item.icon} alt="" className="platform-icon-img" />
@@ -9827,6 +10190,12 @@ function blockFormatCardClickAfterDrag(event) {
                         {t("automation.connectSocialChannelFirst")}
                       </a>
                     )}
+                    {selectedPlatformKeys.length > 0 ? (
+                      <span className="plan-v14349-platform-adapter-note">
+                        <Sparkles size={12} aria-hidden="true" />
+                        {t("automation.platformCompatibility.adaptsAutomatically")}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
 
@@ -10075,7 +10444,8 @@ function blockFormatCardClickAfterDrag(event) {
 
                     {slots.map((slot, index) => {
                       const rowExpanded = expandedInstructionSlotIds.includes(slot.id);
-                      const platformLabel = selectedPlatformOptions[0]?.label || platform || t("automation.choosePlatform");
+                      const slotPlatformOptions = getSlotPlatformOptions(slot);
+                      const platformLabel = slotPlatformOptions[0]?.label || platform || t("automation.choosePlatform");
                       const formatItem = getExploreFormatItem(slot.contentTypeId);
                       const campaignCode = getCampaignCodeFromSlot(slot);
 
@@ -10115,11 +10485,17 @@ function blockFormatCardClickAfterDrag(event) {
                             <strong>{getCustomerSlotMarketingPurpose(slot)}</strong>
                           </div>
                           <div className="plan-v70-planned-channel plan-v74-planned-channels">
-                            {selectedPlatformOptions.length > 0 ? (
-                              <span className="plan-v74-channel-stack" aria-label={selectedPlatformOptions.map((item) => item.label).join(", ")}>
-                                {selectedPlatformOptions.map((item) => (
+                            {slotPlatformOptions.length > 0 ? (
+                              <span className="plan-v74-channel-stack" aria-label={slotPlatformOptions.map((item) => item.label).join(", ")}>
+                                {slotPlatformOptions.map((item) => (
                                   <span className="plan-v74-channel-chip" key={`${slot.id}-${item.value}`}>
-                                    <img src={item.icon} alt="" className="platform-icon-img" />
+                                    {item.icon ? (
+                                      <img src={item.icon} alt="" className="platform-icon-img" />
+                                    ) : (
+                                      <span className="plan-v14349-channel-fallback" aria-hidden="true">
+                                        {item.label.slice(0, 1)}
+                                      </span>
+                                    )}
                                     <span>{item.label}</span>
                                   </span>
                                 ))}
@@ -10351,6 +10727,7 @@ function blockFormatCardClickAfterDrag(event) {
                   <div className="campaign-v14335-slot-list">
                     {slots.map((slot, index) => {
                       const scheduleUnlocked = slot.dateLocked === false;
+                      const slotPlatformOptions = getSlotPlatformOptions(slot);
 
                       return (
                       <article key={slot.id} className={scheduleUnlocked ? "is-schedule-unlocked" : ""}>
@@ -10398,6 +10775,17 @@ function blockFormatCardClickAfterDrag(event) {
                           <time>{normalizeTime(slot.publishTime)}</time>
                         )}
                         <span className="campaign-v14335-slot-format">{getLocalizedSlotFormatLabel(slot)}</span>
+                        <div
+                          className="campaign-v14349-slot-channels"
+                          aria-label={slotPlatformOptions.map((item) => item.label).join(", ")}
+                        >
+                          {slotPlatformOptions.map((item) => (
+                            <span className="campaign-v14349-channel-chip" key={`${slot.id}-campaign-${item.value}`} title={item.label}>
+                              {item.icon ? <img src={item.icon} alt="" className="platform-icon-img" /> : <span>{item.label.slice(0, 1)}</span>}
+                              <b>{item.label}</b>
+                            </span>
+                          ))}
+                        </div>
                         <div className="campaign-v14348-row-actions">
                           <button
                             type="button"
@@ -11504,7 +11892,7 @@ function blockFormatCardClickAfterDrag(event) {
                         ? selectedPlatformKeys.filter((key) => key !== item.value)
                         : [...selectedPlatformKeys, item.value];
 
-                      setPlatform(formatPlatformSelectionFromKeys(nextKeys, connectedPlatformOptions));
+                      applyPlatformSelection(nextKeys);
                     }}
                   />
                   <img src={item.icon} alt="" className="platform-icon-img" />
@@ -12261,9 +12649,7 @@ function blockFormatCardClickAfterDrag(event) {
                 </div>
                 <div>
                   <span>{t("automation.campaignActivated.channels")}</span>
-                  <strong>
-                    {selectedPlatformOptions.map((item) => item.label).join(", ") || platform}
-                  </strong>
+                  <strong>{savedPlanSummary.channels || platform}</strong>
                 </div>
               </div>
 

@@ -1,5 +1,11 @@
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
+import {
+  describeContentTypeDestinations,
+  getContentTypeCoverageScore,
+  getContentTypeDestinationPlatforms,
+  normalizeSpreeloPlatformList,
+} from "../../../lib/platformContentCompatibility";
 
 export const maxDuration = 60;
 
@@ -305,7 +311,7 @@ function getDefaultMarketingValues(goalId, formatId) {
   };
 }
 
-function buildFallbackItems({ goalId, postCount, availableFormats, recentHistory }) {
+function buildFallbackItems({ goalId, postCount, availableFormats, recentHistory, selectedPlatforms = [] }) {
   const goalWeights = GOAL_WEIGHTS[goalId] || GOAL_WEIGHTS.build_trust;
   const selected = [];
   const selectedCategories = new Map();
@@ -318,11 +324,16 @@ function buildFallbackItems({ goalId, postCount, availableFormats, recentHistory
         const categoryPenalty = categoryCount * 18;
         const productPenalty =
           goalId !== "sell_more" && format.category === "product" ? 14 : 0;
+        const platformCoverage = getContentTypeCoverageScore({
+          contentTypeId: format.id,
+          selectedPlatforms,
+        });
         const score =
           Number(goalWeights[format.id] || 40) -
           getRecencyPenalty(format.id, recentHistory) -
           categoryPenalty -
-          productPenalty;
+          productPenalty +
+          platformCoverage * 5;
 
         return { format, score };
       })
@@ -340,6 +351,10 @@ function buildFallbackItems({ goalId, postCount, availableFormats, recentHistory
 
     selected.push({
       content_type_id: format.id,
+      destination_platforms: getContentTypeDestinationPlatforms({
+        contentTypeId: format.id,
+        selectedPlatforms,
+      }),
       role,
       strategic_reason: strategicReason,
       ...marketingValues,
@@ -350,7 +365,7 @@ function buildFallbackItems({ goalId, postCount, availableFormats, recentHistory
   return selected;
 }
 
-function normalizePlanningItem(item, availableFormatMap, goalId) {
+function normalizePlanningItem(item, availableFormatMap, goalId, selectedPlatforms = []) {
   const contentTypeId = String(
     item?.content_type_id || item?.contentTypeId || item?.format || ""
   )
@@ -365,8 +380,18 @@ function normalizePlanningItem(item, availableFormatMap, goalId) {
     format.purpose,
   ];
 
+  const destinationPlatforms = getContentTypeDestinationPlatforms({
+    contentTypeId,
+    selectedPlatforms,
+  });
+
+  if (selectedPlatforms.length > 0 && destinationPlatforms.length === 0) {
+    return null;
+  }
+
   return {
     content_type_id: contentTypeId,
+    destination_platforms: destinationPlatforms,
     role: normalizeShortText(item?.role || item?.label || defaultRole, 120),
     strategic_reason: normalizeShortText(
       item?.strategic_reason || item?.purpose || item?.reason || defaultReason,
@@ -390,19 +415,20 @@ function normalizePlanningItem(item, availableFormatMap, goalId) {
   };
 }
 
-function normalizePlan({ rawPlan, goalId, postCount, availableFormats, recentHistory }) {
+function normalizePlan({ rawPlan, goalId, postCount, availableFormats, recentHistory, selectedPlatforms = [] }) {
   const availableFormatMap = new Map(availableFormats.map((format) => [format.id, format]));
   const fallbackItems = buildFallbackItems({
     goalId,
     postCount,
     availableFormats,
     recentHistory,
+    selectedPlatforms,
   });
   const seenPlanTypes = new Set();
   const planItems = [];
 
   for (const rawItem of Array.isArray(rawPlan?.posts) ? rawPlan.posts : []) {
-    const normalizedItem = normalizePlanningItem(rawItem, availableFormatMap, goalId);
+    const normalizedItem = normalizePlanningItem(rawItem, availableFormatMap, goalId, selectedPlatforms);
     if (!normalizedItem || seenPlanTypes.has(normalizedItem.content_type_id)) continue;
     seenPlanTypes.add(normalizedItem.content_type_id);
     planItems.push(normalizedItem);
@@ -423,7 +449,7 @@ function normalizePlan({ rawPlan, goalId, postCount, availableFormats, recentHis
     : [];
 
   for (const rawItem of [...rawRotation, ...planItems, ...fallbackItems]) {
-    const normalizedItem = normalizePlanningItem(rawItem, availableFormatMap, goalId);
+    const normalizedItem = normalizePlanningItem(rawItem, availableFormatMap, goalId, selectedPlatforms);
     if (!normalizedItem || seenRotationTypes.has(normalizedItem.content_type_id)) continue;
     seenRotationTypes.add(normalizedItem.content_type_id);
     rotationItems.push(normalizedItem);
@@ -533,6 +559,7 @@ export async function POST(request) {
       startDate = "",
       timeZone = "UTC",
       platform = "",
+      platforms = [],
     } = await request.json();
 
     if (!brandProfileId || !allowedGoals.has(String(goalId || ""))) {
@@ -552,7 +579,19 @@ export async function POST(request) {
       return Response.json({ error: brandError?.message || "Brand not found." }, { status: 404 });
     }
 
-    const availableFormats = getAvailableFormats(brandProfile);
+    const selectedPlatforms = normalizeSpreeloPlatformList(
+      Array.isArray(platforms) && platforms.length ? platforms : platform
+    );
+    const brandFormats = getAvailableFormats(brandProfile);
+    const compatibleFormats = selectedPlatforms.length
+      ? brandFormats.filter((format) =>
+          getContentTypeDestinationPlatforms({
+            contentTypeId: format.id,
+            selectedPlatforms,
+          }).length > 0
+        )
+      : brandFormats;
+    const availableFormats = compatibleFormats.length ? compatibleFormats : brandFormats;
     const context = await loadOptionalPlanningContext(supabase, brandProfileId, user.id);
 
     const fallbackPlan = normalizePlan({
@@ -561,6 +600,7 @@ export async function POST(request) {
       postCount,
       availableFormats,
       recentHistory: context.recentHistory,
+      selectedPlatforms,
     });
 
     if (!process.env.OPENAI_API_KEY) {
@@ -571,7 +611,16 @@ export async function POST(request) {
     }
 
     const formatList = availableFormats
-      .map((format) => `- ${format.id}: ${format.label}. ${format.purpose}`)
+      .map((format) => {
+        const destinations = describeContentTypeDestinations({
+          contentTypeId: format.id,
+          selectedPlatforms,
+        });
+        const destinationText = destinations.length
+          ? ` Destinations: ${destinations.join(", ")}.`
+          : "";
+        return `- ${format.id}: ${format.label}. ${format.purpose}${destinationText}`;
+      })
       .join("\n");
 
     const response = await openai.responses.create({
@@ -597,7 +646,7 @@ PLAN
 - Number of posts in the next week: ${postCount}
 - Start date: ${startDate || "not supplied"}
 - Time zone: ${timeZone || "UTC"}
-- Platform: ${platform || "connected social channels"}
+- Selected channels: ${selectedPlatforms.length ? selectedPlatforms.join(", ") : platform || "connected social channels"}
 
 AVAILABLE FORMATS
 ${formatList}
@@ -614,6 +663,11 @@ ${JSON.stringify(context.upcomingCampaigns)}
 RULES
 - The only supported goals are Sell more, Get more followers and Build trust. Treat them as three genuinely different strategies, not labels on the same format mix.
 - Select exactly ${postCount} posts from the available format ids.
+- Channel choice affects the format mix before generation. Prefer formats that give the selected channels useful coverage, but do not force every post onto every channel.
+- A post may intentionally target only a subset of the selected channels when that format is a better native fit there.
+- If only one channel is selected, optimize the whole mix for that channel instead of preserving a generic cross-platform mix.
+- Never assume a static image or carousel belongs on YouTube when other channels are also selected; YouTube should mainly receive video-native posts in a multi-channel plan.
+- Spreelo creates one master content idea and uses platform adapters where listed. Do not invent separate creative concepts for each channel.
 - Do not select Custom post/manual_prompt, discount campaigns, focused-page input, customer cases, local-angle posts, comparisons or behind-the-scenes posts.
 - Do not select product formats unless verified product mode is available.
 - Select service_focus only when there is credible service evidence.
@@ -636,6 +690,7 @@ Return this exact JSON structure:
   "posts": [
     {
       "content_type_id": "one available format id",
+      "destination_platforms": ["channels this post should actually publish on"],
       "role": "Short role shown in the plan",
       "strategic_reason": "Why this post belongs in this week's sequence",
       "marketing_angle": "awareness | engagement | education | guide | trust | product_discovery | product_push | conversion",
@@ -646,6 +701,7 @@ Return this exact JSON structure:
   "rotation_pool": [
     {
       "content_type_id": "one available format id",
+      "destination_platforms": ["channels this format can serve"],
       "role": "A useful recurring role for this format",
       "strategic_reason": "How it should support future weeks without becoming repetitive",
       "marketing_angle": "awareness | engagement | education | guide | trust | product_discovery | product_push | conversion",
@@ -664,6 +720,7 @@ Return this exact JSON structure:
       postCount,
       availableFormats,
       recentHistory: context.recentHistory,
+      selectedPlatforms,
     });
 
     return Response.json({

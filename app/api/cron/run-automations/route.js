@@ -10014,6 +10014,11 @@ function getApprovalChannelsLabel(t, rule) {
   }
   if (raw.includes("tiktok")) labels.push(t("emails.approval.channelTikTok"));
   if (raw.includes("youtube")) labels.push(t("emails.approval.channelYouTubeShorts"));
+  if (raw.includes("linkedin")) labels.push(t("emails.approval.channelLinkedIn"));
+  if (raw.includes("pinterest")) labels.push(t("emails.approval.channelPinterest"));
+  if (raw.includes("threads")) labels.push(t("emails.approval.channelThreads"));
+  if (raw.includes("snapchat")) labels.push(t("emails.approval.channelSnapchat"));
+  if (raw.includes("weibo")) labels.push(t("emails.approval.channelWeibo"));
 
   return Array.from(new Set(labels)).join(" · ") || String(rule?.platform || "Social media");
 }
