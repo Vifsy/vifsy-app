@@ -734,3 +734,39 @@ html body .social-v14339-security-note {
     display: none !important;
   }
 }
+
+/* v143.43 Pinterest connection */
+html body .social-v14339-grid .social-v74-card[data-platform='pinterest']::before {
+  background: linear-gradient(180deg, #e60023 0%, #bd081c 100%) !important;
+}
+html body .social-v74-card[data-platform='pinterest'] .social-v74-platform-icon {
+  background: rgba(230,0,35,.08) !important;
+  border-color: rgba(230,0,35,.14) !important;
+}
+html body .pinterest-select-badge img,
+html body .pinterest-large-icon img,
+html body .pinterest-page-option-icon img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+}
+html body .pinterest-select-badge img {
+  width: 18px !important;
+  height: 18px !important;
+}
+html body .pinterest-large-icon {
+  display: grid !important;
+  place-items: center !important;
+  background: linear-gradient(145deg, #fff 0%, #fff4f6 100%) !important;
+}
+html body .pinterest-large-icon img {
+  width: 54px !important;
+  height: 54px !important;
+}
+html body .pinterest-page-option-icon {
+  background: #fff3f5 !important;
+}
+html body .pinterest-page-option-icon img {
+  width: 24px !important;
+  height: 24px !important;
+}

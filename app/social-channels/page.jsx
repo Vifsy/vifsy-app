@@ -48,6 +48,22 @@ const SOCIAL_PLATFORMS = [
     noIdKey: "social.noInstagramAccountId",
     iconSrc: "/social-icons/instagram.png",
   },
+  {
+    key: "pinterest",
+    eyebrowKey: "social.pinterestEyebrow",
+    titleKey: "social.pinterestTitle",
+    descriptionKey: "social.pinterestDescriptionV2",
+    connectHelpKey: "social.pinterestConnectHelpV2",
+    connectKey: "social.connectPinterest",
+    connectingKey: "social.connectingPinterest",
+    disconnectKey: "social.disconnectPinterest",
+    disconnectConfirmKey: "social.disconnectPinterestConfirm",
+    connectedAccountKey: "social.connectedPinterestBoard",
+    accountFallbackKey: "social.pinterestBoardFallback",
+    idLabelKey: "social.pinterestBoardId",
+    noIdKey: "social.noPinterestBoardId",
+    iconSrc: "/social-icons/pinterest.png",
+  },
 ];
 
 function getConnectionStatusKey(status) {
@@ -70,9 +86,9 @@ function getBrandStorageKey(userId) {
 }
 
 function getConnectEndpoint(platformKey) {
-  return platformKey === "instagram"
-    ? "/api/auth/instagram/start"
-    : "/api/meta/connect";
+  if (platformKey === "instagram") return "/api/auth/instagram/start";
+  if (platformKey === "pinterest") return "/api/auth/pinterest/start";
+  return "/api/meta/connect";
 }
 
 function getSocialUrlMessage({ t }) {
@@ -83,6 +99,7 @@ function getSocialUrlMessage({ t }) {
 
   if (connected === "instagram") return t("social.instagramConnectedMessageV2");
   if (connected === "facebook") return t("social.facebookConnectedMessageV2");
+  if (connected === "pinterest") return t("social.pinterestConnectedMessageV2");
   if (!error) return "";
 
   const knownErrors = {
@@ -102,23 +119,33 @@ function getSocialUrlMessage({ t }) {
     invalid_state_payload: "social.errorMetaState",
     meta_callback_failed: "social.errorMetaCallback",
     no_pages_found: "social.errorNoFacebookPagesFound",
+    missing_pinterest_env: "social.errorMissingPinterestEnv",
+    pinterest_cancelled: "social.errorPinterestCancelled",
+    missing_pinterest_code: "social.errorPinterestCode",
+    invalid_pinterest_state: "social.errorPinterestState",
+    invalid_pinterest_state_payload: "social.errorPinterestState",
+    pinterest_callback_failed: "social.errorPinterestCallback",
   };
 
   return t(knownErrors[error] || "social.errorGenericConnect");
 }
 
-function formatTokenExpiry(value, t) {
+function formatTokenExpiry(value, t, platformKey) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
 
-  return t("social.tokenExpiresAtV2", {
-    date: date.toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    }),
+  const formattedDate = date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
   });
+
+  if (platformKey === "pinterest") {
+    return t("social.pinterestTokenExpiresAt", { date: formattedDate });
+  }
+
+  return t("social.tokenExpiresAtV2", { date: formattedDate });
 }
 
 function ChannelCard({
@@ -134,7 +161,7 @@ function ChannelCard({
 }) {
   const isConnected = connection?.status === "connected";
   const isConnecting = connectingPlatform === platform.key;
-  const expiresText = formatTokenExpiry(connection?.token_expires_at, t);
+  const expiresText = formatTokenExpiry(connection?.token_expires_at, t, platform.key);
   const statusClass = getStatusClass(connection?.status);
 
   return (
