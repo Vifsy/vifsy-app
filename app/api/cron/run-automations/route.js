@@ -15,6 +15,10 @@ import {
   markConnectionExpiredAndAlert,
 } from "../../../../lib/socialConnectionAlerts.js";
 import {
+  getHealthyPinterestAccessToken,
+  isPinterestAuthError,
+} from "../../../../lib/pinterestOAuth.js";
+import {
   buildProductPushEdit,
   queueShotstackRender,
   waitForShotstackRender,
@@ -9832,6 +9836,11 @@ function createEmptySummary() {
     instagram_publish_failed: 0,
     instagram_publish_skipped_no_config: 0,
     instagram_publish_skipped_no_image: 0,
+    pinterest_publish_checked: 0,
+    pinterest_published: 0,
+    pinterest_publish_failed: 0,
+    pinterest_publish_skipped_no_config: 0,
+    pinterest_publish_skipped_no_image: 0,
     brand_profile_found: 0,
     brand_profile_missing: 0,
     website_content_rules: 0,
@@ -30800,6 +30809,10 @@ function getPublishTargets(platformValue) {
     targets.push("instagram");
   }
 
+  if (normalized.includes("pinterest")) {
+    targets.push("pinterest");
+  }
+
   return targets;
 }
 
@@ -31380,6 +31393,130 @@ async function loadCarouselSlidesForPublish({ supabase, postId }) {
   return (data || []).filter((slide) => slide?.image_url);
 }
 
+function buildPinterestPinCopy(content) {
+  const raw = String(content || "").trim();
+  const firstUrl = extractUrlsFromText(raw)[0]?.replace(/[).,!?:;]+$/g, "") || "";
+  const contentWithoutUrls = raw.replace(/https?:\/\/\S+/gi, " ").replace(/\s+/g, " ").trim();
+  const titleSource =
+    contentWithoutUrls.split(/(?<=[.!?])\s+|\n+/).map((item) => item.trim()).find(Boolean) ||
+    "Spreelo";
+
+  return {
+    title: titleSource.slice(0, 100),
+    description: contentWithoutUrls.slice(0, 800),
+    link: firstUrl.slice(0, 2048),
+  };
+}
+
+function pinterestPublishError(response, data, fallback) {
+  const error = new Error(
+    data?.message || data?.error_description || data?.error || fallback
+  );
+  error.status = response?.status || 0;
+  error.pinterestCode = data?.code ?? data?.error_code ?? null;
+  return error;
+}
+
+async function publishPostToPinterest({
+  accessToken,
+  boardId,
+  imageUrls,
+  content,
+}) {
+  const uniqueImageUrls = [...new Set(
+    (Array.isArray(imageUrls) ? imageUrls : [])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+  )].slice(0, 5);
+
+  if (!boardId) {
+    throw new Error("Pinterest board is missing for this brand");
+  }
+
+  if (!uniqueImageUrls.length) {
+    throw new Error("Pinterest post is missing a publishable image");
+  }
+
+  const copy = buildPinterestPinCopy(content);
+  const mediaSource =
+    uniqueImageUrls.length >= 2
+      ? {
+          source_type: "multiple_image_urls",
+          items: uniqueImageUrls.map((url) => ({ url })),
+        }
+      : {
+          source_type: "image_url",
+          url: uniqueImageUrls[0],
+        };
+
+  const body = {
+    board_id: String(boardId),
+    title: copy.title,
+    description: copy.description,
+    media_source: mediaSource,
+  };
+
+  if (copy.link) {
+    body.link = copy.link;
+  }
+
+  const response = await fetch("https://api.pinterest.com/v5/pins", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok || !data?.id) {
+    throw pinterestPublishError(
+      response,
+      data,
+      "Pinterest Pin publishing failed"
+    );
+  }
+
+  return data;
+}
+
+async function getPinterestConnectionForBrand({
+  supabase,
+  userId,
+  brandProfileId,
+}) {
+  if (!userId || !brandProfileId) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("social_connections")
+    .select(
+      "id, page_id, page_name, page_access_token, token_expires_at, refresh_token, refresh_token_expires_at, permissions, status"
+    )
+    .eq("user_id", userId)
+    .eq("brand_profile_id", brandProfileId)
+    .eq("platform", "pinterest")
+    .eq("status", "connected")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Could not load Pinterest connection for brand", {
+      userId,
+      brandProfileId,
+      message: error.message,
+    });
+    return null;
+  }
+
+  return data || null;
+}
+
 async function getFacebookConnectionForBrand({
   supabase,
   userId,
@@ -31532,6 +31669,7 @@ async function publishApprovedSocialPosts({
 
     let facebookConnectionForPost = null;
     let instagramConnectionForPost = null;
+    let pinterestConnectionForPost = null;
     let activePublishTarget = null;
 
     try {
@@ -31571,8 +31709,12 @@ async function publishApprovedSocialPosts({
         continue;
       }
 
-      if (targets.includes("instagram") && normalizedFormat === "single_image" && !post.image_url) {
-        console.error("Instagram publish skipped because post has no image URL", {
+      if (
+        normalizedFormat === "single_image" &&
+        !post.image_url &&
+        (targets.includes("instagram") || targets.includes("pinterest"))
+      ) {
+        console.error("Image publish skipped because post has no image URL", {
           postId: post.id,
           userId: post.user_id,
           brandProfileId: post.brand_profile_id,
@@ -31590,7 +31732,12 @@ async function publishApprovedSocialPosts({
           })
           .eq("id", post.id);
 
-        summary.instagram_publish_skipped_no_image += 1;
+        if (targets.includes("instagram")) {
+          summary.instagram_publish_skipped_no_image += 1;
+        }
+        if (targets.includes("pinterest")) {
+          summary.pinterest_publish_skipped_no_image += 1;
+        }
         summary.social_publish_failed += 1;
         continue;
       }
@@ -31772,6 +31919,97 @@ async function publishApprovedSocialPosts({
         activePublishTarget = null;
       }
 
+      if (targets.includes("pinterest")) {
+        activePublishTarget = "pinterest";
+        summary.pinterest_publish_checked += 1;
+
+        pinterestConnectionForPost = await getPinterestConnectionForBrand({
+          supabase,
+          userId: post.user_id,
+          brandProfileId: post.brand_profile_id,
+        });
+
+        if (
+          !pinterestConnectionForPost?.id ||
+          !pinterestConnectionForPost?.page_id
+        ) {
+          summary.pinterest_publish_skipped_no_config += 1;
+          throw new Error("No connected Pinterest board found for this brand");
+        }
+
+        if (normalizedFormat === "animated_video") {
+          throw new Error(
+            "Pinterest video publishing is not enabled in this release"
+          );
+        }
+
+        let pinterestImageUrls = [];
+        if (normalizedFormat === "carousel") {
+          const carouselSlides = await loadCarouselSlidesForPublish({
+            supabase,
+            postId: post.id,
+          });
+
+          pinterestImageUrls = carouselSlides
+            .filter((slide) => {
+              const metadata = getCarouselEmailSlideMetadata(slide);
+              return !String(metadata.carousel_slide_role || "")
+                .toLowerCase()
+                .includes("outro");
+            })
+            .map((slide) => slide.image_url)
+            .filter(Boolean)
+            .slice(0, 5);
+
+          if (pinterestImageUrls.length < 2) {
+            summary.pinterest_publish_skipped_no_image += 1;
+            throw new Error(
+              "Carousel post is missing at least 2 render-ready slide images for Pinterest publishing"
+            );
+          }
+        } else {
+          pinterestImageUrls = [post.image_url].filter(Boolean);
+        }
+
+        let healthyPinterest = await getHealthyPinterestAccessToken({
+          supabaseAdmin: supabase,
+          connection: pinterestConnectionForPost,
+        });
+
+        try {
+          await publishPostToPinterest({
+            accessToken: healthyPinterest.accessToken,
+            boardId: pinterestConnectionForPost.page_id,
+            imageUrls: pinterestImageUrls,
+            content: post.content,
+          });
+        } catch (pinterestError) {
+          if (!isPinterestAuthError(pinterestError)) {
+            throw pinterestError;
+          }
+
+          healthyPinterest = await getHealthyPinterestAccessToken({
+            supabaseAdmin: supabase,
+            connection:
+              healthyPinterest.connection || pinterestConnectionForPost,
+            forceRefresh: true,
+          });
+
+          pinterestConnectionForPost =
+            healthyPinterest.connection || pinterestConnectionForPost;
+
+          await publishPostToPinterest({
+            accessToken: healthyPinterest.accessToken,
+            boardId: pinterestConnectionForPost.page_id,
+            imageUrls: pinterestImageUrls,
+            content: post.content,
+          });
+        }
+
+        summary.pinterest_published += 1;
+        activePublishTarget = null;
+      }
+
       const { error: updateError } = await supabase
         .from("posts")
         .update({
@@ -31800,7 +32038,12 @@ async function publishApprovedSocialPosts({
         message: error.message,
       });
 
-      if (isConnectionAuthFailure(error)) {
+      const authFailure =
+        isConnectionAuthFailure(error) ||
+        isPinterestAuthError(error) ||
+        Boolean(error?.requiresReconnect);
+
+      if (authFailure) {
         if (activePublishTarget === "facebook" && facebookConnectionForPost?.id) {
           await markConnectionExpiredAndAlert({
             supabase,
@@ -31822,9 +32065,19 @@ async function publishApprovedSocialPosts({
             nowIso,
           });
         }
+
+        if (activePublishTarget === "pinterest" && pinterestConnectionForPost?.id) {
+          await markConnectionExpiredAndAlert({
+            supabase,
+            connectionId: pinterestConnectionForPost.id,
+            platform: "pinterest",
+            reason: error.message || "Pinterest publishing failed because the connection is no longer valid.",
+            resendApiKey,
+            nowIso,
+          });
+        }
       }
 
-      const authFailure = isConnectionAuthFailure(error);
       const shouldRetry = !authFailure && publishAttempt < MAX_PUBLISH_ATTEMPTS;
       const retryDelayMinutes = Math.min(60, 5 * 2 ** Math.max(0, publishAttempt - 1));
 
@@ -31849,6 +32102,10 @@ async function publishApprovedSocialPosts({
 
       if (targets.includes("instagram")) {
         summary.instagram_publish_failed += 1;
+      }
+
+      if (targets.includes("pinterest")) {
+        summary.pinterest_publish_failed += 1;
       }
     }
   }

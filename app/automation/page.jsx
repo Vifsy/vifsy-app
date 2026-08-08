@@ -45,6 +45,7 @@ import {
   Tag,
   Target,
   Trophy,
+  Trash2,
   TrendingUp,
   Video,
   WandSparkles,
@@ -5828,6 +5829,8 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
   const [showSavedRules, setShowSavedRules] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [showLearnMoreModal, setShowLearnMoreModal] = useState(false);
+  const [showCampaignActivatedModal, setShowCampaignActivatedModal] = useState(false);
+  const [openCampaignSlotMenuId, setOpenCampaignSlotMenuId] = useState(null);
   const [showCreditDetails, setShowCreditDetails] = useState(false);
   const [guideExpanded, setGuideExpanded] = useState(true);
   const [guideInitialized, setGuideInitialized] = useState(false);
@@ -8002,6 +8005,17 @@ function addSlot() {
   }
 }
 
+function removeCampaignSlot(slotId) {
+  if (typeof window !== "undefined") {
+    const confirmed = window.confirm(
+      t("automation.campaignExperience.deletePostConfirm")
+    );
+    if (!confirmed) return;
+  }
+
+  removeSlot(slotId);
+}
+
 async function applyDynamicAutoPlan({ goalId, postCount }) {
   const safePostCount = Math.max(1, Number(postCount) || DEFAULT_AUTO_PLAN_POST_COUNT);
   const fallbackTypeIds = getGoalContentTypeIds({
@@ -9265,6 +9279,10 @@ ${slot.campaignSummary}`
         method: formatPlanMode(planCreationMode),
       });
 
+      if (planCreationMode === "campaign") {
+        setShowCampaignActivatedModal(true);
+      }
+
       setGuideExpanded(false);
       setGuideInitialized(true);
       void supabase.auth.updateUser({
@@ -9529,7 +9547,7 @@ function blockFormatCardClickAfterDrag(event) {
                 <div className="plan-v14341-studio-hero-art" aria-hidden="true">
                   <picture>
                     <source media="(max-width: 760px)" srcSet="/backgrounds/spreelo-studio-hero-mobile-v143-39.svg" />
-                    <img src="/backgrounds/spreelo-studio-hero-v143-39.svg" alt="" />
+                    <img src="/backgrounds/spreelo-ai-content-studio-hero-wide-v143-48.png" alt="" />
                   </picture>
                 </div>
                 <div className="plan-v95-header-actions">
@@ -10308,7 +10326,26 @@ function blockFormatCardClickAfterDrag(event) {
                 <section className="campaign-v14335-plan" id="campaign-v14335-preview">
                   <div className="campaign-v14335-plan-heading">
                     <div><h2>{t("automation.campaignExperience.planTitle")}</h2><p>{t("automation.campaignExperience.planText", { count: slots.length })}</p></div>
-                    <div><small>{t("automation.campaignExperience.typesUsed")}</small><span><Tag /> {t("automation.textImage")}</span><span><Video /> {t("automation.video")}</span><span><GalleryHorizontalEnd /> {t("automation.carousel")}</span><span><Link2 /> {t("automation.website")}</span></div>
+                    <div className="campaign-v14348-types-block">
+                      <div className="campaign-v14348-types-title">
+                        <small>{t("automation.campaignExperience.typesUsed")}</small>
+                        <button
+                          type="button"
+                          className="campaign-v14348-plan-help"
+                          onClick={() => setShowLearnMoreModal(true)}
+                          aria-label={t("automation.campaignExperience.help")}
+                          title={t("automation.campaignExperience.help")}
+                        >
+                          <CircleHelp size={16} aria-hidden="true" />
+                        </button>
+                      </div>
+                      <div className="campaign-v14348-type-chips">
+                        <span><Tag /> {t("automation.textImage")}</span>
+                        <span><Video /> {t("automation.video")}</span>
+                        <span><GalleryHorizontalEnd /> {t("automation.carousel")}</span>
+                        <span><Link2 /> {t("automation.website")}</span>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="campaign-v14335-slot-list">
@@ -10361,13 +10398,54 @@ function blockFormatCardClickAfterDrag(event) {
                           <time>{normalizeTime(slot.publishTime)}</time>
                         )}
                         <span className="campaign-v14335-slot-format">{getLocalizedSlotFormatLabel(slot)}</span>
-                        <button type="button" aria-label={t("automation.viewPostDetails")} onClick={() => toggleSlotInstructions(slot.id)}>•••</button>
+                        <div className="campaign-v14348-row-actions">
+                          <button
+                            type="button"
+                            className="campaign-v14348-row-details"
+                            aria-label={t("automation.postActions")}
+                            aria-haspopup="menu"
+                            aria-expanded={openCampaignSlotMenuId === slot.id}
+                            onClick={() =>
+                              setOpenCampaignSlotMenuId((current) =>
+                                current === slot.id ? null : slot.id
+                              )
+                            }
+                          >
+                            •••
+                          </button>
+                          {openCampaignSlotMenuId === slot.id ? (
+                            <div className="campaign-v14348-row-menu" role="menu">
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  toggleSlotInstructions(slot.id);
+                                  setOpenCampaignSlotMenuId(null);
+                                }}
+                              >
+                                <FileSearch size={15} aria-hidden="true" />
+                                {t("automation.viewPostDetails")}
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className="is-danger"
+                                onClick={() => {
+                                  setOpenCampaignSlotMenuId(null);
+                                  removeCampaignSlot(slot.id);
+                                }}
+                              >
+                                <Trash2 size={15} aria-hidden="true" />
+                                {t("automation.campaignExperience.deletePost")}
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
                         {expandedInstructionSlotIds.includes(slot.id) ? <div className="campaign-v14335-slot-detail"><strong>{t("automation.whatPostWillBeAbout")}</strong><p>{getSlotContentExplanation(slot)}</p><small>{getSlotCreditLabel(slot)}</small></div> : null}
                       </article>
                       );
                     })}
                   </div>
-                  <button type="button" className="campaign-v14335-show-plan" onClick={() => setShowLearnMoreModal(true)}>{t("automation.campaignExperience.showWholePlan")} <ChevronRight /></button>
                 </section>
 
                 <section className="campaign-v14335-rationale" id="campaign-v14335-details">
@@ -12147,6 +12225,85 @@ function blockFormatCardClickAfterDrag(event) {
             </div>
           </div>
         )}
+        {showCampaignActivatedModal && savedPlanSummary && campaignOpportunity && (
+          <div className="campaign-v14348-activated-backdrop" role="presentation">
+            <section
+              className="campaign-v14348-activated-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="campaign-v14348-activated-title"
+            >
+              <div className="campaign-v14348-activated-icon" aria-hidden="true">
+                <CheckCircle2 size={28} />
+              </div>
+              <p className="campaign-v14348-activated-eyebrow">
+                {t("automation.campaignActivated.eyebrow")}
+              </p>
+              <h2 id="campaign-v14348-activated-title">
+                {t("automation.campaignActivated.title")}
+              </h2>
+              <p className="campaign-v14348-activated-copy">
+                {t("automation.campaignActivated.text")}
+              </p>
+
+              <div className="campaign-v14348-activated-summary">
+                <div>
+                  <span>{t("automation.campaignActivated.campaign")}</span>
+                  <strong>{campaignOpportunity.title}</strong>
+                </div>
+                <div>
+                  <span>{t("automation.campaignActivated.posts")}</span>
+                  <strong>{savedPlanSummary.totalPosts}</strong>
+                </div>
+                <div>
+                  <span>{t("automation.campaignActivated.firstPost")}</span>
+                  <strong>{savedPlanSummary.firstPostLabel}</strong>
+                </div>
+                <div>
+                  <span>{t("automation.campaignActivated.channels")}</span>
+                  <strong>
+                    {selectedPlatformOptions.map((item) => item.label).join(", ") || platform}
+                  </strong>
+                </div>
+              </div>
+
+              <div className="campaign-v14348-activated-next">
+                <strong>{t("automation.campaignActivated.next")}</strong>
+                <p>{t("automation.campaignActivated.nextText")}</p>
+              </div>
+
+              <div className="campaign-v14348-activated-actions">
+                <button
+                  type="button"
+                  className="is-primary"
+                  onClick={() => {
+                    window.location.href = "/";
+                  }}
+                >
+                  {t("automation.campaignActivated.home")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.location.href = "/calendar";
+                  }}
+                >
+                  {t("automation.campaignActivated.nextCampaign")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCampaignActivatedModal(false);
+                    startAnotherPlan();
+                  }}
+                >
+                  {t("automation.campaignActivated.ongoing")}
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
+
         {showLearnMoreModal && (
   <div
     className="learn-more-modal-backdrop"

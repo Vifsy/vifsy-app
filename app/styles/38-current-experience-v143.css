@@ -9864,3 +9864,530 @@ html body .campaign-v14335-slot-list article.is-schedule-unlocked {
     font-size: 9px !important;
   }
 }
+
+/* ===== v143.48 — campaign review controls, responsive heroes and activation handoff ===== */
+html body .content.spreelo-content:has(.campaign-planner-clean) {
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+html body .automation-page.campaign-planner-clean {
+  width: min(1720px, calc(100% - 36px)) !important;
+  max-width: none !important;
+  margin: 0 auto !important;
+}
+html body .campaign-planner-clean .wizard-layout,
+html body .campaign-planner-clean .wizard-main {
+  width: 100% !important;
+  max-width: 1720px !important;
+  margin-inline: auto !important;
+}
+html body .campaign-v14335-shell {
+  width: 100% !important;
+  max-width: 1720px !important;
+  margin-inline: auto !important;
+  padding: clamp(18px, 1.8vw, 30px) clamp(14px, 1.9vw, 32px) 70px !important;
+}
+html body .campaign-v14335-hero,
+html body .campaign-v14335-hero.is-shopping-visual,
+html body .campaign-v14335-hero.is-calendar-visual {
+  min-height: clamp(285px, 21vw, 340px) !important;
+  padding: clamp(30px, 3vw, 48px) !important;
+  background-image: url("/backgrounds/spreelo-campaign-plan-hero-desktop-v143-48.png") !important;
+  background-size: cover !important;
+  background-position: center center !important;
+}
+html body .campaign-v14335-hero-copy {
+  width: min(48%, 720px) !important;
+}
+html body .campaign-v14335-hero h1 {
+  font-size: clamp(38px, 3.8vw, 61px) !important;
+  line-height: 1 !important;
+}
+html body .campaign-v14335-hero-copy > span {
+  max-width: 610px !important;
+  margin-top: 13px !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+}
+html body .campaign-v14335-hero-copy > div {
+  margin-top: 20px !important;
+}
+
+/* The plan needs to allow date/time popovers to escape the card. */
+html body .campaign-v14335-plan,
+html body .campaign-v14335-slot-list,
+html body .campaign-v14335-slot-list article {
+  overflow: visible !important;
+}
+html body .campaign-v14335-plan {
+  position: relative !important;
+  z-index: 4 !important;
+}
+html body .campaign-v14335-slot-list article {
+  position: relative !important;
+}
+html body .campaign-v14335-slot-list article:has(.custom-calendar-popover),
+html body .campaign-v14335-slot-list article:has(.custom-time-popover) {
+  z-index: 80 !important;
+}
+html body .campaign-v14335-slot-date.is-unlocked,
+html body .campaign-v14346-time-picker {
+  overflow: visible !important;
+}
+html body .campaign-v14335-slot-date.is-unlocked .custom-calendar-popover,
+html body .campaign-v14335-slot-date.is-unlocked .custom-picker-popover,
+html body .campaign-v14346-time-picker .custom-picker-popover {
+  z-index: 260 !important;
+}
+
+/* Compact post-type help replaces the misleading whole-plan button. */
+html body .campaign-v14348-types-block {
+  max-width: 540px !important;
+  display: grid !important;
+  justify-items: end !important;
+  gap: 7px !important;
+}
+html body .campaign-v14348-types-title {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 7px !important;
+}
+html body .campaign-v14348-types-title small {
+  width: auto !important;
+  margin: 0 !important;
+  text-align: right !important;
+}
+html body .campaign-v14348-type-chips {
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 7px !important;
+  flex-wrap: wrap !important;
+}
+html body .campaign-v14348-plan-help {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  padding: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 1px solid #d9e1ee !important;
+  border-radius: 9px !important;
+  background: rgba(255,255,255,.9) !important;
+  color: #5d6d86 !important;
+  box-shadow: 0 5px 14px rgba(30,47,77,.06) !important;
+  cursor: pointer !important;
+}
+html body .campaign-v14348-plan-help:hover {
+  border-color: #c8d3e3 !important;
+  color: #ef6048 !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Two clean row controls: preview details + remove post. */
+html body .campaign-v14335-slot-list article {
+  grid-template-columns: 112px minmax(250px,1fr) 170px 66px 155px 78px !important;
+}
+html body .campaign-v14335-slot-list article.is-schedule-unlocked {
+  grid-template-columns: 112px minmax(250px,1fr) 180px 96px 145px 78px !important;
+}
+html body .campaign-v14348-row-actions {
+  width: 78px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 5px !important;
+}
+html body .campaign-v14348-row-actions > button {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  min-height: 34px !important;
+  padding: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 1px solid transparent !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+  color: #57657d !important;
+  box-shadow: none !important;
+  cursor: pointer !important;
+}
+html body .campaign-v14348-row-actions > .campaign-v14348-row-details {
+  letter-spacing: 1px !important;
+  font-weight: 900 !important;
+}
+html body .campaign-v14348-row-actions > button:hover {
+  border-color: #e0e6ef !important;
+  background: #f7f9fc !important;
+}
+html body .campaign-v14348-row-actions > .campaign-v14348-delete-slot {
+  color: #b84b3a !important;
+}
+html body .campaign-v14348-row-actions > .campaign-v14348-delete-slot:hover {
+  border-color: #f1cfc7 !important;
+  background: #fff3ef !important;
+  color: #a43829 !important;
+}
+
+/* AI Content Studio gets a purpose-built wide hero on tablet/desktop. */
+@media (min-width: 761px) {
+  html body .automation-page.plan-v70-active .plan-v14341-studio-hero {
+    grid-template-columns: minmax(0,1fr) !important;
+    min-height: 190px !important;
+    padding: 30px 34px !important;
+    background:
+      linear-gradient(90deg, rgba(255,255,255,.98) 0%, rgba(255,255,255,.90) 38%, rgba(255,255,255,.12) 66%),
+      url("/backgrounds/spreelo-ai-content-studio-hero-wide-v143-48.png") center / cover no-repeat !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14341-studio-hero-copy {
+    max-width: 54% !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14341-studio-hero-art {
+    display: none !important;
+  }
+}
+
+/* Activation completion is a decision point, not just a saved-state button. */
+html body .campaign-v14348-activated-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 10020 !important;
+  display: grid !important;
+  place-items: center !important;
+  padding: 24px !important;
+  background: rgba(10, 20, 34, .56) !important;
+  backdrop-filter: blur(7px) !important;
+}
+html body .campaign-v14348-activated-modal {
+  width: min(720px, 100%) !important;
+  max-height: calc(100dvh - 48px) !important;
+  overflow: auto !important;
+  padding: 32px !important;
+  border: 1px solid rgba(255,255,255,.92) !important;
+  border-radius: 24px !important;
+  background:
+    radial-gradient(circle at 100% 0, rgba(225,230,255,.72), transparent 33%),
+    radial-gradient(circle at 0 100%, rgba(255,232,221,.64), transparent 35%),
+    #fff !important;
+  box-shadow: 0 32px 90px rgba(8,18,33,.27) !important;
+  color: #101a2e !important;
+}
+html body .campaign-v14348-activated-icon {
+  width: 54px !important;
+  height: 54px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 17px !important;
+  color: #188a53 !important;
+  background: #e9f8ef !important;
+  box-shadow: inset 0 0 0 1px rgba(30,148,91,.12) !important;
+}
+html body .campaign-v14348-activated-eyebrow {
+  margin: 18px 0 7px !important;
+  color: #ef5e47 !important;
+  font-size: 11px !important;
+  font-weight: 900 !important;
+  letter-spacing: .11em !important;
+  text-transform: uppercase !important;
+}
+html body .campaign-v14348-activated-modal h2 {
+  margin: 0 !important;
+  font-size: clamp(28px, 4vw, 40px) !important;
+  line-height: 1.05 !important;
+  letter-spacing: -.035em !important;
+}
+html body .campaign-v14348-activated-copy {
+  max-width: 620px !important;
+  margin: 10px 0 0 !important;
+  color: #607089 !important;
+  font-size: 14px !important;
+  line-height: 1.55 !important;
+}
+html body .campaign-v14348-activated-summary {
+  margin-top: 22px !important;
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0,1fr)) !important;
+  gap: 10px !important;
+}
+html body .campaign-v14348-activated-summary > div {
+  min-width: 0 !important;
+  padding: 14px 15px !important;
+  border: 1px solid #e2e8f1 !important;
+  border-radius: 14px !important;
+  background: rgba(248,250,253,.86) !important;
+}
+html body .campaign-v14348-activated-summary span,
+html body .campaign-v14348-activated-summary strong {
+  display: block !important;
+}
+html body .campaign-v14348-activated-summary span {
+  color: #78859a !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  text-transform: uppercase !important;
+  letter-spacing: .05em !important;
+}
+html body .campaign-v14348-activated-summary strong {
+  margin-top: 4px !important;
+  overflow-wrap: anywhere !important;
+  font-size: 13px !important;
+  line-height: 1.35 !important;
+}
+html body .campaign-v14348-activated-next {
+  margin-top: 14px !important;
+  padding: 14px 15px !important;
+  border: 1px solid #dfe6f1 !important;
+  border-radius: 14px !important;
+  background: rgba(244,247,252,.82) !important;
+}
+html body .campaign-v14348-activated-next strong {
+  font-size: 13px !important;
+}
+html body .campaign-v14348-activated-next p {
+  margin: 4px 0 0 !important;
+  color: #63718a !important;
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+}
+html body .campaign-v14348-activated-actions {
+  margin-top: 20px !important;
+  display: grid !important;
+  grid-template-columns: 1.08fr 1fr 1fr !important;
+  gap: 9px !important;
+}
+html body .campaign-v14348-activated-actions button {
+  min-height: 48px !important;
+  padding: 0 14px !important;
+  border: 1px solid #dbe2ec !important;
+  border-radius: 12px !important;
+  background: #fff !important;
+  color: #2d3a51 !important;
+  font-size: 12px !important;
+  font-weight: 850 !important;
+  cursor: pointer !important;
+}
+html body .campaign-v14348-activated-actions button:hover {
+  background: #f7f9fc !important;
+}
+html body .campaign-v14348-activated-actions button.is-primary {
+  border-color: transparent !important;
+  color: #fff !important;
+  background: linear-gradient(135deg,#ff694f,#ee4430) !important;
+  box-shadow: 0 12px 26px rgba(239,78,53,.23) !important;
+}
+
+@media (min-width: 901px) and (max-width: 1240px) {
+  html body .automation-page.campaign-planner-clean {
+    width: calc(100% - 28px) !important;
+  }
+  html body .campaign-v14335-hero,
+  html body .campaign-v14335-hero.is-shopping-visual,
+  html body .campaign-v14335-hero.is-calendar-visual {
+    min-height: 310px !important;
+    padding: 32px !important;
+  }
+  html body .campaign-v14335-hero-copy {
+    width: 52% !important;
+  }
+  html body .campaign-v14335-slot-list article,
+  html body .campaign-v14335-slot-list article.is-schedule-unlocked {
+    grid-template-columns: 88px minmax(180px,1fr) 150px 82px 116px 72px !important;
+    gap: 9px !important;
+  }
+  html body .campaign-v14335-slot-art {
+    width: 88px !important;
+  }
+  html body .campaign-v14348-row-actions {
+    width: 72px !important;
+  }
+}
+
+@media (min-width: 621px) and (max-width: 900px) {
+  html body .automation-page.campaign-planner-clean {
+    width: calc(100% - 24px) !important;
+  }
+  html body .campaign-v14335-hero,
+  html body .campaign-v14335-hero.is-shopping-visual,
+  html body .campaign-v14335-hero.is-calendar-visual {
+    min-height: 330px !important;
+    padding: 30px !important;
+    background-image: url("/backgrounds/spreelo-campaign-plan-hero-tablet-v143-48.png") !important;
+    background-position: center center !important;
+  }
+  html body .campaign-v14335-hero-copy {
+    width: 55% !important;
+  }
+  html body .campaign-v14335-plan-heading {
+    align-items: flex-start !important;
+  }
+  html body .campaign-v14335-slot-list article,
+  html body .campaign-v14335-slot-list article.is-schedule-unlocked {
+    grid-template-columns: 78px minmax(0,1fr) 156px 70px !important;
+    grid-template-areas:
+      "art copy date menu"
+      "art copy time menu"
+      "art copy format menu"
+      "detail detail detail detail" !important;
+    min-height: 146px !important;
+  }
+  html body .campaign-v14335-slot-art { grid-area: art !important; width: 78px !important; }
+  html body .campaign-v14335-slot-copy { grid-area: copy !important; }
+  html body .campaign-v14335-slot-date { grid-area: date !important; }
+  html body .campaign-v14335-slot-list time,
+  html body .campaign-v14346-time-picker { grid-area: time !important; justify-self: stretch !important; width: 100% !important; }
+  html body .campaign-v14335-slot-format { grid-area: format !important; }
+  html body .campaign-v14348-row-actions { grid-area: menu !important; width: 70px !important; }
+  html body .campaign-v14335-slot-detail { grid-area: detail !important; }
+}
+
+@media (max-width: 620px) {
+  html body .automation-page.campaign-planner-clean {
+    width: calc(100% - 16px) !important;
+  }
+  html body .campaign-v14335-shell {
+    padding-inline: 0 !important;
+  }
+  html body .campaign-v14335-hero,
+  html body .campaign-v14335-hero.is-shopping-visual,
+  html body .campaign-v14335-hero.is-calendar-visual {
+    min-height: 430px !important;
+    padding: 22px 18px 16px !important;
+    background-image: url("/backgrounds/spreelo-campaign-plan-hero-mobile-v143-48.png") !important;
+    background-position: center center !important;
+  }
+  html body .campaign-v14335-hero::before {
+    background: linear-gradient(180deg, rgba(255,249,247,.95) 0%, rgba(255,249,247,.80) 42%, rgba(255,249,247,.12) 68%) !important;
+  }
+  html body .campaign-v14335-hero-copy > div {
+    margin-top: 150px !important;
+  }
+  html body .campaign-v14335-plan-heading {
+    align-items: flex-start !important;
+    gap: 14px !important;
+  }
+  html body .campaign-v14348-types-block {
+    width: 100% !important;
+    max-width: none !important;
+    justify-items: start !important;
+  }
+  html body .campaign-v14348-types-title,
+  html body .campaign-v14348-type-chips {
+    justify-content: flex-start !important;
+  }
+  html body .campaign-v14348-types-title small {
+    text-align: left !important;
+  }
+  html body .campaign-v14335-slot-list article,
+  html body .campaign-v14335-slot-list article.is-schedule-unlocked {
+    position: relative !important;
+    grid-template-columns: 64px minmax(0,1fr) !important;
+    grid-template-areas:
+      "art copy"
+      "art date"
+      "art time"
+      "art format"
+      "detail detail" !important;
+    min-height: 178px !important;
+    padding: 10px 48px 10px 8px !important;
+    overflow: visible !important;
+  }
+  html body .campaign-v14335-slot-art { grid-area: art !important; }
+  html body .campaign-v14335-slot-copy { grid-area: copy !important; }
+  html body .campaign-v14335-slot-date { grid-area: date !important; }
+  html body .campaign-v14335-slot-list time,
+  html body .campaign-v14346-time-picker { grid-area: time !important; width: 100% !important; }
+  html body .campaign-v14335-slot-format { grid-area: format !important; }
+  html body .campaign-v14335-slot-detail { grid-area: detail !important; }
+  html body .campaign-v14348-row-actions {
+    position: absolute !important;
+    top: 9px !important;
+    right: 7px !important;
+    width: 34px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+  }
+  html body .campaign-v14348-row-actions > button {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+  }
+  html body .campaign-v14335-slot-date.is-unlocked .custom-calendar-popover {
+    width: min(310px, calc(100vw - 32px)) !important;
+    max-width: calc(100vw - 32px) !important;
+  }
+  html body .campaign-v14348-activated-backdrop {
+    padding: 12px !important;
+  }
+  html body .campaign-v14348-activated-modal {
+    padding: 22px 17px !important;
+    border-radius: 20px !important;
+  }
+  html body .campaign-v14348-activated-summary {
+    grid-template-columns: 1fr !important;
+  }
+  html body .campaign-v14348-activated-actions {
+    grid-template-columns: 1fr !important;
+  }
+  html body .campaign-v14348-activated-actions button {
+    min-height: 50px !important;
+    font-size: 13px !important;
+  }
+}
+
+/* v143.48 campaign post actions menu */
+html body .campaign-v14348-row-actions {
+  position: relative !important;
+  overflow: visible !important;
+}
+html body .campaign-v14348-row-menu {
+  position: absolute !important;
+  top: calc(100% + 6px) !important;
+  right: 0 !important;
+  z-index: 240 !important;
+  width: 190px !important;
+  padding: 6px !important;
+  border: 1px solid #dfe5ef !important;
+  border-radius: 12px !important;
+  background: rgba(255,255,255,.98) !important;
+  box-shadow: 0 16px 36px rgba(29,42,67,.16) !important;
+}
+html body .campaign-v14348-row-menu > button {
+  width: 100% !important;
+  min-height: 38px !important;
+  padding: 8px 10px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  border: 0 !important;
+  border-radius: 9px !important;
+  background: transparent !important;
+  color: #28364c !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  text-align: left !important;
+  cursor: pointer !important;
+}
+html body .campaign-v14348-row-menu > button:hover {
+  background: #f5f7fb !important;
+}
+html body .campaign-v14348-row-menu > button.is-danger {
+  color: #bf412f !important;
+}
+html body .campaign-v14348-row-menu > button.is-danger:hover {
+  background: #fff3ef !important;
+}
+@media (max-width: 620px) {
+  html body .campaign-v14348-row-menu {
+    top: 0 !important;
+    right: 40px !important;
+    width: min(188px, calc(100vw - 92px)) !important;
+  }
+}
