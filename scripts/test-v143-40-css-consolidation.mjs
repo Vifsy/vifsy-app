@@ -20,10 +20,10 @@ const sv = read('lib/i18n/builtInLocaleLabels.js');
 const lifecycle = read('lib/lifecycleEmails.js');
 
 const imports = [...globals.matchAll(/^@import\s+"\.\/styles\/([^"]+)";/gm)].map((m) => m[1]);
-check('active CSS cascade has 18 imports', imports.length === 18);
+check('active CSS cascade remains consolidated', imports.length >= 18 && imports.length <= 19);
 check('legacy override bundle is imported', imports.includes('15-legacy-overrides-v94-v114.css'));
 check('calendar/admin bundle is imported', imports.includes('28-calendar-admin-v130-v140.css'));
-check('current experience bundle is the final layer', imports.at(-1) === '38-current-experience-v143.css');
+check('current experience bundle remains active before scoped feature layers', imports.includes('38-current-experience-v143.css') && ['38-current-experience-v143.css','39-social-channels-v143-42.css'].includes(imports.at(-1)));
 check('old v143 override layers are no longer imported', !imports.some((name) => /^4[4-9]-v143-|^50-v143-|^51-v143-/.test(name)));
 check('historical source archive exists', exists('app/styles/archive-v143/51-v143-39-responsive-workspace-refinement.css'));
 

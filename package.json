@@ -64,7 +64,8 @@
     "test:v143.37": "node scripts/test-v143-37-readability-responsive-auth.mjs",
     "test:v143.38": "node scripts/test-v143-38-premium-responsive-experience.mjs",
     "test:v143.39": "node scripts/test-v143-39-responsive-workspace-refinement.mjs",
-    "test:v143.40": "node scripts/test-v143-40-css-consolidation.mjs"
+    "test:v143.40": "node scripts/test-v143-40-css-consolidation.mjs",
+    "test:v143.42": "node scripts/test-v143-42-social-channels-premium.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

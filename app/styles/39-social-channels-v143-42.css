@@ -1,0 +1,736 @@
+/* Spreelo v143.42 — premium responsive Social Channels workspace.
+   This layer intentionally comes last and only targets /social-channels UI. */
+
+html body .content.spreelo-content:has(.social-v74-page) {
+  background:
+    radial-gradient(circle at 88% 8%, rgba(207, 222, 255, .34), transparent 31%),
+    radial-gradient(circle at 18% 38%, rgba(255, 230, 219, .23), transparent 28%),
+    linear-gradient(180deg, #f9fbff 0%, #f7f9fd 44%, #f8fafc 100%) !important;
+}
+
+html body .social-v74-page {
+  width: min(100%, 1380px) !important;
+  margin: 0 auto !important;
+  padding: 6px 18px 64px !important;
+  gap: 18px !important;
+}
+
+/* Hero */
+html body .social-v74-hero {
+  position: relative !important;
+  display: block !important;
+  min-height: 282px !important;
+  padding: 34px 38px 28px !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(220, 228, 242, .9) !important;
+  border-radius: 30px !important;
+  background-color: #f9fbff !important;
+  background-image:
+    linear-gradient(90deg, rgba(250,252,255,.18) 0%, rgba(250,252,255,.05) 51%, rgba(250,252,255,0) 72%),
+    url('/backgrounds/spreelo-social-hero-desktop-v143-42.png') !important;
+  background-position: center center, center center !important;
+  background-repeat: no-repeat !important;
+  background-size: cover, cover !important;
+  box-shadow: 0 22px 54px rgba(37, 53, 82, .095), inset 0 1px 0 rgba(255,255,255,.88) !important;
+}
+
+html body .social-v74-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255,255,255,.08), transparent 52%);
+}
+
+html body .social-v14342-hero-text {
+  position: relative !important;
+  z-index: 1 !important;
+  width: min(50%, 610px) !important;
+  padding-bottom: 66px !important;
+}
+
+html body .social-v74-eyebrow {
+  display: inline-flex !important;
+  align-items: center !important;
+  width: fit-content !important;
+  margin: 0 0 10px !important;
+  padding: 7px 11px !important;
+  border: 1px solid rgba(86, 128, 194, .16) !important;
+  border-radius: 999px !important;
+  color: #2f6fc3 !important;
+  background: rgba(255,255,255,.68) !important;
+  box-shadow: 0 6px 18px rgba(37, 66, 112, .055) !important;
+  backdrop-filter: blur(12px) !important;
+  font-size: 10px !important;
+  font-weight: 850 !important;
+  letter-spacing: .09em !important;
+  text-transform: uppercase !important;
+}
+
+html body .social-v74-hero h1 {
+  margin: 0 !important;
+  max-width: 610px !important;
+  color: #101b33 !important;
+  font-size: clamp(39px, 3.25vw, 54px) !important;
+  line-height: 1.01 !important;
+  letter-spacing: -.048em !important;
+}
+
+html body .social-v74-hero-copy {
+  max-width: 560px !important;
+  margin: 12px 0 0 !important;
+  color: #5f6d83 !important;
+  font-size: 15px !important;
+  line-height: 1.55 !important;
+}
+
+html body .social-v74-current-brand {
+  display: inline-flex !important;
+  align-items: center !important;
+  margin-top: 14px !important;
+  padding: 7px 11px !important;
+  border: 1px solid rgba(218, 222, 232, .9) !important;
+  border-radius: 999px !important;
+  color: #647087 !important;
+  background: rgba(255,255,255,.72) !important;
+  box-shadow: 0 7px 20px rgba(34, 52, 82, .05) !important;
+  backdrop-filter: blur(10px) !important;
+  font-size: 11px !important;
+}
+
+html body .social-v74-current-brand strong {
+  margin-left: 4px !important;
+  color: #1c273c !important;
+}
+
+html body .social-v74-hero-summary {
+  position: absolute !important;
+  z-index: 2 !important;
+  left: 38px !important;
+  right: auto !important;
+  bottom: 25px !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: 360px !important;
+  min-height: 46px !important;
+  padding: 7px 8px 7px 7px !important;
+  display: grid !important;
+  grid-template-columns: 34px minmax(0,1fr) 34px !important;
+  align-items: center !important;
+  gap: 9px !important;
+  border: 1px solid rgba(210,219,233,.86) !important;
+  border-radius: 15px !important;
+  background: rgba(255,255,255,.76) !important;
+  box-shadow: 0 12px 30px rgba(30,48,76,.08) !important;
+  backdrop-filter: blur(14px) saturate(115%) !important;
+}
+
+html body .social-v74-hero-summary > span {
+  width: 34px !important;
+  height: 34px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 11px !important;
+  color: #f06b4d !important;
+  background: linear-gradient(145deg, #fff6f2, #ffe9e1) !important;
+}
+
+html body .social-v74-hero-summary strong {
+  display: block !important;
+  color: #1c273b !important;
+  font-size: 12.5px !important;
+  line-height: 1.15 !important;
+}
+
+html body .social-v74-hero-summary p {
+  display: none !important;
+}
+
+html body .social-v74-hero-summary button {
+  width: 34px !important;
+  height: 34px !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 0 !important;
+  border-radius: 11px !important;
+  color: #617089 !important;
+  background: rgba(244,247,252,.9) !important;
+  cursor: pointer !important;
+  transition: transform .18s ease, background .18s ease, color .18s ease !important;
+}
+
+html body .social-v74-hero-summary button:hover {
+  color: #17243b !important;
+  background: #eef3fa !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Message */
+html body .social-v74-notice {
+  margin: 0 !important;
+  padding: 12px 15px !important;
+  border-radius: 15px !important;
+  box-shadow: 0 10px 24px rgba(28,45,73,.055) !important;
+}
+
+/* Unified connection workspace */
+html body .social-v14339-connect-shell {
+  margin-top: 0 !important;
+  padding: 24px !important;
+  border: 1px solid rgba(216, 224, 237, .92) !important;
+  border-radius: 28px !important;
+  background:
+    radial-gradient(circle at 95% 0%, rgba(232,240,255,.62), transparent 28%),
+    linear-gradient(145deg, rgba(255,255,255,.94), rgba(249,251,255,.88)) !important;
+  box-shadow: 0 22px 56px rgba(26,43,70,.075), inset 0 1px 0 rgba(255,255,255,.98) !important;
+}
+
+html body .social-v14339-connect-head {
+  display: flex !important;
+  align-items: flex-end !important;
+  justify-content: space-between !important;
+  gap: 24px !important;
+  margin: 0 0 17px !important;
+  padding: 0 2px 16px !important;
+  border-bottom: 1px solid rgba(224,229,238,.8) !important;
+}
+
+html body .social-v14339-connect-head strong {
+  display: block !important;
+  color: #152039 !important;
+  font-size: 20px !important;
+  letter-spacing: -.02em !important;
+}
+
+html body .social-v14339-connect-head p {
+  max-width: 720px !important;
+  margin: 5px 0 0 !important;
+  color: #67758b !important;
+  font-size: 13px !important;
+  line-height: 1.5 !important;
+}
+
+html body .social-v14339-connect-head > span {
+  flex: 0 0 auto !important;
+  padding: 8px 11px !important;
+  border: 1px solid rgba(239,111,78,.14) !important;
+  border-radius: 999px !important;
+  color: #a44832 !important;
+  background: #fff2ed !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.8) !important;
+  font-size: 10.5px !important;
+  font-weight: 820 !important;
+}
+
+html body .social-v14339-grid {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 10px !important;
+}
+
+html body .social-v14339-grid .social-v74-card {
+  position: relative !important;
+  display: grid !important;
+  grid-template-columns: minmax(255px,.95fr) minmax(250px,1.1fr) minmax(315px,.95fr) !important;
+  align-items: center !important;
+  gap: 22px !important;
+  min-height: 112px !important;
+  padding: 17px 18px !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(220,226,236,.92) !important;
+  border-radius: 18px !important;
+  background: linear-gradient(180deg,#ffffff 0%,#fbfcff 100%) !important;
+  box-shadow: 0 8px 24px rgba(32,47,72,.038) !important;
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease !important;
+}
+
+html body .social-v14339-grid .social-v74-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 16px;
+  bottom: 16px;
+  width: 3px;
+  border-radius: 0 5px 5px 0;
+  background: linear-gradient(180deg,#ff8c69,#ef6546);
+  opacity: .72;
+}
+
+html body .social-v14339-grid .social-v74-card[data-platform='facebook']::before {
+  background: linear-gradient(180deg,#5f94ff,#2374e8);
+}
+
+html body .social-v14339-grid .social-v74-card[data-platform='instagram']::before {
+  background: linear-gradient(180deg,#a855f7,#f45d62 58%,#f7a541);
+}
+
+html body .social-v14339-grid .social-v74-card:hover {
+  border-color: rgba(196,208,226,.96) !important;
+  box-shadow: 0 14px 34px rgba(31,47,74,.07) !important;
+  transform: translateY(-1px) !important;
+}
+
+html body .social-v14339-grid .social-v74-card-top {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 12px !important;
+  min-width: 0 !important;
+}
+
+html body .social-v14339-grid .social-v74-card-identity {
+  display: flex !important;
+  align-items: center !important;
+  gap: 11px !important;
+  min-width: 0 !important;
+}
+
+html body .social-v14339-grid .social-v74-platform-icon {
+  width: 46px !important;
+  height: 46px !important;
+  flex: 0 0 46px !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 1px solid rgba(218,225,236,.9) !important;
+  border-radius: 14px !important;
+  background: linear-gradient(145deg,#fff,#f7f9fd) !important;
+  box-shadow: 0 7px 18px rgba(31,48,75,.065) !important;
+}
+
+html body .social-v14339-grid .social-v74-platform-icon img {
+  width: 28px !important;
+  height: 28px !important;
+  object-fit: contain !important;
+}
+
+html body .social-v14339-grid .social-v74-card-identity p {
+  display: block !important;
+  margin: 0 0 2px !important;
+  color: #8290a5 !important;
+  font-size: 9px !important;
+  font-weight: 820 !important;
+  letter-spacing: .08em !important;
+  text-transform: uppercase !important;
+}
+
+html body .social-v14339-grid .social-v74-card-identity h2 {
+  margin: 0 !important;
+  overflow: hidden !important;
+  color: #162139 !important;
+  font-size: 17px !important;
+  line-height: 1.15 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+html body .social-v14339-grid .social-v74-status {
+  order: 2 !important;
+  margin-left: auto !important;
+  padding: 6px 9px !important;
+  border-radius: 999px !important;
+  white-space: nowrap !important;
+  font-size: 9.5px !important;
+  font-weight: 780 !important;
+}
+
+html body .social-v14339-grid .social-v74-description {
+  margin: 0 !important;
+  color: #657388 !important;
+  font-size: 12.5px !important;
+  line-height: 1.5 !important;
+}
+
+html body .social-v14339-grid .social-v74-connect-panel,
+html body .social-v14339-grid .social-v74-connected-panel {
+  display: grid !important;
+  grid-template-columns: minmax(120px,1fr) auto !important;
+  align-items: center !important;
+  gap: 12px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+
+html body .social-v14339-grid .social-v74-connect-panel > p {
+  display: none !important;
+}
+
+html body .social-v14339-grid .social-v74-brand-chip,
+html body .social-v14339-grid .social-v74-account-row {
+  min-width: 0 !important;
+  padding: 9px 11px !important;
+  border: 1px solid rgba(224,228,236,.9) !important;
+  border-radius: 12px !important;
+  background: #f8fafe !important;
+}
+
+html body .social-v14339-grid .social-v74-brand-chip span,
+html body .social-v14339-grid .social-v74-account-row span {
+  color: #8994a6 !important;
+  font-size: 9px !important;
+  font-weight: 760 !important;
+}
+
+html body .social-v14339-grid .social-v74-brand-chip strong,
+html body .social-v14339-grid .social-v74-account-row strong {
+  color: #243149 !important;
+  font-size: 12px !important;
+}
+
+html body .social-v14339-grid .social-v74-account-row > img {
+  width: 25px !important;
+  height: 25px !important;
+}
+
+html body .social-v14339-grid .social-v74-meta-grid,
+html body .social-v14339-grid .social-v74-token-note {
+  display: none !important;
+}
+
+html body .social-v14339-grid .social-v74-primary-action,
+html body .social-v14339-grid .social-v74-secondary-action {
+  min-width: 138px !important;
+  min-height: 42px !important;
+  padding: 0 13px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 7px !important;
+  border-radius: 12px !important;
+  white-space: nowrap !important;
+  font-size: 11.5px !important;
+  font-weight: 790 !important;
+  transition: transform .18s ease, box-shadow .18s ease, background .18s ease !important;
+}
+
+html body .social-v14339-grid .social-v74-primary-action {
+  border: 1px solid rgba(219,82,54,.06) !important;
+  color: #fff !important;
+  background: linear-gradient(135deg,#f57c5b 0%,#e55e3e 100%) !important;
+  box-shadow: 0 10px 22px rgba(213,87,57,.18) !important;
+}
+
+html body .social-v14339-grid .social-v74-primary-action:hover:not(:disabled) {
+  background: linear-gradient(135deg,#f98562 0%,#df5738 100%) !important;
+  box-shadow: 0 13px 26px rgba(205,80,50,.22) !important;
+  transform: translateY(-1px) !important;
+}
+
+html body .social-v14339-grid .social-v74-secondary-action {
+  margin-top: 0 !important;
+  border: 1px solid #e5d8d3 !important;
+  color: #8c4332 !important;
+  background: #fff8f5 !important;
+}
+
+html body .social-v14339-security-note {
+  margin-top: 16px !important;
+  padding: 11px 13px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  border: 1px solid rgba(220,227,237,.78) !important;
+  border-radius: 14px !important;
+  color: #6b7890 !important;
+  background: rgba(248,250,254,.72) !important;
+  font-size: 10.5px !important;
+}
+
+/* Tablet: maintain the polished horizontal hero, keep channels readable. */
+@media (min-width: 761px) and (max-width: 1180px) {
+  html body .social-v74-page {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  html body .social-v74-hero {
+    min-height: 260px !important;
+    padding: 28px 30px 24px !important;
+    border-radius: 27px !important;
+    background-image:
+      linear-gradient(90deg, rgba(250,252,255,.22) 0%, rgba(250,252,255,.07) 54%, rgba(250,252,255,0) 78%),
+      url('/backgrounds/spreelo-social-hero-tablet-v143-42.png') !important;
+    background-position: center center, center top !important;
+    background-size: cover, 100% auto !important;
+  }
+
+  html body .social-v14342-hero-text {
+    width: min(58%, 540px) !important;
+    padding-bottom: 60px !important;
+  }
+
+  html body .social-v74-hero h1 {
+    font-size: clamp(35px, 5.1vw, 47px) !important;
+  }
+
+  html body .social-v74-hero-copy {
+    max-width: 480px !important;
+    font-size: 14px !important;
+  }
+
+  html body .social-v74-hero-summary {
+    left: 30px !important;
+    bottom: 22px !important;
+  }
+
+  html body .social-v14339-connect-shell {
+    padding: 20px !important;
+  }
+
+  html body .social-v14339-grid .social-v74-card {
+    display: grid !important;
+    grid-template-columns: minmax(225px,.8fr) minmax(0,1fr) !important;
+    gap: 12px 20px !important;
+    min-height: 0 !important;
+    padding: 16px 17px !important;
+  }
+
+  html body .social-v14339-grid .social-v74-description {
+    min-height: 0 !important;
+  }
+
+  html body .social-v14339-grid .social-v74-connect-panel,
+  html body .social-v14339-grid .social-v74-connected-panel {
+    grid-column: 1 / -1 !important;
+    grid-template-columns: minmax(0,1fr) auto !important;
+    margin-top: 2px !important;
+    padding-top: 12px !important;
+    border-top: 1px solid rgba(228,232,240,.8) !important;
+  }
+
+  html body .social-v14339-grid .social-v74-primary-action,
+  html body .social-v14339-grid .social-v74-secondary-action {
+    width: auto !important;
+    min-width: 145px !important;
+  }
+}
+
+/* Mobile: full copy, full action labels, real page gutters. */
+@media (max-width: 760px) {
+  html body .content.spreelo-content:has(.social-v74-page) {
+    padding-top: calc(var(--spreelo-mobile-header-total, 106px) + 8px) !important;
+  }
+
+  html body .social-v74-page {
+    width: auto !important;
+    margin: 0 !important;
+    padding: 8px 12px 34px !important;
+    gap: 12px !important;
+  }
+
+  html body .social-v74-hero {
+    min-height: 238px !important;
+    padding: 18px 17px 17px !important;
+    border-radius: 23px !important;
+    background-image:
+      linear-gradient(90deg, rgba(250,252,255,.23) 0%, rgba(250,252,255,.08) 55%, rgba(250,252,255,0) 78%),
+      url('/backgrounds/spreelo-social-hero-mobile-v143-42.png') !important;
+    background-position: center center, center top !important;
+    background-repeat: no-repeat !important;
+    background-size: cover, 100% auto !important;
+    box-shadow: 0 15px 38px rgba(31,48,76,.085), inset 0 1px 0 rgba(255,255,255,.9) !important;
+  }
+
+  html body .social-v14342-hero-text {
+    width: 67% !important;
+    padding-bottom: 58px !important;
+  }
+
+  html body .social-v74-eyebrow {
+    margin-bottom: 8px !important;
+    padding: 5px 8px !important;
+    font-size: 8px !important;
+  }
+
+  html body .social-v74-hero h1 {
+    max-width: 100% !important;
+    font-size: clamp(27px, 8.2vw, 33px) !important;
+    line-height: 1.02 !important;
+    letter-spacing: -.042em !important;
+  }
+
+  html body .social-v74-hero-copy {
+    max-width: 100% !important;
+    margin-top: 8px !important;
+    color: #647187 !important;
+    font-size: 11px !important;
+    line-height: 1.42 !important;
+  }
+
+  html body .social-v74-current-brand {
+    display: none !important;
+  }
+
+  html body .social-v74-hero-summary {
+    left: 16px !important;
+    right: auto !important;
+    bottom: 14px !important;
+    width: min(76%, 285px) !important;
+    max-width: 285px !important;
+    padding: 6px !important;
+    grid-template-columns: 31px minmax(0,1fr) 31px !important;
+    border-radius: 13px !important;
+  }
+
+  html body .social-v74-hero-summary > span,
+  html body .social-v74-hero-summary button {
+    width: 31px !important;
+    height: 31px !important;
+    border-radius: 10px !important;
+  }
+
+  html body .social-v74-hero-summary strong {
+    font-size: 10.5px !important;
+  }
+
+  html body .social-v14339-connect-shell {
+    padding: 14px !important;
+    border-radius: 21px !important;
+  }
+
+  html body .social-v14339-connect-head {
+    display: block !important;
+    margin-bottom: 12px !important;
+    padding: 0 1px 12px !important;
+  }
+
+  html body .social-v14339-connect-head strong {
+    font-size: 18px !important;
+  }
+
+  html body .social-v14339-connect-head p {
+    margin-top: 4px !important;
+    font-size: 12px !important;
+  }
+
+  html body .social-v14339-connect-head > span {
+    display: inline-flex !important;
+    margin-top: 9px !important;
+    padding: 6px 9px !important;
+    font-size: 9px !important;
+  }
+
+  html body .social-v14339-grid {
+    gap: 9px !important;
+  }
+
+  html body .social-v14339-grid .social-v74-card {
+    display: block !important;
+    min-height: 0 !important;
+    padding: 14px !important;
+    border-radius: 16px !important;
+  }
+
+  html body .social-v14339-grid .social-v74-card::before {
+    top: 13px !important;
+    bottom: 13px !important;
+  }
+
+  html body .social-v14339-grid .social-v74-card-top {
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  html body .social-v14339-grid .social-v74-platform-icon {
+    width: 40px !important;
+    height: 40px !important;
+    flex-basis: 40px !important;
+    border-radius: 12px !important;
+  }
+
+  html body .social-v14339-grid .social-v74-platform-icon img {
+    width: 25px !important;
+    height: 25px !important;
+  }
+
+  html body .social-v14339-grid .social-v74-card-identity h2 {
+    font-size: 16px !important;
+  }
+
+  html body .social-v14339-grid .social-v74-status {
+    display: inline-flex !important;
+    margin-left: auto !important;
+    padding: 5px 7px !important;
+    font-size: 8.5px !important;
+  }
+
+  html body .social-v14339-grid .social-v74-description {
+    display: block !important;
+    margin: 10px 0 11px !important;
+    overflow: visible !important;
+    white-space: normal !important;
+    text-overflow: clip !important;
+    color: #69768a !important;
+    font-size: 11.5px !important;
+    line-height: 1.45 !important;
+  }
+
+  html body .social-v14339-grid .social-v74-connect-panel,
+  html body .social-v14339-grid .social-v74-connected-panel {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 9px !important;
+    margin: 0 !important;
+    padding: 11px !important;
+    border: 1px solid rgba(224,229,237,.9) !important;
+    border-radius: 13px !important;
+    background: #f8fafe !important;
+  }
+
+  html body .social-v14339-grid .social-v74-brand-chip,
+  html body .social-v14339-grid .social-v74-account-row {
+    display: grid !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+  }
+
+  html body .social-v14339-grid .social-v74-primary-action,
+  html body .social-v14339-grid .social-v74-secondary-action {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    min-height: 40px !important;
+    padding: 0 12px !important;
+    overflow: visible !important;
+    font-size: 11px !important;
+    border-radius: 11px !important;
+  }
+
+  html body .social-v14339-grid .social-v74-primary-action svg,
+  html body .social-v14339-grid .social-v74-secondary-action svg {
+    width: 15px !important;
+    height: 15px !important;
+  }
+
+  html body .social-v14339-grid .social-v74-primary-action svg:last-child {
+    display: inline-block !important;
+  }
+
+  html body .social-v14339-security-note {
+    align-items: flex-start !important;
+    justify-content: flex-start !important;
+    margin-top: 12px !important;
+    padding: 10px 11px !important;
+    text-align: left !important;
+    font-size: 9.5px !important;
+    line-height: 1.4 !important;
+  }
+}
+
+@media (max-width: 430px) {
+  html body .social-v14342-hero-text {
+    width: 70% !important;
+  }
+
+  html body .social-v74-hero-copy {
+    font-size: 10.5px !important;
+  }
+
+  html body .social-v74-status svg {
+    display: none !important;
+  }
+}

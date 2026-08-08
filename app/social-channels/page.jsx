@@ -138,7 +138,7 @@ function ChannelCard({
   const statusClass = getStatusClass(connection?.status);
 
   return (
-    <article className={`social-v74-card ${isConnected ? "is-connected" : ""}`}>
+    <article data-platform={platform.key} className={`social-v74-card ${isConnected ? "is-connected" : ""}`}>
       <div className="social-v74-card-top">
         <div className="social-v74-card-identity">
           <span className="social-v74-platform-icon">
@@ -411,7 +411,7 @@ export default function SocialChannelsPage() {
     <AppLayout active="social-channels">
       <div className="social-v74-page">
         <header className="social-v74-hero">
-          <div>
+          <div className="social-v14342-hero-text">
             <p className="social-v74-eyebrow">{t("social.eyebrowV2")}</p>
             <h1>{t("social.titleV2")}</h1>
             <p className="social-v74-hero-copy">{t("social.subtitleV2")}</p>
