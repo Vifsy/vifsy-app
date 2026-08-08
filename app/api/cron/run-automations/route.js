@@ -140,6 +140,8 @@ const SMART_QUEUE_HORIZON_HOURS = 96;
 const PUBLISH_BATCH_SIZE = 40;
 const PUBLISH_LOCK_MINUTES = 12;
 const MAX_PUBLISH_ATTEMPTS = 5;
+const PINTEREST_TRANSIENT_RETRY_MAX_MINUTES = 60;
+const PINTEREST_RECONCILE_PAGE_SIZE = 100;
 const CRON_RULE_PROCESSING_LOCK_MINUTES = 15;
 const RECENT_AUTOMATION_DRAFT_BLOCK_HOURS = 6;
 const INCOMPLETE_CAROUSEL_DRAFT_GRACE_MINUTES = 20;
@@ -31536,6 +31538,87 @@ function pinterestPublishError(response, data, fallback) {
   return error;
 }
 
+function isPinterestTransientPublishError(error) {
+  const status = Number(error?.status || 0);
+  const message = String(error?.message || "").toLowerCase();
+  return Boolean(
+    status === 408 ||
+      status === 425 ||
+      status === 429 ||
+      (status >= 500 && status <= 599) ||
+      /didn['’]?t finish|timed? out|timeout|task_flow:create_pin|_upload_pin_to_s3|temporar(?:y|ily) unavailable|try again|rate limit/.test(
+        message
+      )
+  );
+}
+
+function pinterestPinMatchesPost(pin, postId) {
+  const expected = String(postId || "").trim();
+  if (!expected) return false;
+  const link = String(pin?.link || "").trim();
+  if (!link) return false;
+
+  try {
+    const url = new URL(link);
+    return url.searchParams.get("utm_content") === expected;
+  } catch {
+    return link.includes(`utm_content=${encodeURIComponent(expected)}`) ||
+      link.includes(`utm_content=${expected}`);
+  }
+}
+
+async function findExistingPinterestPinForPost({ accessToken, boardId, postId }) {
+  if (!accessToken || !boardId || !postId) return null;
+
+  const url = new URL(
+    `${getPinterestApiBaseUrl()}/boards/${encodeURIComponent(String(boardId))}/pins`
+  );
+  url.searchParams.set("page_size", String(PINTEREST_RECONCILE_PAGE_SIZE));
+
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+  });
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw pinterestPublishError(
+      response,
+      data,
+      "Could not reconcile Pinterest publishing state"
+    );
+  }
+
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return items.find((pin) => pinterestPinMatchesPost(pin, postId)) || null;
+}
+
+async function persistPublishedTarget({
+  supabase,
+  postId,
+  publishedTargetSet,
+  publishReceipts,
+  target,
+  receipt = null,
+  nowIso,
+}) {
+  publishedTargetSet.add(target);
+  if (receipt) publishReceipts[target] = receipt;
+
+  const { error } = await supabase
+    .from("posts")
+    .update({
+      published_targets: Array.from(publishedTargetSet),
+      publish_receipts: publishReceipts,
+      updated_at: nowIso,
+    })
+    .eq("id", postId);
+
+  if (error) {
+    throw new Error(`Could not persist ${target} publish receipt: ${error.message}`);
+  }
+}
+
 async function publishPostToPinterest({
   accessToken,
   boardId,
@@ -31713,7 +31796,7 @@ async function publishApprovedSocialPosts({
   const { data: posts, error } = await supabase
     .from("posts")
     .select(
-      "id, user_id, brand_profile_id, automation_rule_id, website_url, content, platform, status, published_at, approved_at, scheduled_for, image_url, video_url, video_status, content_format, publish_locked_until, publish_attempts, next_publish_attempt_at, last_publish_error"
+      "id, user_id, brand_profile_id, automation_rule_id, website_url, content, platform, status, published_at, approved_at, scheduled_for, image_url, video_url, video_status, content_format, publish_locked_until, publish_attempts, next_publish_attempt_at, last_publish_error, published_targets, publish_receipts"
     )
     .eq("status", "approved")
     .is("published_at", null)
@@ -31750,8 +31833,34 @@ async function publishApprovedSocialPosts({
   let animatedVideoPublishesThisRun = 0;
 
   for (const post of approvedPosts) {
-    const targets = getPublishTargets(post.platform);
+    const desiredTargets = getPublishTargets(post.platform);
+    const publishedTargetSet = new Set(
+      Array.isArray(post.published_targets)
+        ? post.published_targets.map((target) => String(target || "").toLowerCase())
+        : []
+    );
+    const publishReceipts =
+      post.publish_receipts && typeof post.publish_receipts === "object" && !Array.isArray(post.publish_receipts)
+        ? { ...post.publish_receipts }
+        : {};
+    const targets = desiredTargets.filter((target) => !publishedTargetSet.has(target));
     const normalizedFormat = normalizeContentFormat(post.content_format);
+
+    if (desiredTargets.length > 0 && targets.length === 0) {
+      const { error: alreadyDoneUpdateError } = await supabase
+        .from("posts")
+        .update({
+          status: "published",
+          published_at: post.published_at || nowIso,
+          publish_locked_until: null,
+          next_publish_attempt_at: null,
+          last_publish_error: null,
+          updated_at: nowIso,
+        })
+        .eq("id", post.id);
+      if (!alreadyDoneUpdateError) summary.social_published += 1;
+      continue;
+    }
 
     if (
       normalizedFormat === "animated_video" &&
@@ -31961,6 +32070,14 @@ async function publishApprovedSocialPosts({
           });
         }
 
+        await persistPublishedTarget({
+          supabase,
+          postId: post.id,
+          publishedTargetSet,
+          publishReceipts,
+          target: "facebook",
+          nowIso,
+        });
         summary.facebook_published += 1;
         activePublishTarget = null;
       }
@@ -32036,6 +32153,14 @@ async function publishApprovedSocialPosts({
           });
         }
 
+        await persistPublishedTarget({
+          supabase,
+          postId: post.id,
+          publishedTargetSet,
+          publishReceipts,
+          target: "instagram",
+          nowIso,
+        });
         summary.instagram_published += 1;
         activePublishTarget = null;
       }
@@ -32118,56 +32243,140 @@ async function publishApprovedSocialPosts({
             : null,
         });
 
+        console.log("Pinterest media prepared", {
+          postId: post.id,
+          normalizedFormat,
+          imageCount: pinterestImageUrls.length,
+          productOnlyCarousel: normalizedFormat === "carousel",
+          outroIncluded: false,
+        });
+
         let healthyPinterest = await getHealthyPinterestAccessToken({
           supabaseAdmin: supabase,
           connection: pinterestConnectionForPost,
         });
 
-        try {
-          await publishPostToPinterest({
-            accessToken: healthyPinterest.accessToken,
-            boardId: pinterestConnectionForPost.page_id,
-            imageUrls: pinterestImageUrls,
-            content: post.content,
-            destinationUrl: pinterestDestination.url,
-            postId: post.id,
-          });
-        } catch (pinterestError) {
-          if (!isPinterestAuthError(pinterestError)) {
-            throw pinterestError;
+        let pinterestResult = null;
+        const shouldReconcileBeforeCreate =
+          publishAttempt > 1 ||
+          isPinterestTransientPublishError({ message: post.last_publish_error || "" });
+
+        if (shouldReconcileBeforeCreate) {
+          try {
+            const existingPin = await findExistingPinterestPinForPost({
+              accessToken: healthyPinterest.accessToken,
+              boardId: pinterestConnectionForPost.page_id,
+              postId: post.id,
+            });
+            if (existingPin?.id) {
+              pinterestResult = existingPin;
+              console.log("Pinterest publish recovered from previous attempt", {
+                postId: post.id,
+                pinId: existingPin.id,
+                publishAttempt,
+              });
+            }
+          } catch (reconcileError) {
+            if (isPinterestAuthError(reconcileError)) throw reconcileError;
+            console.warn("Pinterest pre-publish reconciliation unavailable", {
+              postId: post.id,
+              message: reconcileError.message,
+            });
           }
-
-          healthyPinterest = await getHealthyPinterestAccessToken({
-            supabaseAdmin: supabase,
-            connection:
-              healthyPinterest.connection || pinterestConnectionForPost,
-            forceRefresh: true,
-          });
-
-          pinterestConnectionForPost =
-            healthyPinterest.connection || pinterestConnectionForPost;
-
-          await publishPostToPinterest({
-            accessToken: healthyPinterest.accessToken,
-            boardId: pinterestConnectionForPost.page_id,
-            imageUrls: pinterestImageUrls,
-            content: post.content,
-            destinationUrl: pinterestDestination.url,
-            postId: post.id,
-          });
         }
+
+        if (!pinterestResult) {
+          try {
+            pinterestResult = await publishPostToPinterest({
+              accessToken: healthyPinterest.accessToken,
+              boardId: pinterestConnectionForPost.page_id,
+              imageUrls: pinterestImageUrls,
+              content: post.content,
+              destinationUrl: pinterestDestination.url,
+              postId: post.id,
+            });
+          } catch (pinterestError) {
+            if (isPinterestAuthError(pinterestError)) {
+              healthyPinterest = await getHealthyPinterestAccessToken({
+                supabaseAdmin: supabase,
+                connection:
+                  healthyPinterest.connection || pinterestConnectionForPost,
+                forceRefresh: true,
+              });
+
+              pinterestConnectionForPost =
+                healthyPinterest.connection || pinterestConnectionForPost;
+
+              pinterestResult = await publishPostToPinterest({
+                accessToken: healthyPinterest.accessToken,
+                boardId: pinterestConnectionForPost.page_id,
+                imageUrls: pinterestImageUrls,
+                content: post.content,
+                destinationUrl: pinterestDestination.url,
+                postId: post.id,
+              });
+            } else if (isPinterestTransientPublishError(pinterestError)) {
+              // Pinterest can accept the Pin and still time out while ingesting several images.
+              // Reconcile once before scheduling a durable retry so we never blindly duplicate it.
+              await sleep(2500);
+              try {
+                const existingPin = await findExistingPinterestPinForPost({
+                  accessToken: healthyPinterest.accessToken,
+                  boardId: pinterestConnectionForPost.page_id,
+                  postId: post.id,
+                });
+                if (existingPin?.id) {
+                  pinterestResult = existingPin;
+                  console.log("Pinterest timeout reconciled successfully", {
+                    postId: post.id,
+                    pinId: existingPin.id,
+                  });
+                }
+              } catch (reconcileError) {
+                console.warn("Pinterest timeout reconciliation pending", {
+                  postId: post.id,
+                  message: reconcileError.message,
+                });
+              }
+
+              if (!pinterestResult) {
+                pinterestError.pinterestTransient = true;
+                throw pinterestError;
+              }
+            } else {
+              throw pinterestError;
+            }
+          }
+        }
+
+        await persistPublishedTarget({
+          supabase,
+          postId: post.id,
+          publishedTargetSet,
+          publishReceipts,
+          target: "pinterest",
+          receipt: pinterestResult?.id
+            ? { pin_id: String(pinterestResult.id), recorded_at: nowIso }
+            : { recorded_at: nowIso },
+          nowIso,
+        });
 
         summary.pinterest_published += 1;
         activePublishTarget = null;
       }
 
+      const allDesiredTargetsPublished = desiredTargets.every((target) =>
+        publishedTargetSet.has(target)
+      );
       const { error: updateError } = await supabase
         .from("posts")
         .update({
-          status: "published",
-          published_at: nowIso,
+          status: allDesiredTargetsPublished ? "published" : "approved",
+          published_at: allDesiredTargetsPublished ? nowIso : null,
+          published_targets: Array.from(publishedTargetSet),
+          publish_receipts: publishReceipts,
           publish_locked_until: null,
-          next_publish_attempt_at: null,
+          next_publish_attempt_at: allDesiredTargetsPublished ? null : addMinutesIso(new Date(nowIso), 1),
           last_publish_error: null,
           updated_at: nowIso,
         })
@@ -32229,13 +32438,24 @@ async function publishApprovedSocialPosts({
         }
       }
 
-      const shouldRetry = !authFailure && publishAttempt < MAX_PUBLISH_ATTEMPTS;
-      const retryDelayMinutes = Math.min(60, 5 * 2 ** Math.max(0, publishAttempt - 1));
+      const transientPinterestFailure =
+        activePublishTarget === "pinterest" &&
+        (Boolean(error?.pinterestTransient) || isPinterestTransientPublishError(error));
+      const shouldRetry =
+        !authFailure && (transientPinterestFailure || publishAttempt < MAX_PUBLISH_ATTEMPTS);
+      const retryDelayMinutes = transientPinterestFailure
+        ? Math.min(
+            PINTEREST_TRANSIENT_RETRY_MAX_MINUTES,
+            Math.max(1, 2 ** Math.max(0, publishAttempt - 1))
+          )
+        : Math.min(60, 5 * 2 ** Math.max(0, publishAttempt - 1));
 
       await supabase
         .from("posts")
         .update({
           status: shouldRetry ? "approved" : "failed",
+          published_targets: Array.from(publishedTargetSet),
+          publish_receipts: publishReceipts,
           publish_locked_until: null,
           next_publish_attempt_at: shouldRetry
             ? addMinutesIso(new Date(nowIso), retryDelayMinutes)
