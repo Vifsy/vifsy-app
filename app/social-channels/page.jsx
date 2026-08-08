@@ -125,6 +125,9 @@ function getSocialUrlMessage({ t }) {
     invalid_pinterest_state: "social.errorPinterestState",
     invalid_pinterest_state_payload: "social.errorPinterestState",
     pinterest_callback_failed: "social.errorPinterestCallback",
+    pinterest_token_failed: "social.errorPinterestToken",
+    pinterest_account_failed: "social.errorPinterestAccount",
+    pinterest_save_failed: "social.errorPinterestSave",
   };
 
   return t(knownErrors[error] || "social.errorGenericConnect");

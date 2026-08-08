@@ -27,8 +27,10 @@ export async function GET(request) {
   const decoded = verifyAndDecodePinterestState(state, appSecret);
   if (!decoded?.userId || !decoded?.brandProfileId) return NextResponse.redirect(`${baseUrl}/social-channels?error=invalid_pinterest_state_payload`);
 
+  let callbackStage = "initializing";
   try {
     const supabaseAdmin = createSupabaseAdminClient();
+    callbackStage = "brand";
     const validBrand = await verifyBrandBelongsToUser({
       supabaseAdmin,
       userId: decoded.userId,
@@ -36,13 +38,18 @@ export async function GET(request) {
     });
     if (!validBrand) return NextResponse.redirect(`${baseUrl}/social-channels?error=invalid_brand`);
 
+    callbackStage = "token";
     const token = await exchangePinterestCode({
       code,
       appId,
       appSecret,
       redirectUri: decoded.redirectUri || redirectUri,
     });
+
+    callbackStage = "account";
     const account = await fetchPinterestUserAccount(token.access_token);
+
+    callbackStage = "save";
     const connectionId = await savePendingPinterestConnection({
       supabaseAdmin,
       userId: decoded.userId,
@@ -59,7 +66,16 @@ export async function GET(request) {
     response.cookies.delete("spreelo_pinterest_oauth_state");
     return response;
   } catch (error) {
-    console.error("Pinterest OAuth callback failed", error);
-    return NextResponse.redirect(`${baseUrl}/social-channels?error=pinterest_callback_failed`);
+    console.error(`Pinterest OAuth callback failed at ${callbackStage}`, error);
+    const errorCode = callbackStage === "token"
+      ? "pinterest_token_failed"
+      : callbackStage === "account"
+        ? "pinterest_account_failed"
+        : callbackStage === "save"
+          ? "pinterest_save_failed"
+          : "pinterest_callback_failed";
+    const response = NextResponse.redirect(`${baseUrl}/social-channels?error=${errorCode}`);
+    response.cookies.delete("spreelo_pinterest_oauth_state");
+    return response;
   }
 }

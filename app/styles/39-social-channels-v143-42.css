@@ -391,7 +391,8 @@ html body .social-v14339-grid .social-v74-token-note {
 
 html body .social-v14339-grid .social-v74-primary-action,
 html body .social-v14339-grid .social-v74-secondary-action {
-  min-width: 138px !important;
+  width: 178px !important;
+  min-width: 178px !important;
   min-height: 42px !important;
   padding: 0 13px !important;
   display: inline-flex !important;
@@ -503,8 +504,8 @@ html body .social-v14339-security-note {
 
   html body .social-v14339-grid .social-v74-primary-action,
   html body .social-v14339-grid .social-v74-secondary-action {
-    width: auto !important;
-    min-width: 145px !important;
+    width: 164px !important;
+    min-width: 164px !important;
   }
 }
 
@@ -735,7 +736,7 @@ html body .social-v14339-security-note {
   }
 }
 
-/* v143.43 Pinterest connection */
+/* v143.44 Pinterest OAuth + presentation fix */
 html body .social-v14339-grid .social-v74-card[data-platform='pinterest']::before {
   background: linear-gradient(180deg, #e60023 0%, #bd081c 100%) !important;
 }

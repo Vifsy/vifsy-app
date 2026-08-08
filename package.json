@@ -66,7 +66,8 @@
     "test:v143.39": "node scripts/test-v143-39-responsive-workspace-refinement.mjs",
     "test:v143.40": "node scripts/test-v143-40-css-consolidation.mjs",
     "test:v143.42": "node scripts/test-v143-42-social-channels-premium.mjs",
-    "test:v143.43": "node scripts/test-v143-43-pinterest-oauth.mjs"
+    "test:v143.43": "node scripts/test-v143-43-pinterest-oauth.mjs",
+    "test:v143.44": "node scripts/test-v143-44-pinterest-oauth-fix.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
