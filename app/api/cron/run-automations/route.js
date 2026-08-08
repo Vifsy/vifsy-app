@@ -31404,7 +31404,7 @@ async function publishCarouselPostToInstagram({
 async function loadCarouselSlidesForPublish({ supabase, postId }) {
   const { data, error } = await supabase
     .from("post_slides")
-    .select("id, slide_order, image_url, headline, body, cta_text, metadata")
+    .select("id, slide_order, image_url, product_url, headline, body, cta_text, metadata")
     .eq("post_id", postId)
     .order("slide_order", { ascending: true });
 
@@ -31415,9 +31415,106 @@ async function loadCarouselSlidesForPublish({ supabase, postId }) {
   return (data || []).filter((slide) => slide?.image_url);
 }
 
-function buildPinterestPinCopy(content) {
+function normalizePinterestDestinationUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  try {
+    const url = new URL(raw);
+    if (!['http:', 'https:'].includes(url.protocol)) return "";
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
+function addPinterestOrganicTracking(destinationUrl, postId) {
+  const normalized = normalizePinterestDestinationUrl(destinationUrl);
+  if (!normalized) return "";
+
+  try {
+    const url = new URL(normalized);
+    if (!url.searchParams.has('utm_source')) url.searchParams.set('utm_source', 'pinterest');
+    if (!url.searchParams.has('utm_medium')) url.searchParams.set('utm_medium', 'organic_social');
+    if (!url.searchParams.has('utm_campaign')) url.searchParams.set('utm_campaign', 'spreelo');
+    if (postId && !url.searchParams.has('utm_content')) {
+      url.searchParams.set('utm_content', String(postId));
+    }
+    const tracked = url.toString();
+    if (tracked.length <= 2048) return tracked;
+    return normalized.length <= 2048 ? normalized : "";
+  } catch {
+    return normalized.length <= 2048 ? normalized : "";
+  }
+}
+
+function getPinterestCarouselDestination(slides = []) {
+  const orderedSlides = Array.isArray(slides) ? slides : [];
+  const outro = orderedSlides.find((slide) => {
+    const role = String(getCarouselEmailSlideMetadata(slide)?.carousel_slide_role || '').toLowerCase();
+    return role.includes('outro') && normalizePinterestDestinationUrl(slide?.product_url);
+  });
+  if (outro?.product_url) {
+    return { url: normalizePinterestDestinationUrl(outro.product_url), source: 'carousel_outro' };
+  }
+
+  const firstProduct = orderedSlides.find((slide) => normalizePinterestDestinationUrl(slide?.product_url));
+  if (firstProduct?.product_url) {
+    return { url: normalizePinterestDestinationUrl(firstProduct.product_url), source: 'carousel_product_fallback' };
+  }
+
+  return { url: '', source: 'none' };
+}
+
+function resolvePinterestDestination({ post, content, carouselSlides = [] }) {
+  const format = normalizeContentFormat(post?.content_format);
+
+  if (format === 'carousel') {
+    const carouselDestination = getPinterestCarouselDestination(carouselSlides);
+    if (carouselDestination.url) return carouselDestination;
+  }
+
+  const postWebsiteUrl = normalizePinterestDestinationUrl(post?.website_url);
+  if (postWebsiteUrl) {
+    return { url: postWebsiteUrl, source: 'post_website_url' };
+  }
+
+  const explicitContentUrl = normalizePinterestDestinationUrl(
+    extractUrlsFromText(String(content || ''))[0]?.replace(/[).,!?:;]+$/g, '') || ''
+  );
+  if (explicitContentUrl) {
+    return { url: explicitContentUrl, source: 'caption_url' };
+  }
+
+  return { url: '', source: 'none' };
+}
+
+async function loadPinterestBrandFallbackDestination({ supabase, brandProfileId }) {
+  if (!brandProfileId) return '';
+
+  const { data, error } = await supabase
+    .from('brand_profiles')
+    .select('website_url, website_product_source_url')
+    .eq('id', brandProfileId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn('Could not load Pinterest fallback destination for brand', {
+      brandProfileId,
+      message: error.message,
+    });
+    return '';
+  }
+
+  return (
+    normalizePinterestDestinationUrl(data?.website_product_source_url) ||
+    normalizePinterestDestinationUrl(data?.website_url) ||
+    ''
+  );
+}
+
+function buildPinterestPinCopy(content, destinationUrl = '', postId = '') {
   const raw = String(content || "").trim();
-  const firstUrl = extractUrlsFromText(raw)[0]?.replace(/[).,!?:;]+$/g, "") || "";
   const contentWithoutUrls = raw.replace(/https?:\/\/\S+/gi, " ").replace(/\s+/g, " ").trim();
   const titleSource =
     contentWithoutUrls.split(/(?<=[.!?])\s+|\n+/).map((item) => item.trim()).find(Boolean) ||
@@ -31426,7 +31523,7 @@ function buildPinterestPinCopy(content) {
   return {
     title: titleSource.slice(0, 100),
     description: contentWithoutUrls.slice(0, 800),
-    link: firstUrl.slice(0, 2048),
+    link: addPinterestOrganicTracking(destinationUrl, postId),
   };
 }
 
@@ -31444,6 +31541,8 @@ async function publishPostToPinterest({
   boardId,
   imageUrls,
   content,
+  destinationUrl = '',
+  postId = '',
 }) {
   const uniqueImageUrls = [...new Set(
     (Array.isArray(imageUrls) ? imageUrls : [])
@@ -31459,7 +31558,7 @@ async function publishPostToPinterest({
     throw new Error("Pinterest post is missing a publishable image");
   }
 
-  const copy = buildPinterestPinCopy(content);
+  const copy = buildPinterestPinCopy(content, destinationUrl, postId);
   const mediaSource =
     uniqueImageUrls.length >= 2
       ? {
@@ -31614,7 +31713,7 @@ async function publishApprovedSocialPosts({
   const { data: posts, error } = await supabase
     .from("posts")
     .select(
-      "id, user_id, brand_profile_id, content, platform, status, published_at, approved_at, scheduled_for, image_url, video_url, video_status, content_format, publish_locked_until, publish_attempts, next_publish_attempt_at, last_publish_error"
+      "id, user_id, brand_profile_id, automation_rule_id, website_url, content, platform, status, published_at, approved_at, scheduled_for, image_url, video_url, video_status, content_format, publish_locked_until, publish_attempts, next_publish_attempt_at, last_publish_error"
     )
     .eq("status", "approved")
     .is("published_at", null)
@@ -31966,13 +32065,14 @@ async function publishApprovedSocialPosts({
         }
 
         let pinterestImageUrls = [];
+        let pinterestCarouselSlides = [];
         if (normalizedFormat === "carousel") {
-          const carouselSlides = await loadCarouselSlidesForPublish({
+          pinterestCarouselSlides = await loadCarouselSlidesForPublish({
             supabase,
             postId: post.id,
           });
 
-          pinterestImageUrls = carouselSlides
+          pinterestImageUrls = pinterestCarouselSlides
             .filter((slide) => {
               const metadata = getCarouselEmailSlideMetadata(slide);
               return !String(metadata.carousel_slide_role || "")
@@ -31993,6 +32093,31 @@ async function publishApprovedSocialPosts({
           pinterestImageUrls = [post.image_url].filter(Boolean);
         }
 
+        let pinterestDestination = resolvePinterestDestination({
+          post,
+          content: post.content,
+          carouselSlides: pinterestCarouselSlides,
+        });
+
+        if (!pinterestDestination.url) {
+          const brandFallbackUrl = await loadPinterestBrandFallbackDestination({
+            supabase,
+            brandProfileId: post.brand_profile_id,
+          });
+          if (brandFallbackUrl) {
+            pinterestDestination = { url: brandFallbackUrl, source: 'brand_website_fallback' };
+          }
+        }
+
+        console.log("Pinterest publish destination selected", {
+          postId: post.id,
+          source: pinterestDestination.source,
+          hasDestination: Boolean(pinterestDestination.url),
+          destinationHost: pinterestDestination.url
+            ? (() => { try { return new URL(pinterestDestination.url).hostname; } catch { return null; } })()
+            : null,
+        });
+
         let healthyPinterest = await getHealthyPinterestAccessToken({
           supabaseAdmin: supabase,
           connection: pinterestConnectionForPost,
@@ -32004,6 +32129,8 @@ async function publishApprovedSocialPosts({
             boardId: pinterestConnectionForPost.page_id,
             imageUrls: pinterestImageUrls,
             content: post.content,
+            destinationUrl: pinterestDestination.url,
+            postId: post.id,
           });
         } catch (pinterestError) {
           if (!isPinterestAuthError(pinterestError)) {
@@ -32025,6 +32152,8 @@ async function publishApprovedSocialPosts({
             boardId: pinterestConnectionForPost.page_id,
             imageUrls: pinterestImageUrls,
             content: post.content,
+            destinationUrl: pinterestDestination.url,
+            postId: post.id,
           });
         }
 
