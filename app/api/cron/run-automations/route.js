@@ -16,6 +16,7 @@ import {
 } from "../../../../lib/socialConnectionAlerts.js";
 import {
   getHealthyPinterestAccessToken,
+  getPinterestApiBaseUrl,
   isPinterestAuthError,
 } from "../../../../lib/pinterestOAuth.js";
 import {
@@ -9651,7 +9652,7 @@ function pickVisualConcept(rule, postContent) {
     {
       name: "Detail / close-up",
       instruction:
-        "Show a close-up detail that represents the business, service, product or topic. Focus on atmosphere, texture, quality and visual clarity.",
+        "Show a close-up detail that represents the business, service, activity or topic. Focus on atmosphere, texture, quality and visual clarity. Do not invent merchandise or a sellable catalog item.",
     },
     {
       name: "Human situation",
@@ -9710,6 +9711,13 @@ function buildImagePrompt(rule, postContent) {
   const brandProfileText = formatBrandProfileForPrompt(rule.brand_profile);
   const websiteItemText = formatWebsiteItemForPrompt(rule.website_item);
   const focusedPageContextText = formatFocusedPageContextForPrompt(rule);
+  const catalogRealityDirection = Boolean(
+    rule?.brand_profile?.website_product_mode_available ||
+      rule?.uses_website_content ||
+      rule?.website_item
+  )
+    ? "This is a product-selling business. This AI-image path does not receive a verified product image reference, so do not visualize any sellable merchandise or product design from the business. Express the topic through people, activity, environment, atmosphere or abstract/category context instead."
+    : "Do not invent a product or merchandise item that could be mistaken for something the business sells. If product imagery would be needed, use a lifestyle/activity/environment concept instead unless an exact verified product reference is supplied.";
 
   return `
 Create one high-quality square social media image for a business post.
@@ -9741,6 +9749,9 @@ Website URL: ${rule.brand_profile?.website_url || "Not provided"}
 ${formatCampaignVisualContextForPrompt(rule)}
 
 ${formatAuthorizedCampaignOfferForPrompt(rule)}
+
+Catalog reality direction:
+${catalogRealityDirection}
 
 Selected visual concept:
 ${visualConcept.name}
@@ -9791,12 +9802,16 @@ Image quality rules:
 - If this is a campaign, holiday, seasonal or event post, the image must clearly support that campaign theme. Use the Campaign visual context and match terms above as the primary theme. Do not create a generic unrelated image.
 - If the campaign is about a specific occasion but no verified product image is used, create a broader themed campaign/lifestyle image for that occasion rather than unrelated products or random decorations.
 
-Product image safety rules:
-- If this post is based on a specific website item but no real website image is being used, do not recreate, imitate or invent a product image.
+Catalog reality safety rules — mandatory for every AI-generated post image:
+- Never invent, design or depict a sellable product, merchandise item, package, garment, print, poster, mug, accessory, food package, device or other catalog-like object that a viewer could reasonably believe is sold by this business, unless that exact verified product is supplied to the image model as a real website reference image.
+- This rule applies even when the post text or campaign theme mentions the kind of products the business sells. Text mentioning T-shirts, clothing, mugs, posters, toys or other merchandise is NOT permission to invent a visual version of those products.
+- If no verified product reference image is supplied, visualize the idea through people, activity, environment, atmosphere, materials, abstract campaign elements or category context instead of a fake product. Example: for a fishing/diving campaign at an apparel store, show an authentic fishing or diving situation rather than AI-designed fishing/diving T-shirts.
+- Incidental everyday props are allowed only when they are clearly environmental and cannot reasonably be mistaken for the customer's catalog offer. Do not stage an invented object as the hero, packshot, ad product or purchasable item.
+- If this post is based on a specific website item but no real website image is being used, do not recreate, imitate or invent that product image.
 - Do not create fake versions of branded products, packaging, logos, mascots, characters, toy designs or trademarked styles.
 - Do not create fake LEGO, DUPLO, Paw Patrol, Disney, Marvel, Barbie, Pokemon, Nintendo or other branded product images.
-- If a real product image is not available from the website, create a generic unbranded lifestyle or campaign image that supports the occasion, feeling or use case instead.
-- The fallback image should not focus on the exact selected product. It should focus on the broader campaign theme, such as family time, gift giving, play, celebration, shopping inspiration or seasonal atmosphere.
+- If a real product image is not available from the website, create a lifestyle, activity, environment or campaign image that supports the occasion, feeling or use case instead.
+- The fallback image should not focus on the exact selected product. It should focus on the broader campaign theme, such as family time, gift giving, play, celebration, shopping inspiration, an authentic hobby/activity or seasonal atmosphere.
 - For product-based website posts, never make the AI image look like an official product photo unless the image is the original website image.
 
 Output only the image.
@@ -11267,7 +11282,7 @@ async function getBrandProfileForRule(supabase, rule) {
   const { data, error } = await supabase
     .from("brand_profiles")
     .select(
-  "id, business_name, website_url, website_product_source_url, brand_description, industry, target_audience, content_language, logo_url, logo_storage_path, logo_enabled_by_default"
+  "id, business_name, website_url, website_product_source_url, website_product_mode_available, brand_description, industry, target_audience, content_language, logo_url, logo_storage_path, logo_enabled_by_default"
 )
     .eq("id", rule.brand_profile_id)
     .eq("user_id", rule.user_id)
@@ -26573,7 +26588,7 @@ function buildCarouselOutroImagePrompt(rule, outroSlide, products) {
     ? `Show the exact authorized discount and campaign code from this offer as clear readable overlay text: ${authorizedOffer} Never change or invent any value.`
     : "Do not show prices or discount claims.";
 
-  return `Create a premium square closing slide for a social media carousel. This is the final CTA slide after product slides for ${brandName}. Use a clean, polished marketing design with a subtle modern background and clear readable text overlay. Write the overlaid text in ${language}. Main overlay text: "${headline}". Supporting overlay text: "${supportingText}". ${campaignVisualContext}. ${offerVisualRule} If this carousel is connected to a campaign, holiday, season, shopping event or theme, the closing image must clearly match that theme and must not look generic or unrelated. The slide should feel like a professional final call-to-action and may use abstract shapes, elegant composition, soft shadows, geometric shapes, or a tasteful category-inspired scene. If you include any product-like objects, they must be generic, unbranded, non-specific, and not directly identifiable as exact products from the store. Never invent or depict specific catalog items, exact product prints, poster motifs, readable slogan text on products, apparel graphics, packaging artwork, or branded product designs. Do not place the store name or brand logo onto any depicted product. Avoid close-up hero shots of a single product. For stores that sell printed or text-based products such as posters, apparel, mugs, or accessories, do not generate new readable product text or new product artwork. Keep all non-overlay product details subtle, generic, and secondary to the CTA message. Do not use crowded text. Products featured earlier in the carousel: ${productNames || "selected website products"}.`;
+  return `Create a premium square closing slide for a social media carousel. This is the final CTA slide after product slides for ${brandName}. Use a clean, polished marketing design with a subtle modern background and clear readable text overlay. Write the overlaid text in ${language}. Main overlay text: "${headline}". Supporting overlay text: "${supportingText}". ${campaignVisualContext}. ${offerVisualRule} If this carousel is connected to a campaign, holiday, season, shopping event or theme, the closing image must clearly match that theme and must not look generic or unrelated. The slide should feel like a professional final call-to-action and may use abstract shapes, elegant composition, soft shadows, geometric shapes, or a tasteful category-inspired scene. Do not invent product-like objects that could be mistaken for merchandise from the store. Because this closing slide is generated without a verified product reference, prefer people, activity, environment, atmosphere, abstract shapes or category context instead of newly designed products. Never invent or depict catalog items, product variants, clothing designs, exact product prints, poster motifs, readable slogan text on products, apparel graphics, packaging artwork or branded product designs. Do not place the store name or brand logo onto any depicted product. Avoid close-up hero shots of a single product. For stores that sell printed or text-based products such as posters, apparel, mugs, or accessories, do not generate new readable product text or new product artwork. Keep all non-overlay product details subtle, generic, and secondary to the CTA message. Do not use crowded text. Products featured earlier in the carousel: ${productNames || "selected website products"}.`;
 }
 
 export async function generateCarouselOutroSlideImage(openai, rule, outroSlide, products) {
@@ -27226,6 +27241,8 @@ Rules:
 - If multiple colors exist on the website, still keep the exact source-image color unless a different verified color is explicitly selected.
 - When uncertain, keep the exact source-image color and appearance.
 - Build a unique ad-style composition around that product so the final result feels custom-made for this exact item.
+- The supplied reference is the only sellable product you may depict. Do not invent a second product, alternate garment, alternate print/design, package, accessory or other merchandise that could be mistaken for another item in the customer's catalog.
+- People, environments and contextual props may support the scene, but any incidental object must stay clearly secondary and must not look like an additional advertised product.
 - Follow the selected ad layout family above. Do not default to the same left-text/right-product feature-list layout unless that is the selected family.
 - Let the chosen layout family influence the composition, text placement, product scale, and overall mood so different products can receive different visual treatments.
 - Include readable marketing text in the image.
@@ -31465,7 +31482,7 @@ async function publishPostToPinterest({
     body.link = copy.link;
   }
 
-  const response = await fetch("https://api.pinterest.com/v5/pins", {
+  const response = await fetch(`${getPinterestApiBaseUrl()}/pins`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,

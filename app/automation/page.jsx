@@ -10733,58 +10733,64 @@ function blockFormatCardClickAfterDrag(event) {
                       <article key={slot.id} className={scheduleUnlocked ? "is-schedule-unlocked" : ""}>
                         <div className={`campaign-v14335-slot-art art-${index % 5}`}><SlotTypeGlyph slot={slot} /></div>
                         <div className="campaign-v14335-slot-copy"><h3>{getCustomerSlotLabel(slot)}</h3><p>{getCustomerSlotPurpose(slot)}</p></div>
-                        <div className={`campaign-v14335-slot-date${scheduleUnlocked ? " is-unlocked" : ""}`}>
-                          {scheduleUnlocked ? (
-                            <DatePickerField
-                              value={slot.startDate}
-                              onChange={(value) => updateSlot(slot.id, "startDate", value)}
-                              pickerId={`campaign-slot-date-${slot.id}`}
-                              openPickerId={openPickerId}
-                              setOpenPickerId={setOpenPickerId}
-                              timeZone={timeZone}
-                              compact
-                              weekdayLabels={weekdayLabels}
-                              locale={locale}
-                            />
-                          ) : (
-                            <>
-                              <strong>{formatStartDateLabel(slot.startDate, timeZone, locale)}</strong>
-                              <span>{t("automation.lockedCampaignDate")}</span>
-                              <button
-                                type="button"
-                                className="campaign-v14346-unlock-schedule"
-                                onClick={() => updateSlot(slot.id, "dateLocked", false)}
-                              >
-                                {t("automation.unlock")}
-                              </button>
-                            </>
-                          )}
-                        </div>
-                        {scheduleUnlocked ? (
-                          <div className="campaign-v14346-time-picker">
-                            <TimePickerField
-                              value={slot.publishTime}
-                              onChange={(value) => updateSlot(slot.id, "publishTime", value)}
-                              pickerId={`campaign-slot-time-${slot.id}`}
-                              openPickerId={openPickerId}
-                              setOpenPickerId={setOpenPickerId}
-                              compact
-                            />
+                        <div className="campaign-v14350-schedule-block">
+                          <div className={`campaign-v14335-slot-date${scheduleUnlocked ? " is-unlocked" : ""}`}>
+                            {scheduleUnlocked ? (
+                              <DatePickerField
+                                value={slot.startDate}
+                                onChange={(value) => updateSlot(slot.id, "startDate", value)}
+                                pickerId={`campaign-slot-date-${slot.id}`}
+                                openPickerId={openPickerId}
+                                setOpenPickerId={setOpenPickerId}
+                                timeZone={timeZone}
+                                compact
+                                weekdayLabels={weekdayLabels}
+                                locale={locale}
+                              />
+                            ) : (
+                              <>
+                                <strong>{formatStartDateLabel(slot.startDate, timeZone, locale)}</strong>
+                                <span>{t("automation.lockedCampaignDate")}</span>
+                                <button
+                                  type="button"
+                                  className="campaign-v14346-unlock-schedule"
+                                  onClick={() => updateSlot(slot.id, "dateLocked", false)}
+                                >
+                                  {t("automation.unlock")}
+                                </button>
+                              </>
+                            )}
                           </div>
-                        ) : (
-                          <time>{normalizeTime(slot.publishTime)}</time>
-                        )}
-                        <span className="campaign-v14335-slot-format">{getLocalizedSlotFormatLabel(slot)}</span>
-                        <div
-                          className="campaign-v14349-slot-channels"
-                          aria-label={slotPlatformOptions.map((item) => item.label).join(", ")}
-                        >
-                          {slotPlatformOptions.map((item) => (
-                            <span className="campaign-v14349-channel-chip" key={`${slot.id}-campaign-${item.value}`} title={item.label}>
-                              {item.icon ? <img src={item.icon} alt="" className="platform-icon-img" /> : <span>{item.label.slice(0, 1)}</span>}
-                              <b>{item.label}</b>
-                            </span>
-                          ))}
+                          <div className="campaign-v14350-time-line">
+                            {scheduleUnlocked ? (
+                              <div className="campaign-v14346-time-picker">
+                                <TimePickerField
+                                  value={slot.publishTime}
+                                  onChange={(value) => updateSlot(slot.id, "publishTime", value)}
+                                  pickerId={`campaign-slot-time-${slot.id}`}
+                                  openPickerId={openPickerId}
+                                  setOpenPickerId={setOpenPickerId}
+                                  compact
+                                />
+                              </div>
+                            ) : (
+                              <time>{normalizeTime(slot.publishTime)}</time>
+                            )}
+                          </div>
+                        </div>
+                        <div className="campaign-v14350-delivery-block">
+                          <span className="campaign-v14335-slot-format">{getLocalizedSlotFormatLabel(slot)}</span>
+                          <div
+                            className="campaign-v14349-slot-channels"
+                            aria-label={slotPlatformOptions.map((item) => item.label).join(", ")}
+                          >
+                            {slotPlatformOptions.map((item) => (
+                              <span className="campaign-v14349-channel-chip" key={`${slot.id}-campaign-${item.value}`} title={item.label}>
+                                {item.icon ? <img src={item.icon} alt="" className="platform-icon-img" /> : <span>{item.label.slice(0, 1)}</span>}
+                                <b>{item.label}</b>
+                              </span>
+                            ))}
+                          </div>
                         </div>
                         <div className="campaign-v14348-row-actions">
                           <button

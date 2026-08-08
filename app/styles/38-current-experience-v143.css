@@ -10538,3 +10538,417 @@ html body .plan-v14349-channel-fallback {
   font-size: 10px;
   font-weight: 800;
 }
+
+/* ===== v143.50 — compact campaign rows + stable schedule layout ===== */
+html body .campaign-v14335-slot-list article,
+html body .campaign-v14335-slot-list article.is-schedule-unlocked {
+  display: grid !important;
+  grid-template-columns: 86px minmax(260px, 1fr) minmax(185px, 220px) minmax(190px, 280px) 42px !important;
+  grid-template-areas:
+    "art copy schedule delivery menu"
+    "detail detail detail detail detail" !important;
+  align-items: center !important;
+  gap: 12px !important;
+  min-height: 94px !important;
+  padding: 10px 10px !important;
+  overflow: visible !important;
+}
+html body .campaign-v14335-slot-art {
+  grid-area: art !important;
+  width: 86px !important;
+  height: 72px !important;
+  min-height: 0 !important;
+  align-self: center !important;
+  border-radius: 13px !important;
+}
+html body .campaign-v14335-slot-copy {
+  grid-area: copy !important;
+  min-width: 0 !important;
+}
+html body .campaign-v14335-slot-copy h3 {
+  margin-bottom: 3px !important;
+}
+html body .campaign-v14335-slot-copy p {
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+}
+html body .campaign-v14350-schedule-block {
+  grid-area: schedule !important;
+  position: relative !important;
+  z-index: 6 !important;
+  min-width: 0 !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 72px !important;
+  align-items: center !important;
+  gap: 7px !important;
+  overflow: visible !important;
+}
+html body .campaign-v14335-slot-date,
+html body .campaign-v14335-slot-date.is-unlocked {
+  grid-column: auto !important;
+  min-width: 0 !important;
+  width: 100% !important;
+  margin: 0 !important;
+  overflow: visible !important;
+}
+html body .campaign-v14335-slot-date:not(.is-unlocked) {
+  padding: 7px 9px !important;
+}
+html body .campaign-v14335-slot-date:not(.is-unlocked) strong {
+  font-size: 10.5px !important;
+  line-height: 1.2 !important;
+}
+html body .campaign-v14335-slot-date:not(.is-unlocked) span {
+  margin-top: 2px !important;
+  font-size: 8.5px !important;
+  line-height: 1.15 !important;
+}
+html body .campaign-v14346-unlock-schedule {
+  margin-top: 2px !important;
+  font-size: 8.5px !important;
+  line-height: 1.1 !important;
+}
+html body .campaign-v14350-time-line {
+  min-width: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: stretch !important;
+}
+html body .campaign-v14350-time-line > time,
+html body .campaign-v14346-time-picker {
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+}
+html body .campaign-v14350-time-line > time {
+  display: block !important;
+  padding: 0 !important;
+  text-align: center !important;
+  font-size: 10px !important;
+  white-space: nowrap !important;
+}
+html body .campaign-v14346-time-picker .custom-picker-field,
+html body .campaign-v14346-time-picker .custom-picker-anchor,
+html body .campaign-v14346-time-picker .custom-picker-button {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+html body .campaign-v14350-delivery-block {
+  grid-area: delivery !important;
+  min-width: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  flex-wrap: wrap !important;
+}
+html body .campaign-v14350-delivery-block .campaign-v14335-slot-format {
+  grid-column: auto !important;
+  flex: 0 1 auto !important;
+  max-width: 150px !important;
+  margin: 0 !important;
+  white-space: normal !important;
+  line-height: 1.15 !important;
+}
+html body .campaign-v14350-delivery-block .campaign-v14349-slot-channels {
+  flex: 1 1 72px !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+}
+html body .campaign-v14348-row-actions {
+  grid-area: menu !important;
+  position: relative !important;
+  width: 42px !important;
+  min-width: 42px !important;
+  justify-self: end !important;
+  align-self: center !important;
+  display: grid !important;
+  place-items: center !important;
+}
+html body .campaign-v14348-row-actions > button {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  min-height: 34px !important;
+}
+html body .campaign-v14335-slot-detail {
+  grid-area: detail !important;
+  margin-top: 2px !important;
+}
+html body .campaign-v14350-schedule-block:has(.custom-calendar-popover),
+html body .campaign-v14350-schedule-block:has(.custom-time-popover),
+html body .campaign-v14335-slot-list article:has(.custom-calendar-popover),
+html body .campaign-v14335-slot-list article:has(.custom-time-popover) {
+  z-index: 300 !important;
+}
+
+@media (min-width: 901px) and (max-width: 1240px) {
+  html body .campaign-v14335-slot-list article,
+  html body .campaign-v14335-slot-list article.is-schedule-unlocked {
+    grid-template-columns: 72px minmax(190px, 1fr) minmax(168px, 194px) minmax(120px, 170px) 40px !important;
+    gap: 9px !important;
+    min-height: 90px !important;
+  }
+  html body .campaign-v14335-slot-art {
+    width: 72px !important;
+    height: 68px !important;
+  }
+  html body .campaign-v14350-schedule-block {
+    grid-template-columns: minmax(0, 1fr) 64px !important;
+    gap: 6px !important;
+  }
+  html body .campaign-v14350-delivery-block {
+    gap: 6px !important;
+  }
+  html body .campaign-v14350-delivery-block .campaign-v14335-slot-format {
+    max-width: 122px !important;
+  }
+  html body .campaign-v14349-channel-chip {
+    width: 27px !important;
+    padding: 0 !important;
+    justify-content: center !important;
+  }
+  html body .campaign-v14349-channel-chip b {
+    display: none !important;
+  }
+}
+
+@media (min-width: 621px) and (max-width: 900px) {
+  html body .campaign-v14335-plan {
+    padding: 18px 16px !important;
+  }
+  html body .campaign-v14335-slot-list {
+    gap: 9px !important;
+  }
+  html body .campaign-v14335-slot-list article,
+  html body .campaign-v14335-slot-list article.is-schedule-unlocked {
+    grid-template-columns: 66px minmax(0, 1fr) 40px !important;
+    grid-template-areas:
+      "art copy menu"
+      "art schedule menu"
+      "art delivery menu"
+      "detail detail detail" !important;
+    gap: 7px 10px !important;
+    min-height: 0 !important;
+    padding: 11px 10px !important;
+    align-items: start !important;
+  }
+  html body .campaign-v14335-slot-art {
+    width: 66px !important;
+    height: 66px !important;
+    align-self: start !important;
+  }
+  html body .campaign-v14335-slot-copy p {
+    -webkit-line-clamp: 1 !important;
+  }
+  html body .campaign-v14350-schedule-block {
+    grid-template-columns: minmax(0, 1fr) 76px !important;
+    width: min(100%, 320px) !important;
+    gap: 7px !important;
+  }
+  html body .campaign-v14350-delivery-block {
+    width: 100% !important;
+    gap: 7px !important;
+  }
+  html body .campaign-v14350-delivery-block .campaign-v14335-slot-format {
+    max-width: 170px !important;
+  }
+  html body .campaign-v14349-channel-chip {
+    width: 28px !important;
+    height: 28px !important;
+    padding: 0 !important;
+    justify-content: center !important;
+  }
+  html body .campaign-v14349-channel-chip b {
+    display: none !important;
+  }
+  html body .campaign-v14348-row-actions {
+    position: relative !important;
+    top: auto !important;
+    right: auto !important;
+    align-self: start !important;
+  }
+}
+
+@media (max-width: 620px) {
+  html body .automation-page.campaign-planner-clean {
+    width: calc(100% - 12px) !important;
+  }
+  html body .campaign-v14335-shell {
+    gap: 10px !important;
+    padding: 8px 0 72px !important;
+  }
+  html body .campaign-v14335-hero,
+  html body .campaign-v14335-hero.is-shopping-visual,
+  html body .campaign-v14335-hero.is-calendar-visual {
+    min-height: 360px !important;
+    padding: 20px 14px 14px !important;
+    background-position: 70% 58% !important;
+  }
+  html body .campaign-v14335-hero h1 {
+    max-width: 96% !important;
+    font-size: clamp(30px, 9vw, 38px) !important;
+    line-height: 1.02 !important;
+  }
+  html body .campaign-v14335-hero-copy > span {
+    max-width: 96% !important;
+    font-size: 12px !important;
+  }
+  html body .campaign-v14335-hero-copy > div {
+    margin-top: 112px !important;
+    gap: 7px !important;
+  }
+  html body .campaign-v14335-benefits {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+  html body .campaign-v14335-benefits article {
+    min-height: 0 !important;
+    padding: 13px 11px !important;
+  }
+  html body .campaign-v14335-benefits article p {
+    font-size: 10px !important;
+    line-height: 1.35 !important;
+  }
+  html body .campaign-v14335-plan {
+    padding: 16px 10px !important;
+  }
+  html body .campaign-v14335-plan-heading {
+    display: grid !important;
+    gap: 10px !important;
+  }
+  html body .campaign-v14348-types-block {
+    gap: 5px !important;
+  }
+  html body .campaign-v14348-type-chips {
+    gap: 5px !important;
+  }
+  html body .campaign-v14348-type-chips span {
+    min-height: 28px !important;
+    padding: 0 8px !important;
+    font-size: 10px !important;
+  }
+  html body .campaign-v14335-slot-list {
+    gap: 8px !important;
+  }
+  html body .campaign-v14335-slot-list article,
+  html body .campaign-v14335-slot-list article.is-schedule-unlocked {
+    grid-template-columns: 54px minmax(0, 1fr) 34px !important;
+    grid-template-areas:
+      "art copy menu"
+      "art schedule menu"
+      "art delivery menu"
+      "detail detail detail" !important;
+    gap: 6px 9px !important;
+    min-height: 0 !important;
+    padding: 10px 8px !important;
+    align-items: start !important;
+  }
+  html body .campaign-v14335-slot-art {
+    width: 54px !important;
+    height: 54px !important;
+    min-height: 54px !important;
+    align-self: start !important;
+    border-radius: 11px !important;
+  }
+  html body .campaign-v14335-slot-copy h3 {
+    font-size: 13px !important;
+    line-height: 1.2 !important;
+  }
+  html body .campaign-v14335-slot-copy p {
+    margin-top: 2px !important;
+    font-size: 9.5px !important;
+    line-height: 1.3 !important;
+    -webkit-line-clamp: 2 !important;
+  }
+  html body .campaign-v14350-schedule-block {
+    grid-template-columns: minmax(0, 1fr) 70px !important;
+    width: 100% !important;
+    gap: 6px !important;
+  }
+  html body .campaign-v14335-slot-date:not(.is-unlocked) {
+    display: grid !important;
+    grid-template-columns: 1fr auto !important;
+    column-gap: 6px !important;
+    row-gap: 1px !important;
+    align-items: center !important;
+    padding: 6px 7px !important;
+  }
+  html body .campaign-v14335-slot-date:not(.is-unlocked) strong {
+    grid-column: 1 / -1 !important;
+  }
+  html body .campaign-v14335-slot-date:not(.is-unlocked) span {
+    display: none !important;
+  }
+  html body .campaign-v14346-unlock-schedule {
+    grid-column: 1 !important;
+    justify-self: start !important;
+  }
+  html body .campaign-v14350-time-line > time {
+    text-align: left !important;
+    padding-left: 3px !important;
+  }
+  html body .campaign-v14350-delivery-block {
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    flex-wrap: wrap !important;
+  }
+  html body .campaign-v14350-delivery-block .campaign-v14335-slot-format {
+    max-width: min(180px, 100%) !important;
+    min-height: 27px !important;
+    padding: 5px 7px !important;
+    font-size: 9.5px !important;
+  }
+  html body .campaign-v14350-delivery-block .campaign-v14349-slot-channels {
+    flex: 0 1 auto !important;
+  }
+  html body .campaign-v14349-channel-chip {
+    width: 26px !important;
+    height: 26px !important;
+    padding: 0 !important;
+    justify-content: center !important;
+  }
+  html body .campaign-v14349-channel-chip .platform-icon-img {
+    width: 14px !important;
+    height: 14px !important;
+    flex-basis: 14px !important;
+  }
+  html body .campaign-v14349-channel-chip b {
+    display: none !important;
+  }
+  html body .campaign-v14348-row-actions {
+    position: relative !important;
+    top: auto !important;
+    right: auto !important;
+    width: 34px !important;
+    min-width: 34px !important;
+    align-self: start !important;
+  }
+  html body .campaign-v14348-row-actions > button {
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    min-height: 30px !important;
+  }
+  html body .campaign-v14348-row-menu {
+    top: 0 !important;
+    right: 34px !important;
+    width: min(184px, calc(100vw - 84px)) !important;
+  }
+  html body .campaign-v14335-rationale {
+    padding: 16px 14px !important;
+  }
+  html body .campaign-v14335-activate,
+  html body .campaign-v14335-includes {
+    padding: 17px 14px !important;
+  }
+  html body .campaign-v14335-includes > div {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+  }
+}

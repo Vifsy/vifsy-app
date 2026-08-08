@@ -29,7 +29,7 @@ check("Activation modal can start ongoing planner", page.includes("startAnotherP
 check("Help copy explains approval before publishing", labels.includes("each post is sent for review and must be approved") && builtIn.includes("måste godkännas innan Spreelo publicerar"));
 
 check("Pinterest is a publishing target", worker.includes('normalized.includes("pinterest")') && worker.includes('targets.push("pinterest")'));
-check("Pinterest publisher uses Create Pin endpoint", worker.includes('fetch("https://api.pinterest.com/v5/pins"'));
+check("Pinterest publisher uses Create Pin endpoint", worker.includes('getPinterestApiBaseUrl') && worker.includes('fetch(`${getPinterestApiBaseUrl()}/pins`'));
 check("Pinterest carousel uses multi-image URL media source", worker.includes('source_type: "multiple_image_urls"'));
 check("Pinterest carousel is capped at five images", worker.includes(".slice(0, 5)"));
 check("Pinterest uses selected board connection", worker.includes('platform", "pinterest"') && worker.includes("boardId: pinterestConnectionForPost.page_id"));
