@@ -6536,6 +6536,8 @@ async function prepareCarouselProductsForRule({
       const researchRounds = [];
       let combinedCandidates = [];
       let combinedHydratedProducts = [];
+      let combinedFinalVerifiedProducts = [];
+      const finalReviewedProductUrls = new Set();
       let combinedSelectionMode = "varied_categories";
       let researchExclusions = [...recentUsedItems];
 
@@ -6579,11 +6581,81 @@ async function prepareCarouselProductsForRule({
             getPrimaryCampaignResearchRank(right)
         );
 
+        // v143.63: the six-product requirement belongs AFTER the final image
+        // identity gate, not after technical hydration. Resolve and visually
+        // verify each newly hydrated product before deciding whether another
+        // research round is required. Rejected products stay excluded so the
+        // next round spends its budget on genuinely new candidates.
+        const productsNeedingFinalVerification = combinedHydratedProducts.filter(
+          (item) => {
+            const key = normalizeComparableValue(
+              item?.url || item?.product_url || item?.item_url || ""
+            );
+            return key && !finalReviewedProductUrls.has(key);
+          }
+        );
+
+        if (productsNeedingFinalVerification.length) {
+          const finalResolvedProducts =
+            await resolveLargestProductImagesBeforeGeneration({
+              items: productsNeedingFinalVerification,
+              ruleId: rule.id,
+              openai,
+            });
+          const finalReviewedProducts = await reviewResolvedProductImageIdentity({
+            openai,
+            // One already-resolved main asset per product is enough for the
+            // pre-lock gate and keeps a 10-product round inside the verifier's
+            // bounded response schema. If that exact main asset is wrong, the
+            // product is rejected and the next research round replaces it.
+            items: finalResolvedProducts.map((item) => ({
+              ...item,
+              product_image_verified_candidates: [],
+            })),
+            ruleId: rule.id,
+            failClosed: true,
+          });
+
+          for (const item of productsNeedingFinalVerification) {
+            const key = normalizeComparableValue(
+              item?.url || item?.product_url || item?.item_url || ""
+            );
+            if (key) finalReviewedProductUrls.add(key);
+          }
+
+          combinedFinalVerifiedProducts = dedupeUrlItems([
+            ...combinedFinalVerifiedProducts,
+            ...finalReviewedProducts.filter(
+              (item) =>
+                item?.image_url &&
+                item?.product_image_identity_verified === true &&
+                item?.product_image_identity_unresolved !== true &&
+                item?.product_image_semantic_verified === true &&
+                isValidCarouselProduct(item)
+            ),
+          ]).sort(
+            (left, right) =>
+              getPrimaryCampaignResearchRank(left) -
+              getPrimaryCampaignResearchRank(right)
+          );
+
+          console.info("Campaign final product identity pool updated", {
+            ruleId: rule?.id,
+            websiteUrl,
+            researchRound,
+            technicallyHydratedProductCount: combinedHydratedProducts.length,
+            newlyReviewedProductCount: productsNeedingFinalVerification.length,
+            finalVerifiedProductCount: combinedFinalVerifiedProducts.length,
+            requiredVerifiedProductCount:
+              CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED,
+          });
+        }
+
         if (
-          combinedHydratedProducts.length >=
+          combinedFinalVerifiedProducts.length >=
             CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED &&
           hasAdequatePrimaryCampaignCarouselVariety(
-            combinedHydratedProducts,
+            combinedFinalVerifiedProducts,
             combinedSelectionMode
           )
         ) {
@@ -6592,12 +6664,13 @@ async function prepareCarouselProductsForRule({
 
         if (researchRound < CAMPAIGN_PRIMARY_WEB_RESEARCH_MAX_ROUNDS) {
           console.info(
-            "Campaign primary GPT-5.5 web research continuing to reserve round",
+            "Campaign primary GPT-5.5 web research continuing after final identity gate",
             {
               ruleId: rule?.id,
               websiteUrl,
               completedRound: researchRound,
-              verifiedProductCount: combinedHydratedProducts.length,
+              technicallyHydratedProductCount: combinedHydratedProducts.length,
+              finalVerifiedProductCount: combinedFinalVerifiedProducts.length,
               requiredVerifiedProductCount:
                 CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED,
               requiredCarouselProductCount: CAROUSEL_PRODUCT_SLIDE_TARGET,
@@ -6618,8 +6691,9 @@ async function prepareCarouselProductsForRule({
       primaryCampaignWebResearch = {
         ...firstResearchRound,
         candidates: combinedCandidates,
-        verifiedProducts: combinedHydratedProducts,
-        validProducts: combinedHydratedProducts,
+        technicallyHydratedProducts: combinedHydratedProducts,
+        verifiedProducts: combinedFinalVerifiedProducts,
+        validProducts: combinedFinalVerifiedProducts,
         campaignTheme:
           firstResearchRound?.campaignTheme ||
           getPrimaryCampaignWebResearchTheme(rule),
@@ -6653,11 +6727,15 @@ async function prepareCarouselProductsForRule({
       }
 
       const authoritativeResearchError = new Error(
-        `GPT-5.5 web research completed ${researchRounds.length} round(s), but only ${combinedHydratedProducts.length} products were fully verified. Spreelo requires ${CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED} verified products (${CAROUSEL_PRODUCT_SLIDE_TARGET} carousel products + at least 1 reserve) before publishing. The legacy candidate flow was deliberately not used.`
+        `GPT-5.5 web research completed ${researchRounds.length} round(s), but only ${combinedFinalVerifiedProducts.length} products passed the final exact image-identity gate. Spreelo requires ${CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED} final verified products (${CAROUSEL_PRODUCT_SLIDE_TARGET} carousel products + at least 1 reserve) before publishing. The legacy candidate flow was deliberately not used.`
       );
       authoritativeResearchError.code =
         "CAMPAIGN_AUTHORITATIVE_WEB_RESEARCH_INSUFFICIENT_ASSETS";
-      authoritativeResearchError.partialProducts = combinedHydratedProducts;
+      authoritativeResearchError.partialProducts = combinedFinalVerifiedProducts;
+      authoritativeResearchError.verifiedProductCount =
+        combinedFinalVerifiedProducts.length;
+      authoritativeResearchError.targetProductCount =
+        CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED;
       authoritativeResearchError.candidateCount = combinedCandidates.length;
       throw authoritativeResearchError;
     } catch (error) {
@@ -10776,6 +10854,19 @@ function classifyAutomationCreationFailure(errorOrMessage, stage = "unhandled") 
       code: "website_rate_limit_exhausted",
       customerMessage:
         "The website continued limiting access after several automatic cooldown attempts. This occurrence has been stopped and will not be retried automatically.",
+    };
+  }
+
+  if (
+    [
+      "CAROUSEL_EXACT_PRODUCT_POOL_INCOMPLETE",
+      "CAMPAIGN_AUTHORITATIVE_WEB_RESEARCH_INSUFFICIENT_ASSETS",
+    ].includes(String(errorOrMessage?.code || ""))
+  ) {
+    return {
+      code: "carousel_product_verification_incomplete",
+      customerMessage:
+        "Spreelo could not verify enough exact product-and-image matches for this carousel. The post was held for Spreelo review instead of risking a wrong product.",
     };
   }
 
@@ -24051,12 +24142,19 @@ async function hydrateAuthoritativeWebAgentProduct({
       product?.gtin8 ||
       ""
   ).trim();
+  const structuredBrandValue =
+    typeof product?.brand === "string"
+      ? product.brand
+      : product?.brand?.name || product?.manufacturer?.name || product?.manufacturer || "";
+  const structuredProductBrand = String(structuredBrandValue || "").trim();
 
   return {
     ...candidate,
     ...normalized,
     product_identifier:
       structuredProductIdentifier || candidate?.product_identifier || "",
+    product_brand:
+      structuredProductBrand || candidate?.product_brand || candidate?.brand || "",
     reason: candidate?.reason || "",
     item_key: createItemKey(normalized),
     page_type: "product",
@@ -24410,6 +24508,7 @@ async function findPrimaryCampaignProductsWithWebSearch({
 - Do not invent product facts.
 - Every returned product must have at least one official product image visibly available in its product gallery. People, human body parts and animals are allowed when they are part of a genuine product image.
  - Return the best direct official product image URL you can actually verify for each product. Use an empty string if the image URL is not visible; never guess it.
+ - Return the product brand/manufacturer when it is visible on the exact product page. Use an empty string if it cannot be verified.
  - Return the displayed price only when clearly visible. Otherwise use an empty string.
  ${researchRound > 1 ? "- This is a bounded diversity/recovery round. The earlier URLs are excluded below; actively look for other complementary product families that can strengthen a complete five-product carousel." : ""}
 ${usedProducts.length ? `- Prefer products not used in recent Spreelo posts. Avoid these unless the site cannot provide ten better choices:\n${usedProducts.join("\n")}` : ""}
@@ -24477,6 +24576,7 @@ Return the result in the required JSON structure. Keep each reason concise and g
                         "A short normalized generic product family in English, such as backpack, sneakers or jacket. Exclude brand, color and audience.",
                     },
                     image_url: { type: "string" },
+                    brand: { type: "string" },
                     price: { type: "string" },
                     relevance_class: {
                       type: "string",
@@ -24491,6 +24591,7 @@ Return the result in the required JSON structure. Keep each reason concise and g
                      "product_role",
                     "product_family",
                     "image_url",
+                    "brand",
                     "price",
                     "relevance_class",
                   ],
@@ -24582,6 +24683,7 @@ Return the result in the required JSON structure. Keep each reason concise and g
       title: String(product?.title || "").trim(),
       url: productUrl,
       image_url: String(product?.image_url || "").trim(),
+      product_brand: String(product?.brand || "").trim(),
       price: String(product?.price || "").trim(),
       reason,
       score: 1000 - globalRank,
@@ -30682,6 +30784,52 @@ async function resolveLargestProductImagesBeforeGeneration({
     const primaryImageAnchorAllowed = Boolean(
       !strictPageBindingRequired || primaryImageHasSamePageProof
     );
+
+    // Products that passed the v143.63 final exact identity gate already use
+    // the largest verified same-page asset. Do not fetch and reinterpret the
+    // retailer page a second time later in the same generation run. This both
+    // protects the time budget and prevents a recommendations grid from
+    // re-entering the candidate set after a product was already proven safe.
+    const alreadyFinalVerified = Boolean(
+      primaryImageUrl &&
+        !sharedPrimaryImageRejected &&
+        primaryImageAnchorAllowed &&
+        item?.product_image_identity_verified === true &&
+        item?.product_image_identity_unresolved !== true &&
+        item?.product_image_semantic_verified === true
+    );
+    if (alreadyFinalVerified) {
+      resolutions.push({
+        item,
+        html: "",
+        pageUrl,
+        primaryImageUrl,
+        primaryAssetKey,
+        identityAnchorImageUrl: primaryImageUrl,
+        sharedPrimaryImageRejected: false,
+        pageIdentityMismatch: false,
+        staticCandidates: [],
+        selection: {
+          selected: {
+            url: primaryImageUrl,
+            source: item?.product_image_source || "final_semantic_verified",
+            width: Number(item?.product_image_width || 0) || null,
+            height: Number(item?.product_image_height || 0) || null,
+            identityVerified: true,
+            identityMethod:
+              item?.product_image_identity_method || "final_semantic_verified",
+            fingerprintSimilarity: 1,
+          },
+          verifiedCandidates: [],
+          usedSmallImageFallback: Boolean(item?.product_image_small_fallback),
+        },
+        browserUsed: false,
+        renderedCandidateCount: 0,
+        finalIdentityGateReused: true,
+      });
+      continue;
+    }
+
     const identityAnchorImageUrl =
       sharedPrimaryImageRejected || !primaryImageAnchorAllowed
         ? ""
@@ -30907,6 +31055,56 @@ async function resolveLargestProductImagesBeforeGeneration({
 }
 
 
+function normalizeProductBrandIdentity(value) {
+  const normalized = normalizeComparableValue(value)
+    .replace(/\b(?:inc|incorporated|ltd|limited|llc|ab|ag|gmbh|company|co)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (["", "unknown", "none", "not visible", "not provided", "n a"].includes(normalized)) {
+    return "";
+  }
+  return normalized;
+}
+
+function getExpectedProductBrand(item) {
+  return String(
+    item?.product_brand ||
+      item?.brand ||
+      item?.manufacturer ||
+      item?.brand_name ||
+      ""
+  ).trim();
+}
+
+function areEquivalentProductBrands(leftValue, rightValue) {
+  const left = normalizeProductBrandIdentity(leftValue);
+  const right = normalizeProductBrandIdentity(rightValue);
+  if (!left || !right) return true;
+  if (left === right) return true;
+  const leftTokens = left.split(" ").filter(Boolean);
+  const rightTokens = right.split(" ").filter(Boolean);
+  const shorter = leftTokens.length <= rightTokens.length ? leftTokens : rightTokens;
+  const longer = new Set(leftTokens.length <= rightTokens.length ? rightTokens : leftTokens);
+  return shorter.length > 0 && shorter.every((token) => longer.has(token));
+}
+
+function hasHardSemanticBrandConflict(review, expectedBrand) {
+  if (review?.brand_or_model_conflict === true) return true;
+  const observedBrand = String(review?.observed_brand || "").trim();
+  if (
+    normalizeProductBrandIdentity(expectedBrand) &&
+    normalizeProductBrandIdentity(observedBrand) &&
+    !areEquivalentProductBrands(expectedBrand, observedBrand)
+  ) {
+    return true;
+  }
+  const reason = String(review?.reason || "").toLowerCase();
+  return /(?:brand|logo|model)[^.!]{0,90}(?:does not match|doesn't match|do not match|conflict|mismatch|different brand|wrong brand|not the named|not matching)/i.test(
+    reason
+  );
+}
+
 async function reviewResolvedProductImageIdentity({
   openai,
   items,
@@ -30915,6 +31113,22 @@ async function reviewResolvedProductImageIdentity({
 }) {
   const resolvedItems = Array.isArray(items) ? items.filter(Boolean) : [];
   if (!resolvedItems.length) return [];
+
+  if (
+    resolvedItems.every(
+      (item) =>
+        item?.image_url &&
+        item?.product_image_identity_verified === true &&
+        item?.product_image_identity_unresolved !== true &&
+        item?.product_image_semantic_verified === true
+    )
+  ) {
+    console.info("Product image semantic identity gate reused final verified pool", {
+      ruleId,
+      productCount: resolvedItems.length,
+    });
+    return resolvedItems;
+  }
 
   if (!openai) {
     if (failClosed) {
@@ -30960,6 +31174,7 @@ async function reviewResolvedProductImageIdentity({
         productUrl: String(
           item?.url || item?.product_url || item?.item_url || ""
         ).trim(),
+        expectedBrand: getExpectedProductBrand(item),
         ...candidate,
         url,
       });
@@ -30985,6 +31200,7 @@ async function reviewResolvedProductImageIdentity({
         "Verify exact ecommerce product-image identity. For every supplied ID, decide whether the image actually depicts the named product. " +
         "This is a safety gate: false positives are worse than rejecting an image. Treat a correct result as the official clean catalogue/packshot image or another clearly matching image of the exact named product. Match the product type and, when visible or named, the brand/model/design. " +
         "A different product category or conflicting visible brand/model must be rejected (for example sneakers vs a clothing set, or one brand/model of backpack vs a different one). " +
+        "If an expected brand is supplied and a different visible logo/brand is present, observed_brand must name the visible brand and brand_or_model_conflict MUST be true. Never call Nike consistent with The North Face, Adidas consistent with Nike, or any equivalent cross-brand mismatch. " +
         "Color variation alone may be accepted when the same product/model is clearly shown. People or animals are allowed if they are genuinely showing the named product. " +
         "Do not infer that an image is correct merely because it came from the same webpage. A pencil case vs a backpack, one shoe model vs another, or any other product-type/model mismatch must be rejected even when brand/collection/colour words overlap.",
     },
@@ -30995,6 +31211,7 @@ async function reviewResolvedProductImageIdentity({
       type: "input_text",
       text:
         `ID ${option.id}; product title: ${option.title}; ` +
+        `expected brand: ${option.expectedBrand || "not provided"}; ` +
         `product description/context: ${option.description || "not provided"}; ` +
         `product URL: ${option.productUrl || "not provided"}`,
     });
@@ -31033,6 +31250,7 @@ async function reviewResolvedProductImageIdentity({
                       matches_product: { type: "boolean" },
                       product_type_match: { type: "boolean" },
                       brand_or_model_conflict: { type: "boolean" },
+                      observed_brand: { type: "string" },
                       confidence: { type: "number", minimum: 0, maximum: 1 },
                       reason: { type: "string" },
                     },
@@ -31041,6 +31259,7 @@ async function reviewResolvedProductImageIdentity({
                       "matches_product",
                       "product_type_match",
                       "brand_or_model_conflict",
+                      "observed_brand",
                       "confidence",
                       "reason",
                     ],
@@ -31072,13 +31291,19 @@ async function reviewResolvedProductImageIdentity({
         .filter(({ review }) => Boolean(review));
 
       const accepted = reviewedOptions
-        .filter(
-          ({ review }) =>
+        .filter(({ option, review }) => {
+          const hardBrandConflict = hasHardSemanticBrandConflict(
+            review,
+            option.expectedBrand
+          );
+          return (
             review.matches_product === true &&
             review.product_type_match === true &&
             review.brand_or_model_conflict === false &&
+            hardBrandConflict === false &&
             Number(review.confidence || 0) >= 0.9
-        )
+          );
+        })
         .sort(
           (left, right) =>
             Number(right.review?.confidence || 0) -
@@ -31093,10 +31318,15 @@ async function reviewResolvedProductImageIdentity({
           productUrl: getProductImageResolverPageUrl(item) || null,
           productTitle: item?.title || null,
           reviewedOptionCount: reviewedOptions.length,
-          reasons: reviewedOptions
-            .map(({ review }) => String(review?.reason || "").trim())
-            .filter(Boolean)
-            .slice(0, 4),
+          reviews: reviewedOptions.slice(0, 4).map(({ option, review }) => ({
+            expectedBrand: option.expectedBrand || null,
+            observedBrand: review?.observed_brand || null,
+            hardBrandConflict: hasHardSemanticBrandConflict(
+              review,
+              option.expectedBrand
+            ),
+            reason: String(review?.reason || "").trim() || null,
+          })),
         });
         return {
           ...cleanItem,
@@ -33748,15 +33978,36 @@ async function upsertAdminReviewCase(supabase, values) {
   const { data, error } = await supabase
     .from("admin_review_cases")
     .upsert(payload, { onConflict: "occurrence_id" })
-    .select("id")
+    .select("id, occurrence_id, status, needs_review")
     .maybeSingle();
-  if (error && !/admin_review_cases|schema cache|does not exist/i.test(String(error.message || ""))) {
-    console.warn("Could not update durable admin review case", {
+
+  if (error) {
+    console.warn("Durable admin review case could not be persisted; occurrence fallback remains active", {
       occurrenceId: values.occurrence_id,
+      expectedStatus: values.status || null,
+      missingReviewTable: /admin_review_cases|schema cache|does not exist/i.test(
+        String(error.message || "")
+      ),
       message: error.message,
     });
+    return null;
   }
-  return data || null;
+
+  const { data: verified, error: verifyError } = await supabase
+    .from("admin_review_cases")
+    .select("id, occurrence_id, status, needs_review")
+    .eq("occurrence_id", values.occurrence_id)
+    .maybeSingle();
+  if (verifyError || !verified) {
+    console.error("Durable admin review case write could not be verified", {
+      occurrenceId: values.occurrence_id,
+      writtenCaseId: data?.id || null,
+      message: verifyError?.message || "Review case missing immediately after upsert",
+    });
+    return data || null;
+  }
+
+  return verified;
 }
 
 async function runAutomationCron(request, options = {}) {

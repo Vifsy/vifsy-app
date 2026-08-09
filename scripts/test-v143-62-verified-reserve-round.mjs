@@ -26,12 +26,12 @@ assert.match(
 );
 assert.match(
   preparation,
-  /combinedHydratedProducts\.length >=\s*CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED/,
+  /combined(?:Hydrated|FinalVerified)Products\.length >=\s*CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED/,
   "the first round must not stop before six verified products"
 );
 assert.match(
   preparation,
-  /Campaign primary GPT-5\.5 web research continuing to reserve round/,
+  /Campaign primary GPT-5\.5 web research continuing (?:to reserve round|after final identity gate)/,
   "an insufficient first round should explicitly continue to the reserve round"
 );
 assert.match(
@@ -41,7 +41,7 @@ assert.match(
 );
 assert.match(
   preparation,
-  /requires \$\{CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED\} verified products \(\$\{CAROUSEL_PRODUCT_SLIDE_TARGET\} carousel products \+ at least 1 reserve\)/,
+  /requires \${CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED\} (?:verified|final verified) products \(\${CAROUSEL_PRODUCT_SLIDE_TARGET\} carousel products \+ at least 1 reserve\)/,
   "failure should explain the 5+1 fail-closed contract"
 );
 

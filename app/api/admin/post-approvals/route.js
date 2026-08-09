@@ -32,16 +32,43 @@ export async function GET(request) {
   }
 
   const postRows = posts || [];
-  const occurrenceResult = ["all", "failed", "creating"].includes(status)
-    ? await context.admin
-        .from("automation_occurrences")
-        .select("id, post_id, user_id, brand_profile_id, automation_rule_id, status, scheduled_for, content_type_label, content_format, campaign_title, started_at, finished_at, failure_code, failure_stage, failure_message_internal, failure_message_customer, refunded_credits, metadata")
-        .order("started_at", { ascending: false })
-        .limit(200)
-    : { data: [], error: null };
-  if (occurrenceResult.error) {
-    return Response.json({ ok: false, error: occurrenceResult.error.message }, { status: 500 });
+
+  // v143.63: failures are queried explicitly in SQL instead of fetching the
+  // newest 200 occurrences of every status and filtering afterwards. A busy
+  // installation can otherwise push a terminal failure out of the admin
+  // window even though the failure email was sent correctly.
+  const occurrenceSelect =
+    "id, post_id, user_id, brand_profile_id, automation_rule_id, status, scheduled_for, content_type_label, content_format, campaign_title, started_at, finished_at, failure_code, failure_stage, failure_message_internal, failure_message_customer, refunded_credits, metadata";
+  const [failedOccurrenceResult, activeOccurrenceResult] = await Promise.all([
+    ["all", "failed"].includes(status)
+      ? context.admin
+          .from("automation_occurrences")
+          .select(occurrenceSelect)
+          .eq("status", "failed_terminal")
+          .order("started_at", { ascending: false })
+          .limit(200)
+      : Promise.resolve({ data: [], error: null }),
+    ["all", "creating"].includes(status)
+      ? context.admin
+          .from("automation_occurrences")
+          .select(occurrenceSelect)
+          .in("status", ["running", "retry_pending"])
+          .order("started_at", { ascending: false })
+          .limit(200)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  const occurrenceError =
+    failedOccurrenceResult.error || activeOccurrenceResult.error;
+  if (occurrenceError) {
+    return Response.json({ ok: false, error: occurrenceError.message }, { status: 500 });
   }
+  const occurrenceResult = {
+    data: [
+      ...(failedOccurrenceResult.data || []),
+      ...(activeOccurrenceResult.data || []),
+    ],
+    error: null,
+  };
 
   const reviewCaseResult = ["all", "failed"].includes(status)
     ? await context.admin
@@ -280,6 +307,11 @@ export async function GET(request) {
         failure_message_internal: reviewCase.failure_message,
       },
     }))],
+  }, {
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+      Pragma: "no-cache",
+    },
   });
 }
 

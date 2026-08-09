@@ -130,6 +130,15 @@ export default function AdminPostApprovalsPage() {
     );
 
   useEffect(() => { loadPosts(); }, [filter]);
+  useEffect(() => {
+    const refresh = () => fetchPosts("", true);
+    const intervalId = window.setInterval(refresh, 15000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [filter, selectedPostId]);
   useEffect(() => { loadReviewGate(); }, []);
   useEffect(() => {
     if (!selectedPostId) return undefined;
@@ -147,8 +156,12 @@ export default function AdminPostApprovalsPage() {
   }, [selectedPost]);
 
   async function loadPosts(preferredSelectedPostId = "") {
-    setLoading(true);
-    setError("");
+    return fetchPosts(preferredSelectedPostId, false);
+  }
+
+  async function fetchPosts(preferredSelectedPostId = "", silent = false) {
+    if (!silent) setLoading(true);
+    if (!silent) setError("");
     try {
       const headers = await getHeaders();
       const response = await fetch(`/api/admin/post-approvals?status=${encodeURIComponent(filter)}`, { headers, cache: "no-store" });
@@ -173,7 +186,7 @@ export default function AdminPostApprovalsPage() {
     } catch (loadError) {
       setError(loadError.message || t("admin.approvals.loadError"));
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
