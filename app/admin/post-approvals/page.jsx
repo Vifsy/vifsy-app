@@ -52,6 +52,10 @@ const emptyCarouselProduct = () => ({ title: "", description: "", url: "", image
 function isCarouselPost(post) {
   return /carousel/i.test(String(post?.content_format || post?.post_type || ""));
 }
+function isSyntheticAdminCaseId(id) {
+  const value = String(id || "");
+  return value.startsWith("occurrence-") || value.startsWith("review-case-");
+}
 function getFiveCarouselProducts(items) {
   return Array.from({ length: CAROUSEL_PRODUCT_COUNT }, (_, index) => ({
     ...emptyCarouselProduct(),
@@ -116,7 +120,12 @@ export default function AdminPostApprovalsPage() {
     () => posts.find((post) => post.id === selectedPostId) || null,
     [posts, selectedPostId]
   );
-  const carouselReady = isCarouselPost(selectedPost) && materials.length === CAROUSEL_PRODUCT_COUNT && materials.every((item) => item.image_url && item.title?.trim() && item.description?.trim());
+  const carouselReady =
+    isCarouselPost(selectedPost) &&
+    materials.length === CAROUSEL_PRODUCT_COUNT &&
+    materials.every(
+      (item) => item.image_url && item.title?.trim() && item.url?.trim()
+    );
 
   useEffect(() => { loadPosts(); }, [filter]);
   useEffect(() => { loadReviewGate(); }, []);
@@ -249,7 +258,7 @@ export default function AdminPostApprovalsPage() {
   }
 
   async function archiveSelected(ids) {
-    const postIds = ids.filter((id) => !id.startsWith("occurrence-"));
+    const postIds = ids.filter((id) => !isSyntheticAdminCaseId(id));
     if (!postIds.length) return;
     try {
       await runAdminAction({ action: "bulk_archive", post_ids: postIds });
@@ -399,8 +408,8 @@ export default function AdminPostApprovalsPage() {
                   {isCarouselPost(selectedPost) ? (
                     <section className="admin-carousel-editor">
                       <div className="admin-carousel-editor-heading">
-                        <div><span>Carousel products</span><strong>Exactly five products</strong><p>Replace any product directly in the preview. Caption and hashtags are always regenerated.</p></div>
-                        <b className={carouselReady ? "ready" : ""}>{materials.filter((item) => item.image_url && item.title && item.description).length}/5</b>
+                        <div><span>Carousel products</span><strong>Exactly five products</strong><p>Keep any products that are already correct and replace only the ones you want. Old and newly added products can be mixed. Five product images + product text/name + product links are enough; description is optional. Caption and hashtags are regenerated from exactly these five products.</p></div>
+                        <b className={carouselReady ? "ready" : ""}>{materials.filter((item) => item.image_url && item.title?.trim() && item.url?.trim()).length}/5</b>
                       </div>
                       <div className="admin-carousel-product-grid">
                         {materials.map((item, index) => (
@@ -413,8 +422,8 @@ export default function AdminPostApprovalsPage() {
                             </div>
                             <div className="admin-carousel-product-fields">
                               <input value={item.title || ""} placeholder="Product name" onChange={(event) => setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, title: event.target.value } : row))} />
-                              <textarea value={item.description || ""} placeholder="Product information for caption and hashtags" onChange={(event) => setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, description: event.target.value } : row))} />
-                              <input value={item.url || ""} placeholder="Product URL (optional)" onChange={(event) => setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, url: event.target.value } : row))} />
+                              <textarea value={item.description || ""} placeholder="Product information (optional — leave blank if name + image + link are enough)" onChange={(event) => setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, description: event.target.value } : row))} />
+                              <input value={item.url || ""} placeholder="Product URL (required)" onChange={(event) => setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, url: event.target.value } : row))} />
                             </div>
                           </article>
                         ))}
@@ -477,7 +486,7 @@ export default function AdminPostApprovalsPage() {
                       {t("admin.approvals.releaseToCustomer")}
                     </button>
                   ) : null}
-                  {!selectedPost.id.startsWith("occurrence-") ? <button type="button" className="admin-archive-button" onClick={() => archiveSelected([selectedPost.id])}><Trash2 size={15} /> Archive post</button> : null}
+                  {!isSyntheticAdminCaseId(selectedPost.id) ? <button type="button" className="admin-archive-button" onClick={() => archiveSelected([selectedPost.id])}><Trash2 size={15} /> Archive post</button> : null}
 
                   {selectedPost.rejection ? (
                     <div className="admin-v74-rejection-review">

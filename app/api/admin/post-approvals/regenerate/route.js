@@ -15,9 +15,17 @@ export async function POST(request) {
   const occurrenceId = String(body?.occurrence_id || "").trim();
   const products = (Array.isArray(body?.product_items) ? body.product_items : [])
     .map((item) => ({ title: String(item?.title || "").trim(), description: String(item?.description || "").trim(), url: String(item?.url || "").trim(), image_url: String(item?.image_url || "").trim() }))
-    .filter((item) => item.title && item.image_url)
+    .filter((item) => item.title || item.image_url || item.url || item.description)
     .slice(0, 5);
-  if (products.length !== 5 || products.some((item) => !item.description)) return Response.json({ ok: false, error: "A carousel must contain exactly five complete products with an image, product name and product information." }, { status: 400 });
+  if (
+    products.length !== 5 ||
+    products.some((item) => !item.image_url || !item.title || !item.url)
+  ) {
+    return Response.json({
+      ok: false,
+      error: "A carousel must contain exactly five products. Each product only needs a product image, product text/name and product link. Product information/description is optional."
+    }, { status: 400 });
+  }
 
   let post = null;
   let occurrence = null;
@@ -43,7 +51,7 @@ export async function POST(request) {
   try {
     const response = await openai.responses.create({
       model: process.env.POST_TEXT_MODEL || "gpt-5.5",
-      input: `Write one polished social-media carousel caption in ${language} for ${campaign}. Use only these supplied, verified products and facts. Do not invent prices, offers or claims. Include a natural CTA and relevant hashtags.\n${JSON.stringify(products)}`,
+      input: `Write one polished social-media carousel caption in ${language} for ${campaign}. The five admin-supplied product images, product names and product URLs are authoritative and may be a mix of old products and newly added products. Use only those five products. Product descriptions may be empty, so do not invent missing details, prices, offers, specifications or claims. Include a natural CTA and relevant hashtags.\n${JSON.stringify(products)}`,
       max_output_tokens: 1200,
     });
     content = String(response.output_text || content).trim();
@@ -106,6 +114,7 @@ export async function POST(request) {
         source_image_url: product.image_url,
         carousel_slide_role: "product",
         admin_regenerated: true,
+        admin_materials_authoritative: true,
         product_label_applied: rendered.productLabelApplied,
         product_label_placement: rendered.productLabelPlacement,
         product_label_layout: rendered.productLabelLayout,

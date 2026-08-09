@@ -42,16 +42,52 @@ export async function GET(request) {
   if (occurrenceResult.error) {
     return Response.json({ ok: false, error: occurrenceResult.error.message }, { status: 500 });
   }
+
+  const reviewCaseResult = ["all", "failed"].includes(status)
+    ? await context.admin
+        .from("admin_review_cases")
+        .select("id, occurrence_id, post_id, user_id, brand_profile_id, automation_rule_id, status, scheduled_for, campaign_title, content_type_label, content_format, product_items, failure_code, failure_stage, failure_message, needs_review, created_at, updated_at")
+        .eq("needs_review", true)
+        .eq("status", "needs_repair")
+        .order("updated_at", { ascending: false })
+        .limit(200)
+    : { data: [], error: null };
+  if (
+    reviewCaseResult.error &&
+    !/admin_review_cases|schema cache|does not exist/i.test(
+      String(reviewCaseResult.error.message || "")
+    )
+  ) {
+    return Response.json({ ok: false, error: reviewCaseResult.error.message }, { status: 500 });
+  }
+
   const occurrenceRows = (occurrenceResult.data || []).filter((occurrence) => {
     if (status === "failed") return occurrence.status === "failed_terminal";
     if (status === "creating") return !["completed", "failed_terminal"].includes(occurrence.status);
     return true;
   });
+  const reviewCaseRows = reviewCaseResult.data || [];
+  const reviewCaseByOccurrence = new Map(
+    reviewCaseRows
+      .filter((item) => item.occurrence_id)
+      .map((item) => [item.occurrence_id, item])
+  );
+
   const orphanFailures = occurrenceRows.filter(
     (occurrence) => !occurrence.post_id || !postRows.some((post) => post.id === occurrence.post_id)
   );
-  const brandIds = Array.from(new Set([...postRows, ...orphanFailures].map((item) => item.brand_profile_id).filter(Boolean)));
-  const userIds = Array.from(new Set([...postRows, ...orphanFailures].map((item) => item.user_id).filter(Boolean)));
+  const orphanOccurrenceIds = new Set(
+    orphanFailures.map((item) => item.id).filter(Boolean)
+  );
+  const reviewOnlyFailures = reviewCaseRows.filter(
+    (reviewCase) =>
+      (!reviewCase.post_id || !postRows.some((post) => post.id === reviewCase.post_id)) &&
+      (!reviewCase.occurrence_id || !orphanOccurrenceIds.has(reviewCase.occurrence_id))
+  );
+
+  const adminQueueRows = [...postRows, ...orphanFailures, ...reviewOnlyFailures];
+  const brandIds = Array.from(new Set(adminQueueRows.map((item) => item.brand_profile_id).filter(Boolean)));
+  const userIds = Array.from(new Set(adminQueueRows.map((item) => item.user_id).filter(Boolean)));
   const postIds = postRows.map((item) => item.id);
 
   const [{ data: brands }, { data: feedbackRows }, { data: slideRows }] = await Promise.all([
@@ -178,13 +214,71 @@ export async function GET(request) {
       created_at: occurrence.started_at,
       updated_at: occurrence.finished_at || occurrence.started_at,
       admin_review_status: occurrence.status === "failed_terminal" ? "needs_repair" : "creating",
-      admin_product_items: occurrence.metadata?.admin_product_items || occurrence.metadata?.partial_products || [],
+      admin_product_items:
+        reviewCaseByOccurrence.get(occurrence.id)?.product_items ||
+        occurrence.metadata?.admin_product_items ||
+        occurrence.metadata?.partial_products ||
+        [],
       brand_admin_review_required: brands?.find((brand) => brand.id === occurrence.brand_profile_id)?.admin_review_required ?? null,
       brand_name: brandMap[occurrence.brand_profile_id] || "",
       customer_email: userMap[occurrence.user_id] || "",
       rejection: null,
       slides: [],
-      failure: occurrence,
+      failure: {
+        ...occurrence,
+        ...(reviewCaseByOccurrence.get(occurrence.id)
+          ? {
+              review_case_id: reviewCaseByOccurrence.get(occurrence.id).id,
+              failure_code:
+                reviewCaseByOccurrence.get(occurrence.id).failure_code ||
+                occurrence.failure_code,
+              failure_stage:
+                reviewCaseByOccurrence.get(occurrence.id).failure_stage ||
+                occurrence.failure_stage,
+              failure_message_internal:
+                reviewCaseByOccurrence.get(occurrence.id).failure_message ||
+                occurrence.failure_message_internal,
+            }
+          : {}),
+      },
+    })), ...reviewOnlyFailures.map((reviewCase) => ({
+      id: `review-case-${reviewCase.id}`,
+      occurrence_id: reviewCase.occurrence_id || null,
+      user_id: reviewCase.user_id,
+      brand_profile_id: reviewCase.brand_profile_id,
+      automation_rule_id: reviewCase.automation_rule_id,
+      status: "failed",
+      content: reviewCase.campaign_title || reviewCase.content_type_label || "",
+      platform: null,
+      post_type: reviewCase.content_type_label || "Generation",
+      content_format: reviewCase.content_format || null,
+      image_url: null,
+      video_url: null,
+      image_status: "missing",
+      video_status: "missing",
+      video_error: reviewCase.failure_message || reviewCase.failure_code || "Post generation needs repair",
+      scheduled_for: reviewCase.scheduled_for,
+      created_at: reviewCase.created_at,
+      updated_at: reviewCase.updated_at || reviewCase.created_at,
+      admin_review_status: "needs_repair",
+      admin_product_items: Array.isArray(reviewCase.product_items) ? reviewCase.product_items : [],
+      brand_admin_review_required: brands?.find((brand) => brand.id === reviewCase.brand_profile_id)?.admin_review_required ?? null,
+      brand_name: brandMap[reviewCase.brand_profile_id] || "",
+      customer_email: userMap[reviewCase.user_id] || "",
+      rejection: null,
+      slides: [],
+      failure: {
+        id: reviewCase.occurrence_id || reviewCase.id,
+        review_case_id: reviewCase.id,
+        status: "failed_terminal",
+        scheduled_for: reviewCase.scheduled_for,
+        content_type_label: reviewCase.content_type_label,
+        content_format: reviewCase.content_format,
+        campaign_title: reviewCase.campaign_title,
+        failure_code: reviewCase.failure_code,
+        failure_stage: reviewCase.failure_stage,
+        failure_message_internal: reviewCase.failure_message,
+      },
     }))],
   });
 }

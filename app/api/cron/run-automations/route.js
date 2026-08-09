@@ -308,7 +308,7 @@ const CAMPAIGN_MINIMUM_PRODUCT_FIT_SCORE = 60;
 const CAMPAIGN_STORE_SEARCH_PRODUCT_FIT_SCORE = 55;
 const CAROUSEL_MIN_PRODUCT_SLIDES = 5;
 const CAROUSEL_PRODUCT_SLIDE_TARGET = 5;
-const CAROUSEL_PLATFORM_MIN_PRODUCT_SLIDES = 3;
+const CAROUSEL_PLATFORM_MIN_PRODUCT_SLIDES = CAROUSEL_PRODUCT_SLIDE_TARGET;
 const CAROUSEL_OUTRO_SLIDE_COUNT = 1;
 const CAROUSEL_MAX_PRODUCT_SLIDES = CAROUSEL_PRODUCT_SLIDE_TARGET + CAROUSEL_OUTRO_SLIDE_COUNT;
 const CAMPAIGN_LOCKED_SEARCH_POOL_MIN_ITEMS = 15;
@@ -10984,6 +10984,124 @@ async function markAutomationFailureNotification({
   }
 }
 
+function getImmediateAdminAlertRecipients() {
+  return String(
+    process.env.SPREELO_ADMIN_EMAILS ||
+      process.env.ADMIN_ALERT_EMAIL ||
+      ""
+  )
+    .split(/[;,]/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+async function sendImmediateAdminFailureAlertEmail({
+  resendApiKey,
+  rule = null,
+  brandProfile = null,
+  occurrenceId = null,
+  postId = null,
+  failureCode = null,
+  stage = null,
+  message = null,
+  productItems = [],
+  kind = "generation",
+}) {
+  const recipients = getImmediateAdminAlertRecipients();
+  if (!resendApiKey || !recipients.length) {
+    console.warn("Immediate admin failure alert skipped", {
+      reason: !resendApiKey ? "missing_resend_api_key" : "missing_admin_recipient",
+      occurrenceId,
+      postId,
+      failureCode,
+      stage,
+    });
+    return { sent: false, reason: !resendApiKey ? "missing_resend_api_key" : "missing_admin_recipient" };
+  }
+
+  const appUrl = String(
+    process.env.NEXT_PUBLIC_APP_URL ||
+      process.env.APP_URL ||
+      "https://app.spreelo.com"
+  ).replace(/\/$/, "");
+  const brandName =
+    brandProfile?.business_name ||
+    rule?.brand_profile?.business_name ||
+    rule?.brand_name ||
+    "Unknown brand";
+  const contentLabel =
+    rule?.content_type_label ||
+    rule?.post_type ||
+    rule?.content_format ||
+    "Post";
+  const safeMessage = String(message || "Unknown failure").slice(0, 4000);
+  const suppliedProducts = (Array.isArray(productItems) ? productItems : [])
+    .filter((item) => item?.title || item?.image_url || item?.url)
+    .slice(0, 5);
+  const productSummary = suppliedProducts.length
+    ? `<p><strong>Usable products already recovered:</strong> ${suppliedProducts.length}/5</p><ul>${suppliedProducts
+        .map((item) => `<li>${escapeHtml(item?.title || "Unnamed product")}${item?.url ? ` · ${escapeHtml(item.url)}` : ""}</li>`)
+        .join("")}</ul>`
+    : "";
+
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: process.env.RESEND_FROM_EMAIL || "Spreelo <noreply@spreelo.com>",
+        to: recipients,
+        subject: `Spreelo ${kind === "publish" ? "publishing" : "post"} failed · ${brandName}`,
+        html: `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;padding:28px;color:#172033">
+          <p style="color:#d65337;font-weight:800;letter-spacing:.08em">SPREELO · ACTION REQUIRED</p>
+          <h1 style="font-size:25px;margin:8px 0 14px">A ${kind === "publish" ? "publishing attempt" : "post generation"} failed</h1>
+          <p><strong>Brand:</strong> ${escapeHtml(brandName)}<br/>
+          <strong>Content:</strong> ${escapeHtml(contentLabel)}<br/>
+          <strong>Stage:</strong> ${escapeHtml(stage || "unknown")}<br/>
+          <strong>Failure code:</strong> ${escapeHtml(failureCode || "unknown")}</p>
+          <div style="background:#fff5f2;border:1px solid #ffd5ca;border-radius:12px;padding:14px 16px;margin:18px 0;white-space:pre-wrap">${escapeHtml(safeMessage)}</div>
+          ${productSummary}
+          <a href="${appUrl}/admin/post-approvals" style="display:inline-block;background:#0b1724;color:white;text-decoration:none;padding:13px 18px;border-radius:10px;font-weight:700">Open admin review</a>
+        </div>`,
+        text: `Spreelo ${kind === "publish" ? "publishing" : "post generation"} failed\nBrand: ${brandName}\nContent: ${contentLabel}\nStage: ${stage || "unknown"}\nFailure code: ${failureCode || "unknown"}\n${safeMessage}\n${appUrl}/admin/post-approvals`,
+      }),
+    });
+
+    if (!response.ok) {
+      const providerError = await response.text().catch(() => "");
+      console.warn("Immediate admin failure alert email failed", {
+        occurrenceId,
+        postId,
+        failureCode,
+        stage,
+        providerError: String(providerError || "").slice(0, 1000),
+      });
+      return { sent: false, reason: "provider_error" };
+    }
+
+    console.info("Immediate admin failure alert email sent", {
+      occurrenceId,
+      postId,
+      failureCode,
+      stage,
+      recipients: recipients.length,
+    });
+    return { sent: true };
+  } catch (alertError) {
+    console.warn("Immediate admin failure alert email unavailable", {
+      occurrenceId,
+      postId,
+      failureCode,
+      stage,
+      message: alertError?.message || String(alertError || "Unknown email error"),
+    });
+    return { sent: false, reason: "transport_error" };
+  }
+}
+
 async function sendAutomationCreationFailureEmail({
   supabase,
   resendApiKey,
@@ -11128,13 +11246,45 @@ async function failAutomationOccurrenceTerminal({
         scheduledFor || getScheduledPublishAtIso(rule, new Date())
       )
     : null;
+  const repairProductItems = (
+    Array.isArray(metadata?.admin_product_items)
+      ? metadata.admin_product_items
+      : Array.isArray(metadata?.partial_products)
+        ? metadata.partial_products
+        : []
+  ).slice(0, 5);
+
+  const repairCaseValues = {
+    occurrence_id: occurrenceId,
+    user_id: rule.user_id,
+    brand_profile_id: rule.brand_profile_id || null,
+    automation_rule_id: rule.id,
+    status: "needs_repair",
+    scheduled_for: scheduledFor || getScheduledPublishAtIso(rule, new Date()),
+    campaign_title: rule.name || rule.campaign_theme || null,
+    content_type_label: rule.content_type_label || rule.post_type || null,
+    content_format: normalizeContentFormat(rule.content_format),
+    ...(repairProductItems.length ? { product_items: repairProductItems } : {}),
+    failure_code: failure.code,
+    failure_stage: stage || null,
+    failure_message: internalMessage,
+    needs_review: true,
+  };
+
+  // Create the durable repair case before finalizing the occurrence. This makes
+  // the admin workbench fail-safe even if the occurrence RPC itself is unavailable.
+  await upsertAdminReviewCase(supabase, repairCaseValues);
+
   const { data, error } = await supabase.rpc("fail_automation_occurrence_terminal", {
     p_occurrence_id: occurrenceId,
     p_failure_code: failure.code,
     p_internal_message: internalMessage,
     p_customer_message: failure.customerMessage,
     p_failure_stage: stage || null,
-    p_metadata: metadata || {},
+    p_metadata: {
+      ...(metadata || {}),
+      ...(repairProductItems.length ? { admin_product_items: repairProductItems } : {}),
+    },
     p_keep_rule_active: keepRuleActive,
     p_next_run_at: nextRunAt,
   });
@@ -11146,6 +11296,17 @@ async function failAutomationOccurrenceTerminal({
       message: error.message,
     });
     await setRuleError(supabase, rule.id, internalMessage);
+    await sendImmediateAdminFailureAlertEmail({
+      resendApiKey,
+      rule,
+      brandProfile,
+      occurrenceId,
+      failureCode: failure.code,
+      stage: stage || "occurrence_finalize",
+      message: `${internalMessage}\n\nOccurrence finalization also failed: ${error.message}`,
+      productItems: repairProductItems,
+      kind: "generation",
+    });
     return { handled: false, refundedCredits: 0, notificationStatus: "failed" };
   }
 
@@ -11153,21 +11314,7 @@ async function failAutomationOccurrenceTerminal({
   const refundedCredits = Math.max(0, Number(data?.refunded_credits || 0));
   let notificationStatus = String(data?.notification_status || "pending");
 
-  await upsertAdminReviewCase(supabase, {
-    occurrence_id: occurrenceId,
-    user_id: rule.user_id,
-    brand_profile_id: rule.brand_profile_id || null,
-    automation_rule_id: rule.id,
-    status: "needs_repair",
-    scheduled_for: scheduledFor || getScheduledPublishAtIso(rule, new Date()),
-    campaign_title: rule.name || rule.campaign_theme || null,
-    content_type_label: rule.content_type_label || rule.post_type || null,
-    content_format: normalizeContentFormat(rule.content_format),
-    failure_code: failure.code,
-    failure_stage: stage || null,
-    failure_message: internalMessage,
-    needs_review: true,
-  });
+  await upsertAdminReviewCase(supabase, repairCaseValues);
 
   if (handled) {
     let resolvedBrandProfile = brandProfile;
@@ -11183,6 +11330,18 @@ async function failAutomationOccurrenceTerminal({
         resolvedBrandProfile = null;
       }
     }
+
+    await sendImmediateAdminFailureAlertEmail({
+      resendApiKey,
+      rule,
+      brandProfile: resolvedBrandProfile,
+      occurrenceId,
+      failureCode: failure.code,
+      stage: stage || "unhandled",
+      message: internalMessage,
+      productItems: repairProductItems,
+      kind: "generation",
+    });
 
     const notification = await sendAutomationCreationFailureEmail({
       supabase,
@@ -23458,13 +23617,19 @@ Return only the required JSON structure.`.trim();
 
   const requestBody = {
       model: PRODUCT_RESEARCH_MODEL,
-      ...(useVerifiedEditorialPool ? {} : { tools: [
+      // This function exists specifically to repair a stale/mismatched exact
+      // product identity. It must always be allowed to search the retailer's
+      // official domain. Do not depend on the editorial-pool flag from the
+      // separate campaign-research function; that variable is not in this
+      // scope and previously disabled exact identity recovery at runtime.
+      tools: [
         {
           type: "web_search",
           filters: { allowed_domains: [allowedDomain] },
           search_context_size: "high",
         },
-      ], tool_choice: "required" }),
+      ],
+      tool_choice: "required",
       instructions,
       ...getReasoningOptionsForModel(PRODUCT_RESEARCH_MODEL),
       max_output_tokens: 4500,
@@ -33172,6 +33337,33 @@ async function publishApprovedSocialPosts({
         })
         .eq("id", post.id);
 
+      if (!shouldRetry) {
+        let publishBrandProfile = null;
+        if (post.brand_profile_id) {
+          const { data: loadedPublishBrand } = await supabase
+            .from("brand_profiles")
+            .select("id, business_name, website_url")
+            .eq("id", post.brand_profile_id)
+            .maybeSingle();
+          publishBrandProfile = loadedPublishBrand || null;
+        }
+        await sendImmediateAdminFailureAlertEmail({
+          resendApiKey,
+          rule: {
+            id: post.automation_rule_id || null,
+            content_type_label: post.post_type || post.content_format || "Social post",
+            content_format: post.content_format || null,
+          },
+          brandProfile: publishBrandProfile,
+          postId: post.id,
+          failureCode: authFailure ? "social_connection_auth_failed" : "social_publish_failed",
+          stage: `social_publish_${activePublishTarget || targets.join("_") || "unknown"}`,
+          message: error.message || "Social publishing failed",
+          productItems: [],
+          kind: "publish",
+        });
+      }
+
       summary.social_publish_failed += 1;
 
       if (targets.includes("facebook")) {
@@ -34162,7 +34354,16 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
           }
         }
 
-        if (websiteItem?.image_url) {
+        // Always run exact product-image verification when product objects are
+        // available. A missing image on the first selected product must never
+        // bypass verification for the rest of a carousel; the resolver may
+        // still recover an exact image from the product URL or reserves.
+        if (
+          websiteItem ||
+          (isCarouselRule(websitePreparedRule) &&
+            Array.isArray(websiteItems) &&
+            websiteItems.length > 0)
+        ) {
           const primaryItems = isCarouselRule(websitePreparedRule)
             ? websiteItems
             : [websiteItem];
@@ -34241,12 +34442,25 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
             websiteItem = websiteItems[0] || websiteItem;
 
             if (websiteItems.length < CAROUSEL_PRODUCT_SLIDE_TARGET) {
-              console.warn("Carousel image verification could not fill every product slot", {
+              console.error("Carousel product identity recovery exhausted before five exact products", {
                 ruleId: rule.id,
                 selectedProductCount: websiteItems.length,
                 resolvedReserveCount: resolvedReserveItems.length,
                 targetProductCount: CAROUSEL_PRODUCT_SLIDE_TARGET,
               });
+              const identityPoolError = new Error(
+                `Spreelo could verify only ${websiteItems.length} of ${CAROUSEL_PRODUCT_SLIDE_TARGET} exact carousel products. The post was blocked instead of creating an incomplete carousel or risking a wrong product.`
+              );
+              identityPoolError.code = "CAROUSEL_EXACT_PRODUCT_POOL_INCOMPLETE";
+              identityPoolError.verifiedProductCount = websiteItems.length;
+              identityPoolError.targetProductCount = CAROUSEL_PRODUCT_SLIDE_TARGET;
+              identityPoolError.partialProducts = websiteItems.map((item) => ({
+                title: item?.title || item?.item_title || "",
+                description: item?.description || item?.body || item?.reason || "",
+                url: item?.url || item?.item_url || item?.product_url || "",
+                image_url: item?.image_url || item?.imageUrl || "",
+              }));
+              throw identityPoolError;
             }
           } else {
             const exactIdentityCandidates = resolvedItems.filter(
@@ -35326,7 +35540,18 @@ product_research_model_used: websitePreparedRule.uses_website_content
             summary.skipped += 1;
           }
         } else if (automationOccurrenceClaimed && automationOccurrenceId) {
-          await failCurrentOccurrence(error, "unhandled");
+          const terminalFailureMetadata = {
+            ...(Array.isArray(error?.partialProducts) && error.partialProducts.length
+              ? { partial_products: error.partialProducts.slice(0, 5) }
+              : {}),
+            ...(Number.isFinite(Number(error?.verifiedProductCount))
+              ? { verified_product_count: Number(error.verifiedProductCount) }
+              : {}),
+            ...(Number.isFinite(Number(error?.targetProductCount))
+              ? { target_product_count: Number(error.targetProductCount) }
+              : {}),
+          };
+          await failCurrentOccurrence(error, "unhandled", terminalFailureMetadata);
           summary.errors += 1;
         } else {
           await setRuleError(supabase, rule.id, message);

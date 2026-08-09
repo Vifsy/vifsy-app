@@ -80,7 +80,9 @@
     "test:v143.54": "node scripts/test-v143-54-pinterest-clickthrough-product-label.mjs",
     "test:v143.55": "node scripts/test-v143-55-pinterest-idempotency-premium-label.mjs",
     "test:v143.56": "node scripts/test-v143-56-consistent-carousel-glass-labels.mjs",
-    "test:v143.57": "node scripts/test-v143-57-product-identity-integrity.mjs"
+    "test:v143.57": "node scripts/test-v143-57-product-identity-integrity.mjs",
+    "test:v143.58": "node scripts/test-v143-58-exact-product-fail-closed-recovery.mjs",
+    "test:v143.59": "node scripts/test-v143-59-admin-repair-immediate-alerts.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
