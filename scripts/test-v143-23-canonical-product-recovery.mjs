@@ -56,8 +56,11 @@ const hydrate = extractFunction(
 assert.match(hydrate, /technicalPageRateLimited[\s\S]*console\.warn[\s\S]*console\.info/);
 assert.match(
   hydrate,
-  /console\.info\("Authoritative GPT-5\.5 product lacked a usable technical image asset"/
+  /console\.info\("Authoritative product page did not expose one lockable main-product object"/,
+  "authoritative recovery must fail closed when one exact main-product object cannot be locked"
 );
+assert.match(hydrate, /extractLockedProductObjectFromHtml/);
+assert.doesNotMatch(hydrate, /extractBestProductImageFromHtml|collectProductImageCandidates/);
 assert.match(
   route,
   /console\.warn\("Final clean-product image review was unavailable; keeping only identity-verified images"/

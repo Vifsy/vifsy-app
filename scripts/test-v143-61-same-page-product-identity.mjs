@@ -48,12 +48,12 @@ assert.equal(
 
 assert.match(
   route,
-  /Authoritative product page identity mismatch blocked before image hydration/,
-  "hydration must reject a product URL whose live page title is a different product"
+  /Locked product page object created/,
+  "hydration must replace research hints with one authoritative product-page object"
 );
 assert.match(
   route,
-  /initial web-research result is[\s\S]{0,180}NOT enough on its own/,
+  /initialResearchImageIgnored/,
   "an initial model image URL must not be treated as same-page product proof"
 );
 assert.match(
@@ -87,7 +87,7 @@ const semanticEnd = route.indexOf("async function reviewCarouselProductOnlyImage
 const semantic = route.slice(semanticStart, semanticEnd);
 assert.match(semantic, /detail: "high"/);
 assert.match(semantic, /Number\(review\.confidence \|\| 0\) >= 0\.9/);
-assert.match(semantic, /pencil case vs a backpack/);
+assert.match(semantic, /same-page lock is the primary source of truth/i);
 
 assert.match(
   route,

@@ -161,8 +161,18 @@ const hydrationEnd = routeSource.indexOf(
 const hydrationSource = routeSource.slice(hydrationStart, hydrationEnd);
 assert.match(
   hydrationSource,
-  /const imageUrl\s*=\s*productImage\s*\|\|\s*pageImage\s*\|\|/,
-  "the authoritative web-agent path must prefer Product.image"
+  /extractLockedProductObjectFromHtml/,
+  "the authoritative web-agent path must build one locked product object from the exact page"
+);
+assert.match(
+  hydrationSource,
+  /lockedProduct\.primaryImageUrl/,
+  "the authoritative web-agent path must take the image from the locked main-product object"
+);
+assert.doesNotMatch(
+  hydrationSource,
+  /extractBestProductImageFromHtml|collectProductImageCandidates/,
+  "the authoritative web-agent path must not search unrelated page imagery after locking the product page"
 );
 
 const resolverStart = routeSource.indexOf(

@@ -6581,7 +6581,7 @@ async function prepareCarouselProductsForRule({
             getPrimaryCampaignResearchRank(right)
         );
 
-        // v143.63: the six-product requirement belongs AFTER the final image
+        // v143.64: the six-product requirement belongs AFTER the final image
         // identity gate, not after technical hydration. Resolve and visually
         // verify each newly hydrated product before deciding whether another
         // research round is required. Rejected products stay excluded so the
@@ -19557,18 +19557,207 @@ function collectImageValuesFromObject(value, results = []) {
   return results;
 }
 
-function getProductImageFromJsonLd(product, pageUrl) {
+function getProductImagesFromJsonLd(product, pageUrl) {
   const rawImages = collectImageValuesFromObject(product?.image);
+  const seen = new Set();
+  const images = [];
 
   for (const rawImage of rawImages) {
     const resolvedUrl = rawImage ? resolveUrl(rawImage, pageUrl) : null;
-
-    if (resolvedUrl && isHttpUrl(resolvedUrl) && !isBadProductImageUrl(resolvedUrl)) {
-      return resolvedUrl;
+    if (
+      !resolvedUrl ||
+      !isHttpUrl(resolvedUrl) ||
+      isBadProductImageUrl(resolvedUrl)
+    ) {
+      continue;
     }
+    const key = canonicalProductImageAssetKey(resolvedUrl) || resolvedUrl;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    images.push(resolvedUrl);
+    if (images.length >= 12) break;
   }
 
-  return null;
+  return images;
+}
+
+function getProductImageFromJsonLd(product, pageUrl) {
+  return getProductImagesFromJsonLd(product, pageUrl)[0] || null;
+}
+
+function extractCanonicalProductPageUrl(html, pageUrl) {
+  const linkTags = String(html || "").match(/<link\b[^>]*>/gi) || [];
+  for (const tag of linkTags) {
+    const rel = String(getAttributeValueFromTag(tag, "rel") || "").toLowerCase();
+    if (!rel.split(/\s+/).includes("canonical")) continue;
+    const href = normalizeEscapedUrl(getAttributeValueFromTag(tag, "href"));
+    const resolved = href ? resolveUrl(href, pageUrl) : null;
+    if (resolved && isHttpUrl(resolved)) return resolved;
+  }
+  return pageUrl || "";
+}
+
+function getStructuredProductIdentifier(product, pageUrl = "") {
+  const explicit = String(
+    product?.sku ||
+      product?.mpn ||
+      product?.productID ||
+      product?.gtin14 ||
+      product?.gtin13 ||
+      product?.gtin12 ||
+      product?.gtin8 ||
+      ""
+  ).trim();
+  if (explicit) return explicit;
+  return getAuthoritativeProductIdentityHints({ url: pageUrl })[0] || "";
+}
+
+function getStructuredProductBrand(product) {
+  const raw =
+    typeof product?.brand === "string"
+      ? product.brand
+      : product?.brand?.name ||
+        product?.manufacturer?.name ||
+        product?.manufacturer ||
+        "";
+  return String(raw || "").trim();
+}
+
+function findExactPageJsonLdProduct(html, pageUrl) {
+  const products = extractJsonLdObjects(html).filter((item) =>
+    normalizeJsonLdType(item?.["@type"]).some((type) => type.includes("product"))
+  );
+  if (!products.length) return null;
+
+  const canonicalPage = normalizeComparableValue(
+    canonicalizeWebsiteProductUrl(pageUrl, pageUrl) || pageUrl
+  );
+  const exact = products.find((product) => {
+    const productUrl = getProductUrlFromJsonLd(product, pageUrl);
+    const comparable = normalizeComparableValue(
+      canonicalizeWebsiteProductUrl(productUrl, pageUrl) || productUrl
+    );
+    return canonicalPage && comparable && canonicalPage === comparable;
+  });
+  if (exact) return exact;
+
+  // A single Product entity on a direct product page is unambiguous. If the
+  // page exposes several Product entities and none points to the current URL,
+  // do not guess which recommendation/variant is the main product.
+  return products.length === 1 ? products[0] : null;
+}
+
+function buildLockedProductIdentityFingerprint({
+  url,
+  identifier,
+  title,
+  primaryImageUrl,
+}) {
+  return crypto
+    .createHash("sha256")
+    .update(
+      [
+        normalizeComparableValue(url),
+        normalizeComparableValue(identifier),
+        normalizeComparableValue(title),
+        canonicalProductImageAssetKey(primaryImageUrl) ||
+          normalizeComparableValue(primaryImageUrl),
+      ].join("|")
+    )
+    .digest("hex")
+    .slice(0, 24);
+}
+
+function extractLockedProductObjectFromHtml({ html, pageUrl, websiteUrl }) {
+  if (!html || !pageUrl) return null;
+
+  const canonicalUrl =
+    canonicalizeWebsiteProductUrl(
+      extractCanonicalProductPageUrl(html, pageUrl),
+      websiteUrl || pageUrl
+    ) || pageUrl;
+  if (
+    !canonicalUrl ||
+    !isHttpUrl(canonicalUrl) ||
+    (websiteUrl && !isSameOrSubdomainUrl(canonicalUrl, websiteUrl)) ||
+    (websiteUrl && !matchesConfiguredWebsiteMarket(canonicalUrl, websiteUrl)) ||
+    isLikelyNonProductUrl(canonicalUrl, websiteUrl || pageUrl) ||
+    isLikelyBadDiscoveryPageUrl(canonicalUrl, websiteUrl || pageUrl)
+  ) {
+    return null;
+  }
+
+  const product = findExactPageJsonLdProduct(html, canonicalUrl);
+  const structuredImages = product
+    ? getProductImagesFromJsonLd(product, canonicalUrl)
+    : [];
+  const ogImageRaw = getMetaContent(html, ["og:image", "twitter:image"]);
+  const ogImage = ogImageRaw ? resolveUrl(ogImageRaw, canonicalUrl) : null;
+  const canUsePageMetadataImage = Boolean(
+    product ||
+      /\bproduct\b/i.test(getMetaContent(html, ["og:type"])) ||
+      isLikelyProductDetailUrl(canonicalUrl)
+  );
+  const imageUrls = [...structuredImages];
+  if (
+    canUsePageMetadataImage &&
+    ogImage &&
+    isHttpUrl(ogImage) &&
+    !isBadProductImageUrl(ogImage) &&
+    !imageUrls.some(
+      (value) =>
+        (canonicalProductImageAssetKey(value) || value) ===
+        (canonicalProductImageAssetKey(ogImage) || ogImage)
+    )
+  ) {
+    imageUrls.push(ogImage);
+  }
+
+  const rawTitle =
+    String(product?.name || "").trim() ||
+    String(getMetaContent(html, ["og:title", "twitter:title"]) || "").trim() ||
+    String(extractPageTitle(html) || "").trim();
+  const title = sanitizeProductTitleForCard(rawTitle) || rawTitle;
+  const primaryImageUrl = imageUrls[0] || "";
+  if (!title || !primaryImageUrl) return null;
+
+  const identifier = getStructuredProductIdentifier(product, canonicalUrl);
+  const brand = getStructuredProductBrand(product);
+  const category = String(
+    product?.category || getMetaContent(html, ["product:category", "category"]) || ""
+  ).trim();
+  const color = String(
+    product?.color || getMetaContent(html, ["product:color", "color"]) || ""
+  ).trim();
+  const description = String(
+    product?.description ||
+      getMetaContent(html, ["og:description", "description", "twitter:description"]) ||
+      ""
+  ).trim();
+  const price = product ? getProductPriceFromJsonLd(product) : "";
+  const source = structuredImages.length
+    ? "json_ld_main_product_object"
+    : "page_level_product_metadata";
+
+  return {
+    title,
+    url: canonicalUrl,
+    identifier,
+    brand,
+    category,
+    color,
+    description,
+    price,
+    primaryImageUrl,
+    imageUrls: imageUrls.slice(0, 12),
+    source,
+    fingerprint: buildLockedProductIdentityFingerprint({
+      url: canonicalUrl,
+      identifier,
+      title,
+      primaryImageUrl,
+    }),
+  };
 }
 
 function getProductPricingFromJsonLd(product) {
@@ -23738,13 +23927,16 @@ For every supplied product:
 - Find the CURRENT canonical direct product page for the SAME product in the same country/market as ${websiteUrl}.
 - A stale URL may come from an older commerce platform or search index. Prefer the retailer's current canonical URL structure.
 - Open the current official result immediately before returning it. Confirm that it loads as a live product page rather than a 404, redirect loop, search result, category or cached snippet.
+- Treat the MAIN PRODUCT block on the opened product detail page as one indivisible object. Read current_title, product_identifier/SKU, brand, category, color, current_price and the main image from that same main-product block.
 - Return the best direct product-image file URL that is visibly attached to the MAIN PRODUCT on that exact opened product detail page.
-- The image and current_title must come from the same opened current_url. Never borrow an image from recommendations, related products, search-result cards, colour swatches, "more from the brand" sections or image-search thumbnails.
+- The image, current_title and product facts must come from the same opened current_url and the same main-product block. Never borrow an image or text from recommendations, related products, search-result cards, colour swatches, "more from the brand" sections or image-search thumbnails.
 - Set image_source_page_url to the exact product detail page where the returned image is attached to the main product, and set image_is_main_product_asset=true only when you verified that relationship.
 - The image must be a real product image, not a logo, icon, placeholder, category banner, editorial hero or guessed URL.
 - Preserve original_rank exactly. Return no row when the same identity cannot be evidenced.
-- Do not substitute a similar product. Color/size variants are acceptable only when they are the same underlying product identity.
+- Do not substitute a similar product or a different colour/size/style variant when the selected title, URL or identity hints specify a variant. If the exact selected variant cannot be evidenced, return no row.
 - Treat model/style/article identifiers as stronger evidence than shared brand, colour, campaign or category words.
+- Return image_alt_text when the main image exposes it, otherwise an empty string.
+- Return main_product_evidence as a concise description of the main-product block that jointly proves the title and image belong together.
 - Keep identity_evidence concise and state the exact title, SKU/product number or other official evidence that proves the match.
 
 Return only the required JSON structure.`.trim();
@@ -23801,6 +23993,12 @@ Return only the required JSON structure.`.trim();
                     image_source_page_url: { type: "string" },
                     image_is_main_product_asset: { type: "boolean" },
                     product_identifier: { type: "string" },
+                    brand: { type: "string" },
+                    category: { type: "string" },
+                    color: { type: "string" },
+                    current_price: { type: "string" },
+                    image_alt_text: { type: "string" },
+                    main_product_evidence: { type: "string" },
                     identity_hints: {
                       type: "array",
                       items: { type: "string" },
@@ -23816,6 +24014,12 @@ Return only the required JSON structure.`.trim();
                     "image_source_page_url",
                     "image_is_main_product_asset",
                     "product_identifier",
+                    "brand",
+                    "category",
+                    "color",
+                    "current_price",
+                    "image_alt_text",
+                    "main_product_evidence",
                     "identity_hints",
                     "identity_evidence",
                   ],
@@ -23932,6 +24136,13 @@ Return only the required JSON structure.`.trim();
         String(repairedProduct?.product_identifier || "").trim() ||
         selectedCandidate?.product_identifier ||
         "",
+      product_brand:
+        String(repairedProduct?.brand || "").trim() ||
+        selectedCandidate?.product_brand ||
+        "",
+      category: String(repairedProduct?.category || "").trim(),
+      product_color: String(repairedProduct?.color || "").trim(),
+      price: String(repairedProduct?.current_price || "").trim(),
       technical_identity_recovered: true,
       technical_identity_recovery_source:
         "gpt55_exact_canonical_asset_repair",
@@ -23939,6 +24150,32 @@ Return only the required JSON structure.`.trim();
       product_image_page_bound: true,
       product_image_page_bound_source: "gpt55_exact_repair_same_page",
       product_image_source_page_url: imageSourcePageUrl,
+      product_identity_locked: true,
+      locked_product_source: "gpt55_main_product_block",
+      locked_product_url: currentUrl,
+      locked_product_title:
+        String(repairedProduct?.current_title || "").trim() ||
+        selectedCandidate.title,
+      locked_product_identifier:
+        String(repairedProduct?.product_identifier || "").trim() || "",
+      locked_product_brand: String(repairedProduct?.brand || "").trim(),
+      locked_product_category: String(repairedProduct?.category || "").trim(),
+      locked_product_color: String(repairedProduct?.color || "").trim(),
+      locked_product_price: String(repairedProduct?.current_price || "").trim(),
+      locked_product_primary_image_url: imageUrl,
+      locked_product_image_urls: [imageUrl],
+      locked_product_image_alt_text: String(
+        repairedProduct?.image_alt_text || ""
+      ).trim(),
+      locked_product_evidence: String(
+        repairedProduct?.main_product_evidence || ""
+      ).trim(),
+      locked_product_fingerprint: buildLockedProductIdentityFingerprint({
+        url: currentUrl,
+        identifier: repairedProduct?.product_identifier,
+        title: repairedProduct?.current_title,
+        primaryImageUrl: imageUrl,
+      }),
       technical_identity_evidence: String(
         repairedProduct?.identity_evidence || ""
       ).trim(),
@@ -23980,199 +24217,181 @@ async function hydrateAuthoritativeWebAgentProduct({
     const logProductFetchFailure = technicalPageRateLimited
       ? console.warn
       : console.info;
-    logProductFetchFailure("Authoritative GPT-5.5 product page could not be fetched; exact same-page asset proof is now required", {
-      productUrl: candidate?.url,
-      title: candidate?.title,
-      message: error?.message,
-      technicalPageRateLimited,
-    });
+    logProductFetchFailure(
+      "Authoritative GPT-5.5 product page could not be fetched; locked main-product object is required",
+      {
+        productUrl: candidate?.url,
+        title: candidate?.title,
+        message: error?.message,
+        technicalPageRateLimited,
+      }
+    );
   }
 
-  // A model-provided image must never make a known missing product URL usable.
-  if (technicalPageStatus === 404) {
-    console.warn("Authoritative GPT-5.5 product rejected because its direct product page returned 404", {
+  if ([404, 410].includes(technicalPageStatus)) {
+    console.warn("Authoritative GPT-5.5 product rejected because its direct product page is gone", {
       rank: getPrimaryCampaignResearchRank(candidate),
       productUrl: candidate?.url,
       title: candidate?.title,
-    });
-    return null;
-  }
-  if (technicalPageStatus === 410) {
-    console.warn("Authoritative GPT-5.5 product rejected because its direct product page returned 410", {
-      rank: getPrimaryCampaignResearchRank(candidate),
-      productUrl: candidate?.url,
-      title: candidate?.title,
+      status: technicalPageStatus,
     });
     return null;
   }
 
-  const product = html
-    ? findBestJsonLdProduct(html, candidate.url, candidate.title)
+  // v143.64 source-of-truth contract: one product page produces one locked
+  // product object. Title/text/SKU/category/colour and the image are extracted
+  // together from the exact page's Product object (or page-level product
+  // metadata). The initial research image and generic recommendations gallery
+  // are deliberately ignored.
+  let lockedProduct = html
+    ? extractLockedProductObjectFromHtml({
+        html,
+        pageUrl: candidate.url,
+        websiteUrl,
+      })
     : null;
-  const pageTitle =
-    String(product?.name || "").trim() ||
-    (html ? String(extractPageTitle(html) || "").trim() : "");
-  const selectedTitle = String(candidate?.title || "").trim();
 
-  // Product URL, product information and product image must describe the same
-  // concrete item. A live page for a different model is a hard failure and is
-  // sent to exact recovery instead of borrowing that page's image.
-  if (
-    html &&
-    selectedTitle &&
-    pageTitle &&
-    !haveProductTitlesIdentityAgreement(selectedTitle, pageTitle)
-  ) {
-    console.warn("Authoritative product page identity mismatch blocked before image hydration", {
+  // Some retailers block Spreelo's technical fetch while the web-research
+  // agent can still open the exact product page. In that bounded fallback we
+  // accept only an already locked main-product object returned by exact repair;
+  // never a loose image URL from the initial research result or catalog cache.
+  if (!lockedProduct && candidate?.product_identity_locked === true) {
+    const repairedUrl = String(candidate?.locked_product_url || candidate?.url || "").trim();
+    const repairedImage = String(
+      candidate?.locked_product_primary_image_url || candidate?.image_url || ""
+    ).trim();
+    const repairedTitle = String(
+      candidate?.locked_product_title || candidate?.title || ""
+    ).trim();
+    const repairedSourcePage = String(
+      candidate?.product_image_source_page_url || repairedUrl
+    ).trim();
+    const samePage = Boolean(
+      repairedUrl &&
+        repairedSourcePage &&
+        normalizeComparableValue(
+          canonicalizeWebsiteProductUrl(repairedUrl, websiteUrl) || repairedUrl
+        ) ===
+          normalizeComparableValue(
+            canonicalizeWebsiteProductUrl(repairedSourcePage, websiteUrl) ||
+              repairedSourcePage
+          )
+    );
+    if (
+      samePage &&
+      repairedTitle &&
+      isHttpUrl(repairedUrl) &&
+      isSameOrSubdomainUrl(repairedUrl, websiteUrl) &&
+      matchesConfiguredWebsiteMarket(repairedUrl, websiteUrl) &&
+      isHttpUrl(repairedImage) &&
+      !isBadProductImageUrl(repairedImage)
+    ) {
+      lockedProduct = {
+        title: repairedTitle,
+        url: repairedUrl,
+        identifier: String(candidate?.locked_product_identifier || "").trim(),
+        brand: String(candidate?.locked_product_brand || candidate?.product_brand || "").trim(),
+        category: String(candidate?.locked_product_category || candidate?.category || "").trim(),
+        color: String(candidate?.locked_product_color || candidate?.product_color || "").trim(),
+        description: String(candidate?.description || candidate?.reason || "").trim(),
+        price: String(candidate?.locked_product_price || "").trim(),
+        primaryImageUrl: repairedImage,
+        imageUrls: Array.isArray(candidate?.locked_product_image_urls)
+          ? candidate.locked_product_image_urls.filter(Boolean).slice(0, 12)
+          : [repairedImage],
+        source: String(candidate?.locked_product_source || "gpt55_main_product_block"),
+        fingerprint:
+          String(candidate?.locked_product_fingerprint || "").trim() ||
+          buildLockedProductIdentityFingerprint({
+            url: repairedUrl,
+            identifier: candidate?.locked_product_identifier,
+            title: repairedTitle,
+            primaryImageUrl: repairedImage,
+          }),
+      };
+    }
+  }
+
+  if (!lockedProduct) {
+    console.info("Authoritative product page did not expose one lockable main-product object", {
       rank: getPrimaryCampaignResearchRank(candidate),
-      selectedTitle,
-      pageTitle,
       productUrl: candidate?.url,
+      researchTitle: candidate?.title,
+      pageFetched: Boolean(html),
+      initialResearchImageIgnored: Boolean(candidate?.image_url),
+      cachedImageIgnored: Boolean(cachedItem?.image_url),
     });
     return null;
   }
 
-  const rawTitle =
-    pageTitle ||
-    selectedTitle ||
-    (html ? extractPageTitle(html) : "");
-  const title = sanitizeProductTitleForCard(rawTitle) || rawTitle;
-  const description =
-    String(product?.description || "").trim() ||
-    String(candidate?.reason || "").trim() ||
-    (html
-      ? String(
-          getMetaContent(html, [
-            "description",
-            "og:description",
-            "twitter:description",
-          ]) || ""
-        ).trim()
-      : "");
-
-  const productImage = product
-    ? getProductImageFromJsonLd(product, candidate.url)
-    : null;
-  const pageImage = html
-    ? extractBestProductImageFromHtml(html, candidate.url, title)
-    : null;
-  const pageBoundImage = productImage || pageImage || null;
-
-  const cachedPageBoundImage =
-    cachedItem?.product_image_page_bound === true &&
-    isHttpUrl(cachedItem?.image_url) &&
-    !isBadProductImageUrl(cachedItem.image_url)
-      ? cachedItem.image_url
-      : null;
-  const repairedPageBoundImage =
-    candidate?.technical_identity_same_page_verified === true &&
-    candidate?.product_image_page_bound === true &&
-    isHttpUrl(candidate?.image_url) &&
-    !isBadProductImageUrl(candidate.image_url)
-      ? candidate.image_url
-      : null;
-
-  // Important: an image URL returned by the initial web-research result is
-  // NOT enough on its own. It may be a related/recommended product image from
-  // the same retailer page. Either parse the exact product page here or use a
-  // recovery result that explicitly proved title + URL + image on one page.
-  const imageUrl =
-    productImage ||
-    pageImage ||
-    cachedPageBoundImage ||
-    repairedPageBoundImage ||
-    null;
-  const productImagePageBoundSource = productImage
-    ? "product_json_ld_same_page"
-    : pageImage
-      ? "main_gallery_same_page"
-      : cachedPageBoundImage
-        ? "cached_same_page_verified"
-        : repairedPageBoundImage
-          ? "gpt55_exact_repair_same_page"
-          : "unbound";
-  const imageSourcePageUrl = pageBoundImage
-    ? candidate.url
-    : cachedPageBoundImage
-      ? String(
-          cachedItem?.product_image_source_page_url ||
-            cachedItem?.url ||
-            candidate.url ||
-            ""
-        ).trim()
-      : repairedPageBoundImage
-        ? String(
-            candidate?.product_image_source_page_url || candidate?.url || ""
-          ).trim()
-        : "";
-
-  const productPrice = product ? getProductPriceFromJsonLd(product) : "";
   const normalized = normalizeWebsiteItem(
     {
-      title,
+      title: lockedProduct.title,
       type: "product",
-      url: candidate.url,
-      description,
-      price: productPrice || candidate?.price || cachedItem?.price || "",
-      image_url: imageUrl,
+      url: lockedProduct.url,
+      description:
+        lockedProduct.description || String(candidate?.reason || "").trim(),
+      price: lockedProduct.price || "",
+      image_url: lockedProduct.primaryImageUrl,
     },
     websiteUrl
   );
-
   if (!normalized?.title || !normalized?.url || !normalized?.image_url) {
-    console.info("Authoritative GPT-5.5 product lacked a usable technical image asset", {
-      rank: getPrimaryCampaignResearchRank(candidate),
-      productUrl: candidate?.url,
-      title: candidate?.title,
-      pageFetched: Boolean(html),
-      modelImageProvided: Boolean(candidate?.image_url),
-      exactRepairBound:
-        candidate?.technical_identity_same_page_verified === true,
-    });
     return null;
   }
 
-  const structuredProductIdentifier = String(
-    product?.sku ||
-      product?.mpn ||
-      product?.productID ||
-      product?.gtin14 ||
-      product?.gtin13 ||
-      product?.gtin12 ||
-      product?.gtin8 ||
-      ""
-  ).trim();
-  const structuredBrandValue =
-    typeof product?.brand === "string"
-      ? product.brand
-      : product?.brand?.name || product?.manufacturer?.name || product?.manufacturer || "";
-  const structuredProductBrand = String(structuredBrandValue || "").trim();
+  console.info("Locked product page object created", {
+    rank: getPrimaryCampaignResearchRank(candidate),
+    productUrl: normalized.url,
+    title: normalized.title,
+    identifier: lockedProduct.identifier || null,
+    brand: lockedProduct.brand || null,
+    category: lockedProduct.category || null,
+    color: lockedProduct.color || null,
+    imageSource: lockedProduct.source,
+    imageCount: lockedProduct.imageUrls.length,
+    fingerprint: lockedProduct.fingerprint,
+  });
 
   return {
     ...candidate,
     ...normalized,
-    product_identifier:
-      structuredProductIdentifier || candidate?.product_identifier || "",
-    product_brand:
-      structuredProductBrand || candidate?.product_brand || candidate?.brand || "",
+    // The exact product page is now authoritative. The web-research title,
+    // brand and image were navigation hints only and cannot overwrite it.
+    title: normalized.title,
+    url: normalized.url,
+    image_url: normalized.image_url,
+    product_identifier: lockedProduct.identifier || "",
+    product_brand: lockedProduct.brand || "",
+    category: lockedProduct.category || "",
+    product_color: lockedProduct.color || "",
     reason: candidate?.reason || "",
     item_key: createItemKey(normalized),
     page_type: "product",
     page_type_confidence: 100,
-    // GPT-5.5 selected the product editorially. Technical hydration is now
-    // strict about binding the exact title/URL to the image asset.
-    product_page_verified: false,
-    product_confidence: 95,
-    product_schema_verified: Boolean(product),
-    ecommerce_proof_found: Boolean(product),
-    concrete_product_verified: null,
+    product_page_verified: true,
+    product_confidence: 100,
+    product_schema_verified:
+      lockedProduct.source === "json_ld_main_product_object",
+    ecommerce_proof_found: true,
+    concrete_product_verified: true,
     authoritative_web_agent_selected: true,
+    product_identity_locked: true,
+    locked_product_source: lockedProduct.source,
+    locked_product_url: normalized.url,
+    locked_product_title: normalized.title,
+    locked_product_identifier: lockedProduct.identifier || "",
+    locked_product_brand: lockedProduct.brand || "",
+    locked_product_category: lockedProduct.category || "",
+    locked_product_color: lockedProduct.color || "",
+    locked_product_price: lockedProduct.price || "",
+    locked_product_primary_image_url: normalized.image_url,
+    locked_product_image_urls: lockedProduct.imageUrls,
+    locked_product_fingerprint: lockedProduct.fingerprint,
     product_image_page_bound: true,
-    product_image_page_bound_source: productImagePageBoundSource,
-    product_image_source_page_url: imageSourcePageUrl || candidate.url,
-    technical_identity_same_page_verified:
-      candidate?.technical_identity_same_page_verified === true ||
-      Boolean(pageBoundImage),
+    product_image_page_bound_source: lockedProduct.source,
+    product_image_source_page_url: normalized.url,
+    technical_identity_same_page_verified: true,
     technical_page_rate_limited: technicalPageRateLimited,
     technical_page_fetched: Boolean(html),
     technical_page_status: technicalPageStatus,
@@ -24735,9 +24954,10 @@ Return the result in the required JSON structure. Keep each reason concise and g
       .filter(([key]) => Boolean(key))
   );
 
-  // Preserve GPT-5.5's exact order. This loop only obtains the title, price
-  // and largest usable image asset from each chosen product page. It does not
-  // call Product Engine, score campaign fit or reject a product semantically.
+  // Preserve GPT-5.5's exact order. Each direct URL is reopened and converted
+  // into one locked main-product object. The page itself supplies the public
+  // title/text and image together; the research image is never an identity
+  // source and no generic recommendations gallery is consulted here.
   for (const candidate of rankedCandidates) {
     if (
       Number.isFinite(deadlineMs) &&
@@ -30785,7 +31005,106 @@ async function resolveLargestProductImagesBeforeGeneration({
       !strictPageBindingRequired || primaryImageHasSamePageProof
     );
 
-    // Products that passed the v143.63 final exact identity gate already use
+    const hasLockedProductObject = Boolean(
+      item?.product_identity_locked === true &&
+        item?.technical_identity_same_page_verified === true &&
+        primaryImageUrl &&
+        String(item?.locked_product_primary_image_url || primaryImageUrl).trim() ===
+          primaryImageUrl
+    );
+    if (hasLockedProductObject && (sharedPrimaryImageRejected || !primaryImageAnchorAllowed)) {
+      resolutions.push({
+        item,
+        html: "",
+        pageUrl,
+        primaryImageUrl,
+        primaryAssetKey,
+        identityAnchorImageUrl: "",
+        sharedPrimaryImageRejected,
+        pageIdentityMismatch: false,
+        staticCandidates: [],
+        selection: null,
+        browserUsed: false,
+        renderedCandidateCount: 0,
+        lockedProductObject: true,
+      });
+      console.warn("Locked product page object rejected without alternate image search", {
+        ruleId,
+        productUrl: pageUrl || null,
+        productTitle: item?.title || null,
+        sharedPrimaryImageRejected,
+        samePageBindingValid: primaryImageAnchorAllowed,
+      });
+      continue;
+    }
+
+    const lockedProductObject = Boolean(
+      hasLockedProductObject &&
+        primaryImageAnchorAllowed &&
+        !sharedPrimaryImageRejected
+    );
+    if (lockedProductObject) {
+      let inspected = null;
+      try {
+        inspected = await inspectImage(primaryImageUrl);
+      } catch (error) {
+        console.warn("Locked product page image could not be downloaded", {
+          ruleId,
+          productUrl: pageUrl || null,
+          productTitle: item?.title || null,
+          imageUrl: primaryImageUrl,
+          message: error?.message || String(error),
+        });
+      }
+      const downloadable = Boolean(
+        inspected?.width > 0 && inspected?.height > 0 && inspected?.bytes > 0
+      );
+      resolutions.push({
+        item,
+        html: "",
+        pageUrl,
+        primaryImageUrl,
+        primaryAssetKey,
+        identityAnchorImageUrl: primaryImageUrl,
+        sharedPrimaryImageRejected: false,
+        pageIdentityMismatch: false,
+        staticCandidates: [],
+        selection: downloadable
+          ? {
+              selected: {
+                url: primaryImageUrl,
+                source: item?.locked_product_source || "locked_product_page_object",
+                width: Number(inspected?.width || 0) || null,
+                height: Number(inspected?.height || 0) || null,
+                identityVerified: true,
+                identityMethod: "locked_product_page_object",
+                fingerprintSimilarity: 1,
+              },
+              verifiedCandidates: [],
+              usedSmallImageFallback: !(
+                Number(inspected?.width || 0) >= 1000 &&
+                Number(inspected?.height || 0) >= 1000
+              ),
+            }
+          : null,
+        browserUsed: false,
+        renderedCandidateCount: 0,
+        lockedProductObject: true,
+      });
+      console.info("Product image resolver reused locked main-product asset", {
+        ruleId,
+        productUrl: pageUrl || null,
+        productTitle: item?.title || null,
+        productIdentifier: item?.locked_product_identifier || null,
+        imageUrl: primaryImageUrl,
+        downloadable,
+        width: Number(inspected?.width || 0) || null,
+        height: Number(inspected?.height || 0) || null,
+      });
+      continue;
+    }
+
+    // Products that passed the v143.64 locked page-object identity gate already use
     // the largest verified same-page asset. Do not fetch and reinterpret the
     // retailer page a second time later in the same generation run. This both
     // protects the time budget and prevents a recommendations grid from
@@ -30930,6 +31249,7 @@ async function resolveLargestProductImagesBeforeGeneration({
   const browserNeeded = resolutions.filter(
     (resolution) =>
       resolution.pageUrl &&
+      !resolution.lockedProductObject &&
       !resolution.pageIdentityMismatch &&
       !isPreferredProductImage(resolution.selection?.selected)
   );
@@ -31175,6 +31495,16 @@ async function reviewResolvedProductImageIdentity({
           item?.url || item?.product_url || item?.item_url || ""
         ).trim(),
         expectedBrand: getExpectedProductBrand(item),
+        expectedIdentifier: String(
+          item?.locked_product_identifier || item?.product_identifier || ""
+        ).trim(),
+        expectedCategory: String(
+          item?.locked_product_category || item?.category || ""
+        ).trim(),
+        expectedColor: String(
+          item?.locked_product_color || item?.product_color || ""
+        ).trim(),
+        lockedSource: String(item?.locked_product_source || "").trim(),
         ...candidate,
         url,
       });
@@ -31201,8 +31531,8 @@ async function reviewResolvedProductImageIdentity({
         "This is a safety gate: false positives are worse than rejecting an image. Treat a correct result as the official clean catalogue/packshot image or another clearly matching image of the exact named product. Match the product type and, when visible or named, the brand/model/design. " +
         "A different product category or conflicting visible brand/model must be rejected (for example sneakers vs a clothing set, or one brand/model of backpack vs a different one). " +
         "If an expected brand is supplied and a different visible logo/brand is present, observed_brand must name the visible brand and brand_or_model_conflict MUST be true. Never call Nike consistent with The North Face, Adidas consistent with Nike, or any equivalent cross-brand mismatch. " +
-        "Color variation alone may be accepted when the same product/model is clearly shown. People or animals are allowed if they are genuinely showing the named product. " +
-        "Do not infer that an image is correct merely because it came from the same webpage. A pencil case vs a backpack, one shoe model vs another, or any other product-type/model mismatch must be rejected even when brand/collection/colour words overlap.",
+        "When the locked product page explicitly names a colour/variant, a clearly conflicting colour/design is evidence that the image is not the locked item. People or animals are allowed if they are genuinely showing the named product. " +
+        "The same-page lock is the primary source of truth; this visual check is only a final safety belt. Reject an obvious product-type/model/variant conflict rather than trying to repair it with a different image.",
     },
   ];
 
@@ -31212,8 +31542,12 @@ async function reviewResolvedProductImageIdentity({
       text:
         `ID ${option.id}; product title: ${option.title}; ` +
         `expected brand: ${option.expectedBrand || "not provided"}; ` +
+        `locked identifier: ${option.expectedIdentifier || "not provided"}; ` +
+        `locked category: ${option.expectedCategory || "not provided"}; ` +
+        `locked colour/variant: ${option.expectedColor || "not provided"}; ` +
         `product description/context: ${option.description || "not provided"}; ` +
-        `product URL: ${option.productUrl || "not provided"}`,
+        `product URL: ${option.productUrl || "not provided"}; ` +
+        `identity source: ${option.lockedSource || "legacy"}`,
     });
     content.push({
       type: "input_image",
@@ -32994,6 +33328,88 @@ async function publishPostToPinterest({
   return data;
 }
 
+function summarizePinterestPinMedia(pin) {
+  const media = pin?.media && typeof pin.media === "object" ? pin.media : {};
+  const mediaType = String(media?.media_type || "").trim().toLowerCase();
+  const items = Array.isArray(media?.items) ? media.items : [];
+  const imageCount = mediaType === "multiple_images"
+    ? items.length
+    : mediaType === "image"
+      ? 1
+      : 0;
+  return { mediaType, imageCount };
+}
+
+async function getPinterestPinById({ accessToken, pinId }) {
+  const response = await fetch(
+    `${getPinterestApiBaseUrl()}/pins/${encodeURIComponent(String(pinId))}`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    }
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw pinterestPublishError(
+      response,
+      data,
+      "Could not verify the published Pinterest Pin"
+    );
+  }
+  return data;
+}
+
+async function verifyPinterestPublishedMedia({
+  accessToken,
+  pinId,
+  expectedImageCount,
+  postId,
+}) {
+  const expected = Math.max(1, Number(expectedImageCount || 1));
+  let lastPin = null;
+  let lastSummary = { mediaType: "", imageCount: 0 };
+
+  // Pinterest can need a short moment to populate media metadata immediately
+  // after creation. Read the Pin back before Spreelo marks the target done.
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    try {
+      lastPin = await getPinterestPinById({ accessToken, pinId });
+      lastSummary = summarizePinterestPinMedia(lastPin);
+      const valid = expected >= 2
+        ? lastSummary.mediaType === "multiple_images" &&
+          lastSummary.imageCount === expected
+        : lastSummary.mediaType === "image" && lastSummary.imageCount === 1;
+      if (valid) {
+        console.info("Pinterest published media verified", {
+          postId: postId || null,
+          pinId: String(pinId),
+          expectedImageCount: expected,
+          mediaType: lastSummary.mediaType,
+          imageCount: lastSummary.imageCount,
+          attempt,
+        });
+        return lastPin;
+      }
+    } catch (error) {
+      if (isPinterestAuthError(error)) throw error;
+      if (attempt >= 4) throw error;
+    }
+    if (attempt < 4) await sleep(1500 * attempt);
+  }
+
+  const error = new Error(
+    expected >= 2
+      ? `Pinterest returned Pin ${pinId}, but Spreelo could not verify the ${expected}-image carousel (received ${lastSummary.mediaType || "unknown"} with ${lastSummary.imageCount} image(s)). The post was not marked published.`
+      : `Pinterest returned Pin ${pinId}, but Spreelo could not verify the single-image media. The post was not marked published.`
+  );
+  error.pinterestMediaVerificationFailed = true;
+  error.pinId = String(pinId);
+  error.expectedImageCount = expected;
+  error.actualMediaType = lastSummary.mediaType || null;
+  error.actualImageCount = lastSummary.imageCount;
+  throw error;
+}
+
 async function getPinterestConnectionForBrand({
   supabase,
   userId,
@@ -33692,6 +34108,16 @@ async function publishApprovedSocialPosts({
             }
           }
         }
+
+        if (!pinterestResult?.id) {
+          throw new Error("Pinterest did not return a Pin id to verify");
+        }
+        pinterestResult = await verifyPinterestPublishedMedia({
+          accessToken: healthyPinterest.accessToken,
+          pinId: pinterestResult.id,
+          expectedImageCount: pinterestImageUrls.length,
+          postId: post.id,
+        });
 
         await persistPublishedTarget({
           supabase,

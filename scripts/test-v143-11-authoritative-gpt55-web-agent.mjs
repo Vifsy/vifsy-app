@@ -28,8 +28,10 @@ const hydrationFunction = extractFunction(
   "hydrateAuthoritativeWebAgentProduct",
   "findPrimaryCampaignProductsWithWebSearch"
 );
-assert.match(hydrationFunction, /extractBestProductImageFromHtml/);
-assert.match(hydrationFunction, /product_page_verified: false/);
+assert.match(hydrationFunction, /extractLockedProductObjectFromHtml/);
+assert.doesNotMatch(hydrationFunction, /extractBestProductImageFromHtml/);
+assert.match(hydrationFunction, /product_page_verified: true/);
+assert.match(hydrationFunction, /product_identity_locked: true/);
 assert.match(hydrationFunction, /authoritative_web_agent_selected: true/);
 assert.doesNotMatch(
   hydrationFunction,

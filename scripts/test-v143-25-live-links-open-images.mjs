@@ -24,10 +24,10 @@ const hydrate = extractFunction(
   "hydrateAuthoritativeWebAgentProduct",
   "createCampaignResearchPendingError"
 );
-assert.match(hydrate, /technicalPageStatus === 404/);
+assert.match(hydrate, /\[404, 410\]\.includes\(technicalPageStatus\)/);
 assert.match(
   hydrate,
-  /product rejected because its direct product page returned 404[\s\S]*return null;/
+  /product rejected because its direct product page is gone[\s\S]*return null;/
 );
 
 const resolver = extractFunction(

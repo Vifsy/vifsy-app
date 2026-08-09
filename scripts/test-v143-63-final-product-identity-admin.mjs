@@ -47,7 +47,7 @@ assert.match(route, /product_image_semantic_verified === true/);
 assert.match(route, /observed_brand: \{ type: "string" \}/);
 assert.match(route, /hasHardSemanticBrandConflict/);
 assert.match(route, /expected brand:/);
-assert.match(route, /product_brand:\s*String\(product\?\.brand/);
+assert.match(route, /locked_product_brand/);
 assert.match(route, /Product image semantic identity gate reused final verified pool/);
 assert.match(route, /carousel_product_verification_incomplete/);
 
