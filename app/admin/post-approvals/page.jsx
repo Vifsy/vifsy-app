@@ -596,7 +596,14 @@ export default function AdminPostApprovalsPage() {
                       <span>{selectedPost.post_type || selectedPost.content_format || t("admin.approvals.post")}</span>
                       <h3>Quality review</h3>
                     </div>
-                    <span className="admin-review-post-id">{String(selectedPost.id || "").slice(0, 8)}</span>
+                    <div className="admin-review-title-actions">
+                      {(isCarouselPost(selectedPost) || materials.length) ? (
+                        <button type="button" className="admin-review-jump-products" onClick={() => document.getElementById(`admin-review-products-${selectedPost.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+                          <PackageCheck size={15} /> Edit products
+                        </button>
+                      ) : null}
+                      <span className="admin-review-post-id">{String(selectedPost.id || "").slice(0, 8)}</span>
+                    </div>
                   </div>
 
                   <div className="admin-review-quality-strip">
@@ -625,7 +632,7 @@ export default function AdminPostApprovalsPage() {
                   </section>
 
                   {isCarouselPost(selectedPost) ? (
-                    <section className="admin-carousel-editor admin-review-product-workspace">
+                    <section id={`admin-review-products-${selectedPost.id}`} className="admin-carousel-editor admin-review-product-workspace">
                       <div className="admin-carousel-editor-heading">
                         <div>
                           <span>Product source</span>
@@ -649,7 +656,7 @@ export default function AdminPostApprovalsPage() {
                               </div>
                               <div className="admin-carousel-product-fields admin-review-product-fields">
                                 <label className="admin-product-url-field">
-                                  <span>Original product URL</span>
+                                  <span>Replace product · Original product URL</span>
                                   <div>
                                     <Link2 size={15} />
                                     <input value={item.url || ""} placeholder="https://.../product" onChange={(event) => {
@@ -658,7 +665,7 @@ export default function AdminPostApprovalsPage() {
                                     }} />
                                     <button type="button" disabled={!item.url?.trim() || resolvingProductIndex === index} onClick={() => resolveMaterialProduct(index)}>
                                       {resolvingProductIndex === index ? <LoaderCircle className="admin-spin" size={15} /> : <ScanSearch size={15} />}
-                                      Fetch
+                                      {item.title ? "Refresh" : "Fetch"}
                                     </button>
                                   </div>
                                 </label>
@@ -672,6 +679,7 @@ export default function AdminPostApprovalsPage() {
                                     <div><span>Source image</span><strong>{width && height ? `${width} × ${height}` : "—"}</strong></div>
                                   </div>
                                 ) : <p className="admin-product-url-help">Paste a product URL and click Fetch. Spreelo will fill everything else.</p>}
+                                <p className="admin-product-refresh-help">Paste a different URL to replace this product. Keep the same URL and click Refresh to re-fetch the verified product image and data.</p>
                                 {item.url ? <a className="admin-product-original-link" href={item.url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Open original product</a> : null}
                               </div>
                             </article>
@@ -689,7 +697,7 @@ export default function AdminPostApprovalsPage() {
                       {regenerationSuccess ? <div className="admin-alert success admin-regeneration-inline-alert"><CheckCircle2 size={16} /> <span>{regenerationSuccess}</span></div> : null}
                     </section>
                   ) : selectedPost.admin_product_items?.length || materials.length ? (
-                    <section className="admin-review-single-product">
+                    <section id={`admin-review-products-${selectedPost.id}`} className="admin-review-single-product">
                       <div className="admin-review-section-heading">
                         <div><span>Product source</span><strong>Locked product object</strong></div>
                         <small>Replace the product by pasting only its original URL</small>
@@ -707,7 +715,7 @@ export default function AdminPostApprovalsPage() {
                                 </span>
                               </div>
                               <label className="admin-product-url-field">
-                                <span>Original product URL</span>
+                                <span>Replace product · Original product URL</span>
                                 <div>
                                   <Link2 size={15} />
                                   <input value={item.url || ""} placeholder="https://.../product" onChange={(event) => {
@@ -716,7 +724,7 @@ export default function AdminPostApprovalsPage() {
                                   }} />
                                   <button type="button" disabled={!item.url?.trim() || resolvingProductIndex === 0} onClick={() => resolveMaterialProduct(0)}>
                                     {resolvingProductIndex === 0 ? <LoaderCircle className="admin-spin" size={15} /> : <ScanSearch size={15} />}
-                                    Fetch
+                                    {item.title ? "Refresh" : "Fetch"}
                                   </button>
                                 </div>
                               </label>
@@ -731,6 +739,7 @@ export default function AdminPostApprovalsPage() {
                                 <div><span>Source image</span><strong>{item.product_image_width && item.product_image_height ? `${item.product_image_width} × ${item.product_image_height}` : "—"}</strong></div>
                               </div>
                             ) : <p className="admin-product-url-help">Paste the original product URL and click Fetch. Spreelo will fetch the product name, brand, type, variant and best verified image itself.</p>}
+                            <p className="admin-product-refresh-help">Use a different URL to replace the product, or keep the same URL and click Refresh to re-fetch its verified image and data.</p>
                             {item.url ? <a className="admin-product-original-link" href={item.url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Open original product</a> : null}
                             {regenerationError ? <div className="admin-alert error admin-regeneration-inline-alert"><AlertTriangle size={16} /> <span>{regenerationError}</span></div> : null}
                             {regenerationSuccess ? <div className="admin-alert success admin-regeneration-inline-alert"><CheckCircle2 size={16} /> <span>{regenerationSuccess}</span></div> : null}
@@ -824,7 +833,8 @@ export default function AdminPostApprovalsPage() {
         ) : null}
 
         {lightboxIndex !== null && lightboxItems[lightboxIndex] ? (
-          <div className="admin-review-lightbox" role="dialog" aria-modal="true" aria-label="Full size image review" onMouseDown={(event) => { if (event.target === event.currentTarget) setLightboxIndex(null); }}>
+          <div className="admin-review-lightbox-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setLightboxIndex(null); }}>
+            <section className="admin-review-lightbox" role="dialog" aria-modal="true" aria-label="Large image review">
             <header>
               <div>
                 <span>{selectedPost?.brand_name || "Spreelo"}</span>
@@ -841,7 +851,8 @@ export default function AdminPostApprovalsPage() {
               <img src={lightboxItems[lightboxIndex].url} alt="" />
               {lightboxItems.length > 1 ? <button type="button" className="next" onClick={() => setLightboxIndex((lightboxIndex + 1) % lightboxItems.length)} aria-label="Next image"><ChevronRight size={26} /></button> : null}
             </div>
-            <footer><span>Use ← → to browse · Esc to close</span><strong><ZoomIn size={15} /> Full-resolution review</strong></footer>
+            <footer><span>Use ← → to browse · Esc to close</span><strong><ZoomIn size={15} /> Large preview</strong></footer>
+            </section>
           </div>
         ) : null}
       </div>
