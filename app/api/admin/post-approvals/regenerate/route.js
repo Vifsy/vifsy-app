@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import OpenAI from "openai";
 import { adminContextError, getAdminContext } from "../../../../../lib/adminAuth";
-import { generateCarouselOutroSlideImage, getCarouselProductLabelPresentation, renderCarouselProductSlideImage } from "../../../cron/run-automations/route.js";
+import { generateCarouselOutroSlideImage, getCarouselProductLabelPresentation, renderCarouselProductSlideImage, resolveLockedProductUrlForUse } from "../../../cron/run-automations/route.js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -13,7 +13,7 @@ export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const requestedPostId = String(body?.post_id || "").trim();
   const occurrenceId = String(body?.occurrence_id || "").trim();
-  const products = (Array.isArray(body?.product_items) ? body.product_items : [])
+  let products = (Array.isArray(body?.product_items) ? body.product_items : [])
     .map((item) => ({
       title: String(item?.title || "").trim(),
       description: String(item?.description || "").trim(),
@@ -22,16 +22,18 @@ export async function POST(request) {
       product_brand: String(item?.product_brand || item?.brand || "").trim(),
       product_display_type: String(item?.product_display_type || "").trim(),
       product_color: String(item?.product_color || item?.color || "").trim(),
+      product_identifier: String(item?.product_identifier || "").trim(),
+      product_image_width: Number(item?.product_image_width || 0) || null,
+      product_image_height: Number(item?.product_image_height || 0) || null,
+      product_identity_locked: item?.product_identity_locked === true,
+      product_image_semantic_verified: item?.product_image_semantic_verified === true,
     }))
-    .filter((item) => item.title || item.image_url || item.url || item.description)
+    .filter((item) => item.url || item.title || item.image_url || item.description)
     .slice(0, 5);
-  if (
-    products.length !== 5 ||
-    products.some((item) => !item.image_url || !item.title || !item.url)
-  ) {
+  if (products.length !== 5 || products.some((item) => !item.url)) {
     return Response.json({
       ok: false,
-      error: "A carousel must contain exactly five products. Each product only needs a product image, product text/name and product link. Product information/description is optional."
+      error: "A carousel must contain exactly five product URLs. Spreelo fetches the product name, brand, product type, variant and main image from each original product page automatically."
     }, { status: 400 });
   }
 
@@ -50,12 +52,53 @@ export async function POST(request) {
   const ruleId = post?.automation_rule_id || occurrence?.automation_rule_id;
   const { data: rule } = ruleId ? await context.admin.from("automation_rules").select("*").eq("id", ruleId).maybeSingle() : { data: null };
   const brandProfileId = post?.brand_profile_id || occurrence?.brand_profile_id || rule?.brand_profile_id;
-  const { data: brandProfile } = brandProfileId ? await context.admin.from("brand_profiles").select("business_name, content_language, website_url").eq("id", brandProfileId).maybeSingle() : { data: null };
+  const { data: brandProfile } = brandProfileId ? await context.admin.from("brand_profiles").select("business_name, content_language, website_url, website_product_source_url").eq("id", brandProfileId).maybeSingle() : { data: null };
   const language = post?.language || rule?.language || "English";
   const campaign = occurrence?.campaign_title || rule?.name || "campaign";
   const enhancedRule = { ...(rule || {}), brand_profile: brandProfile || null, language, campaign_theme: campaign };
   let content = String(body?.content || "").trim();
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+  // v143.67: admin replacement/regeneration follows the exact same locked
+  // product-page pipeline as automatic Spreelo discovery. The URL is the only
+  // authoritative admin input; stale/manual title or image fields are never
+  // allowed to override the original product page.
+  const resolvedProducts = [];
+  for (const product of products) {
+    try {
+      const resolved = await resolveLockedProductUrlForUse({
+        supabase: context.admin,
+        openai,
+        productUrl: product.url,
+        websiteUrl: brandProfile?.website_product_source_url || brandProfile?.website_url || product.url,
+        titleHint: product.title || "",
+        rule: enhancedRule,
+        ruleId: ruleId || "admin-carousel-regeneration",
+      });
+      resolvedProducts.push({
+        title: resolved.title || "",
+        description: resolved.description || resolved.reason || "",
+        url: resolved.url || product.url,
+        image_url: resolved.image_url || "",
+        product_brand: resolved.product_brand || resolved.locked_product_brand || "",
+        product_display_type: resolved.product_display_type || resolved.display_product_type || resolved.locked_product_category || resolved.category || "",
+        product_color: resolved.product_color || resolved.locked_product_color || "",
+        product_identifier: resolved.product_identifier || resolved.locked_product_identifier || "",
+        product_image_width: Number(resolved.product_image_width || 0) || null,
+        product_image_height: Number(resolved.product_image_height || 0) || null,
+        product_identity_locked: resolved.product_identity_locked === true,
+        product_image_semantic_verified: resolved.product_image_semantic_verified === true,
+        locked_product_fingerprint: resolved.locked_product_fingerprint || "",
+      });
+    } catch (error) {
+      return Response.json({
+        ok: false,
+        error: `Could not verify product ${resolvedProducts.length + 1}: ${error?.message || "unknown product error"}`,
+      }, { status: 422 });
+    }
+  }
+  products = resolvedProducts;
+
   try {
     const response = await openai.responses.create({
       model: process.env.POST_TEXT_MODEL || "gpt-5.5",
@@ -130,7 +173,13 @@ export async function POST(request) {
         product_title: product.title,
         product_description: product.description || null,
         product_brand: product.product_brand || null,
+        product_identifier: product.product_identifier || null,
         product_display_type: product.product_display_type || null,
+        product_color: product.product_color || null,
+        product_image_width: product.product_image_width || null,
+        product_image_height: product.product_image_height || null,
+        product_identity_locked: product.product_identity_locked === true,
+        product_image_semantic_verified: product.product_image_semantic_verified === true,
         source_image_url: product.image_url,
         carousel_slide_role: "product",
         admin_regenerated: true,

@@ -178,6 +178,14 @@ export async function GET(request) {
         url: String(slide?.product_url || "").trim(),
         image_url: String(slide?.metadata?.source_image_url || slide?.image_url || "").trim(),
         preview_image_url: String(slide?.image_url || "").trim(),
+        product_brand: String(slide?.metadata?.product_brand || "").trim(),
+        product_identifier: String(slide?.metadata?.product_identifier || "").trim(),
+        product_display_type: String(slide?.metadata?.product_display_type || "").trim(),
+        product_color: String(slide?.metadata?.product_color || "").trim(),
+        product_image_width: Number(slide?.metadata?.product_image_width || 0) || null,
+        product_image_height: Number(slide?.metadata?.product_image_height || 0) || null,
+        product_identity_locked: slide?.metadata?.product_identity_locked === true,
+        product_image_semantic_verified: slide?.metadata?.product_image_semantic_verified === true,
         existing_slide_order: slide?.slide_order || null,
       }));
     const storedProducts = Array.isArray(post.admin_product_items)
@@ -460,6 +468,16 @@ function normalizeProductItems(items) {
     description: String(item?.description || "").trim().slice(0, 3000),
     url: String(item?.url || "").trim().slice(0, 2000),
     image_url: String(item?.image_url || "").trim().slice(0, 3000),
+    preview_image_url: String(item?.preview_image_url || "").trim().slice(0, 3000),
+    product_brand: String(item?.product_brand || "").trim().slice(0, 180),
+    product_identifier: String(item?.product_identifier || "").trim().slice(0, 180),
+    product_display_type: String(item?.product_display_type || "").trim().slice(0, 220),
+    product_color: String(item?.product_color || "").trim().slice(0, 220),
+    product_image_width: Number(item?.product_image_width || 0) || null,
+    product_image_height: Number(item?.product_image_height || 0) || null,
+    product_identity_locked: item?.product_identity_locked === true,
+    product_image_semantic_verified: item?.product_image_semantic_verified === true,
+    locked_product_fingerprint: String(item?.locked_product_fingerprint || "").trim().slice(0, 240),
   }));
 }
 

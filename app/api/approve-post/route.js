@@ -84,6 +84,7 @@ function resolveApprovalPageLocale({ request, url, post, brandProfile, userAppLa
 
 function createHtmlPage({ title, message, status = "success", t, locale = "en" }) {
   const isSuccess = status === "success";
+  const logoUrl = `${APP_URL.replace(/\/$/, "")}/brand/spreelologo.png`;
 
   return `
 <!doctype html>
@@ -91,120 +92,302 @@ function createHtmlPage({ title, message, status = "success", t, locale = "en" }
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
     <title>${title}</title>
     <style>
+      :root {
+        --spreelo-ink: #0b1724;
+        --spreelo-muted: #667085;
+        --spreelo-line: #e8e3dc;
+        --spreelo-surface: rgba(255, 255, 255, 0.96);
+        --spreelo-accent: #ef6849;
+        --spreelo-accent-deep: #c84b31;
+        --spreelo-accent-soft: #fff0e8;
+        --spreelo-bg: #f7f4ef;
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body { min-height: 100%; }
+
       body {
         margin: 0;
         min-height: 100vh;
-        font-family: Arial, sans-serif;
-        background: #f5f3ee;
-        color: #111827;
+        font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+        background:
+          radial-gradient(circle at 18% 18%, rgba(239, 104, 73, 0.10), transparent 30%),
+          radial-gradient(circle at 84% 80%, rgba(11, 23, 36, 0.07), transparent 28%),
+          var(--spreelo-bg);
+        color: var(--spreelo-ink);
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 24px;
+        padding: 28px;
+        overflow-x: hidden;
+      }
+
+      .page-glow {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        overflow: hidden;
+      }
+
+      .page-glow::before,
+      .page-glow::after {
+        content: "";
+        position: absolute;
+        width: 280px;
+        height: 280px;
+        border-radius: 999px;
+        filter: blur(1px);
+        opacity: 0.45;
+      }
+
+      .page-glow::before {
+        left: -105px;
+        top: -115px;
+        background: linear-gradient(145deg, rgba(255, 107, 82, 0.26), rgba(239, 62, 47, 0.03));
+      }
+
+      .page-glow::after {
+        right: -115px;
+        bottom: -135px;
+        background: linear-gradient(145deg, rgba(11, 23, 36, 0.12), rgba(255, 255, 255, 0));
+      }
+
+      .shell {
+        width: 100%;
+        max-width: 640px;
+        position: relative;
+        z-index: 1;
+      }
+
+      .brand-row {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 18px;
+      }
+
+      .brand-row img {
+        display: block;
+        width: 150px;
+        max-width: 46vw;
+        height: auto;
       }
 
       .card {
+        position: relative;
+        overflow: hidden;
         width: 100%;
-        max-width: 560px;
-        background: #ffffff;
-        border: 1px solid #e5e7eb;
-        border-radius: 18px;
-        padding: 32px;
-        box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08);
+        background: var(--spreelo-surface);
+        border: 1px solid rgba(11, 23, 36, 0.09);
+        border-radius: 26px;
+        padding: 42px 42px 36px;
+        box-shadow:
+          0 28px 70px rgba(11, 23, 36, 0.10),
+          0 4px 14px rgba(11, 23, 36, 0.04);
         text-align: center;
+        backdrop-filter: blur(14px);
+      }
+
+      .card::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 5px;
+        background: linear-gradient(90deg, #ff6b52 0%, #ef3e2f 46%, #8b5cf6 100%);
+      }
+
+      .status-wrap {
+        display: flex;
+        justify-content: center;
+        margin: 2px 0 22px;
       }
 
       .badge {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 48px;
-        height: 48px;
-        border-radius: 999px;
-        margin-bottom: 18px;
-        background: ${isSuccess ? "#dcfce7" : "#fee2e2"};
-        color: ${isSuccess ? "#166534" : "#991b1b"};
-        font-size: 24px;
+        width: 62px;
+        height: 62px;
+        border-radius: 20px;
+        background: ${isSuccess ? "#effaf4" : "#fff1f0"};
+        color: ${isSuccess ? "#16834b" : "#b42318"};
+        border: 1px solid ${isSuccess ? "#ccefd9" : "#ffd3ce"};
+        box-shadow: 0 10px 28px ${isSuccess ? "rgba(22, 131, 75, 0.12)" : "rgba(180, 35, 24, 0.10)"};
+      }
+
+      .badge svg {
+        width: 28px;
+        height: 28px;
+        stroke-width: 2.2;
+      }
+
+      .eyebrow {
+        margin: 0 0 9px;
+        color: var(--spreelo-accent-deep);
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
       }
 
       h1 {
-        margin: 0 0 12px;
-        font-size: 26px;
+        margin: 0 auto 12px;
+        max-width: 520px;
+        font-size: clamp(27px, 5vw, 34px);
+        line-height: 1.15;
+        letter-spacing: -0.035em;
+        font-weight: 850;
       }
 
-      p {
-        margin: 0 0 18px;
-        color: #4b5563;
-        line-height: 1.6;
-      }
-
-      .small-text {
-        margin-top: 16px;
-        margin-bottom: 0;
-        color: #6b7280;
-        font-size: 13px;
+      .message {
+        margin: 0 auto;
+        max-width: 470px;
+        color: #526071;
+        font-size: 16px;
+        line-height: 1.65;
       }
 
       .button-row {
         display: flex;
         justify-content: center;
-        gap: 10px;
+        gap: 12px;
         flex-wrap: wrap;
-        margin-top: 22px;
+        margin-top: 28px;
       }
 
       a,
       button {
+        min-height: 46px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        padding: 12px 18px;
-        border-radius: 999px;
+        gap: 8px;
+        padding: 12px 20px;
+        border-radius: 13px;
         text-decoration: none;
-        font-weight: 700;
+        font-family: inherit;
+        font-weight: 800;
         font-size: 14px;
         cursor: pointer;
+        transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease, border-color 160ms ease;
       }
 
-      a {
-        background: #111827;
+      a:hover,
+      button:hover {
+        transform: translateY(-1px);
+      }
+
+      .primary-action {
+        background: var(--spreelo-ink);
         color: #ffffff;
-        border: 1px solid #111827;
+        border: 1px solid var(--spreelo-ink);
+        box-shadow: 0 10px 24px rgba(11, 23, 36, 0.16);
       }
 
-      button {
+      .primary-action:hover {
+        background: #152437;
+        border-color: #152437;
+        box-shadow: 0 13px 28px rgba(11, 23, 36, 0.20);
+      }
+
+      .secondary-action {
         background: #ffffff;
-        color: #111827;
-        border: 1px solid #d1d5db;
+        color: var(--spreelo-ink);
+        border: 1px solid #d9dde3;
+        box-shadow: 0 4px 12px rgba(11, 23, 36, 0.04);
+      }
+
+      .secondary-action:hover {
+        border-color: #bfc6cf;
+        background: #fbfbfc;
+      }
+
+      .arrow {
+        width: 22px;
+        height: 22px;
+        border-radius: 7px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--spreelo-accent);
+        color: white;
+        line-height: 1;
+        font-size: 15px;
+      }
+
+      .divider {
+        width: 54px;
+        height: 3px;
+        margin: 28px auto 15px;
+        border-radius: 999px;
+        background: var(--spreelo-accent-soft);
+      }
+
+      .small-text {
+        margin: 0;
+        color: #7b8491;
+        font-size: 12.5px;
+        line-height: 1.55;
+      }
+
+      @media (max-width: 560px) {
+        body { padding: 18px; }
+        .brand-row { margin-bottom: 14px; }
+        .brand-row img { width: 132px; }
+        .card { padding: 34px 22px 28px; border-radius: 22px; }
+        .badge { width: 56px; height: 56px; border-radius: 18px; }
+        .message { font-size: 15px; }
+        .button-row { flex-direction: column-reverse; }
+        a, button { width: 100%; }
       }
     </style>
   </head>
   <body>
-    <main class="card">
-      <div class="badge">${isSuccess ? "✓" : "!"}</div>
-      <h1>${title}</h1>
-      <p>${message}</p>
+    <div class="page-glow" aria-hidden="true"></div>
+    <main class="shell">
+      <div class="brand-row">
+        <img src="${logoUrl}" alt="Spreelo" />
+      </div>
 
-      ${
-        isSuccess
-          ? `
-            <div class="button-row">
-              <button type="button" onclick="window.close()">${t("approvePages.closePage")}</button>
-              <a href="https://app.spreelo.com">${t("approvePages.openSpreelo")}</a>
-            </div>
+      <section class="card">
+        <div class="status-wrap">
+          <div class="badge" aria-hidden="true">
+            ${
+              isSuccess
+                ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+                : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 8v5" stroke-linecap="round"/><path d="M12 17h.01" stroke-linecap="round"/><circle cx="12" cy="12" r="9"/></svg>`
+            }
+          </div>
+        </div>
 
-            <p class="small-text">
-              ${t("approvePages.safeClose")}
-            </p>
-          `
-          : `
-            <div class="button-row">
-              <a href="https://app.spreelo.com">${t("approvePages.openSpreelo")}</a>
-            </div>
-          `
-      }
+        <p class="eyebrow">SPREELO</p>
+        <h1>${title}</h1>
+        <p class="message">${message}</p>
+
+        ${
+          isSuccess
+            ? `
+              <div class="button-row">
+                <button class="secondary-action" type="button" onclick="window.close()">${t("approvePages.closePage")}</button>
+                <a class="primary-action" href="${APP_URL}">${t("approvePages.openSpreelo")}<span class="arrow">→</span></a>
+              </div>
+
+              <div class="divider"></div>
+              <p class="small-text">${t("approvePages.safeClose")}</p>
+            `
+            : `
+              <div class="button-row">
+                <a class="primary-action" href="${APP_URL}">${t("approvePages.openSpreelo")}<span class="arrow">→</span></a>
+              </div>
+            `
+        }
+      </section>
     </main>
   </body>
 </html>

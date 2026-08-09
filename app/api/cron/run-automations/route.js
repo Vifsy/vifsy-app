@@ -1734,7 +1734,10 @@ export function getCarouselProductLabelPresentation(product, fallbackTitle = "")
   ).replace(/\s+/gu, " ").trim();
   // Prefer the colour wording from the locked title because retailer metadata
   // often appends translated aliases (for example black/white/svart).
-  const titleColor = titleParts.length >= 3 ? titleParts.slice(2).join(" - ") : "";
+  // The final title segment is the variant/colour. Using every segment after
+  // the product type can duplicate descriptive words already present in
+  // product_display_type (for example "T-shirt - bas · bas - ghost").
+  const titleColor = titleParts.length >= 3 ? titleParts[titleParts.length - 1] : "";
   const color = String(titleColor || product?.locked_product_color || product?.product_color || "")
     .replace(/\s+/gu, " ")
     .trim();
@@ -3187,13 +3190,17 @@ function formatWebsiteItemForPrompt(websiteItem, { includePrice = true } = {}) {
   const verifiedPrice = includePrice ? getTrustedWebsiteItemPrice(websiteItem) : "";
 
   return `
-Selected website item:
-Title: ${websiteItem.title || "Not provided"}
-Type: ${websiteItem.type || "Not provided"}
+Selected locked website product:
+Brand: ${websiteItem.product_brand || websiteItem.locked_product_brand || websiteItem.brand || "Not provided"}
+Title/model: ${websiteItem.title || "Not provided"}
+Customer-facing product type: ${websiteItem.product_display_type || websiteItem.display_product_type || websiteItem.locked_product_category || websiteItem.category || websiteItem.type || "Not provided"}
+Product identifier/SKU: ${websiteItem.product_identifier || websiteItem.locked_product_identifier || "Not provided"}
+Colour/variant: ${websiteItem.product_color || websiteItem.locked_product_color || websiteItem.color || "Not provided"}
 URL: ${websiteItem.url || "Not provided"}
 Description: ${websiteItem.description || "Not provided"}
 Verified price: ${includePrice ? verifiedPrice || "Not provided" : "Intentionally omitted for this format"}
-Image URL: ${websiteItem.image_url || "Not provided"}
+Main product image URL: ${websiteItem.image_url || "Not provided"}
+Locked same-page identity: ${websiteItem.product_identity_locked === true ? "yes" : "no"}
 
 Important website item rules:
 - Base this post on the selected website item above.
@@ -3217,12 +3224,17 @@ function formatWebsiteItemsForPrompt(items = []) {
     .map((item, index) => {
       const verifiedPrice = getTrustedWebsiteItemPrice(item);
       return `Product ${index + 1}:
-Title: ${item.title || "Not provided"}
+Brand: ${item.product_brand || item.locked_product_brand || item.brand || "Not provided"}
+Title/model: ${item.title || "Not provided"}
+Customer-facing product type: ${item.product_display_type || item.display_product_type || item.locked_product_category || item.category || item.type || "Not provided"}
+Product identifier/SKU: ${item.product_identifier || item.locked_product_identifier || "Not provided"}
+Colour/variant: ${item.product_color || item.locked_product_color || item.color || "Not provided"}
 URL: ${item.url || "Not provided"}
 Description: ${item.description || "Not provided"}
 Verified price: ${verifiedPrice || "Not provided"}
 Direct checkout proof: ${verifiedPrice ? "Price visible" : "Not verified - use contact/request-info wording, not buy-now wording"}
-Image URL: ${item.image_url || "Not provided"}`;
+Main product image URL: ${item.image_url || "Not provided"}
+Locked same-page identity: ${item.product_identity_locked === true ? "yes" : "no"}`;
     });
 
   if (!rows.length) {
@@ -24457,6 +24469,156 @@ async function hydrateAuthoritativeWebAgentProduct({
   };
 }
 
+// v143.67 single source of truth for every product-based format and admin
+// replacement. Discovery/catalog/search may nominate a URL, but before a
+// product can be used in copy, a carousel, a product card, an AI product ad or
+// an animated Reel, Spreelo reopens that exact URL and turns it into the same
+// locked product-page object used by campaign carousels.
+export async function resolveLockedProductUrlForUse({
+  supabase,
+  openai,
+  productUrl,
+  websiteUrl,
+  titleHint = "",
+  rule = null,
+  ruleId = "manual-product-resolution",
+}) {
+  const canonicalUrl =
+    canonicalizeWebsiteProductUrl(productUrl, websiteUrl || productUrl) ||
+    String(productUrl || "").trim();
+  if (!canonicalUrl || !isHttpUrl(canonicalUrl)) {
+    throw new Error("A valid product URL is required.");
+  }
+  if (websiteUrl && !isSameOrSubdomainUrl(canonicalUrl, websiteUrl)) {
+    throw new Error("The replacement product must belong to the customer's configured website.");
+  }
+
+  const fallbackTitle = (() => {
+    try {
+      return decodeURIComponent(new URL(canonicalUrl).pathname.split("/").filter(Boolean).at(-1) || "")
+        .replace(/[-_]+/g, " ")
+        .trim();
+    } catch {
+      return "Selected product";
+    }
+  })();
+  const candidate = {
+    title: String(titleHint || fallbackTitle || "Selected product").trim(),
+    url: canonicalUrl,
+    reason: "Selected product URL; exact page is authoritative.",
+    campaign_research_rank: 1,
+    campaign_research_round: 1,
+    authoritative_web_agent_selected: true,
+  };
+
+  let hydrated = await hydrateAuthoritativeWebAgentProduct({
+    candidate,
+    websiteUrl: websiteUrl || canonicalUrl,
+    cachedItem: candidate,
+  });
+
+  if (!hydrated && openai && supabase) {
+    const repair = await repairAuthoritativeWebAgentProductAssets({
+      supabase,
+      openai,
+      automationOccurrenceId: null,
+      selectedCandidates: [candidate],
+      websiteUrl: websiteUrl || canonicalUrl,
+      deadlineMs: Date.now() + 75_000,
+      rule: rule || { id: ruleId, brand_profile_id: null },
+      researchRound: 1,
+    }).catch((error) => {
+      console.warn("Exact product URL repair failed", {
+        ruleId,
+        productUrl: canonicalUrl,
+        message: error?.message || String(error),
+      });
+      return { repairedCandidates: [] };
+    });
+    const repaired = repair?.repairedCandidates?.[0] || null;
+    if (repaired) {
+      hydrated = await hydrateAuthoritativeWebAgentProduct({
+        candidate: repaired,
+        websiteUrl: websiteUrl || canonicalUrl,
+        cachedItem: repaired,
+      });
+    }
+  }
+
+  if (!hydrated?.product_identity_locked || !hydrated?.url || !hydrated?.image_url) {
+    throw new Error("Spreelo could not build a locked product object from that exact product page.");
+  }
+
+  const [resolvedImage] = await resolveLargestProductImagesBeforeGeneration({
+    items: [hydrated],
+    ruleId: rule?.id || ruleId,
+    openai,
+  });
+  const [verified] = await reviewResolvedProductImageIdentity({
+    openai,
+    items: resolvedImage ? [resolvedImage] : [],
+    ruleId: rule?.id || ruleId,
+    failClosed: true,
+  });
+  if (!verified?.image_url || verified?.product_image_semantic_verified !== true) {
+    throw new Error("The product page was found, but Spreelo could not verify its main product image safely.");
+  }
+
+  return verified;
+}
+
+async function ensureLockedProductPoolForUse({
+  supabase,
+  openai,
+  items = [],
+  websiteUrl = "",
+  rule = null,
+  ruleId = "carousel-product-resolution",
+}) {
+  const uniqueItems = dedupeWebsiteItemsByUrlTitleAndImage(items || []).filter((item) => item?.url);
+  if (!uniqueItems.length) return { lockedItems: [], rejectedItems: [] };
+
+  const outcomes = await mapWithConcurrency(uniqueItems, 2, async (item) => {
+    if (
+      item?.product_identity_locked === true &&
+      item?.product_image_semantic_verified === true &&
+      item?.image_url &&
+      item?.url
+    ) {
+      return { ok: true, item };
+    }
+
+    try {
+      const locked = await resolveLockedProductUrlForUse({
+        supabase,
+        openai,
+        productUrl: item.url,
+        websiteUrl: websiteUrl || item.url,
+        titleHint: item.title || item.item_title || "",
+        rule,
+        ruleId,
+      });
+      return { ok: true, item: { ...item, ...locked } };
+    } catch (error) {
+      console.warn("Carousel candidate rejected because its exact product page could not produce a locked object", {
+        ruleId: rule?.id || ruleId,
+        productUrl: item?.url || null,
+        productTitle: item?.title || null,
+        message: error?.message || String(error),
+      });
+      return { ok: false, item, error };
+    }
+  });
+
+  return {
+    lockedItems: outcomes.filter((outcome) => outcome?.ok).map((outcome) => outcome.item),
+    rejectedItems: outcomes.filter((outcome) => !outcome?.ok).map((outcome) => ({
+      item: outcome.item,
+      message: outcome?.error?.message || "Product could not be locked",
+    })),
+  };
+}
+
 function createCampaignResearchPendingError({
   responseId = "",
   responseStatus = "in_progress",
@@ -26350,6 +26512,27 @@ async function prepareWebsiteContentForRule({
   });
 
   const websiteUrl = getWebsiteProductSourceUrl(brandProfile, rule);
+  const finalizePreparedWebsiteItem = async (item, cycleNumber = 1) => {
+    const lockedItem = item?.product_identity_locked === true &&
+      item?.product_image_semantic_verified === true && item?.image_url
+      ? item
+      : await resolveLockedProductUrlForUse({
+          supabase,
+          openai,
+          productUrl: item?.url || item?.product_url || item?.item_url || websiteUrl,
+          websiteUrl,
+          titleHint: item?.title || item?.item_title || rule?.content_source_title || "",
+          rule,
+          ruleId: rule?.id || "single-product",
+        });
+    return {
+      websiteItem: lockedItem,
+      websiteSourceUrl: websiteUrl,
+      websiteCycleNumber: cycleNumber,
+      useWebsiteImage: Boolean(lockedItem?.image_url),
+      websiteRule: rule,
+    };
+  };
   const contentSourceScope = getRuleContentSourceScope(rule);
   const contentType = rule.content_type_id || "website_item";
   const productIntentScoped = isProductIntentScopedWebsiteRule(rule);
@@ -26359,20 +26542,15 @@ async function prepareWebsiteContentForRule({
   }
 
   if (contentSourceScope === "exact_product") {
-    const exactProduct = await extractProductDataFromProductPage({
+    const exactProduct = await resolveLockedProductUrlForUse({
+      supabase,
+      openai,
       productUrl: websiteUrl,
       websiteUrl,
-      webSearchProduct: {
-        title: rule.content_source_title || "",
-        reason: "Customer selected this exact product URL.",
-        source_page_url: websiteUrl,
-        campaign_fit_source: "customer_selected_exact_product",
-      },
+      titleHint: rule.content_source_title || "",
+      rule,
+      ruleId: rule?.id || "exact-product",
     });
-
-    if (!exactProduct?.url || !exactProduct?.title) {
-      throw new Error("The exact product URL could not be verified as a usable product page.");
-    }
 
     await upsertWebsiteProductCatalogItems({
       supabase,
@@ -26380,19 +26558,13 @@ async function prepareWebsiteContentForRule({
       brandProfileId: rule.brand_profile_id,
       sourceUrl: websiteUrl,
       items: [exactProduct],
-      discoverySource: "customer_selected_exact_product",
+      discoverySource: "customer_selected_exact_product_locked",
     });
 
     summary.website_items_found += 1;
     summary.website_content_success += 1;
 
-    return {
-      websiteItem: exactProduct,
-      websiteSourceUrl: websiteUrl,
-      websiteCycleNumber: 1,
-      useWebsiteImage: Boolean(exactProduct.image_url),
-      websiteRule: rule,
-    };
+    return finalizePreparedWebsiteItem(exactProduct, 1);
   }
 
   const recentUsedItems = await getRecentUsedWebsiteItems({
@@ -26470,13 +26642,7 @@ async function prepareWebsiteContentForRule({
     summary.website_items_found += 1;
     summary.website_content_success += 1;
 
-    return {
-      websiteItem: focusedSelection.item,
-      websiteSourceUrl: websiteUrl,
-      websiteCycleNumber: focusedSelection.cycleNumber,
-      useWebsiteImage: focusedSelection.useWebsiteImage,
-      websiteRule: rule,
-    };
+    return finalizePreparedWebsiteItem(focusedSelection.item, focusedSelection.cycleNumber);
   }
 
   let catalogItems = filterWebsiteCatalogItemsForRule(
@@ -26605,13 +26771,7 @@ async function prepareWebsiteContentForRule({
       summary.website_items_found += 1;
       summary.website_content_success += 1;
 
-      return {
-        websiteItem: storeMapSelection.item,
-        websiteSourceUrl: websiteUrl,
-        websiteCycleNumber: storeMapSelection.cycleNumber,
-        useWebsiteImage: storeMapSelection.useWebsiteImage,
-        websiteRule: rule,
-      };
+      return finalizePreparedWebsiteItem(storeMapSelection.item, storeMapSelection.cycleNumber);
     }
   }
 
@@ -26646,13 +26806,7 @@ async function prepareWebsiteContentForRule({
     summary.website_items_found += 1;
     summary.website_content_success += 1;
 
-    return {
-      websiteItem: catalogSelection.item,
-      websiteSourceUrl: websiteUrl,
-      websiteCycleNumber: catalogSelection.cycleNumber,
-      useWebsiteImage: catalogSelection.useWebsiteImage,
-      websiteRule: rule,
-    };
+    return finalizePreparedWebsiteItem(catalogSelection.item, catalogSelection.cycleNumber);
   }
 
   if (catalogSelection?.item && productIntentScoped) {
@@ -26737,13 +26891,7 @@ async function prepareWebsiteContentForRule({
               summary.website_content_success += 1;
               summary.website_web_search_success += 1;
 
-              return {
-                websiteItem: storeSearchSelection.item,
-                websiteSourceUrl: websiteUrl,
-                websiteCycleNumber: storeSearchSelection.cycleNumber,
-                useWebsiteImage: storeSearchSelection.useWebsiteImage,
-                websiteRule: rule,
-              };
+              return finalizePreparedWebsiteItem(storeSearchSelection.item, storeSearchSelection.cycleNumber);
             }
           }
         }
@@ -26806,13 +26954,7 @@ async function prepareWebsiteContentForRule({
         summary.website_content_success += 1;
         summary.website_web_search_success += 1;
 
-        return {
-          websiteItem: selected.item,
-          websiteSourceUrl: websiteUrl,
-          websiteCycleNumber: selected.cycleNumber,
-          useWebsiteImage: selected.useWebsiteImage,
-          websiteRule: rule,
-        };
+        return finalizePreparedWebsiteItem(selected.item, selected.cycleNumber);
       }
 
       console.log("Verified products were found but all were recently used; expanding catalog discovery", {
@@ -26906,13 +27048,7 @@ async function prepareWebsiteContentForRule({
         summary.website_content_success += 1;
         summary.website_web_search_success += 1;
 
-        return {
-          websiteItem: discoveredSelection.item,
-          websiteSourceUrl: websiteUrl,
-          websiteCycleNumber: discoveredSelection.cycleNumber,
-          useWebsiteImage: discoveredSelection.useWebsiteImage,
-          websiteRule: rule,
-        };
+        return finalizePreparedWebsiteItem(discoveredSelection.item, discoveredSelection.cycleNumber);
       }
     }
 
@@ -26953,13 +27089,7 @@ async function prepareWebsiteContentForRule({
       summary.website_content_success += 1;
       summary.website_web_search_success += 1;
 
-      return {
-        websiteItem: reuseSelection.item,
-        websiteSourceUrl: websiteUrl,
-        websiteCycleNumber: reuseSelection.cycleNumber,
-        useWebsiteImage: reuseSelection.useWebsiteImage,
-        websiteRule: rule,
-      };
+      return finalizePreparedWebsiteItem(reuseSelection.item, reuseSelection.cycleNumber);
     }
   } catch (webSearchError) {
     if (isWebsiteRateLimitError(webSearchError)) throw webSearchError;
@@ -27371,7 +27501,7 @@ Rewrite the post now.
   return completion.choices?.[0]?.message?.content?.trim() || "";
 }
 
-async function generateAutomationPostWithProductContractValidation(openai, rule) {
+export async function generateAutomationPostWithProductContractValidation(openai, rule) {
   let content = await generateAutomationPost(openai, rule);
 
   const selectedProducts =
@@ -27485,6 +27615,18 @@ async function generateAutomationPostWithProductContractValidation(openai, rule)
   });
 
   return rewritten;
+}
+
+export async function generateLockedProductPostContentForUse(openai, rule) {
+  const rawContent = await generateAutomationPostWithProductContractValidation(openai, rule);
+  const sanitizedContent = sanitizeUnsupportedOfferLanguage(
+    rawContent,
+    rule?.website_item || null
+  );
+  return cleanPostContentUrls(
+    removePricesFromAnimatedCaption(sanitizedContent, rule),
+    getPostDestinationUrl(rule)
+  );
 }
 
 async function generateCarouselSlides(openai, rule, postContent) {
@@ -28084,7 +28226,13 @@ async function saveCarouselSlidesForPost({
           ? Number(slideProduct?.product_image_semantic_confidence || 0) || null
           : null,
         product_brand: getTrustedProductCardBrand(slideProduct) || null,
-        product_display_type: String(slideProduct?.product_display_type || "").trim() || null,
+        product_identifier: String(slideProduct?.product_identifier || slideProduct?.locked_product_identifier || "").trim() || null,
+        product_display_type: String(slideProduct?.product_display_type || slideProduct?.display_product_type || slideProduct?.locked_product_category || "").trim() || null,
+        product_color: String(slideProduct?.product_color || slideProduct?.locked_product_color || "").trim() || null,
+        product_image_width: Number(slideProduct?.product_image_width || 0) || null,
+        product_image_height: Number(slideProduct?.product_image_height || 0) || null,
+        product_identity_locked: !isOutroSlide ? slideProduct?.product_identity_locked === true : null,
+        locked_product_fingerprint: !isOutroSlide ? String(slideProduct?.locked_product_fingerprint || "").trim() || null : null,
         product_price: getTrustedWebsiteItemPricing(slideProduct || {}).displayPrice || slide.product_price || null,
         product_sale_price: getTrustedWebsiteItemPricing(slideProduct || {}).salePrice || null,
         product_original_price: getTrustedWebsiteItemPricing(slideProduct || {}).originalPrice || null,
@@ -28228,41 +28376,41 @@ function selectWebsiteItemAdLayoutFamily(rule, postContent) {
   const seed = getWebsiteItemAdLayoutSeed(rule, postContent);
 
   const layoutFamilies = {
-    feature_split: {
-      key: "feature_split",
-      name: "Feature split",
+    emotional_hero: {
+      key: "emotional_hero",
+      name: "Emotional hero",
       instruction:
-        "Use a structured ad layout with the product and text separated into clear zones. The product can be on the right or left. Use one strong headline, one short supporting line, up to 3 short callouts, and a clear CTA. This is the most practical feature-led layout.",
+        "Build the ad around one strong emotional promise or occasion. Use a cinematic/lifestyle background and let the exact product be the hero. Use one large headline, one short supporting line and a restrained CTA. Avoid a three-point feature list unless the product genuinely needs it.",
     },
-    minimal_product_spotlight: {
-      key: "minimal_product_spotlight",
-      name: "Minimal product spotlight",
+    clean_premium: {
+      key: "clean_premium",
+      name: "Clean premium",
       instruction:
-        "Let the product dominate the design with lots of negative space. Use a concise headline, very little extra copy, and a subtle CTA/domain. Avoid bullet lists unless absolutely necessary.",
+        "Use a polished premium product spotlight with generous negative space, refined typography and very little copy. The product should dominate. Use one concise headline, at most one small badge or proof point, and a subtle CTA/domain. Do not use a bullet list.",
     },
-    bold_promo: {
-      key: "bold_promo",
-      name: "Bold promo",
+    benefits_icons: {
+      key: "benefits_icons",
+      name: "Benefits with icons",
       instruction:
-        "Use a high-energy, attention-grabbing poster-like layout with bold typography and dramatic scale. Keep the copy short and impactful. Use at most 1 or 2 short callouts, not a dense feature list.",
+        "Use a structured benefits-led layout. Show the exact product prominently and support it with 2 or 3 short verified benefits, preferably with simple visual icons or markers. Keep every benefit brief and mobile-readable. Do not invent features just to fill three slots.",
     },
-    premium_editorial: {
-      key: "premium_editorial",
-      name: "Premium editorial",
+    problem_solution: {
+      key: "problem_solution",
+      name: "Problem to solution",
       instruction:
-        "Use an elegant editorial style with generous spacing, refined typography, and a premium feel. Focus on polish rather than features. Avoid bullet lists and keep the copy minimal.",
+        "Lead with a concrete customer problem or need that is supported by the product context, then present the exact product as the solution. Use a strong problem/solution headline structure, one short explanation and a clear CTA. Avoid generic feature bullets unless they directly explain the solution.",
     },
-    lifestyle_focus: {
-      key: "lifestyle_focus",
-      name: "Lifestyle focus",
+    technical_spec: {
+      key: "technical_spec",
+      name: "Technical specification",
       instruction:
-        "Use a more contextual or lifestyle-driven composition while keeping the exact product clearly recognizable. Text should be secondary and concise. Avoid forcing a structured three-point list unless truly helpful.",
+        "Use a professional technical/product-information layout suited to construction, tools, B2B or specification-heavy products. Present 2 to 4 verified facts or use-cases in a clean grid or callout system, with strong hierarchy and no decorative lifestyle claims. Never invent specifications that are not present in the verified product data.",
     },
-    playful_story: {
-      key: "playful_story",
-      name: "Playful story",
+    seasonal_campaign: {
+      key: "seasonal_campaign",
+      name: "Seasonal campaign",
       instruction:
-        "Use a fun, colorful composition tailored to festive, kid-friendly, costume, candy, or novelty items. Text can be lively but still brief. Use up to 2 or 3 short badges only if helpful.",
+        "Make the campaign or season visually unmistakable while keeping the exact product central. Use one timely headline, a short supporting line and a clear CTA. Seasonal props and atmosphere may frame the product, but do not add fake sellable products or force a three-point list.",
     },
   };
 
@@ -28271,42 +28419,45 @@ function selectWebsiteItemAdLayoutFamily(rule, postContent) {
     return layoutFamilies[safeKeys[getDeterministicLayoutIndex(seed, safeKeys.length)]];
   };
 
-  if (websiteTextContainsAny(productContext, [
-    "halloween", "karneval", "carnival", "costume", "kostym", "maskerad", "party", "fest", "kids", "barn", "toy", "leksak", "candy", "godis", "cookie", "novelty", "sesam", "krümel", "monster"
-  ])) {
-    return pickFrom(["playful_story", "bold_promo"]);
+  const technicalProduct = websiteTextContainsAny(productContext, [
+    "isover", "insulation", "isolering", "bygg", "construction", "fasad", "vindskydd", "membrane", "fog", "tätnings", "verktyg", "tool", "industrial", "b2b", "specifikation", "technical"
+  ]);
+  if (technicalProduct) {
+    return pickFrom(["technical_spec", "problem_solution", "clean_premium"]);
+  }
+
+  const seasonalContext = Boolean(isCampaignScopedWebsiteRule(rule)) && websiteTextContainsAny(productContext, [
+    "jul", "christmas", "halloween", "skolstart", "back to school", "school", "sommar", "summer", "vinter", "winter", "höst", "autumn", "spring", "valentine", "mors dag", "fars dag", "black friday", "cyber monday", "new year", "nyår"
+  ]);
+  if (seasonalContext) {
+    return pickFrom(["seasonal_campaign", "emotional_hero", "benefits_icons"]);
   }
 
   if (websiteTextContainsAny(productContext, [
-    "band", "rock", "metal", "music", "merch", "vinyl", "album", "punk", "concert", "mezmerize", "system of a down"
+    "gift", "gåva", "present", "teddy", "nalle", "toy", "leksak", "baby", "barn", "kids", "love", "kärlek", "home", "decor", "inredning"
   ])) {
-    return pickFrom(["bold_promo", "feature_split"]);
+    return pickFrom(["emotional_hero", "seasonal_campaign", "clean_premium"]);
   }
 
   if (websiteTextContainsAny(productContext, [
-    "skincare", "beauty", "serum", "cream", "cosmetic", "perfume", "parfum", "watch", "jewelry", "smycke", "luxury", "premium"
+    "skincare", "beauty", "serum", "cream", "cosmetic", "perfume", "parfum", "watch", "jewelry", "smycke", "luxury", "premium", "fashion", "sneaker", "shoe", "skor"
   ])) {
-    return pickFrom(["premium_editorial", "minimal_product_spotlight"]);
+    return pickFrom(["clean_premium", "emotional_hero", "seasonal_campaign"]);
   }
 
   if (websiteTextContainsAny(productContext, [
-    "hoodie", "t-shirt", "tee", "shirt", "sweatshirt", "sweater", "apparel", "clothing", "fashion", "kläder", "tröja", "dress", "klänning"
+    "feature", "material", "recycled", "återvunnen", "waterproof", "vattentät", "soft", "mjuk", "capacity", "storage", "funktion", "benefit"
   ])) {
-    return pickFrom(["minimal_product_spotlight", "feature_split", "lifestyle_focus"]);
-  }
-
-  if (websiteTextContainsAny(productContext, [
-    "home", "decor", "interior", "furniture", "outdoor", "sport", "fitness", "kitchen", "travel", "bag", "backpack"
-  ])) {
-    return pickFrom(["lifestyle_focus", "minimal_product_spotlight", "feature_split"]);
+    return pickFrom(["benefits_icons", "problem_solution", "clean_premium"]);
   }
 
   return pickFrom([
-    "feature_split",
-    "minimal_product_spotlight",
-    "bold_promo",
-    "premium_editorial",
-    "lifestyle_focus",
+    "emotional_hero",
+    "clean_premium",
+    "benefits_icons",
+    "problem_solution",
+    "technical_spec",
+    "seasonal_campaign",
   ]);
 }
 
@@ -28384,14 +28535,22 @@ Output only the image.
 `.trim();
 }
 
-async function generateWebsiteItemAdImage(openai, rule, postContent) {
+export async function generateWebsiteItemAdImage(openai, rule, postContent) {
   const sourceImageUrl = rule?.website_item?.image_url;
 
   if (!sourceImageUrl) {
     throw new Error("Website Text + Ad requires a verified website product image");
   }
 
+  const selectedLayoutFamily = selectWebsiteItemAdLayoutFamily(rule, postContent);
   const prompt = buildWebsiteItemAdImagePrompt(rule, postContent);
+  console.info("AI product ad layout selected", {
+    ruleId: rule?.id || null,
+    productUrl: rule?.website_item?.url || null,
+    productTitle: rule?.website_item?.title || null,
+    layoutFamily: selectedLayoutFamily?.key || null,
+    layoutName: selectedLayoutFamily?.name || null,
+  });
   const sourceImageBuffer = await fetchImageBufferForOverlay(sourceImageUrl);
   const normalizedSourceImageBuffer = await sharp(sourceImageBuffer)
     .rotate()
@@ -29322,14 +29481,19 @@ function buildAnimatedTextPanelPrompt({
 }) {
   const websiteItem = rule?.website_item || {};
   const brand = rule?.brand_profile || {};
+  const presentation = getCarouselProductLabelPresentation(
+    websiteItem,
+    websiteItem?.title || rule?.content_type_label || "Featured product"
+  );
   const rawTitle = truncateText(
     sanitizeProductTitleForCard(
-      websiteItem?.title || rule?.content_type_label || "Featured product"
+      presentation?.title || websiteItem?.title || rule?.content_type_label || "Featured product"
     ) || "Featured product",
     110
   );
-  const { mainTitle, descriptor } = parseAnimatedTextPanelTitle(rawTitle);
-  const secondaryLineContent = descriptor;
+  const mainTitle = rawTitle;
+  const productBrand = truncateText(String(presentation?.brand || "").trim(), 54);
+  const secondaryLineContent = truncateText(String(presentation?.descriptor || "").trim(), 72);
   const effectiveBackgroundBrightness = String(
     backgroundBrightness || backgroundAsset?.brightness || ""
   ).toLowerCase();
@@ -29373,24 +29537,26 @@ Canvas and permanent card:
 - Do not use transparency, chroma key, green screen, cyan screen, magenta screen, a room, a wall, a floor, a product photo or a background scene.
 - Do not create a second card, inset mockup, photo frame or fake interface inside the canvas.
 
-Product-name content:
-- Main product name, with exact spelling and all words preserved: "${mainTitle}"
+Product identity content:
+${productBrand ? `- Product brand eyebrow, with exact spelling: "${productBrand}"` : "- No product brand was available, so do not invent one."}
+- Main product/model name, with exact spelling and all words preserved: "${mainTitle}"
 ${secondaryLineContent
-  ? `- Use exactly one clearly readable secondary line containing: "${secondaryLineContent}"`
-  : `- Create at most one short secondary phrase of 2 to 4 words in ${contentLanguage}, based only on the supplied product and campaign context.`}
+  ? `- Use exactly one clearly readable descriptor line containing: "${secondaryLineContent}"`
+  : `- If a descriptor is unavailable, do not invent product specifications; the card may contain only the brand (when supplied) and main product/model name.`}
 - Do not write a product price, currency symbol, currency code or monetary amount anywhere on the card.
 - Treat separators from the source title as metadata separators, not as characters that must be printed.
 - Never begin or end a line with a hyphen, dash, bullet, colon or other separator. Never print an isolated separator.
 - You may choose capitalization and balanced line breaks, but do not rename, translate, omit, replace or invent a product-name word.
 - Keep the main name dominant in one or two balanced lines.
-- Use no more than two text blocks in the entire card: the large main headline and at most one secondary line above or below it.
-- Do not create an eyebrow plus a supporting line. Do not add a third line of copy, fine print, slogan, caption, brand name or decorative pseudo-text.
+- Use only the supplied product identity text: a compact brand eyebrow when provided, the large main model/name, and at most one descriptor line.
+- Do not add slogans, captions, fine print, promotional claims or decorative pseudo-text beyond those supplied identity fields.
 
 Mobile Reel readability requirements:
 - This design will be viewed primarily as a Facebook or Instagram Reel on a phone. Every word must remain immediately readable at small screen size.
 - The main headline must occupy roughly 50 to 65 percent of the usable card height and be the unmistakable focal point.
 - Render the main headline at the visual equivalent of approximately 112 to 168 px high on this ${ANIMATED_TEXT_PANEL_SOURCE_WIDTH} x ${ANIMATED_TEXT_PANEL_SOURCE_HEIGHT} canvas. If it needs two lines, keep both lines large and balanced.
-- When a secondary line is used, render it at least 64 px high with normal readable spacing.
+- When a descriptor line is used, render it at least 64 px high with normal readable spacing.
+- When the product brand is supplied, render it as a clearly readable premium eyebrow at least 58 px high.
 - Never render any text smaller than 58 px. No microcopy, tiny capitals, widely letter-spaced fine print or hairline lettering.
 - If all supplied words do not fit at these readable sizes, simplify decoration and line breaks instead of shrinking the text.
 
@@ -29414,8 +29580,8 @@ Creative direction:
 - Decoration may be visually expressive, but it must frame and support the large text rather than compete with it.
 - Never simulate decoration with unreadable letters, glyphs, symbols or fake words.
 - The word "T-shirt" must clearly read with a real capital T and unambiguous letterforms.
-- Do not write the brand name. Spreelo adds the brand separately above the product.
-- No product image, logo, button, watermark, mockup, packaging, frame around another scene or fake clickable element.
+- If a product brand was supplied above, include exactly that brand name as the small identity eyebrow; do not substitute the retailer or the customer's company name.
+- No product image, logo mark, button, watermark, mockup, packaging, frame around another scene or fake clickable element.
 - No pixel font, bitmap font, arcade style, block lettering made from squares, jagged outline or colored fringe.
 - Render clean smooth high-resolution letter edges suitable for a professional Scandinavian fashion advertisement.
 `.trim();
@@ -29634,9 +29800,15 @@ async function createFallbackAnimatedTextOverlay({
   dominantColor,
 }) {
   const websiteItem = rule?.website_item || {};
-  const title = sanitizeProductTitleForCard(
+  const presentation = getCarouselProductLabelPresentation(
+    websiteItem,
     websiteItem?.title || rule?.content_type_label || "Featured product"
+  );
+  const title = sanitizeProductTitleForCard(
+    presentation?.title || websiteItem?.title || rule?.content_type_label || "Featured product"
   ) || "Featured product";
+  const brandLine = String(presentation?.brand || "").trim();
+  const descriptorLine = String(presentation?.descriptor || "").trim();
   const titleLines = splitAnimatedOverlayTitle(title);
   const style = getPremiumFallbackTextStyle({
     rule,
@@ -29723,6 +29895,12 @@ async function createProfessionalFallbackAnimatedTextOverlay({
       return `<text x="540" y="${firstBaseline + index * titleLineHeight}" text-anchor="middle" font-family="${style.font}" font-size="${titleFontSize}" font-style="${style.fontStyle}" font-weight="${style.weight}" letter-spacing="1.5" fill="${style.mainColor}">${escapeSvgText(line)}</text>`;
     })
     .join("");
+  const brandMarkup = brandLine
+    ? `<text x="540" y="${ANIMATED_TEXT_PANEL_TOP + 58}" text-anchor="middle" font-family="Trebuchet MS, sans-serif" font-size="27" font-weight="800" letter-spacing="4" fill="${style.accentColor}">${escapeSvgText(brandLine.toUpperCase())}</text>`
+    : "";
+  const descriptorMarkup = descriptorLine
+    ? `<text x="540" y="${ANIMATED_TEXT_PANEL_TOP + ANIMATED_TEXT_PANEL_HEIGHT - 44}" text-anchor="middle" font-family="Trebuchet MS, sans-serif" font-size="26" font-weight="700" letter-spacing="1" fill="${style.mainColor}" opacity="0.78">${escapeSvgText(descriptorLine)}</text>`
+    : "";
   const svg = `
     <svg width="1080" height="1920" xmlns="http://www.w3.org/2000/svg">
       <defs>
@@ -29731,7 +29909,9 @@ async function createProfessionalFallbackAnimatedTextOverlay({
         </filter>
       </defs>
       <rect x="${ANIMATED_TEXT_PANEL_LEFT}" y="${ANIMATED_TEXT_PANEL_TOP}" width="${ANIMATED_TEXT_PANEL_WIDTH}" height="${ANIMATED_TEXT_PANEL_HEIGHT}" rx="28" fill="#f8f6f1" filter="url(#panelShadow)"/>
+      ${brandMarkup}
       ${titleMarkup}
+      ${descriptorMarkup}
       <line x1="390" y1="${ANIMATED_TEXT_PANEL_TOP + ANIMATED_TEXT_PANEL_HEIGHT - 21}" x2="690" y2="${ANIMATED_TEXT_PANEL_TOP + ANIMATED_TEXT_PANEL_HEIGHT - 21}" stroke="${style.accentColor}" stroke-width="3" stroke-linecap="round" opacity="0.72"/>
     </svg>
   `;
@@ -30856,7 +31036,7 @@ async function uploadRenderedVideoToStorage({
   };
 }
 
-async function generateAnimatedProductVideo({
+export async function generateAnimatedProductVideo({
   openai,
   supabase,
   rule,
@@ -30919,7 +31099,7 @@ async function generateAnimatedProductVideo({
   };
 }
 
-function shouldUseLogoForRule(rule, brandProfile) {
+export function shouldUseLogoForRule(rule, brandProfile) {
   if (!brandProfile?.logo_url) {
     return false;
   }
@@ -31118,11 +31298,31 @@ async function resolveLargestProductImagesBeforeGeneration({
         !sharedPrimaryImageRejected
     );
     if (lockedProductObject) {
-      let inspected = null;
+      // v143.67: keep the locked product identity, but still probe larger URL
+      // variants of that exact same main-product asset. This is especially
+      // important for Drupal/Saint-Gobain sites that expose a 375-500 px
+      // /styles/product_gallery/ derivative while the original file is public.
+      // No page-wide image scan is performed here, so recommendations can never
+      // replace the locked product image.
+      let selection = null;
       try {
-        inspected = await inspectImage(primaryImageUrl);
+        const lockedCandidates = collectProductImageCandidates({
+          html: "",
+          pageUrl,
+          primaryImageUrl,
+          productTitle: item?.title || item?.item_title || "",
+          renderedCandidates: [],
+        }).filter((candidate) =>
+          candidate?.assetKey === canonicalProductImageAssetKey(primaryImageUrl)
+        );
+        selection = await selectLargestVerifiedProductImage({
+          candidates: lockedCandidates,
+          primaryImageUrl,
+          inspectImage,
+          maximumInspections: 8,
+        });
       } catch (error) {
-        console.warn("Locked product page image could not be downloaded", {
+        console.warn("Locked product page image quality upgrade unavailable", {
           ruleId,
           productUrl: pageUrl || null,
           productTitle: item?.title || null,
@@ -31130,9 +31330,18 @@ async function resolveLargestProductImagesBeforeGeneration({
           message: error?.message || String(error),
         });
       }
-      const downloadable = Boolean(
-        inspected?.width > 0 && inspected?.height > 0 && inspected?.bytes > 0
-      );
+
+      const selected = selection?.selected
+        ? {
+            ...selection.selected,
+            identityVerified: true,
+            identityMethod: "locked_product_page_object",
+            fingerprintSimilarity: 1,
+          }
+        : null;
+      if (selected && selection) {
+        selection = { ...selection, selected };
+      }
       resolutions.push({
         item,
         html: "",
@@ -31143,24 +31352,7 @@ async function resolveLargestProductImagesBeforeGeneration({
         sharedPrimaryImageRejected: false,
         pageIdentityMismatch: false,
         staticCandidates: [],
-        selection: downloadable
-          ? {
-              selected: {
-                url: primaryImageUrl,
-                source: item?.locked_product_source || "locked_product_page_object",
-                width: Number(inspected?.width || 0) || null,
-                height: Number(inspected?.height || 0) || null,
-                identityVerified: true,
-                identityMethod: "locked_product_page_object",
-                fingerprintSimilarity: 1,
-              },
-              verifiedCandidates: [],
-              usedSmallImageFallback: !(
-                Number(inspected?.width || 0) >= 1000 &&
-                Number(inspected?.height || 0) >= 1000
-              ),
-            }
-          : null,
+        selection,
         browserUsed: false,
         renderedCandidateCount: 0,
         lockedProductObject: true,
@@ -31170,10 +31362,14 @@ async function resolveLargestProductImagesBeforeGeneration({
         productUrl: pageUrl || null,
         productTitle: item?.title || null,
         productIdentifier: item?.locked_product_identifier || null,
-        imageUrl: primaryImageUrl,
-        downloadable,
-        width: Number(inspected?.width || 0) || null,
-        height: Number(inspected?.height || 0) || null,
+        originalImageUrl: primaryImageUrl,
+        imageUrl: selected?.url || null,
+        downloadable: Boolean(selected?.width && selected?.height),
+        width: Number(selected?.width || 0) || null,
+        height: Number(selected?.height || 0) || null,
+        sameAssetQualityUpgrade: Boolean(
+          selected?.url && selected.url !== primaryImageUrl
+        ),
       });
       continue;
     }
@@ -32060,7 +32256,7 @@ async function fetchImageBufferForOverlay(imageUrl) {
   return Buffer.from(arrayBuffer);
 }
 
-async function applyLogoOverlayIfNeeded({
+export async function applyLogoOverlayIfNeeded({
   supabase,
   userId,
   postId,
@@ -35196,19 +35392,50 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
                 automationOccurrenceResumedAfterWebsiteRateLimit,
             });
 
-            websiteItem = preparedCarouselProducts.websiteItem;
-            websiteItems = preparedCarouselProducts.websiteItems || [];
-            websiteReserveItems = preparedCarouselProducts.websiteReserveItems || [];
-            productContentContract = preparedCarouselProducts.productContentContract ||
-              buildProductContentContract(websiteItems, websiteReserveItems);
-            websiteSourceUrl = preparedCarouselProducts.websiteSourceUrl;
+            websiteSourceUrl = preparedCarouselProducts.websiteSourceUrl ||
+              getWebsiteProductSourceUrl(brandProfile, rule) || null;
+            const preparedSelectedItems = preparedCarouselProducts.websiteItems || [];
+            const preparedReserveItems = preparedCarouselProducts.websiteReserveItems || [];
+            const lockedCarouselPool = await ensureLockedProductPoolForUse({
+              supabase,
+              openai,
+              items: [...preparedSelectedItems, ...preparedReserveItems],
+              websiteUrl: websiteSourceUrl || preparedSelectedItems?.[0]?.url || "",
+              rule: preparedCarouselProducts.websiteRule || rule,
+              ruleId: rule.id,
+            });
+            websiteItems = lockedCarouselPool.lockedItems.slice(0, CAROUSEL_PRODUCT_SLIDE_TARGET);
+            websiteReserveItems = lockedCarouselPool.lockedItems.slice(CAROUSEL_PRODUCT_SLIDE_TARGET);
+            if (websiteItems.length < CAROUSEL_PRODUCT_SLIDE_TARGET) {
+              const lockedCarouselError = new Error(
+                `Spreelo could verify only ${websiteItems.length} of ${CAROUSEL_PRODUCT_SLIDE_TARGET} exact product-page objects for this carousel.`
+              );
+              lockedCarouselError.code = "CAROUSEL_LOCKED_PRODUCT_POOL_INCOMPLETE";
+              lockedCarouselError.partialProducts = websiteItems;
+              lockedCarouselError.productEngineDiagnostics = {
+                ...(preparedCarouselProducts.productEngineDiagnostics || {}),
+                unifiedLockedProductPipeline: true,
+                rejectedLockedProductCount: lockedCarouselPool.rejectedItems.length,
+                rejectedLockedProducts: lockedCarouselPool.rejectedItems.slice(0, 8),
+              };
+              throw lockedCarouselError;
+            }
+            websiteItem = websiteItems[0] || preparedCarouselProducts.websiteItem || null;
+            productContentContract = buildProductContentContract(websiteItems, websiteReserveItems);
             websiteCycleNumber = preparedCarouselProducts.websiteCycleNumber;
             useWebsiteImage = Boolean(preparedCarouselProducts.useWebsiteImage);
-            websitePreparedRule = preparedCarouselProducts.websiteRule || rule;
+            websitePreparedRule = {
+              ...(preparedCarouselProducts.websiteRule || rule),
+              website_item: websiteItem,
+              website_items: websiteItems,
+            };
             automationRunWebsiteItem = websiteItem;
             automationRunWebsiteItems = websiteItems;
-            automationRunProductEngineDiagnostics =
-              preparedCarouselProducts.productEngineDiagnostics || null;
+            automationRunProductEngineDiagnostics = {
+              ...(preparedCarouselProducts.productEngineDiagnostics || {}),
+              unifiedLockedProductPipeline: true,
+              rejectedLockedProductCount: lockedCarouselPool.rejectedItems.length,
+            };
           } catch (carouselError) {
             const message = carouselError.message ||
               `Website carousel needs at least ${CAROUSEL_MIN_PRODUCT_SLIDES} products with product images.`;
@@ -35598,21 +35825,9 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
           );
         }
 
-        const rawGeneratedContent = await generateAutomationPostWithProductContractValidation(
+        let generatedContent = await generateLockedProductPostContentForUse(
           openai,
           ruleWithBrandProfile
-        );
-
-        const sanitizedGeneratedContent = sanitizeUnsupportedOfferLanguage(
-          rawGeneratedContent,
-          websiteItem
-        );
-        let generatedContent = cleanPostContentUrls(
-          removePricesFromAnimatedCaption(
-            sanitizedGeneratedContent,
-            ruleWithBrandProfile
-          ),
-          getPostDestinationUrl(ruleWithBrandProfile)
         );
 
         if (!generatedContent) {
@@ -35710,6 +35925,15 @@ product_research_model_used: websitePreparedRule.uses_website_content
             description: item?.description || item?.body || item?.reason || "",
             url: item?.url || item?.item_url || item?.product_url || "",
             image_url: item?.image_url || item?.imageUrl || "",
+            product_brand: item?.product_brand || item?.locked_product_brand || item?.brand || "",
+            product_identifier: item?.product_identifier || item?.locked_product_identifier || "",
+            product_display_type: item?.product_display_type || item?.display_product_type || item?.locked_product_category || item?.category || "",
+            product_color: item?.product_color || item?.locked_product_color || item?.color || "",
+            product_image_width: Number(item?.product_image_width || 0) || null,
+            product_image_height: Number(item?.product_image_height || 0) || null,
+            product_identity_locked: item?.product_identity_locked === true,
+            product_image_semantic_verified: item?.product_image_semantic_verified === true,
+            locked_product_fingerprint: item?.locked_product_fingerprint || "",
           }));
         await supabase.from("posts").update({ admin_product_items: adminProductItems }).eq("id", post.id);
         await upsertAdminReviewCase(supabase, {

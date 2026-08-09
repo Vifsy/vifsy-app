@@ -4,18 +4,26 @@ import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   Clock3,
+  ExternalLink,
   FileCheck2,
   ImageIcon,
+  Link2,
   LoaderCircle,
+  Maximize2,
+  PackageCheck,
   RefreshCw,
   Save,
+  ScanSearch,
+  ShieldCheck,
   Sparkles,
   Trash2,
   Upload,
   Video,
   X,
+  ZoomIn,
   XCircle,
 } from "lucide-react";
 import AppLayout from "../../../components/AppLayout";
@@ -63,34 +71,68 @@ function getFiveCarouselProducts(items) {
   }));
 }
 
-function MediaPreview({ post, t }) {
+function getPostMediaItems(post) {
+  if (Array.isArray(post?.slides) && post.slides.length) {
+    return post.slides
+      .filter((slide) => slide?.image_url)
+      .map((slide, index) => ({
+        url: slide.image_url,
+        label: slide.headline || slide.metadata?.product_title || `Slide ${slide.slide_order || index + 1}`,
+        productUrl: slide.product_url || "",
+        order: slide.slide_order || index + 1,
+      }));
+  }
+  return post?.image_url
+    ? [{ url: post.image_url, label: post.post_type || post.content_format || "Post image", productUrl: post?.admin_product_items?.[0]?.url || "", order: 1 }]
+    : [];
+}
+
+function MediaPreview({ post, t, onOpen }) {
+  const mediaItems = getPostMediaItems(post);
   if (post.slides?.length) {
     return (
-      <div className="admin-v74-slide-grid">
-        {post.slides.map((slide) => (
-          <article key={`${post.id}-${slide.slide_order}`}>
-            {slide.image_url ? <img src={slide.image_url} alt="" /> : <span><ImageIcon size={22} /></span>}
-            <div>
-              <strong>{slide.headline || slide.metadata?.product_title || `Slide ${slide.slide_order}`}</strong>
-              {slide.body ? <p>{slide.body}</p> : null}
-              {slide.cta_text ? <small>{slide.cta_text}</small> : null}
-            </div>
-          </article>
-        ))}
+      <div className="admin-review-media-section">
+        <div className="admin-review-section-heading">
+          <div><span>Visual review</span><strong>{mediaItems.length} images</strong></div>
+          <small>Click any image to inspect it full size</small>
+        </div>
+        <div className="admin-v74-slide-grid admin-review-slide-grid">
+          {post.slides.map((slide) => {
+            const mediaIndex = mediaItems.findIndex((item) => item.url === slide.image_url);
+            return (
+              <article key={`${post.id}-${slide.slide_order}`}>
+                {slide.image_url ? (
+                  <button type="button" className="admin-review-image-button" onClick={() => onOpen?.(Math.max(0, mediaIndex))}>
+                    <img src={slide.image_url} alt="" />
+                    <span className="admin-review-image-zoom"><Maximize2 size={16} /> Inspect</span>
+                  </button>
+                ) : <span><ImageIcon size={22} /></span>}
+                <div>
+                  <strong>{slide.headline || slide.metadata?.product_title || `Slide ${slide.slide_order}`}</strong>
+                  {slide.body ? <p>{slide.body}</p> : null}
+                  {slide.cta_text ? <small>{slide.cta_text}</small> : null}
+                </div>
+              </article>
+            );
+          })}
+        </div>
       </div>
     );
   }
   if (post.video_url) {
     return (
-      <div className="admin-v74-media-frame">
+      <div className="admin-v74-media-frame admin-review-primary-media">
         <video src={post.video_url} controls playsInline preload="metadata" />
       </div>
     );
   }
   if (post.image_url) {
     return (
-      <div className="admin-v74-media-frame">
-        <img src={post.image_url} alt="" />
+      <div className="admin-v74-media-frame admin-review-primary-media">
+        <button type="button" className="admin-review-image-button admin-review-single-image" onClick={() => onOpen?.(0)}>
+          <img src={post.image_url} alt="" />
+          <span className="admin-review-image-zoom"><ZoomIn size={17} /> Inspect full size</span>
+        </button>
       </div>
     );
   }
@@ -117,17 +159,31 @@ export default function AdminPostApprovalsPage() {
   const [regenerationSuccess, setRegenerationSuccess] = useState("");
   const [outroSlide, setOutroSlide] = useState(null);
   const [outroRemoved, setOutroRemoved] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(null);
+  const [resolvingProductIndex, setResolvingProductIndex] = useState(null);
+  const [savingReviewChanges, setSavingReviewChanges] = useState(false);
 
   const selectedPost = useMemo(
     () => posts.find((post) => post.id === selectedPostId) || null,
     [posts, selectedPostId]
   );
+  const lightboxItems = useMemo(() => getPostMediaItems(selectedPost), [selectedPost]);
   const carouselReady =
     isCarouselPost(selectedPost) &&
     materials.length === CAROUSEL_PRODUCT_COUNT &&
-    materials.every(
-      (item) => item.image_url && item.title?.trim() && item.url?.trim()
-    );
+    materials.every((item) => item.url?.trim());
+  const singleProductReady =
+    Boolean(selectedPost) &&
+    !isCarouselPost(selectedPost) &&
+    Boolean(materials?.[0]?.url?.trim());
+  const verifiedMaterialCount = materials.filter(
+    (item) => item.product_identity_locked === true && item.product_image_semantic_verified === true
+  ).length;
+  const lowResolutionMaterialCount = materials.filter((item) => {
+    const width = Number(item?.product_image_width || 0);
+    const height = Number(item?.product_image_height || 0);
+    return width > 0 && height > 0 && Math.max(width, height) < 1000;
+  }).length;
 
   useEffect(() => { loadPosts(); }, [filter]);
   useEffect(() => {
@@ -141,18 +197,33 @@ export default function AdminPostApprovalsPage() {
   }, [filter, selectedPostId]);
   useEffect(() => { loadReviewGate(); }, []);
   useEffect(() => {
-    if (!selectedPostId) return undefined;
-    const onKeyDown = (event) => { if (event.key === "Escape") setSelectedPostId(""); };
+    if (!selectedPostId && lightboxIndex === null) return undefined;
+    const onKeyDown = (event) => {
+      if (lightboxIndex !== null) {
+        if (event.key === "Escape") setLightboxIndex(null);
+        if (event.key === "ArrowLeft") setLightboxIndex((index) => lightboxItems.length ? (Number(index || 0) - 1 + lightboxItems.length) % lightboxItems.length : null);
+        if (event.key === "ArrowRight") setLightboxIndex((index) => lightboxItems.length ? (Number(index || 0) + 1) % lightboxItems.length : null);
+        return;
+      }
+      if (event.key === "Escape") setSelectedPostId("");
+    };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedPostId]);
+  }, [selectedPostId, lightboxIndex, lightboxItems.length]);
   useEffect(() => {
-    setMaterials(isCarouselPost(selectedPost) ? getFiveCarouselProducts(selectedPost?.admin_product_items) : []);
+    setMaterials(
+      isCarouselPost(selectedPost)
+        ? getFiveCarouselProducts(selectedPost?.admin_product_items)
+        : selectedPost?.admin_product_items?.length
+          ? [{ ...emptyCarouselProduct(), ...(selectedPost.admin_product_items[0] || {}) }]
+          : []
+    );
     setPostCopy(selectedPost?.content || "");
     setOutroSlide(selectedPost?.outro_slide || null);
     setOutroRemoved(false);
     setRegenerationError("");
     setRegenerationSuccess("");
+    setLightboxIndex(null);
   }, [selectedPost]);
 
   async function loadPosts(preferredSelectedPostId = "") {
@@ -249,6 +320,29 @@ export default function AdminPostApprovalsPage() {
     return result;
   }
 
+  async function saveCurrentReviewChanges() {
+    if (!selectedPost || isSyntheticAdminCaseId(selectedPost.id)) return;
+    setSavingReviewChanges(true);
+    setRegenerationError("");
+    setRegenerationSuccess("");
+    try {
+      await runAdminAction({
+        action: "save_materials",
+        post_id: selectedPost.id,
+        occurrence_id: selectedPost.occurrence_id || null,
+        content: postCopy,
+        product_items: materials,
+      });
+      await loadPosts(selectedPost.id);
+      setSelectedPostId(selectedPost.id);
+      setRegenerationSuccess("Review changes saved.");
+    } catch (actionError) {
+      setRegenerationError(actionError.message || "Could not save review changes.");
+    } finally {
+      setSavingReviewChanges(false);
+    }
+  }
+
   async function regenerateFromMaterials() {
     if (!selectedPost) return;
     setRegenerating(true);
@@ -268,6 +362,77 @@ export default function AdminPostApprovalsPage() {
       setRegenerationError(message);
       setError(message);
     } finally { setRegenerating(false); }
+  }
+
+  async function regenerateSingleProduct() {
+    if (!selectedPost || !singleProductReady) return;
+    setRegenerating(true);
+    setError("");
+    setRegenerationError("");
+    setRegenerationSuccess("");
+    try {
+      const headers = await getHeaders();
+      const response = await fetch("/api/admin/post-approvals/regenerate-product", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          post_id: selectedPost.id,
+          product_url: materials[0].url,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || "Product post regeneration failed.");
+      await loadPosts(result.post_id);
+      setSelectedPostId(result.post_id);
+      setRegenerationSuccess(
+        result.format === "animated_product_reel"
+          ? "Product Reel regenerated from the verified original product page."
+          : result.format === "ai_product_ad"
+            ? "AI product ad regenerated from the verified original product page."
+            : "Product post regenerated from the verified original product page."
+      );
+    } catch (actionError) {
+      const message = actionError.message || "Product post regeneration failed.";
+      setRegenerationError(message);
+      setError(message);
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
+  async function resolveMaterialProduct(index) {
+    const productUrl = String(materials?.[index]?.url || "").trim();
+    if (!selectedPost || !productUrl) return;
+    setResolvingProductIndex(index);
+    setRegenerationError("");
+    setRegenerationSuccess("");
+    try {
+      const headers = await getHeaders();
+      const response = await fetch("/api/admin/post-approvals/resolve-product", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          post_id: selectedPost.status === "failed" ? null : selectedPost.id,
+          occurrence_id: selectedPost.occurrence_id || null,
+          product_url: productUrl,
+          title_hint: materials?.[index]?.title || "",
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || "Could not verify product URL.");
+      setMaterials((items) => items.map((item, itemIndex) =>
+        itemIndex === index ? { ...emptyCarouselProduct(), ...(result.product || {}) } : item
+      ));
+      setRegenerationSuccess(
+        isCarouselPost(selectedPost)
+          ? `Product ${index + 1} was fetched and verified from its original page.`
+          : "The replacement product was fetched and verified from its original page. Regenerate the post when you are ready."
+      );
+    } catch (actionError) {
+      setRegenerationError(actionError.message || "Could not verify product URL.");
+    } finally {
+      setResolvingProductIndex(null);
+    }
   }
 
   async function uploadProductImage(index, file) {
@@ -424,36 +589,94 @@ export default function AdminPostApprovalsPage() {
               </header>
 
               <div className="admin-v74-detail-body">
-                <div className="admin-v74-email-preview">
-                  <div className="admin-v74-email-topline">SPREELO</div>
-                  <h3>{selectedPost.post_type || selectedPost.content_format || t("admin.approvals.post")}</h3>
-                  {!isCarouselPost(selectedPost) ? <MediaPreview post={selectedPost} t={t} /> : null}
-                  <div className="admin-v74-post-copy">
-                    <span>{t("admin.approvals.postCopy")}</span>
-                    <p>{selectedPost.content || t("admin.approvals.noContent")}</p>
+                <div className="admin-v74-email-preview admin-review-workspace-main">
+                  <div className="admin-v74-email-topline">SPREELO REVIEW WORKSPACE</div>
+                  <div className="admin-review-title-row">
+                    <div>
+                      <span>{selectedPost.post_type || selectedPost.content_format || t("admin.approvals.post")}</span>
+                      <h3>Quality review</h3>
+                    </div>
+                    <span className="admin-review-post-id">{String(selectedPost.id || "").slice(0, 8)}</span>
                   </div>
+
+                  <div className="admin-review-quality-strip">
+                    <div className={materials.length && verifiedMaterialCount === materials.length ? "ok" : "neutral"}>
+                      <ShieldCheck size={18} /><span>Product identity</span><strong>{materials.length ? `${verifiedMaterialCount}/${materials.length}` : "Ready"}</strong>
+                    </div>
+                    <div className={lowResolutionMaterialCount ? "warning" : "ok"}>
+                      <ImageIcon size={18} /><span>Image quality</span><strong>{lowResolutionMaterialCount ? `${lowResolutionMaterialCount} low-res` : "Checked"}</strong>
+                    </div>
+                    <div className={lightboxItems.length ? "ok" : "neutral"}>
+                      <PackageCheck size={18} /><span>Media</span><strong>{lightboxItems.length ? `${lightboxItems.length} image${lightboxItems.length === 1 ? "" : "s"}` : selectedPost.video_url ? "Video" : "None"}</strong>
+                    </div>
+                    <div className={selectedPost.content ? "ok" : "warning"}>
+                      <FileCheck2 size={18} /><span>Post copy</span><strong>{selectedPost.content ? "Ready" : "Missing"}</strong>
+                    </div>
+                  </div>
+
+                  <MediaPreview post={selectedPost} t={t} onOpen={(index) => setLightboxIndex(index)} />
+
+                  <section className="admin-review-copy-editor">
+                    <div className="admin-review-section-heading">
+                      <div><span>Caption</span><strong>Post copy</strong></div>
+                      <small>Edit before regeneration if needed</small>
+                    </div>
+                    <textarea value={postCopy} onChange={(event) => setPostCopy(event.target.value)} placeholder={t("admin.approvals.noContent")} />
+                  </section>
+
                   {isCarouselPost(selectedPost) ? (
-                    <section className="admin-carousel-editor">
+                    <section className="admin-carousel-editor admin-review-product-workspace">
                       <div className="admin-carousel-editor-heading">
-                        <div><span>Carousel products</span><strong>Exactly five products</strong><p>Keep any products that are already correct and replace only the ones you want. Old and newly added products can be mixed. Five product images + product text/name + product links are enough; description is optional. Caption and hashtags are regenerated from exactly these five products.</p></div>
-                        <b className={carouselReady ? "ready" : ""}>{materials.filter((item) => item.image_url && item.title?.trim() && item.url?.trim()).length}/5</b>
+                        <div>
+                          <span>Product source</span>
+                          <strong>Five exact product URLs</strong>
+                          <p>Paste the original product URL. Spreelo fetches the name, brand, product type, variant and best verified main image itself. You do not need to type product information manually.</p>
+                        </div>
+                        <b className={carouselReady ? "ready" : ""}>{materials.filter((item) => item.url?.trim()).length}/5</b>
                       </div>
-                      <div className="admin-carousel-product-grid">
-                        {materials.map((item, index) => (
-                          <article className={item.image_url ? "complete" : "empty"} key={`${selectedPost.id}-product-${index}`}>
-                            <span className="admin-carousel-number">{index + 1}</span>
-                            <button type="button" className="admin-carousel-clear" onClick={() => setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? emptyCarouselProduct() : row))} aria-label="Remove product"><X size={16} /></button>
-                            <div className="admin-carousel-product-image">
-                              {(item.preview_image_url || item.image_url) ? <img src={item.preview_image_url || item.image_url} alt="" /> : <ImageIcon size={28} />}
-                              <label><Upload size={15} />{item.image_url ? "Replace image" : "Upload product image"}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => uploadProductImage(index, event.target.files?.[0])} /></label>
-                            </div>
-                            <div className="admin-carousel-product-fields">
-                              <input value={item.title || ""} placeholder="Product name" onChange={(event) => setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, title: event.target.value } : row))} />
-                              <textarea value={item.description || ""} placeholder="Product information (optional — leave blank if name + image + link are enough)" onChange={(event) => setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, description: event.target.value } : row))} />
-                              <input value={item.url || ""} placeholder="Product URL (required)" onChange={(event) => setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, url: event.target.value } : row))} />
-                            </div>
-                          </article>
-                        ))}
+                      <div className="admin-carousel-product-grid admin-review-product-grid">
+                        {materials.map((item, index) => {
+                          const verified = item.product_identity_locked === true && item.product_image_semantic_verified === true;
+                          const width = Number(item.product_image_width || 0);
+                          const height = Number(item.product_image_height || 0);
+                          return (
+                            <article className={item.url ? "complete" : "empty"} key={`${selectedPost.id}-product-${index}`}>
+                              <span className="admin-carousel-number">{index + 1}</span>
+                              <button type="button" className="admin-carousel-clear" onClick={() => setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? emptyCarouselProduct() : row))} aria-label="Remove product"><X size={16} /></button>
+                              <div className="admin-carousel-product-image admin-review-product-image">
+                                {(item.image_url || item.preview_image_url) ? <img src={item.image_url || item.preview_image_url} alt="" /> : <ImageIcon size={28} />}
+                                <span className={`admin-product-verification-badge ${verified ? "verified" : "pending"}`}>{verified ? <ShieldCheck size={13} /> : <ScanSearch size={13} />}{verified ? "Verified source" : "Fetch from URL"}</span>
+                              </div>
+                              <div className="admin-carousel-product-fields admin-review-product-fields">
+                                <label className="admin-product-url-field">
+                                  <span>Original product URL</span>
+                                  <div>
+                                    <Link2 size={15} />
+                                    <input value={item.url || ""} placeholder="https://.../product" onChange={(event) => {
+                                      const url = event.target.value;
+                                      setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? { ...emptyCarouselProduct(), url } : row));
+                                    }} />
+                                    <button type="button" disabled={!item.url?.trim() || resolvingProductIndex === index} onClick={() => resolveMaterialProduct(index)}>
+                                      {resolvingProductIndex === index ? <LoaderCircle className="admin-spin" size={15} /> : <ScanSearch size={15} />}
+                                      Fetch
+                                    </button>
+                                  </div>
+                                </label>
+                                {item.title ? (
+                                  <div className="admin-product-facts">
+                                    <div><span>Brand</span><strong>{item.product_brand || "—"}</strong></div>
+                                    <div><span>Product</span><strong>{item.title}</strong></div>
+                                    <div><span>Type</span><strong>{item.product_display_type || "—"}</strong></div>
+                                    <div><span>Variant</span><strong>{item.product_color || "—"}</strong></div>
+                                    <div><span>SKU / ID</span><strong>{item.product_identifier || "—"}</strong></div>
+                                    <div><span>Source image</span><strong>{width && height ? `${width} × ${height}` : "—"}</strong></div>
+                                  </div>
+                                ) : <p className="admin-product-url-help">Paste a product URL and click Fetch. Spreelo will fill everything else.</p>}
+                                {item.url ? <a className="admin-product-original-link" href={item.url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Open original product</a> : null}
+                              </div>
+                            </article>
+                          );
+                        })}
                         <article className={`admin-carousel-outro ${outroSlide?.image_url && !outroRemoved ? "complete" : "empty"}`}>
                           <span className="admin-carousel-number">AI</span>
                           {outroSlide?.image_url && !outroRemoved ? <button type="button" className="admin-carousel-clear" onClick={() => setOutroRemoved(true)} aria-label="Create a new AI closing image"><X size={16} /></button> : null}
@@ -464,7 +687,56 @@ export default function AdminPostApprovalsPage() {
                       </div>
                       {regenerationError ? <div className="admin-alert error admin-regeneration-inline-alert"><AlertTriangle size={16} /> <span>{regenerationError}</span></div> : null}
                       {regenerationSuccess ? <div className="admin-alert success admin-regeneration-inline-alert"><CheckCircle2 size={16} /> <span>{regenerationSuccess}</span></div> : null}
-                      <button type="button" className="admin-primary-button admin-regenerate-button" disabled={regenerating || !carouselReady} onClick={regenerateFromMaterials}>{regenerating ? <LoaderCircle className="admin-spin" size={16} /> : <RefreshCw size={16} />} Regenerate complete carousel</button>
+                    </section>
+                  ) : selectedPost.admin_product_items?.length || materials.length ? (
+                    <section className="admin-review-single-product">
+                      <div className="admin-review-section-heading">
+                        <div><span>Product source</span><strong>Locked product object</strong></div>
+                        <small>Replace the product by pasting only its original URL</small>
+                      </div>
+                      {materials.slice(0, 1).map((item, index) => {
+                        const verified = item.product_identity_locked === true && item.product_image_semantic_verified === true;
+                        return (
+                          <div className="admin-review-single-product-editor" key={`single-product-${index}`}>
+                            <div className="admin-review-single-product-source">
+                              <div className="admin-review-product-image">
+                                {item.image_url ? <img src={item.image_url} alt="" /> : <ImageIcon size={30} />}
+                                <span className={`admin-product-verification-badge ${verified ? "verified" : "pending"}`}>
+                                  {verified ? <ShieldCheck size={13} /> : <ScanSearch size={13} />}
+                                  {verified ? "Verified source" : "Fetch from URL"}
+                                </span>
+                              </div>
+                              <label className="admin-product-url-field">
+                                <span>Original product URL</span>
+                                <div>
+                                  <Link2 size={15} />
+                                  <input value={item.url || ""} placeholder="https://.../product" onChange={(event) => {
+                                    const url = event.target.value;
+                                    setMaterials([{ ...emptyCarouselProduct(), url }]);
+                                  }} />
+                                  <button type="button" disabled={!item.url?.trim() || resolvingProductIndex === 0} onClick={() => resolveMaterialProduct(0)}>
+                                    {resolvingProductIndex === 0 ? <LoaderCircle className="admin-spin" size={15} /> : <ScanSearch size={15} />}
+                                    Fetch
+                                  </button>
+                                </div>
+                              </label>
+                            </div>
+                            {item.title ? (
+                              <div className="admin-product-facts admin-product-facts-single">
+                                <div><span>Brand</span><strong>{item.product_brand || "—"}</strong></div>
+                                <div><span>Product</span><strong>{item.title || "—"}</strong></div>
+                                <div><span>Type</span><strong>{item.product_display_type || "—"}</strong></div>
+                                <div><span>Variant</span><strong>{item.product_color || "—"}</strong></div>
+                                <div><span>SKU / ID</span><strong>{item.product_identifier || "—"}</strong></div>
+                                <div><span>Source image</span><strong>{item.product_image_width && item.product_image_height ? `${item.product_image_width} × ${item.product_image_height}` : "—"}</strong></div>
+                              </div>
+                            ) : <p className="admin-product-url-help">Paste the original product URL and click Fetch. Spreelo will fetch the product name, brand, type, variant and best verified image itself.</p>}
+                            {item.url ? <a className="admin-product-original-link" href={item.url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Open original product</a> : null}
+                            {regenerationError ? <div className="admin-alert error admin-regeneration-inline-alert"><AlertTriangle size={16} /> <span>{regenerationError}</span></div> : null}
+                            {regenerationSuccess ? <div className="admin-alert success admin-regeneration-inline-alert"><CheckCircle2 size={16} /> <span>{regenerationSuccess}</span></div> : null}
+                          </div>
+                        );
+                      })}
                     </section>
                   ) : null}
                 </div>
@@ -504,17 +776,6 @@ export default function AdminPostApprovalsPage() {
                     </div>
                   ) : null}
 
-                  {selectedPost.admin_review_status === "pending" && selectedPost.status !== "failed" ? (
-                    <button
-                      type="button"
-                      className="admin-primary-button admin-release-button"
-                      disabled={releasingPostId === selectedPost.id}
-                      onClick={() => releaseToCustomer(selectedPost.id)}
-                    >
-                      {releasingPostId === selectedPost.id ? <LoaderCircle className="admin-spin" size={16} /> : <CheckCircle2 size={16} />}
-                      {t("admin.approvals.releaseToCustomer")}
-                    </button>
-                  ) : null}
                   {!isSyntheticAdminCaseId(selectedPost.id) ? <button type="button" className="admin-archive-button" onClick={() => archiveSelected([selectedPost.id])}><Trash2 size={15} /> Archive post</button> : null}
 
                   {selectedPost.rejection ? (
@@ -530,7 +791,57 @@ export default function AdminPostApprovalsPage() {
                   ) : null}
                 </aside>
               </div>
+              <footer className="admin-review-actionbar">
+                <button type="button" className="admin-review-secondary-action" onClick={() => setSelectedPostId("")}><X size={16} /> Close</button>
+                <div>
+                  {!isSyntheticAdminCaseId(selectedPost.id) ? (
+                    <button type="button" className="admin-review-secondary-action" disabled={savingReviewChanges} onClick={saveCurrentReviewChanges}>
+                      {savingReviewChanges ? <LoaderCircle className="admin-spin" size={16} /> : <Save size={16} />}
+                      Save changes
+                    </button>
+                  ) : null}
+                  {isCarouselPost(selectedPost) ? (
+                    <button type="button" className="admin-review-secondary-action admin-review-regenerate-action" disabled={regenerating || !carouselReady} onClick={regenerateFromMaterials}>
+                      {regenerating ? <LoaderCircle className="admin-spin" size={16} /> : <RefreshCw size={16} />}
+                      Regenerate complete carousel
+                    </button>
+                  ) : selectedPost.admin_product_items?.length || materials.length ? (
+                    <button type="button" className="admin-review-secondary-action admin-review-regenerate-action" disabled={regenerating || !singleProductReady} onClick={regenerateSingleProduct}>
+                      {regenerating ? <LoaderCircle className="admin-spin" size={16} /> : <RefreshCw size={16} />}
+                      Regenerate with product
+                    </button>
+                  ) : null}
+                  {selectedPost.admin_review_status === "pending" && selectedPost.status !== "failed" ? (
+                    <button type="button" className="admin-primary-button admin-review-approve-action" disabled={releasingPostId === selectedPost.id} onClick={() => releaseToCustomer(selectedPost.id)}>
+                      {releasingPostId === selectedPost.id ? <LoaderCircle className="admin-spin" size={16} /> : <CheckCircle2 size={16} />}
+                      {t("admin.approvals.releaseToCustomer")}
+                    </button>
+                  ) : null}
+                </div>
+              </footer>
             </section>
+          </div>
+        ) : null}
+
+        {lightboxIndex !== null && lightboxItems[lightboxIndex] ? (
+          <div className="admin-review-lightbox" role="dialog" aria-modal="true" aria-label="Full size image review" onMouseDown={(event) => { if (event.target === event.currentTarget) setLightboxIndex(null); }}>
+            <header>
+              <div>
+                <span>{selectedPost?.brand_name || "Spreelo"}</span>
+                <strong>{lightboxItems[lightboxIndex].label}</strong>
+                <small>{lightboxIndex + 1} / {lightboxItems.length}</small>
+              </div>
+              <div>
+                {lightboxItems[lightboxIndex].productUrl ? <a href={lightboxItems[lightboxIndex].productUrl} target="_blank" rel="noreferrer"><ExternalLink size={16} /> Original product</a> : null}
+                <button type="button" onClick={() => setLightboxIndex(null)} aria-label="Close full size image"><X size={21} /></button>
+              </div>
+            </header>
+            <div className="admin-review-lightbox-stage">
+              {lightboxItems.length > 1 ? <button type="button" className="previous" onClick={() => setLightboxIndex((lightboxIndex - 1 + lightboxItems.length) % lightboxItems.length)} aria-label="Previous image"><ChevronLeft size={26} /></button> : null}
+              <img src={lightboxItems[lightboxIndex].url} alt="" />
+              {lightboxItems.length > 1 ? <button type="button" className="next" onClick={() => setLightboxIndex((lightboxIndex + 1) % lightboxItems.length)} aria-label="Next image"><ChevronRight size={26} /></button> : null}
+            </div>
+            <footer><span>Use ← → to browse · Esc to close</span><strong><ZoomIn size={15} /> Full-resolution review</strong></footer>
           </div>
         ) : null}
       </div>
