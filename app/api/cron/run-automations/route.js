@@ -1521,7 +1521,10 @@ function normalizeCarouselProductLabelAnalysis(value) {
     !["text_only", "compact_card"].includes(layout)
   ) return null;
 
-  return { placement, layout, textTone, confidence, productBox };
+  // v143.56: keep the premium glass-card identity consistent on every
+  // ecommerce carousel slide. AI still chooses the safest placement and text
+  // tone, but it no longer decides whether the branded glass card disappears.
+  return { placement, layout: "compact_card", textTone, confidence, productBox };
 }
 
 async function analyzeCarouselProductLabelPlacements({ openai, items, ruleId }) {
@@ -1533,7 +1536,7 @@ async function analyzeCarouselProductLabelPlacements({ openai, items, ruleId }) 
   const content = [
     {
       type: "input_text",
-      text: "Analyze all supplied ecommerce images in this single request. For each image, locate the marketed product named in the title and choose one predefined free area only when a product-name label can be placed without covering or touching the marketed product. People and animals are allowed and must not cause rejection, but do not place text over faces or other visually important human or animal areas. Prefer text_only when the chosen area is visually calm with strong readable contrast; otherwise choose compact_card for a small translucent rounded card. Available areas are top_left, top_right, middle_left, middle_right, bottom_left, and bottom_right. Choose none only when none of these areas is safe, the product is unclear, or confidence is below 0.70. Coordinates are integers from 0 to 1000 relative to the full source image. Return exactly one result for every ID.",
+      text: "Analyze all supplied ecommerce images in this single request. For each image, locate the marketed product named in the title and choose the safest predefined area for Spreelo's compact translucent product card without covering or touching the marketed product. People and animals are allowed and must not cause rejection, but do not place the card over faces or other visually important human or animal areas. The visual layout is always compact_card; your job is to choose placement and readable text tone. Available areas are top_left, top_right, middle_left, middle_right, bottom_left, and bottom_right. Choose none only when the product is unclear or confidence is below 0.70; Spreelo will then use its own least-obstructive fallback so every product still receives a label. Coordinates are integers from 0 to 1000 relative to the full source image. Return exactly one result for every ID.",
     },
   ];
   for (const candidate of candidates) {
@@ -1778,7 +1781,7 @@ async function deriveLocalPackshotLabelAnalysis(sourceBuffer, { includeLogo = fa
   return {
     analysis: {
       placement: best.placement,
-      layout: best.variance < 180 ? "text_only" : "compact_card",
+      layout: "compact_card",
       textTone: best.mean < 120 ? "light" : "dark",
       confidence: 0.82,
       productBox: null,
@@ -2004,19 +2007,29 @@ export async function renderCarouselProductSlideImage({
           ? mapNormalizedBoxToContainedCanvas(productLabelAnalysis.productBox, sourceMetadata, width, height)
           : null;
 
-        if (productTitle && productLabelAnalysis && productCanvasBox &&
-            !(includeLogo && productLabelAnalysis.placement === "bottom_right")) {
-          if (productLabelAnalysis.placement) {
-            appliedLabelAnalysis = productLabelAnalysis;
+        if (productTitle && productLabelAnalysis && productCanvasBox) {
+          const preferredPlacement = productLabelAnalysis.placement;
+          const preferredAllowed = Boolean(preferredPlacement) &&
+            !(includeLogo && preferredPlacement === "bottom_right") &&
+            !boxesOverlapWithPadding(
+              CAROUSEL_PRODUCT_LABEL_PLACEMENTS[preferredPlacement],
+              productCanvasBox,
+              22
+            );
+          if (preferredAllowed) {
+            appliedLabelAnalysis = { ...productLabelAnalysis, layout: "compact_card" };
             productLabelSource = "ai_placement";
           } else {
+            const safePlacement = chooseNonOverlappingProductLabelPlacement(productCanvasBox, { includeLogo });
             appliedLabelAnalysis = {
               ...productLabelAnalysis,
-              placement: chooseLeastObstructiveProductLabelPlacement(productCanvasBox, { includeLogo }),
+              placement: safePlacement || chooseLeastObstructiveProductLabelPlacement(productCanvasBox, { includeLogo }),
               layout: "compact_card",
-              allowControlledOverlap: true,
+              allowControlledOverlap: !safePlacement,
             };
-            productLabelSource = "ai_bbox_glass_fallback";
+            productLabelSource = safePlacement
+              ? "ai_bbox_safe_glass_fallback"
+              : "ai_bbox_glass_fallback";
           }
         } else if (productTitle) {
           const localPlacement = await deriveLocalPackshotLabelAnalysis(sourceBuffer, { includeLogo });
@@ -2040,22 +2053,53 @@ export async function renderCarouselProductSlideImage({
       }
 
       if (productTitle && appliedLabelAnalysis && productCanvasBox) {
-        const labelRender = buildCarouselProductLabelSvg({
+        // v143.56: carousel labels are part of the visual identity, not an
+        // optional decoration. Force the glass-card layout and recover from a
+        // late geometry rejection by trying another safe corner before using
+        // the least-obstructive controlled-overlap position.
+        appliedLabelAnalysis = { ...appliedLabelAnalysis, layout: "compact_card" };
+        let labelRender = buildCarouselProductLabelSvg({
           title: productTitle,
           eyebrow: getProductLabelEyebrow(rule),
           analysis: appliedLabelAnalysis,
           productCanvasBox,
           languageHint,
         });
+
+        if (!labelRender?.svg) {
+          const recoveryPlacement = chooseNonOverlappingProductLabelPlacement(productCanvasBox, { includeLogo });
+          const recoveryAnalysis = {
+            ...appliedLabelAnalysis,
+            placement: recoveryPlacement || chooseLeastObstructiveProductLabelPlacement(productCanvasBox, { includeLogo }),
+            layout: "compact_card",
+            allowControlledOverlap: !recoveryPlacement,
+          };
+          labelRender = buildCarouselProductLabelSvg({
+            title: productTitle,
+            eyebrow: getProductLabelEyebrow(rule),
+            analysis: recoveryAnalysis,
+            productCanvasBox,
+            languageHint,
+          });
+          if (labelRender?.svg) {
+            appliedLabelAnalysis = recoveryAnalysis;
+            productLabelSource = recoveryPlacement
+              ? "render_safe_glass_fallback"
+              : "render_least_obstructive_glass_fallback";
+          }
+        }
+
         if (labelRender?.svg) {
           composites.push({ input: Buffer.from(labelRender.svg), top: 0, left: 0 });
           productLabelApplied = true;
           productLabelReason = productLabelSource.includes("fallback") && productLabelAnalysisStatus === "timed_out"
             ? "analysis_timeout_local_fallback"
-            : "applied";
+            : productLabelSource.includes("render_")
+              ? "placement_recovered"
+              : "applied";
           appliedTypography = labelRender.typography;
         } else {
-          productLabelReason = "overlap_rejected";
+          productLabelReason = "label_render_unavailable";
         }
       }
     } catch (error) {
