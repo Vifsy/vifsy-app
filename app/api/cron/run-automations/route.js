@@ -26476,28 +26476,139 @@ async function generateAutomationPost(openai, rule) {
   return completion.choices?.[0]?.message?.content?.trim() || "";
 }
 
-async function generateAutomationPostWithProductContractValidation(openai, rule) {
-  let content = await generateAutomationPost(openai, rule);
 
-  if (!PRODUCT_ENGINE_V2_ENABLED || isCarouselRule(rule) || !rule?.website_item) {
-    return content;
+async function validateProductCopyIdentityWithModel({
+  openai,
+  rule,
+  content,
+}) {
+  const contract =
+    rule?.product_content_contract ||
+    buildProductContentContract(
+      isCarouselRule(rule)
+        ? getCarouselProducts(rule).filter(isValidCarouselProduct)
+        : rule?.website_item
+          ? [rule.website_item]
+          : [],
+      rule?.website_reserve_items || []
+    );
+  const selectedProducts = Array.isArray(contract?.selected_products)
+    ? contract.selected_products.filter((item) => item?.title)
+    : [];
+
+  if (!selectedProducts.length || !String(content || "").trim()) {
+    return {
+      valid: true,
+      mentionedProducts: [],
+      invalidMentions: [],
+      reason: "no_product_contract",
+    };
   }
 
-  const validation = validateSingleProductCopyAgainstContract({
-    text: content,
-    selectedProduct: rule.website_item,
-    reserveProducts: rule.website_reserve_items || [],
-  });
+  const allowedProductsText = selectedProducts
+    .map(
+      (item, index) =>
+        `${index + 1}. ${String(item.title || "").trim()} | ${String(
+          item.product_url || ""
+        ).trim()}`
+    )
+    .join("\n");
 
-  if (validation.valid) {
-    return content;
-  }
+  const response = await openai.responses.create(
+    {
+      model: PRODUCT_RESEARCH_FAST_MODEL,
+      input: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: `Validate product identity in this social post.
 
-  console.warn("Product Engine V2 rejected single-product copy that mentioned reserve products", {
-    ruleId: rule?.id,
-    selectedProduct: rule?.website_item?.title || null,
-    disallowedMentions: validation.disallowedMentions,
-  });
+Allowed selected products:
+${allowedProductsText}
+
+Draft:
+${String(content || "").trim()}
+
+Rules:
+- A named product, model, collection item, branded merchandise item or exact product reference in the draft is allowed only if it clearly refers to one of the selected products above.
+- Generic category words such as "ryggsäckar", "skor", "presenter" or "jackor" are not product identity errors by themselves.
+- Do not allow a reserve product, a different brand/model, or an invented product.
+- For a single-product post, any concrete product mention must refer to that one selected product.
+- For a carousel, concrete product mentions must be among the selected carousel products.
+- If uncertain whether a concrete named product is one of the selected products, mark it invalid.
+Return a strict identity verdict.`,
+            },
+          ],
+        },
+      ],
+      max_output_tokens: 900,
+      text: {
+        format: {
+          type: "json_schema",
+          name: "product_copy_identity_validation",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              valid: { type: "boolean" },
+              mentioned_products: {
+                type: "array",
+                items: { type: "string" },
+              },
+              invalid_mentions: {
+                type: "array",
+                items: { type: "string" },
+              },
+              reason: { type: "string" },
+            },
+            required: [
+              "valid",
+              "mentioned_products",
+              "invalid_mentions",
+              "reason",
+            ],
+          },
+        },
+      },
+    },
+    { timeout: 25_000, maxRetries: 0 }
+  );
+
+  const parsed = safeJsonParse(getOpenAiResponseOutputText(response)) || {};
+  return {
+    valid: parsed?.valid === true,
+    mentionedProducts: Array.isArray(parsed?.mentioned_products)
+      ? parsed.mentioned_products
+      : [],
+    invalidMentions: Array.isArray(parsed?.invalid_mentions)
+      ? parsed.invalid_mentions
+      : [],
+    reason: String(parsed?.reason || "").trim(),
+  };
+}
+
+async function rewriteProductCopyToExactContract({
+  openai,
+  rule,
+  content,
+  validation,
+}) {
+  const contract =
+    rule?.product_content_contract ||
+    buildProductContentContract(
+      isCarouselRule(rule)
+        ? getCarouselProducts(rule).filter(isValidCarouselProduct)
+        : rule?.website_item
+          ? [rule.website_item]
+          : [],
+      rule?.website_reserve_items || []
+    );
+  const selectedProducts = Array.isArray(contract?.selected_products)
+    ? contract.selected_products.filter((item) => item?.title)
+    : [];
 
   const completion = await openai.chat.completions.create({
     model: POST_TEXT_MODEL,
@@ -26505,20 +26616,153 @@ async function generateAutomationPostWithProductContractValidation(openai, rule)
       {
         role: "system",
         content:
-          "You are an expert social media copywriter. Rewrite the post so it obeys the product content contract exactly. Return only the corrected post.",
+          "You are an expert social media copy editor. Preserve the intended campaign message but enforce exact product identity. Return only the corrected ready-to-publish post.",
       },
       {
         role: "user",
         content: `${buildAutomationPrompt(rule)}
 
-The previous draft was rejected because it mentioned these non-selected products: ${validation.disallowedMentions.join(", ")}. Write a fresh post about only the selected product.`,
+Selected products are authoritative:
+${selectedProducts
+  .map((item, index) => `${index + 1}. ${item.title}`)
+  .join("\n")}
+
+Rejected draft:
+${String(content || "").trim()}
+
+Identity validator reason:
+${validation?.reason || "The draft contained a product identity mismatch."}
+
+Invalid concrete product mentions:
+${(validation?.invalidMentions || []).join(", ") || "unknown"}
+
+Rewrite the post now.
+- Never name, imply, recommend or invent a concrete product outside the selected list.
+- Generic category wording is allowed.
+- If you are not certain of an exact product name, use generic campaign/category wording instead.
+- Do not add new product facts.`,
       },
     ],
-    temperature: 0.45,
+    temperature: 0.25,
   });
 
-  content = completion.choices?.[0]?.message?.content?.trim() || content;
-  return content;
+  return completion.choices?.[0]?.message?.content?.trim() || "";
+}
+
+async function generateAutomationPostWithProductContractValidation(openai, rule) {
+  let content = await generateAutomationPost(openai, rule);
+
+  const selectedProducts =
+    rule?.product_content_contract?.selected_products ||
+    (isCarouselRule(rule)
+      ? getCarouselProducts(rule).filter(isValidCarouselProduct)
+      : rule?.website_item
+        ? [rule.website_item]
+        : []);
+
+  if (!PRODUCT_ENGINE_V2_ENABLED || !selectedProducts.length) {
+    return content;
+  }
+
+  if (!isCarouselRule(rule) && rule?.website_item) {
+    const deterministicValidation = validateSingleProductCopyAgainstContract({
+      text: content,
+      selectedProduct: rule.website_item,
+      reserveProducts: rule.website_reserve_items || [],
+    });
+
+    if (!deterministicValidation.valid) {
+      console.warn(
+        "Product Engine V2 rejected single-product copy that mentioned reserve products",
+        {
+          ruleId: rule?.id,
+          selectedProduct: rule?.website_item?.title || null,
+          disallowedMentions: deterministicValidation.disallowedMentions,
+        }
+      );
+
+      content = await rewriteProductCopyToExactContract({
+        openai,
+        rule,
+        content,
+        validation: {
+          valid: false,
+          reason: "The draft mentioned a reserve/non-selected product.",
+          invalidMentions: deterministicValidation.disallowedMentions,
+        },
+      });
+    }
+  }
+
+  let identityValidation;
+  try {
+    identityValidation = await validateProductCopyIdentityWithModel({
+      openai,
+      rule,
+      content,
+    });
+  } catch (error) {
+    throw new Error(
+      `Product copy identity validation could not be completed safely: ${
+        error?.message || String(error)
+      }`
+    );
+  }
+
+  if (identityValidation.valid) {
+    console.info("Product copy passed identity gate", {
+      ruleId: rule?.id || null,
+      contentFormat: normalizeContentFormat(rule?.content_format),
+      mentionedProducts: identityValidation.mentionedProducts,
+    });
+    return content;
+  }
+
+  console.warn("Product copy rejected by identity gate", {
+    ruleId: rule?.id || null,
+    contentFormat: normalizeContentFormat(rule?.content_format),
+    invalidMentions: identityValidation.invalidMentions,
+    reason: identityValidation.reason,
+  });
+
+  const rewritten = await rewriteProductCopyToExactContract({
+    openai,
+    rule,
+    content,
+    validation: identityValidation,
+  });
+
+  if (!rewritten) {
+    throw new Error(
+      "Product copy identity gate rejected the draft and the safe rewrite was empty."
+    );
+  }
+
+  const secondValidation = await validateProductCopyIdentityWithModel({
+    openai,
+    rule,
+    content: rewritten,
+  });
+
+  if (!secondValidation.valid) {
+    console.error("Product copy identity gate failed closed after rewrite", {
+      ruleId: rule?.id || null,
+      invalidMentions: secondValidation.invalidMentions,
+      reason: secondValidation.reason,
+    });
+    throw new Error(
+      `Product copy could not be made identity-safe. Invalid mentions: ${
+        secondValidation.invalidMentions.join(", ") || "unknown"
+      }`
+    );
+  }
+
+  console.info("Product copy corrected and passed identity gate", {
+    ruleId: rule?.id || null,
+    mentionedProducts: secondValidation.mentionedProducts,
+  });
+
+  return rewritten;
 }
 
 async function generateCarouselSlides(openai, rule, postContent) {
@@ -26608,12 +26852,16 @@ function buildFallbackProductCarouselSlides(rule, products, postContent = "") {
   const selectedProducts = products.slice(0, CAROUSEL_PRODUCT_SLIDE_TARGET);
   const productSlides = selectedProducts.map((product, index) => ({
     slide_type: index === 0 ? "product_hook" : "product",
-    headline: normalizeSlideText(product.title || `Product ${index + 1}`, 90),
+    headline: normalizeSlideText(
+      sanitizeProductTitleForCard(product.title) || product.title || `Product ${index + 1}`,
+      90
+    ),
     body: "",
     cta_text: "",
     product_url: product.url || null,
     image_url: product.image_url || null,
     product_title: product.title || null,
+    product_identity_key: createItemKey(product),
     product_price: getTrustedProductCardPrice(product) || null,
   }));
 
@@ -26740,12 +26988,20 @@ Return JSON exactly in this shape:
       const slide = sourceSlides[index] || {};
       return {
         slide_type: index === 0 ? "product_hook" : "product",
-        headline: normalizeSlideText(slide.headline || slide.title || product.title || `Product ${index + 1}`, 90),
+        // Product identity is authoritative. AI may not rename or reorder the
+        // concrete product shown on a product slide.
+        headline: normalizeSlideText(
+          sanitizeProductTitleForCard(product.title) ||
+            product.title ||
+            `Product ${index + 1}`,
+          90
+        ),
         body: "",
         cta_text: normalizeSlideText(slide.cta_text || slide.cta || "", 80),
         product_url: product.url || null,
         image_url: product.image_url || null,
         product_title: product.title || null,
+        product_identity_key: createItemKey(product),
         product_price: getTrustedProductCardPrice(product) || null,
       };
     });
@@ -26828,6 +27084,18 @@ async function saveCarouselSlidesForPost({
     website_item: carouselProducts[0] || selectedItem,
     website_items: carouselProducts,
   };
+  const semanticallyUnverifiedProducts = carouselProducts.filter(
+    (product) => product?.product_image_semantic_verified !== true
+  );
+  if (semanticallyUnverifiedProducts.length) {
+    throw new Error(
+      `Carousel product identity safety gate blocked ${semanticallyUnverifiedProducts.length} product image(s): ${semanticallyUnverifiedProducts
+        .map((product) => product?.title || "unknown product")
+        .slice(0, 5)
+        .join(", ")}`
+    );
+  }
+
   const slides = await generateCarouselSlides(openai, carouselRule, postContent);
   const productCount = carouselProducts.length;
 
@@ -26868,7 +27136,46 @@ async function saveCarouselSlidesForPost({
     const slide = slides[index] || {};
     const isOutroSlide = String(slide.slide_type || '').toLowerCase() === 'product_outro';
     const slideProduct = !isOutroSlide ? carouselProducts[index] || null : null;
-    const sourceSlideImageUrl = slide.image_url || slideProduct?.image_url || (!isOutroSlide && index === 0 ? imageUrl || selectedItem?.image_url : null) || null;
+    if (!isOutroSlide && slideProduct) {
+      const expectedIdentityKey = createItemKey(slideProduct);
+      const slideIdentityKey = String(slide?.product_identity_key || "").trim();
+      const slideProductUrl = String(slide?.product_url || "").trim();
+      if (
+        (slideIdentityKey && slideIdentityKey !== expectedIdentityKey) ||
+        (slideProductUrl &&
+          !areSameWebsiteItem(
+            slideProduct,
+            {
+              title: slide?.product_title || slideProduct?.title,
+              url: slideProductUrl,
+            },
+            getWebsiteProductSourceUrl(rule?.brand_profile) ||
+              rule?.website_url ||
+              ""
+          ))
+      ) {
+        throw new Error(
+          `Carousel slide ${index + 1} product identity mismatch. Expected ${
+            slideProduct?.title || "selected product"
+          }.`
+        );
+      }
+      if (slideProduct?.product_image_semantic_verified !== true) {
+        throw new Error(
+          `Carousel slide ${index + 1} image was not semantically verified for ${
+            slideProduct?.title || "selected product"
+          }.`
+        );
+      }
+    }
+    // Never trust generated slide order for the source product image. The
+    // selected product object is the single source of truth for title, URL and
+    // image identity.
+    const sourceSlideImageUrl = !isOutroSlide
+      ? slideProduct?.image_url ||
+        (index === 0 ? imageUrl || selectedItem?.image_url : null) ||
+        null
+      : slide.image_url || null;
     let slideImageUrl = sourceSlideImageUrl;
     let slideStoragePath = !isOutroSlide && index === 0 ? imageStoragePath || null : null;
     let generatedImagePrompt = null;
@@ -27001,7 +27308,9 @@ async function saveCarouselSlidesForPost({
       }
     }
 
-    const slideProductUrl = slide.product_url || (!isOutroSlide && index === 0 ? selectedItem?.url : null) || (isOutroSlide ? destinationUrl : null) || null;
+    const slideProductUrl = !isOutroSlide
+      ? slideProduct?.url || null
+      : destinationUrl || slide.product_url || null;
 
     return {
       user_id: rule.user_id,
@@ -27027,6 +27336,14 @@ async function saveCarouselSlidesForPost({
         source_image_url: sourceSlideImageUrl || null,
         rendered_slide: slideRenderedBy !== 'source_image',
         product_title: slideProduct?.title || slide.product_title || null,
+        product_identity_key: !isOutroSlide && slideProduct ? createItemKey(slideProduct) : null,
+        product_identity_url: !isOutroSlide ? slideProduct?.url || null : null,
+        product_image_semantic_verified: !isOutroSlide
+          ? slideProduct?.product_image_semantic_verified === true
+          : null,
+        product_image_semantic_confidence: !isOutroSlide
+          ? Number(slideProduct?.product_image_semantic_confidence || 0) || null
+          : null,
         product_brand: getTrustedProductCardBrand(slideProduct) || null,
         product_price: getTrustedWebsiteItemPricing(slideProduct || {}).displayPrice || slide.product_price || null,
         product_sale_price: getTrustedWebsiteItemPricing(slideProduct || {}).salePrice || null,
@@ -30182,6 +30499,260 @@ async function resolveLargestProductImagesBeforeGeneration({
   // resolver. People and animals are allowed in verified product images, so do
   // not discard otherwise usable products in a separate motif review.
   return resolvedItems;
+}
+
+
+async function reviewResolvedProductImageIdentity({
+  openai,
+  items,
+  ruleId,
+  failClosed = true,
+}) {
+  const resolvedItems = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!resolvedItems.length) return [];
+
+  if (!openai) {
+    if (failClosed) {
+      return resolvedItems.map((item) => ({
+        ...item,
+        image_url: null,
+        product_image_identity_verified: false,
+        product_image_identity_unresolved: true,
+        product_image_semantic_verified: false,
+        product_image_semantic_reason: "semantic_verifier_unavailable",
+      }));
+    }
+    return resolvedItems;
+  }
+
+  const imageOptions = [];
+  for (let itemIndex = 0; itemIndex < resolvedItems.length; itemIndex += 1) {
+    const item = resolvedItems[itemIndex];
+    const seenUrls = new Set();
+    const candidates = [
+      {
+        url: item?.image_url,
+        source: item?.product_image_source,
+        width: item?.product_image_width,
+        height: item?.product_image_height,
+        identityMethod: item?.product_image_identity_method,
+      },
+      ...(item?.product_image_verified_candidates || []),
+    ];
+
+    for (const candidate of candidates) {
+      const url = String(candidate?.url || "").trim();
+      if (!url || seenUrls.has(url)) continue;
+      seenUrls.add(url);
+      imageOptions.push({
+        id: `${itemIndex}:${seenUrls.size - 1}`,
+        itemIndex,
+        title: String(item?.title || item?.item_title || "").trim(),
+        description: truncateText(
+          String(item?.description || item?.reason || "").trim(),
+          260
+        ),
+        productUrl: String(
+          item?.url || item?.product_url || item?.item_url || ""
+        ).trim(),
+        ...candidate,
+        url,
+      });
+      if (seenUrls.size >= 4) break;
+    }
+  }
+
+  if (!imageOptions.length) {
+    return resolvedItems.map((item) => ({
+      ...item,
+      image_url: null,
+      product_image_identity_verified: false,
+      product_image_identity_unresolved: true,
+      product_image_semantic_verified: false,
+      product_image_semantic_reason: "no_semantic_image_candidates",
+    }));
+  }
+
+  const content = [
+    {
+      type: "input_text",
+      text:
+        "Verify exact ecommerce product-image identity. For every supplied ID, decide whether the image actually depicts the named product. " +
+        "This is a safety gate: false positives are worse than rejecting an image. Treat a correct result as the official clean catalogue/packshot image or another clearly matching image of the exact named product. Match the product type and, when visible or named, the brand/model/design. " +
+        "A different product category or conflicting visible brand/model must be rejected (for example sneakers vs a clothing set, or one brand/model of backpack vs a different one). " +
+        "Color variation alone may be accepted when the same product/model is clearly shown. People or animals are allowed if they are genuinely showing the named product. " +
+        "Do not infer that an image is correct merely because it came from the same webpage.",
+    },
+  ];
+
+  for (const option of imageOptions) {
+    content.push({
+      type: "input_text",
+      text:
+        `ID ${option.id}; product title: ${option.title}; ` +
+        `product description/context: ${option.description || "not provided"}; ` +
+        `product URL: ${option.productUrl || "not provided"}`,
+    });
+    content.push({
+      type: "input_image",
+      image_url: option.url,
+      detail: "low",
+    });
+  }
+
+  try {
+    const response = await openai.responses.create(
+      {
+        model: PRODUCT_RESEARCH_FAST_MODEL,
+        input: [{ role: "user", content }],
+        max_output_tokens: 2200,
+        text: {
+          format: {
+            type: "json_schema",
+            name: "product_image_identity_review",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                images: {
+                  type: "array",
+                  maxItems: 20,
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      id: { type: "string" },
+                      matches_product: { type: "boolean" },
+                      product_type_match: { type: "boolean" },
+                      brand_or_model_conflict: { type: "boolean" },
+                      confidence: { type: "number", minimum: 0, maximum: 1 },
+                      reason: { type: "string" },
+                    },
+                    required: [
+                      "id",
+                      "matches_product",
+                      "product_type_match",
+                      "brand_or_model_conflict",
+                      "confidence",
+                      "reason",
+                    ],
+                  },
+                },
+              },
+              required: ["images"],
+            },
+          },
+        },
+      },
+      { timeout: 35_000, maxRetries: 0 }
+    );
+
+    const parsed = safeJsonParse(getOpenAiResponseOutputText(response));
+    const reviews = new Map(
+      (Array.isArray(parsed?.images) ? parsed.images : []).map((review) => [
+        String(review?.id || ""),
+        review,
+      ])
+    );
+
+    return resolvedItems.map((item, itemIndex) => {
+      const options = imageOptions.filter(
+        (option) => option.itemIndex === itemIndex
+      );
+      const reviewedOptions = options
+        .map((option) => ({ option, review: reviews.get(option.id) }))
+        .filter(({ review }) => Boolean(review));
+
+      const accepted = reviewedOptions
+        .filter(
+          ({ review }) =>
+            review.matches_product === true &&
+            review.product_type_match === true &&
+            review.brand_or_model_conflict === false &&
+            Number(review.confidence || 0) >= 0.78
+        )
+        .sort(
+          (left, right) =>
+            Number(right.review?.confidence || 0) -
+            Number(left.review?.confidence || 0)
+        )[0];
+
+      const { product_image_verified_candidates, ...cleanItem } = item;
+
+      if (!accepted) {
+        console.warn("Product image rejected by semantic identity gate", {
+          ruleId,
+          productUrl: getProductImageResolverPageUrl(item) || null,
+          productTitle: item?.title || null,
+          reviewedOptionCount: reviewedOptions.length,
+          reasons: reviewedOptions
+            .map(({ review }) => String(review?.reason || "").trim())
+            .filter(Boolean)
+            .slice(0, 4),
+        });
+        return {
+          ...cleanItem,
+          image_url: null,
+          product_image_identity_verified: false,
+          product_image_identity_unresolved: true,
+          product_image_semantic_verified: false,
+          product_image_semantic_reason: "no_exact_product_match",
+        };
+      }
+
+      console.info("Product image passed semantic identity gate", {
+        ruleId,
+        productUrl: getProductImageResolverPageUrl(item) || null,
+        productTitle: item?.title || null,
+        selectedImageUrl: accepted.option.url,
+        confidence: Number(accepted.review?.confidence || 0),
+        reason: accepted.review?.reason || null,
+      });
+
+      return {
+        ...cleanItem,
+        image_url: accepted.option.url,
+        product_image_source:
+          accepted.option.source || item.product_image_source,
+        product_image_width:
+          Number(accepted.option.width || 0) || item.product_image_width,
+        product_image_height:
+          Number(accepted.option.height || 0) || item.product_image_height,
+        product_image_identity_method:
+          accepted.option.identityMethod || item.product_image_identity_method,
+        product_image_identity_verified: true,
+        product_image_identity_unresolved: false,
+        product_image_semantic_verified: true,
+        product_image_semantic_confidence: Number(
+          accepted.review?.confidence || 0
+        ),
+        product_image_semantic_reason:
+          accepted.review?.reason || "exact_product_match",
+      };
+    });
+  } catch (error) {
+    console.warn("Product image semantic identity gate unavailable", {
+      ruleId,
+      imageOptionCount: imageOptions.length,
+      failClosed,
+      message: error?.message || String(error),
+    });
+
+    if (!failClosed) return resolvedItems;
+
+    return resolvedItems.map((item) => {
+      const { product_image_verified_candidates, ...cleanItem } = item;
+      return {
+        ...cleanItem,
+        image_url: null,
+        product_image_identity_verified: false,
+        product_image_identity_unresolved: true,
+        product_image_semantic_verified: false,
+        product_image_semantic_reason: "semantic_verifier_failed_closed",
+      };
+    });
+  }
 }
 
 async function reviewCarouselProductOnlyImages({ openai, items, ruleId }) {
@@ -33595,14 +34166,23 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
           const primaryItems = isCarouselRule(websitePreparedRule)
             ? websiteItems
             : [websiteItem];
-          const additionalItems = isAnimatedVideoRule(websitePreparedRule || rule)
-            ? websiteReserveItems
-            : [];
+          const additionalItems = isCarouselRule(websitePreparedRule)
+            ? []
+            : (websiteReserveItems || []).slice(
+                0,
+                isAnimatedVideoRule(websitePreparedRule || rule) ? 4 : 3
+              );
           const primaryCount = primaryItems.length;
-          const resolvedItems = await resolveLargestProductImagesBeforeGeneration({
+          const technicallyResolvedItems = await resolveLargestProductImagesBeforeGeneration({
             items: [...primaryItems, ...additionalItems],
             ruleId: rule.id,
             openai,
+          });
+          const resolvedItems = await reviewResolvedProductImageIdentity({
+            openai,
+            items: technicallyResolvedItems,
+            ruleId: rule.id,
+            failClosed: true,
           });
 
           if (isCarouselRule(websitePreparedRule)) {
@@ -33627,10 +34207,15 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
                 )
               : [];
             const resolvedReserveItems = reserveCandidates.length
-              ? await resolveLargestProductImagesBeforeGeneration({
-                  items: reserveCandidates,
-                  ruleId: rule.id,
+              ? await reviewResolvedProductImageIdentity({
                   openai,
+                  items: await resolveLargestProductImagesBeforeGeneration({
+                    items: reserveCandidates,
+                    ruleId: rule.id,
+                    openai,
+                  }),
+                  ruleId: rule.id,
+                  failClosed: true,
                 })
               : [];
 
@@ -33664,10 +34249,29 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
               });
             }
           } else {
-            websiteItem = resolvedItems[0] || websiteItem;
-            if (additionalItems.length) {
-              websiteReserveItems = resolvedItems.slice(primaryCount);
+            const exactIdentityCandidates = resolvedItems.filter(
+              (item) =>
+                item?.image_url &&
+                item?.product_image_semantic_verified === true &&
+                item?.product_image_identity_unresolved !== true
+            );
+            const exactPrimary = exactIdentityCandidates[0] || null;
+
+            if (!exactPrimary) {
+              throw new Error(
+                `No exact product-image identity could be verified for ${
+                  websiteItem?.title || "the selected website product"
+                }. The post was blocked rather than risk showing the wrong product.`
+              );
             }
+
+            websiteItem = exactPrimary;
+            websiteReserveItems = resolvedItems.filter(
+              (item) =>
+                item !== exactPrimary &&
+                item?.image_url &&
+                item?.product_image_semantic_verified === true
+            );
           }
           productContentContract = buildProductContentContract(
             isCarouselRule(websitePreparedRule) ? websiteItems : [websiteItem],
