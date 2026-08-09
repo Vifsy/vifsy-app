@@ -127,7 +127,7 @@ export async function POST(request) {
       user_id: post.user_id,
       post_id: post.id,
       slide_order: 6,
-      slide_type: "product_outro",
+      slide_type: "content",
       headline: requestedOutro.headline || brandProfile?.business_name || campaign,
       body: requestedOutro.body || null,
       cta_text: requestedOutro.cta_text || null,
@@ -151,7 +151,7 @@ export async function POST(request) {
       user_id: post.user_id,
       post_id: post.id,
       slide_order: 6,
-      slide_type: "product_outro",
+      slide_type: "content",
       headline: outroCopy.headline,
       body: outroCopy.body,
       cta_text: outroCopy.cta_text,
@@ -170,10 +170,22 @@ export async function POST(request) {
 
   const deleteSlides = await context.admin.from("post_slides").delete().eq("post_id", post.id);
   if (deleteSlides.error) return Response.json({ ok: false, error: deleteSlides.error.message }, { status: 500 });
+  // post_slides.slide_type is a database-level structural type. Product/outro semantics
+  // belong in metadata.carousel_slide_role, exactly like the normal carousel generator.
+  // Keep every admin-regenerated carousel row on the supported `content` type so an
+  // otherwise successful repair can never fail the post_slides_slide_type_check constraint.
+  const invalidSlideType = slides.find((slide) => slide.slide_type !== "content");
+  if (invalidSlideType) {
+    if (previousSlides?.length) await context.admin.from("post_slides").insert(previousSlides);
+    return Response.json({
+      ok: false,
+      error: `Regeneration safety check failed before save: unsupported slide type ${invalidSlideType.slide_type}.`,
+    }, { status: 500 });
+  }
   const insertSlides = await context.admin.from("post_slides").insert(slides);
   if (insertSlides.error) {
     if (previousSlides?.length) await context.admin.from("post_slides").insert(previousSlides);
-    return Response.json({ ok: false, error: insertSlides.error.message }, { status: 500 });
+    return Response.json({ ok: false, error: `Regeneration could not be saved: ${insertSlides.error.message}` }, { status: 500 });
   }
   const postReadyUpdate = await context.admin.from("posts").update({
     content,

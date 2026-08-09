@@ -10952,3 +10952,21 @@ html body .campaign-v14335-slot-list article:has(.custom-time-popover) {
     gap: 10px !important;
   }
 }
+
+/* v143.60 — admin carousel regeneration save feedback */
+.admin-regeneration-inline-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 11px 13px;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.admin-regeneration-inline-alert svg { flex: 0 0 auto; margin-top: 1px; }
+.admin-regeneration-inline-alert.success {
+  border: 1px solid #b9e8cc;
+  background: #eefaf3;
+  color: #146c3d;
+}

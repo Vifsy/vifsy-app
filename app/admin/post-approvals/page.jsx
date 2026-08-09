@@ -113,6 +113,8 @@ export default function AdminPostApprovalsPage() {
   const [materials, setMaterials] = useState([]);
   const [postCopy, setPostCopy] = useState("");
   const [regenerating, setRegenerating] = useState(false);
+  const [regenerationError, setRegenerationError] = useState("");
+  const [regenerationSuccess, setRegenerationSuccess] = useState("");
   const [outroSlide, setOutroSlide] = useState(null);
   const [outroRemoved, setOutroRemoved] = useState(false);
 
@@ -140,9 +142,11 @@ export default function AdminPostApprovalsPage() {
     setPostCopy(selectedPost?.content || "");
     setOutroSlide(selectedPost?.outro_slide || null);
     setOutroRemoved(false);
+    setRegenerationError("");
+    setRegenerationSuccess("");
   }, [selectedPost]);
 
-  async function loadPosts() {
+  async function loadPosts(preferredSelectedPostId = "") {
     setLoading(true);
     setError("");
     try {
@@ -163,7 +167,9 @@ export default function AdminPostApprovalsPage() {
         }
       });
       setDrafts(nextDrafts);
-      if (selectedPostId && !nextPosts.some((post) => post.id === selectedPostId)) setSelectedPostId("");
+      const selectionToKeep = preferredSelectedPostId || selectedPostId;
+      if (selectionToKeep && nextPosts.some((post) => post.id === selectionToKeep)) setSelectedPostId(selectionToKeep);
+      else if (selectionToKeep) setSelectedPostId("");
     } catch (loadError) {
       setError(loadError.message || t("admin.approvals.loadError"));
     } finally {
@@ -232,15 +238,23 @@ export default function AdminPostApprovalsPage() {
 
   async function regenerateFromMaterials() {
     if (!selectedPost) return;
-    setRegenerating(true); setError("");
+    setRegenerating(true);
+    setError("");
+    setRegenerationError("");
+    setRegenerationSuccess("");
     try {
       const headers = await getHeaders();
       const response = await fetch("/api/admin/post-approvals/regenerate", { method: "POST", headers, body: JSON.stringify({ post_id: selectedPost.status === "failed" ? null : selectedPost.id, occurrence_id: selectedPost.occurrence_id || null, content: postCopy, product_items: materials, preserve_outro: !outroRemoved && Boolean(outroSlide?.image_url), outro_slide: !outroRemoved ? outroSlide : null }) });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result?.error || "Regeneration failed.");
-      setSelectedPostId(result.post_id); await loadPosts();
-    } catch (actionError) { setError(actionError.message); }
-    finally { setRegenerating(false); }
+      await loadPosts(result.post_id);
+      setSelectedPostId(result.post_id);
+      setRegenerationSuccess(`Carousel regenerated successfully with ${result.slide_count || 6} slides.`);
+    } catch (actionError) {
+      const message = actionError.message || "Regeneration failed.";
+      setRegenerationError(message);
+      setError(message);
+    } finally { setRegenerating(false); }
   }
 
   async function uploadProductImage(index, file) {
@@ -307,7 +321,7 @@ export default function AdminPostApprovalsPage() {
             <h1>{t("admin.approvals.title")}</h1>
             <p>{t("admin.approvals.description")}</p>
           </div>
-          <button type="button" className="admin-primary-button" onClick={loadPosts}>
+          <button type="button" className="admin-primary-button" onClick={() => loadPosts()}>
             <RefreshCw size={16} /> {t("admin.retry")}
           </button>
         </header>
@@ -435,6 +449,8 @@ export default function AdminPostApprovalsPage() {
                           </div>
                         </article>
                       </div>
+                      {regenerationError ? <div className="admin-alert error admin-regeneration-inline-alert"><AlertTriangle size={16} /> <span>{regenerationError}</span></div> : null}
+                      {regenerationSuccess ? <div className="admin-alert success admin-regeneration-inline-alert"><CheckCircle2 size={16} /> <span>{regenerationSuccess}</span></div> : null}
                       <button type="button" className="admin-primary-button admin-regenerate-button" disabled={regenerating || !carouselReady} onClick={regenerateFromMaterials}>{regenerating ? <LoaderCircle className="admin-spin" size={16} /> : <RefreshCw size={16} />} Regenerate complete carousel</button>
                     </section>
                   ) : null}
