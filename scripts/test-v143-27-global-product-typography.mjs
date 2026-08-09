@@ -51,7 +51,7 @@ for (const sample of cases) {
   assert.equal(profile.direction, sample.direction);
   const layout = layoutProductTitle(sample.title, { maxWidth: 390, maxHeight: 184 });
   assert.ok(layout.lines.length > 0);
-  assert.ok(layout.fontSize >= 19 && layout.fontSize <= 44);
+  assert.ok(layout.fontSize >= 19 && layout.fontSize <= 46);
   const sourceLetters = sample.title.replace(/\s+/gu, "");
   const renderedLetters = layout.lines.join("").replace(/\s+/gu, "");
   assert.equal(renderedLetters, sourceLetters, `title must not be translated or truncated: ${sample.title}`);

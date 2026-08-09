@@ -77,7 +77,8 @@
     "test:v143.51": "node scripts/test-v143-51-pinterest-sandbox-bootstrap.mjs",
     "test:v143.52": "node scripts/test-v143-52-pinterest-smart-destination-links.mjs",
     "test:v143.53": "node scripts/test-v143-53-pinterest-carousel-reliability.mjs",
-    "test:v143.54": "node scripts/test-v143-54-pinterest-clickthrough-product-label.mjs"
+    "test:v143.54": "node scripts/test-v143-54-pinterest-clickthrough-product-label.mjs",
+    "test:v143.55": "node scripts/test-v143-55-pinterest-idempotency-premium-label.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

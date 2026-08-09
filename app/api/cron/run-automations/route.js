@@ -142,6 +142,7 @@ const PUBLISH_LOCK_MINUTES = 12;
 const MAX_PUBLISH_ATTEMPTS = 5;
 const PINTEREST_TRANSIENT_RETRY_MAX_MINUTES = 60;
 const PINTEREST_RECONCILE_PAGE_SIZE = 100;
+const PINTEREST_CREATE_SETTLE_MINUTES = 15;
 const CRON_RULE_PROCESSING_LOCK_MINUTES = 15;
 const RECENT_AUTOMATION_DRAFT_BLOCK_HOURS = 6;
 const INCOMPLETE_CAROUSEL_DRAFT_GRACE_MINUTES = 20;
@@ -1822,7 +1823,8 @@ function buildCarouselProductLabelSvg({ title, eyebrow = "", analysis, productCa
   );
   const outline = analysis.layout === "text_only"
     ? `stroke="${isLight ? "#000000" : "#ffffff"}" stroke-opacity="0.34" stroke-width="7" paint-order="stroke"`
-    : "";
+    : `stroke="${textColor}" stroke-width="0.7" paint-order="stroke"`;
+  const productLetterSpacing = typography.profile.script === "global" ? "-0.7" : "0";
   const spans = lines
     .map((line, index) => `<tspan x="${textX}" dy="${index === 0 ? 0 : typography.lineHeight}">${escapeProductSvg(line)}</tspan>`)
     .join("");
@@ -1830,7 +1832,7 @@ function buildCarouselProductLabelSvg({ title, eyebrow = "", analysis, productCa
     ? `<text x="${textX}" y="${labelBox.y + 35}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="${Array.from(eyebrow).length > 30 ? 12 : Array.from(eyebrow).length > 24 ? 14 : 17}" font-weight="760" letter-spacing="${Array.from(eyebrow).length > 24 ? 1.5 : 3.2}" fill="${textColor}" text-anchor="${isRtl ? "end" : "start"}">${escapeProductSvg(eyebrow.toLocaleUpperCase())}</text><rect x="${isRtl ? textX - 42 : textX}" y="${labelBox.y + 52}" width="42" height="4" rx="2" fill="#3478f6"/>`
     : "";
   return {
-    svg: `<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg">${card}${eyebrowMarkup}<text x="${textX}" y="${textY}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="${typography.fontSize}" font-weight="900" fill="${textColor}" direction="${typography.profile.direction}" unicode-bidi="plaintext" text-anchor="${isRtl ? "end" : "start"}" ${outline}>${spans}</text></svg>`,
+    svg: `<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg">${card}${eyebrowMarkup}<text x="${textX}" y="${textY}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="${typography.fontSize}" font-weight="950" letter-spacing="${productLetterSpacing}" fill="${textColor}" direction="${typography.profile.direction}" unicode-bidi="plaintext" text-anchor="${isRtl ? "end" : "start"}" ${outline}>${spans}</text></svg>`,
     typography,
   };
 }
@@ -31576,6 +31578,29 @@ function pinterestPinMatchesPost(pin, postId) {
   }
 }
 
+function getPinterestProcessingReceipt(publishReceipts) {
+  const receipt = publishReceipts?.pinterest;
+  if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) return null;
+  return String(receipt.state || "").toLowerCase() === "processing" ? receipt : null;
+}
+
+function isPinterestProcessingReceiptSettling(receipt, nowValue = new Date()) {
+  if (!receipt) return false;
+  const lastCreateMs = new Date(receipt.last_create_attempt_at || receipt.first_attempt_at || 0).getTime();
+  if (!Number.isFinite(lastCreateMs) || lastCreateMs <= 0) return false;
+  return nowValue.getTime() - lastCreateMs < PINTEREST_CREATE_SETTLE_MINUTES * 60_000;
+}
+
+function createPinterestProcessingPendingError(receipt) {
+  const error = new Error(
+    "Pinterest is still processing the previous Pin creation. Spreelo will verify the board before sending anything again."
+  );
+  error.pinterestTransient = true;
+  error.pinterestProcessingPending = true;
+  error.lastPinterestCreateAttemptAt = receipt?.last_create_attempt_at || null;
+  return error;
+}
+
 async function findExistingPinterestPinForPost({ accessToken, boardId, postId }) {
   if (!accessToken || !boardId || !postId) return null;
 
@@ -32287,8 +32312,14 @@ async function publishApprovedSocialPosts({
         });
 
         let pinterestResult = null;
+        const pinterestProcessingReceipt = getPinterestProcessingReceipt(publishReceipts);
+        const pinterestProcessingSettling = isPinterestProcessingReceiptSettling(
+          pinterestProcessingReceipt,
+          new Date(nowIso)
+        );
         const shouldReconcileBeforeCreate =
           publishAttempt > 1 ||
+          Boolean(pinterestProcessingReceipt) ||
           isPinterestTransientPublishError({ message: post.last_publish_error || "" });
 
         if (shouldReconcileBeforeCreate) {
@@ -32313,6 +32344,16 @@ async function publishApprovedSocialPosts({
               message: reconcileError.message,
             });
           }
+        }
+
+        if (!pinterestResult && pinterestProcessingSettling) {
+          console.log("Pinterest duplicate-create guard active", {
+            postId: post.id,
+            publishAttempt,
+            lastCreateAttemptAt: pinterestProcessingReceipt?.last_create_attempt_at || null,
+            settleMinutes: PINTEREST_CREATE_SETTLE_MINUTES,
+          });
+          throw createPinterestProcessingPendingError(pinterestProcessingReceipt);
         }
 
         if (!pinterestResult) {
@@ -32347,7 +32388,28 @@ async function publishApprovedSocialPosts({
               });
             } else if (isPinterestTransientPublishError(pinterestError)) {
               // Pinterest can accept the Pin and still time out while ingesting several images.
-              // Reconcile once before scheduling a durable retry so we never blindly duplicate it.
+              // Persist a processing receipt immediately. Future workers must reconcile the board
+              // and are forbidden from issuing another Create Pin during the settling window.
+              const previousProcessingReceipt = getPinterestProcessingReceipt(publishReceipts);
+              publishReceipts.pinterest = {
+                state: "processing",
+                first_attempt_at: previousProcessingReceipt?.first_attempt_at || nowIso,
+                last_create_attempt_at: nowIso,
+                media_kind: normalizedFormat === "carousel" ? "multiple_images" : "image",
+                image_count: pinterestImageUrls.length,
+              };
+              const { error: pendingReceiptError } = await supabase
+                .from("posts")
+                .update({ publish_receipts: publishReceipts, updated_at: nowIso })
+                .eq("id", post.id);
+              if (pendingReceiptError) {
+                console.warn("Could not persist Pinterest processing receipt", {
+                  postId: post.id,
+                  message: pendingReceiptError.message,
+                });
+              }
+
+              // Reconcile once immediately before scheduling the durable retry.
               await sleep(2500);
               try {
                 const existingPin = await findExistingPinterestPinForPost({

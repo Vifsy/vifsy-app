@@ -26,7 +26,7 @@ check('Pinterest carousel continues to exclude AI outro media',
   worker.includes('outroIncluded: false') && worker.includes('.slice(0, 5)'));
 check('Pinterest publish logs how many per-image destinations were sent',
   worker.includes('Pinterest Pin payload accepted') && worker.includes('perImageDestinations:'));
-check('Carousel product name uses stronger bold weight', worker.includes('font-weight="900"'));
+check('Carousel product name uses stronger bold weight', /font-weight=\"9(?:00|50)\"/.test(worker));
 check('Carousel product name uses a dedicated text area below the divider',
   worker.includes('const textAreaTop = eyebrow ? labelBox.y + 68 : labelBox.y + 16;'));
 check('Carousel product text block is vertically centred in the available glass-card area',
