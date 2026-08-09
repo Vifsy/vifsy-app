@@ -22,7 +22,7 @@ assert.match(
 );
 assert.match(
   route,
-  /const CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED = 5;/
+  /const CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED = 6;/
 );
 assert.match(
   route,

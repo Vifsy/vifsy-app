@@ -83,7 +83,9 @@
     "test:v143.57": "node scripts/test-v143-57-product-identity-integrity.mjs",
     "test:v143.58": "node scripts/test-v143-58-exact-product-fail-closed-recovery.mjs",
     "test:v143.59": "node scripts/test-v143-59-admin-repair-immediate-alerts.mjs",
-    "test:v143.60": "node scripts/test-v143-60-admin-regeneration-slide-contract.mjs"
+    "test:v143.60": "node scripts/test-v143-60-admin-regeneration-slide-contract.mjs",
+    "test:v143.61": "node scripts/test-v143-61-same-page-product-identity.mjs",
+    "test:v143.62": "node scripts/test-v143-62-verified-reserve-round.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

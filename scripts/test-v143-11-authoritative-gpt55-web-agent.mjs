@@ -17,7 +17,7 @@ function extractFunction(name, nextName) {
 }
 
 assert.match(route, /const CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET = 10;/);
-assert.match(route, /const CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED = 5;/);
+assert.match(route, /const CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED = 6;/);
 assert.match(route, /const CAMPAIGN_PRIMARY_WEB_RESEARCH_MAX_ROUNDS = 2;/);
 assert.match(
   route,
