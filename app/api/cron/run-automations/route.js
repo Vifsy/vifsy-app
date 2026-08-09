@@ -1706,6 +1706,50 @@ function getProductLabelEyebrow(rule) {
   return firstPhrase.split(" ").filter(Boolean).slice(0, 4).join(" ");
 }
 
+function stripBrandPrefixFromProductTitle(titleValue, brandValue) {
+  const title = String(titleValue || "").replace(/\s+/gu, " ").trim();
+  const brand = String(brandValue || "").replace(/\s+/gu, " ").trim();
+  if (!title || !brand) return title;
+  const normalizedTitle = normalizeProductBrandIdentity(title);
+  const normalizedBrand = normalizeProductBrandIdentity(brand);
+  if (!normalizedTitle || !normalizedBrand || !normalizedTitle.startsWith(`${normalizedBrand} `)) {
+    return title;
+  }
+  const titleWords = title.split(/\s+/u);
+  const brandWords = brand.split(/\s+/u);
+  return titleWords.slice(brandWords.length).join(" ").trim() || title;
+}
+
+export function getCarouselProductLabelPresentation(product, fallbackTitle = "") {
+  const rawTitle = String(
+    product?.locked_product_title || product?.title || product?.item_title || fallbackTitle || ""
+  ).replace(/\s+/gu, " ").trim();
+  const brand = String(
+    product?.locked_product_brand || product?.product_brand || product?.brand || product?.brand_name || ""
+  ).replace(/\s+/gu, " ").trim();
+  const titleParts = rawTitle.split(/\s+[–—-]\s+/u).map((part) => part.trim()).filter(Boolean);
+  const modelTitle = stripBrandPrefixFromProductTitle(titleParts[0] || rawTitle, brand) || rawTitle;
+  const displayType = String(
+    product?.product_display_type || product?.locked_product_category || product?.category || titleParts[1] || ""
+  ).replace(/\s+/gu, " ").trim();
+  // Prefer the colour wording from the locked title because retailer metadata
+  // often appends translated aliases (for example black/white/svart).
+  const titleColor = titleParts.length >= 3 ? titleParts.slice(2).join(" - ") : "";
+  const color = String(titleColor || product?.locked_product_color || product?.product_color || "")
+    .replace(/\s+/gu, " ")
+    .trim();
+  const descriptorWithColor = [displayType, color].filter(Boolean).join(" · ");
+  const descriptor = Array.from(descriptorWithColor).length <= 44
+    ? descriptorWithColor
+    : displayType || color;
+  return {
+    brand,
+    title: modelTitle,
+    descriptor,
+    rawTitle,
+  };
+}
+
 async function deriveLocalPackshotLabelAnalysis(sourceBuffer, { includeLogo = false } = {}) {
   const sampleSize = 180;
   const { data, info } = await sharp(sourceBuffer)
@@ -1793,12 +1837,17 @@ async function deriveLocalPackshotLabelAnalysis(sourceBuffer, { includeLogo = fa
   };
 }
 
-function buildCarouselProductLabelSvg({ title, eyebrow = "", analysis, productCanvasBox, languageHint = "" }) {
+function buildCarouselProductLabelSvg({ title, brand = "", descriptor = "", eyebrow = "", analysis, productCanvasBox, languageHint = "" }) {
   const labelBox = CAROUSEL_PRODUCT_LABEL_PLACEMENTS[analysis?.placement];
   if (!labelBox || (!analysis?.allowControlledOverlap && boxesOverlapWithPadding(labelBox, productCanvasBox))) return null;
+  const hasBrand = Boolean(String(brand || "").trim());
+  const hasDescriptor = Boolean(String(descriptor || "").trim());
+  const titleAreaTop = eyebrow ? labelBox.y + (hasBrand ? 84 : 66) : labelBox.y + (hasBrand ? 48 : 18);
+  const titleAreaBottom = labelBox.y + labelBox.height - (hasDescriptor ? 36 : 16);
+  const titleAreaHeight = Math.max(46, titleAreaBottom - titleAreaTop);
   const typography = layoutProductTitle(title, {
     maxWidth: labelBox.width - 36,
-    maxHeight: eyebrow ? labelBox.height - 74 : labelBox.height - 24,
+    maxHeight: titleAreaHeight,
     languageHint,
   });
   const lines = typography.lines;
@@ -1815,16 +1864,10 @@ function buildCarouselProductLabelSvg({ title, eyebrow = "", analysis, productCa
   const textX = isRtl
     ? labelBox.x + labelBox.width - horizontalPadding
     : labelBox.x + horizontalPadding;
-  // Keep the product name visually centred in the glass card below the blue
-  // eyebrow divider. SVG text uses a baseline, so calculate against the actual
-  // rendered line block instead of just adding a fixed eyebrow offset.
-  const textAreaTop = eyebrow ? labelBox.y + 68 : labelBox.y + 16;
-  const textAreaBottom = labelBox.y + labelBox.height - 18;
   const renderedTextHeight = typography.fontSize + typography.lineHeight * Math.max(0, lines.length - 1);
-  const textAreaHeight = Math.max(renderedTextHeight, textAreaBottom - textAreaTop);
   const textY = Math.round(
-    textAreaTop +
-      Math.max(0, (textAreaHeight - renderedTextHeight) / 2) +
+    titleAreaTop +
+      Math.max(0, (titleAreaHeight - renderedTextHeight) / 2) +
       typography.fontSize
   );
   const outline = analysis.layout === "text_only"
@@ -1835,10 +1878,17 @@ function buildCarouselProductLabelSvg({ title, eyebrow = "", analysis, productCa
     .map((line, index) => `<tspan x="${textX}" dy="${index === 0 ? 0 : typography.lineHeight}">${escapeProductSvg(line)}</tspan>`)
     .join("");
   const eyebrowMarkup = eyebrow
-    ? `<text x="${textX}" y="${labelBox.y + 35}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="${Array.from(eyebrow).length > 30 ? 12 : Array.from(eyebrow).length > 24 ? 14 : 17}" font-weight="760" letter-spacing="${Array.from(eyebrow).length > 24 ? 1.5 : 3.2}" fill="${textColor}" text-anchor="${isRtl ? "end" : "start"}">${escapeProductSvg(eyebrow.toLocaleUpperCase())}</text><rect x="${isRtl ? textX - 42 : textX}" y="${labelBox.y + 52}" width="42" height="4" rx="2" fill="#3478f6"/>`
+    ? `<text x="${textX}" y="${labelBox.y + 31}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="${Array.from(eyebrow).length > 30 ? 11 : Array.from(eyebrow).length > 24 ? 12 : 14}" font-weight="760" letter-spacing="${Array.from(eyebrow).length > 24 ? 1.4 : 2.8}" fill="${textColor}" text-anchor="${isRtl ? "end" : "start"}">${escapeProductSvg(eyebrow.toLocaleUpperCase())}</text><rect x="${isRtl ? textX - 38 : textX}" y="${labelBox.y + 43}" width="38" height="3" rx="1.5" fill="#3478f6"/>`
+    : "";
+  const brandMarkup = hasBrand
+    ? `<text x="${textX}" y="${labelBox.y + (eyebrow ? 70 : 34)}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="17" font-weight="850" letter-spacing="0.2" fill="${textColor}" text-anchor="${isRtl ? "end" : "start"}">${escapeProductSvg(String(brand).toLocaleUpperCase())}</text>`
+    : "";
+  const descriptorText = Array.from(String(descriptor || "")).slice(0, 48).join("");
+  const descriptorMarkup = hasDescriptor
+    ? `<text x="${textX}" y="${labelBox.y + labelBox.height - 16}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="15" font-weight="650" letter-spacing="0" fill="${textColor}" fill-opacity="0.82" text-anchor="${isRtl ? "end" : "start"}">${escapeProductSvg(descriptorText)}</text>`
     : "";
   return {
-    svg: `<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg">${card}${eyebrowMarkup}<text x="${textX}" y="${textY}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="${typography.fontSize}" font-weight="950" letter-spacing="${productLetterSpacing}" fill="${textColor}" direction="${typography.profile.direction}" unicode-bidi="plaintext" text-anchor="${isRtl ? "end" : "start"}" ${outline}>${spans}</text></svg>`,
+    svg: `<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg">${card}${eyebrowMarkup}${brandMarkup}<text x="${textX}" y="${textY}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="${typography.fontSize}" font-weight="950" letter-spacing="${productLetterSpacing}" fill="${textColor}" direction="${typography.profile.direction}" unicode-bidi="plaintext" text-anchor="${isRtl ? "end" : "start"}" ${outline}>${spans}</text>${descriptorMarkup}</svg>`,
     typography,
   };
 }
@@ -1849,6 +1899,8 @@ export async function renderCarouselProductSlideImage({
   rule = null,
   backgroundSelectionContext = null,
   productTitle = "",
+  productBrand = "",
+  productDescriptor = "",
   productLabelAnalysis = null,
   productLabelAnalysisStatus = "not_requested",
   includeLogo = false,
@@ -2063,6 +2115,8 @@ export async function renderCarouselProductSlideImage({
         appliedLabelAnalysis = { ...appliedLabelAnalysis, layout: "compact_card" };
         let labelRender = buildCarouselProductLabelSvg({
           title: productTitle,
+          brand: productBrand,
+          descriptor: productDescriptor,
           eyebrow: getProductLabelEyebrow(rule),
           analysis: appliedLabelAnalysis,
           productCanvasBox,
@@ -2079,6 +2133,8 @@ export async function renderCarouselProductSlideImage({
           };
           labelRender = buildCarouselProductLabelSvg({
             title: productTitle,
+            brand: productBrand,
+            descriptor: productDescriptor,
             eyebrow: getProductLabelEyebrow(rule),
             analysis: recoveryAnalysis,
             productCanvasBox,
@@ -27780,15 +27836,23 @@ async function saveCarouselSlidesForPost({
   const productLabelAnalyses = await analyzeCarouselProductLabelPlacements({
     openai,
     ruleId: rule?.id,
-    items: carouselProducts.map((product, index) => ({
-      id: String(index),
-      title: String(product?.title || slides[index]?.product_title || "").trim(),
-      imageUrl:
-        slides[index]?.image_url ||
-        product?.image_url ||
-        (index === 0 ? imageUrl || selectedItem?.image_url : null) ||
-        null,
-    })),
+    items: carouselProducts.map((product, index) => {
+      const presentation = getCarouselProductLabelPresentation(
+        product,
+        slides[index]?.product_title || ""
+      );
+      return {
+        id: String(index),
+        title: [presentation.brand, presentation.rawTitle || presentation.title]
+          .filter(Boolean)
+          .join(" — "),
+        imageUrl:
+          slides[index]?.image_url ||
+          product?.image_url ||
+          (index === 0 ? imageUrl || selectedItem?.image_url : null) ||
+          null,
+      };
+    }),
   });
   if (includeLogo) {
     for (const [analysisId, analysis] of productLabelAnalyses) {
@@ -27861,12 +27925,18 @@ async function saveCarouselSlidesForPost({
 
     if (!isOutroSlide && sourceSlideImageUrl) {
       try {
+        const productLabelPresentation = getCarouselProductLabelPresentation(
+          slideProduct,
+          slide.product_title || ""
+        );
         const renderedProductSlide = await renderCarouselProductSlideImage({
           sourceImageUrl: sourceSlideImageUrl,
           supabase,
           rule,
           backgroundSelectionContext,
-          productTitle: String(slideProduct?.title || slide.product_title || "").trim(),
+          productTitle: productLabelPresentation.title,
+          productBrand: productLabelPresentation.brand,
+          productDescriptor: productLabelPresentation.descriptor,
           productLabelAnalysis: productLabelAnalyses.get(String(index)) || null,
           productLabelAnalysisStatus: productLabelAnalyses.analysisStatus || "not_requested",
           includeLogo,
@@ -27887,6 +27957,9 @@ async function saveCarouselSlidesForPost({
           fontSize: renderedProductSlide.productLabelFontSize,
           direction: renderedProductSlide.productLabelDirection,
           script: renderedProductSlide.productLabelScript,
+          brand: productLabelPresentation.brand || null,
+          title: productLabelPresentation.title || null,
+          descriptor: productLabelPresentation.descriptor || null,
         });
 
         const uploadedImage = await uploadGeneratedImageToStorage({
@@ -28011,6 +28084,7 @@ async function saveCarouselSlidesForPost({
           ? Number(slideProduct?.product_image_semantic_confidence || 0) || null
           : null,
         product_brand: getTrustedProductCardBrand(slideProduct) || null,
+        product_display_type: String(slideProduct?.product_display_type || "").trim() || null,
         product_price: getTrustedWebsiteItemPricing(slideProduct || {}).displayPrice || slide.product_price || null,
         product_sale_price: getTrustedWebsiteItemPricing(slideProduct || {}).salePrice || null,
         product_original_price: getTrustedWebsiteItemPricing(slideProduct || {}).originalPrice || null,
@@ -31410,18 +31484,47 @@ function areEquivalentProductBrands(leftValue, rightValue) {
 }
 
 function hasHardSemanticBrandConflict(review, expectedBrand) {
-  if (review?.brand_or_model_conflict === true) return true;
   const observedBrand = String(review?.observed_brand || "").trim();
-  if (
-    normalizeProductBrandIdentity(expectedBrand) &&
-    normalizeProductBrandIdentity(observedBrand) &&
-    !areEquivalentProductBrands(expectedBrand, observedBrand)
-  ) {
+  const expectedNormalized = normalizeProductBrandIdentity(expectedBrand);
+  const observedNormalized = normalizeProductBrandIdentity(observedBrand);
+
+  // The exact product page is authoritative. A visual verifier may describe a
+  // parent/co-brand more fully than the retailer metadata (for example a
+  // sub-brand plus its parent mark). If all expected brand tokens are present,
+  // that is compatible branding rather than a reason to discard the locked
+  // product object.
+  if (expectedNormalized && observedNormalized) {
+    if (areEquivalentProductBrands(expectedBrand, observedBrand)) return false;
     return true;
   }
+
   const reason = String(review?.reason || "").toLowerCase();
-  return /(?:brand|logo|model)[^.!]{0,90}(?:does not match|doesn't match|do not match|conflict|mismatch|different brand|wrong brand|not the named|not matching)/i.test(
+  return /(?:brand|logo)[^.!]{0,90}(?:does not match|doesn't match|do not match|conflict|mismatch|different brand|wrong brand|not the named|not matching)/i.test(
     reason
+  );
+}
+
+function hasHardSemanticModelConflict(review) {
+  if (review?.brand_or_model_conflict !== true) return false;
+  const reason = String(review?.reason || "").toLowerCase();
+  return /(?:model|design|variant|style|product)[^.!]{0,120}(?:does not match|doesn't match|do not match|conflict|mismatch|different|wrong|not the named|not matching)/i.test(
+    reason
+  );
+}
+
+function hasHardSemanticVariantConflict(review) {
+  const reason = String(review?.reason || "").toLowerCase();
+  return /(?:colou?r|variant|design)[^.!]{0,120}(?:does not match|doesn't match|do not match|conflict|mismatch|different|wrong|not matching)/i.test(
+    reason
+  );
+}
+
+function isCompatibleObservedBrandFamily(review, expectedBrand) {
+  const observedBrand = String(review?.observed_brand || "").trim();
+  return Boolean(
+    normalizeProductBrandIdentity(expectedBrand) &&
+      normalizeProductBrandIdentity(observedBrand) &&
+      areEquivalentProductBrands(expectedBrand, observedBrand)
   );
 }
 
@@ -31530,8 +31633,9 @@ async function reviewResolvedProductImageIdentity({
         "Verify exact ecommerce product-image identity. For every supplied ID, decide whether the image actually depicts the named product. " +
         "This is a safety gate: false positives are worse than rejecting an image. Treat a correct result as the official clean catalogue/packshot image or another clearly matching image of the exact named product. Match the product type and, when visible or named, the brand/model/design. " +
         "A different product category or conflicting visible brand/model must be rejected (for example sneakers vs a clothing set, or one brand/model of backpack vs a different one). " +
-        "If an expected brand is supplied and a different visible logo/brand is present, observed_brand must name the visible brand and brand_or_model_conflict MUST be true. Never call Nike consistent with The North Face, Adidas consistent with Nike, or any equivalent cross-brand mismatch. " +
+        "If an expected brand is supplied and a genuinely different visible logo/brand is present, observed_brand must name the visible brand and brand_or_model_conflict MUST be true. Parent-brand, sub-brand or co-brand wording is compatible when the observed brand contains the expected brand identity rather than contradicting it; extra compatible brand words alone are not a mismatch. Never call genuinely unrelated brands consistent. " +
         "When the locked product page explicitly names a colour/variant, a clearly conflicting colour/design is evidence that the image is not the locked item. People or animals are allowed if they are genuinely showing the named product. " +
+        "Also return display_product_type: a short customer-facing product type in the language used by the product title. Base it on the locked title/page facts and what is visibly marketed. For a set, describe the main marketed item plus the included item when clear (for example a backpack with pencil case), rather than blindly repeating a misleading retailer taxonomy label. Do not include brand, model name or colour in display_product_type. " +
         "The same-page lock is the primary source of truth; this visual check is only a final safety belt. Reject an obvious product-type/model/variant conflict rather than trying to repair it with a different image.",
     },
   ];
@@ -31585,6 +31689,7 @@ async function reviewResolvedProductImageIdentity({
                       product_type_match: { type: "boolean" },
                       brand_or_model_conflict: { type: "boolean" },
                       observed_brand: { type: "string" },
+                      display_product_type: { type: "string" },
                       confidence: { type: "number", minimum: 0, maximum: 1 },
                       reason: { type: "string" },
                     },
@@ -31594,6 +31699,7 @@ async function reviewResolvedProductImageIdentity({
                       "product_type_match",
                       "brand_or_model_conflict",
                       "observed_brand",
+                      "display_product_type",
                       "confidence",
                       "reason",
                     ],
@@ -31630,11 +31736,24 @@ async function reviewResolvedProductImageIdentity({
             review,
             option.expectedBrand
           );
+          const hardModelConflict = hasHardSemanticModelConflict(review);
+          const hardVariantConflict = hasHardSemanticVariantConflict(review);
+          const lockedBrandFamilyFalseNegative = Boolean(
+            option.lockedSource &&
+              review.matches_product !== true &&
+              review.product_type_match === true &&
+              review.brand_or_model_conflict === true &&
+              hardBrandConflict === false &&
+              hardModelConflict === false &&
+              hardVariantConflict === false &&
+              isCompatibleObservedBrandFamily(review, option.expectedBrand)
+          );
           return (
-            review.matches_product === true &&
+            (review.matches_product === true || lockedBrandFamilyFalseNegative) &&
             review.product_type_match === true &&
-            review.brand_or_model_conflict === false &&
             hardBrandConflict === false &&
+            hardModelConflict === false &&
+            hardVariantConflict === false &&
             Number(review.confidence || 0) >= 0.9
           );
         })
@@ -31659,6 +31778,10 @@ async function reviewResolvedProductImageIdentity({
               review,
               option.expectedBrand
             ),
+            hardModelConflict: hasHardSemanticModelConflict(review),
+            hardVariantConflict: hasHardSemanticVariantConflict(review),
+            compatibleBrandFamily: isCompatibleObservedBrandFamily(review, option.expectedBrand),
+            displayProductType: String(review?.display_product_type || "").trim() || null,
             reason: String(review?.reason || "").trim() || null,
           })),
         });
@@ -31678,12 +31801,14 @@ async function reviewResolvedProductImageIdentity({
         productTitle: item?.title || null,
         selectedImageUrl: accepted.option.url,
         confidence: Number(accepted.review?.confidence || 0),
+        displayProductType: String(accepted.review?.display_product_type || "").trim() || null,
         reason: accepted.review?.reason || null,
       });
 
       return {
         ...cleanItem,
         image_url: accepted.option.url,
+        product_display_type: String(accepted.review?.display_product_type || "").trim(),
         product_image_source:
           accepted.option.source || item.product_image_source,
         product_image_width:
@@ -35938,16 +36063,28 @@ product_research_model_used: websitePreparedRule.uses_website_content
 
           try {
             const trustedProductTitle = getTrustedProductCardTitle(websiteItem);
+            const singleProductPresentation = getCarouselProductLabelPresentation(
+              websiteItem,
+              trustedProductTitle
+            );
             const singleProductLabelAnalyses = await analyzeCarouselProductLabelPlacements({
               openai,
               ruleId: rule?.id,
-              items: [{ id: "0", title: trustedProductTitle, imageUrl: websiteItem.image_url }],
+              items: [{
+                id: "0",
+                title: [singleProductPresentation.brand, singleProductPresentation.rawTitle || trustedProductTitle]
+                  .filter(Boolean)
+                  .join(" — "),
+                imageUrl: websiteItem.image_url,
+              }],
             });
             const { imageBase64 } = await renderCarouselProductSlideImage({
               sourceImageUrl: websiteItem.image_url,
               supabase,
               rule,
-              productTitle: trustedProductTitle,
+              productTitle: singleProductPresentation.title,
+              productBrand: singleProductPresentation.brand,
+              productDescriptor: singleProductPresentation.descriptor,
               productLabelAnalysis: singleProductLabelAnalyses.get("0") || null,
               productLabelAnalysisStatus: singleProductLabelAnalyses.analysisStatus || "not_requested",
               includeLogo: shouldUseLogoForRule(rule, brandProfile),

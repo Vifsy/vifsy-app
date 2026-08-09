@@ -102,7 +102,7 @@ assert.match(
   /publishCarouselPostToInstagram\([\s\S]*?caption: buildInstagramCaptionFromPostContent\(post\.content\)/
 );
 
-assert.match(route, /technicalPageStatus === 404/);
+assert.match(route, /\[404, 410\]\.includes\(technicalPageStatus\)/);
 assert.doesNotMatch(route, /horze\.se|zalando\.se|isover\.(?:se|com)/i);
 
 console.log("v143.26 adaptive labels, durable resume logging and Instagram caption checks passed.");

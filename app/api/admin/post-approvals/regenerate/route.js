@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import OpenAI from "openai";
 import { adminContextError, getAdminContext } from "../../../../../lib/adminAuth";
-import { generateCarouselOutroSlideImage, renderCarouselProductSlideImage } from "../../../cron/run-automations/route.js";
+import { generateCarouselOutroSlideImage, getCarouselProductLabelPresentation, renderCarouselProductSlideImage } from "../../../cron/run-automations/route.js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -14,7 +14,15 @@ export async function POST(request) {
   const requestedPostId = String(body?.post_id || "").trim();
   const occurrenceId = String(body?.occurrence_id || "").trim();
   const products = (Array.isArray(body?.product_items) ? body.product_items : [])
-    .map((item) => ({ title: String(item?.title || "").trim(), description: String(item?.description || "").trim(), url: String(item?.url || "").trim(), image_url: String(item?.image_url || "").trim() }))
+    .map((item) => ({
+      title: String(item?.title || "").trim(),
+      description: String(item?.description || "").trim(),
+      url: String(item?.url || "").trim(),
+      image_url: String(item?.image_url || "").trim(),
+      product_brand: String(item?.product_brand || item?.brand || "").trim(),
+      product_display_type: String(item?.product_display_type || "").trim(),
+      product_color: String(item?.product_color || item?.color || "").trim(),
+    }))
     .filter((item) => item.title || item.image_url || item.url || item.description)
     .slice(0, 5);
   if (
@@ -92,7 +100,17 @@ export async function POST(request) {
   const slides = [];
   for (let index = 0; index < products.length; index += 1) {
     const product = products[index];
-    const rendered = await renderCarouselProductSlideImage({ sourceImageUrl: product.image_url, supabase: context.admin, rule: enhancedRule, productTitle: product.title, includeLogo: false, languageHint: language });
+    const presentation = getCarouselProductLabelPresentation(product, product.title);
+    const rendered = await renderCarouselProductSlideImage({
+      sourceImageUrl: product.image_url,
+      supabase: context.admin,
+      rule: enhancedRule,
+      productTitle: presentation.title,
+      productBrand: presentation.brand,
+      productDescriptor: presentation.descriptor,
+      includeLogo: false,
+      languageHint: language,
+    });
     const path = `admin-regenerated/${post.id}/${index + 1}-${crypto.randomUUID()}.png`;
     const upload = await context.admin.storage.from("post-images").upload(path, Buffer.from(rendered.imageBase64, "base64"), { contentType: "image/png", upsert: false });
     if (upload.error) return Response.json({ ok: false, error: upload.error.message }, { status: 500 });
@@ -111,6 +129,8 @@ export async function POST(request) {
       metadata: {
         product_title: product.title,
         product_description: product.description || null,
+        product_brand: product.product_brand || null,
+        product_display_type: product.product_display_type || null,
         source_image_url: product.image_url,
         carousel_slide_role: "product",
         admin_regenerated: true,

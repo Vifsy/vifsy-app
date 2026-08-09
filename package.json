@@ -87,7 +87,8 @@
     "test:v143.61": "node scripts/test-v143-61-same-page-product-identity.mjs",
     "test:v143.62": "node scripts/test-v143-62-verified-reserve-round.mjs",
     "test:v143.63": "node scripts/test-v143-63-final-product-identity-admin.mjs",
-    "test:v143.64": "node scripts/test-v143-64-locked-product-page-object.mjs"
+    "test:v143.64": "node scripts/test-v143-64-locked-product-page-object.mjs",
+    "test:v143.65": "node scripts/test-v143-65-brand-aware-product-labels.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

@@ -27,10 +27,14 @@ check('Pinterest carousel continues to exclude AI outro media',
 check('Pinterest publish logs how many per-image destinations were sent',
   worker.includes('Pinterest Pin payload accepted') && worker.includes('perImageDestinations:'));
 check('Carousel product name uses stronger bold weight', /font-weight=\"9(?:00|50)\"/.test(worker));
-check('Carousel product name uses a dedicated text area below the divider',
-  worker.includes('const textAreaTop = eyebrow ? labelBox.y + 68 : labelBox.y + 16;'));
+check('Carousel product name uses a dedicated text area below campaign and brand metadata',
+  worker.includes('const titleAreaTop = eyebrow ? labelBox.y + (hasBrand ? 84 : 66)'));
 check('Carousel product text block is vertically centred in the available glass-card area',
-  worker.includes('(textAreaHeight - renderedTextHeight) / 2'));
+  worker.includes('(titleAreaHeight - renderedTextHeight) / 2'));
+check('Carousel product label visibly renders the locked product brand',
+  worker.includes('const brandMarkup = hasBrand'));
+check('Carousel product label supports a concise verified type/colour descriptor',
+  worker.includes('const descriptorMarkup = hasDescriptor'));
 check('v143.54 test is registered',
   pkg.scripts?.['test:v143.54'] === 'node scripts/test-v143-54-pinterest-clickthrough-product-label.mjs');
 
