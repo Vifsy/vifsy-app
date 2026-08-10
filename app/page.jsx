@@ -14,12 +14,17 @@ import {
   ChevronUp,
   CircleDollarSign,
   Gift,
+  ImageIcon,
   Layers3,
   Lightbulb,
+  Pause,
+  Play,
   Plus,
   RefreshCw,
   Sparkles,
   Trash2,
+  History,
+  X,
 } from "lucide-react";
 import AppLayout from "../components/AppLayout";
 import { supabase } from "../lib/supabaseClient";
@@ -434,6 +439,71 @@ function groupContentPlans(rules = []) {
   return Array.from(groups.values());
 }
 
+function getOperationalPlanGroupKey(rule) {
+  const createdMinute = String(rule?.created_at || "").slice(0, 16);
+  const name = String(rule?.name || rule?.content_type_label || rule?.post_type || "").trim();
+  const scheduleType = String(rule?.schedule_type || "").trim();
+  const source = String(rule?.queue_source || "studio").trim();
+  return [name, scheduleType, source, createdMinute].join("|");
+}
+
+function groupOperationalPlans(rules = []) {
+  const groups = new Map();
+  for (const rule of rules) {
+    const key = getOperationalPlanGroupKey(rule);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        id: key,
+        name: rule?.name || rule?.content_type_label || rule?.post_type || "",
+        schedule_type: rule?.schedule_type || "",
+        queue_source: rule?.queue_source || "",
+        created_at: rule?.created_at || null,
+        next_run_at: null,
+        plan_state: rule?.plan_state || "active",
+        plan_ended_at: rule?.plan_ended_at || null,
+        rules: [],
+        ruleIds: [],
+      });
+    }
+    const group = groups.get(key);
+    group.rules.push(rule);
+    group.ruleIds.push(rule.id);
+    if (rule?.plan_state === "ended") group.plan_state = "ended";
+    else if (rule?.plan_state === "paused" && group.plan_state !== "ended") group.plan_state = "paused";
+    if (rule?.plan_ended_at && (!group.plan_ended_at || new Date(rule.plan_ended_at) > new Date(group.plan_ended_at))) {
+      group.plan_ended_at = rule.plan_ended_at;
+    }
+    const candidate = rule?.next_run_at || rule?.run_date || null;
+    if (candidate) {
+      const time = new Date(candidate).getTime();
+      const current = group.next_run_at ? new Date(group.next_run_at).getTime() : Number.POSITIVE_INFINITY;
+      if (Number.isFinite(time) && time < current) group.next_run_at = candidate;
+    }
+    if (rule?.created_at && (!group.created_at || new Date(rule.created_at) < new Date(group.created_at))) {
+      group.created_at = rule.created_at;
+    }
+  }
+  return Array.from(groups.values()).map((group) => {
+    const platforms = Array.from(new Set(group.rules.map((rule) => String(rule?.platform || "").trim()).filter(Boolean)));
+    const contentTypes = Array.from(new Set(group.rules.map((rule) => String(rule?.content_type_id || rule?.content_type_label || rule?.post_type || "").trim()).filter(Boolean)));
+    const weeklySlots = new Set(
+      group.rules
+        .filter((rule) => rule?.schedule_type === "weekly")
+        .map((rule) => [rule?.weekday, rule?.publish_time, rule?.content_type_id || rule?.content_type_label || rule?.post_type].join("|"))
+    );
+    const hasFutureRun = group.rules.some((rule) => isFutureDate(rule?.next_run_at || rule?.run_date));
+    const anyActive = group.rules.some((rule) => rule?.is_active === true);
+    return {
+      ...group,
+      platforms,
+      contentTypes,
+      postsPerWeek: weeklySlots.size || (group.schedule_type === "weekly" ? 1 : 0),
+      anyActive,
+      hasFutureRun,
+    };
+  });
+}
+
 function getCurrentMonthStart() {
   const now = new Date();
 
@@ -498,6 +568,8 @@ export default function Home() {
   const [contentPlanActionLoading, setContentPlanActionLoading] = useState(false);
   const [showAllHomePlans, setShowAllHomePlans] = useState(false);
   const [expandedHomePlanIds, setExpandedHomePlanIds] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [scheduleActionLoading, setScheduleActionLoading] = useState("");
   const { t, locale } = useUiText(["dashboard"]);
 
   useEffect(() => {
@@ -550,6 +622,7 @@ export default function Home() {
     setShowAllContentPlans(false);
     setShowAllHomePlans(false);
     setExpandedHomePlanIds([]);
+    setShowHistory(false);
     setSuggestedCampaign(null);
 
     const {
@@ -624,21 +697,41 @@ export default function Home() {
       }
     }
 
-    const { data: rulesData, error: rulesError } = await supabase
+    const rulesSelect = "id, brand_profile_id, name, weekday, publish_time, platform, post_type, schedule_type, run_date, timezone, next_run_at, is_active, plan_state, plan_ended_at, content_type_id, content_type_label, content_format, queue_source, uses_website_content, generate_image, approval_required, created_at, generation_occurrence_status, generation_customer_message, generation_refunded_credits, generation_notification_status, generation_occurrence_scheduled_for";
+    const legacyRulesSelect = "id, brand_profile_id, name, weekday, publish_time, platform, post_type, schedule_type, run_date, timezone, next_run_at, is_active, content_type_id, content_type_label, content_format, queue_source, uses_website_content, generate_image, approval_required, created_at, generation_occurrence_status, generation_customer_message, generation_refunded_credits, generation_notification_status, generation_occurrence_scheduled_for";
+
+    let rulesResult = await supabase
       .from("automation_rules")
-      .select(
-        "id, brand_profile_id, name, weekday, publish_time, platform, post_type, schedule_type, run_date, timezone, next_run_at, is_active, content_type_id, content_type_label, content_format, queue_source, uses_website_content, generate_image, approval_required, created_at, generation_occurrence_status, generation_customer_message, generation_refunded_credits, generation_notification_status, generation_occurrence_scheduled_for"
-      )
+      .select(rulesSelect)
       .eq("user_id", user.id)
       .eq("brand_profile_id", selectedBrand.id)
       .order("next_run_at", { ascending: true });
 
-    if (rulesError) {
+    const lifecycleColumnsMissing = Boolean(
+      rulesResult.error && /plan_state|plan_ended_at|schema cache|PGRST204/i.test(String(rulesResult.error.message || ""))
+    );
+    if (lifecycleColumnsMissing) {
+      rulesResult = await supabase
+        .from("automation_rules")
+        .select(legacyRulesSelect)
+        .eq("user_id", user.id)
+        .eq("brand_profile_id", selectedBrand.id)
+        .order("next_run_at", { ascending: true });
+      if (!rulesResult.error) {
+        rulesResult.data = (rulesResult.data || []).map((rule) => ({
+          ...rule,
+          plan_state: rule.is_active ? "active" : rule.schedule_type === "weekly" ? "paused" : "active",
+          plan_ended_at: null,
+        }));
+      }
+    }
+
+    if (rulesResult.error) {
       setMessage((current) =>
-        current ? `${current} ${rulesError.message}` : rulesError.message
+        current ? `${current} ${rulesResult.error.message}` : rulesResult.error.message
       );
     } else {
-      setRules(rulesData || []);
+      setRules(rulesResult.data || []);
     }
 
     const { data: campaignData, error: campaignError } = await supabase
@@ -828,9 +921,140 @@ export default function Home() {
     );
   }
 
+  const operationalPlans = useMemo(() => groupOperationalPlans(rules), [rules]);
+  const recurringSchedules = useMemo(
+    () => operationalPlans.filter((plan) => plan.schedule_type === "weekly" && plan.queue_source !== "campaign" && plan.plan_state !== "ended"),
+    [operationalPlans]
+  );
+  const calendarCampaignPlans = useMemo(
+    () => operationalPlans.filter((plan) => plan.queue_source === "campaign" && plan.plan_state !== "ended" && plan.hasFutureRun),
+    [operationalPlans]
+  );
+  const scheduledPlanGroups = useMemo(
+    () => operationalPlans.filter((plan) => plan.schedule_type !== "weekly" && plan.queue_source !== "campaign" && plan.plan_state !== "ended" && plan.hasFutureRun),
+    [operationalPlans]
+  );
+  const planHistory = useMemo(
+    () => operationalPlans
+      .filter((plan) => plan.plan_state === "ended" || (!plan.anyActive && !plan.hasFutureRun && plan.schedule_type !== "weekly"))
+      .sort((a, b) => new Date(b.plan_ended_at || b.next_run_at || b.created_at || 0) - new Date(a.plan_ended_at || a.next_run_at || a.created_at || 0)),
+    [operationalPlans]
+  );
+  const standaloneScheduledPosts = useMemo(() => {
+    const plannedRuleIds = new Set(scheduledPlanGroups.flatMap((plan) => plan.ruleIds || []));
+    return scheduledPosts.filter((post) => !post.automation_rule_id || !plannedRuleIds.has(post.automation_rule_id));
+  }, [scheduledPosts, scheduledPlanGroups]);
+
   const nextAutomation = upcomingRules[0] || null;
   const currentBrandName = brandProfile?.business_name || t("dashboard.currentBrand");
   const dashboardEyebrow = t("dashboard.eyebrow");
+
+  async function setOperationalPlanState(plan, nextState) {
+    if (!plan?.ruleIds?.length || !currentBrandId || scheduleActionLoading) return;
+    setScheduleActionLoading(plan.id);
+    setMessage("");
+    try {
+      if (nextState === "ended") {
+        const { data, error } = await supabase.rpc("end_automation_rules_keep_history", {
+          p_rule_ids: plan.ruleIds,
+        });
+        if (error) throw error;
+        const releasedCredits = Number(data?.released_credits || 0);
+        if (releasedCredits > 0) {
+          setCreditBalance((current) => current ? {
+            ...current,
+            credits_remaining: Number(current.credits_remaining || 0) + releasedCredits,
+          } : current);
+        }
+        setRules((current) => current.map((rule) => plan.ruleIds.includes(rule.id) ? {
+          ...rule,
+          is_active: false,
+          plan_state: "ended",
+          plan_ended_at: new Date().toISOString(),
+        } : rule));
+      } else {
+        const isActive = nextState === "active";
+        const { error } = await supabase
+          .from("automation_rules")
+          .update({
+            is_active: isActive,
+            plan_state: isActive ? "active" : "paused",
+            plan_ended_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("brand_profile_id", currentBrandId)
+          .in("id", plan.ruleIds);
+        if (error) throw error;
+        setRules((current) => current.map((rule) => plan.ruleIds.includes(rule.id) ? {
+          ...rule,
+          is_active: isActive,
+          plan_state: isActive ? "active" : "paused",
+          plan_ended_at: null,
+        } : rule));
+      }
+      setMessage(t("dashboard.scheduleUpdated"));
+    } catch (error) {
+      setMessage(error?.message || t("dashboard.scheduleUpdateError"));
+    } finally {
+      setScheduleActionLoading("");
+    }
+  }
+
+  function getOperationalContentLabels(plan) {
+    return Array.from(new Set(
+      (plan?.rules || []).map((rule) => formatRuleContentType(rule, t)).filter(Boolean)
+    ));
+  }
+
+  function renderOperationalPlanRow(plan, kind = "recurring") {
+    const labels = getOperationalContentLabels(plan);
+    const isPaused = plan.plan_state === "paused" || !plan.anyActive;
+    const actionBusy = scheduleActionLoading === plan.id;
+    const nextRun = plan.next_run_at || plan.rules?.map((rule) => rule?.next_run_at || rule?.run_date).find(Boolean);
+    return (
+      <article className="home-v14369-operation-row" key={plan.id}>
+        <div className="home-v14369-operation-main">
+          <div className="home-v14369-operation-title">
+            <span className={`home-v14369-operation-status ${isPaused ? "paused" : "active"}`} />
+            <div>
+              <strong>{dashboardText(plan.name, t("dashboard.contentPlan"))}</strong>
+              <small>
+                {kind === "recurring" && plan.postsPerWeek ? t("dashboard.postsPerWeek", { count: plan.postsPerWeek }) : null}
+                {kind === "recurring" && plan.postsPerWeek && nextRun ? " · " : null}
+                {nextRun ? t("dashboard.nextRun", { date: formatShortDate(nextRun, t) }) : null}
+              </small>
+            </div>
+          </div>
+          <div className="home-v14369-operation-meta">
+            <span><b>{t("dashboard.platforms")}</b>{plan.platforms.length ? plan.platforms.join(" · ") : t("dashboard.platformNotSet")}</span>
+            <span><b>{t("dashboard.contentTypes")}</b>{labels.slice(0, 3).join(" · ") || t("dashboard.post")}{labels.length > 3 ? ` +${labels.length - 3}` : ""}</span>
+            <span><b>{t("dashboard.startDateLabel")}</b>{formatShortDate(plan.created_at, t)}</span>
+          </div>
+        </div>
+        <div className="home-v14369-operation-actions">
+          <button
+            type="button"
+            className="home-v14369-pause"
+            disabled={actionBusy}
+            onClick={() => setOperationalPlanState(plan, isPaused ? "active" : "paused")}
+          >
+            {actionBusy ? <RefreshCw className="home-v14369-spin" /> : isPaused ? <Play /> : <Pause />}
+            {actionBusy ? t("dashboard.pausing") : isPaused ? t("dashboard.resume") : t("dashboard.pause")}
+          </button>
+          <button
+            type="button"
+            className="home-v14369-end"
+            disabled={actionBusy}
+            onClick={() => {
+              if (window.confirm(t("dashboard.confirmEndSchedule"))) setOperationalPlanState(plan, "ended");
+            }}
+          >
+            <Trash2 /> {kind === "campaign" ? t("dashboard.endCampaign") : t("dashboard.endSchedule")}
+          </button>
+        </div>
+      </article>
+    );
+  }
 
   function toggleContentPlanSelection(ruleId) {
     setSelectedContentPlanIds((current) => {
@@ -1051,153 +1275,104 @@ export default function Home() {
                 </article>
                 <article>
                   <span className="is-mint"><Layers3 /></span>
-                  <div><small>{t("dashboard.stat.activePlans")}</small><strong>{homeActivePlans.length}</strong><p>{t("dashboard.stat.activeShort")}</p></div>
+                  <div><small>{t("dashboard.activeSchedules")}</small><strong>{recurringSchedules.length + calendarCampaignPlans.length}</strong><p>{t("dashboard.activeSchedulesShort")}</p></div>
                 </article>
               </section>
 
-              <div className="home-v14335-duo">
-                <section className="home-v14335-panel home-v14335-plans">
-                  <div className="home-v14335-panel-heading">
-                    <div><p>{t("dashboard.contentPlansEyebrow")}</p><h2>{t("dashboard.activePlansTitle")}</h2></div>
-                  </div>
-
-                  {loading ? (
-                    <div className="home-v14335-compact-empty">{t("dashboard.loadingContentPlansTitle")}</div>
-                  ) : homeVisiblePlans.length ? (
-                    <div className="home-v14335-plan-list">
-                      {homeVisiblePlans.map((plan) => {
-                        const planRules = getRulesFromContentPlan(plan);
-                        const isExpanded = expandedHomePlanIds.includes(plan.id);
-
-                        return (
-                          <article className={`home-v14347-plan${isExpanded ? " is-expanded" : ""}`} key={plan.id}>
-                            <div className="home-v14347-plan-row">
-                              <button
-                                type="button"
-                                className="home-v14347-plan-toggle"
-                                onClick={() => toggleHomePlan(plan.id)}
-                                aria-expanded={isExpanded}
-                              >
-                                <span className="home-v14335-plan-art"><img src="/calendar-generic.svg" alt="" /></span>
-                                <span className="home-v14347-plan-copy">
-                                  <strong>{dashboardText(formatPlanName(plan, t), t("dashboard.contentPlan"))}</strong>
-                                  <small>{dashboardText(getContentPlanSummary(plan, t))}</small>
-                                </span>
-                                <b>{planRules.length}<small>{t("dashboard.plannedShort")}</small></b>
-                                <span className="home-v14347-plan-chevron" aria-hidden="true">
-                                  {isExpanded ? <ChevronUp /> : <ChevronDown />}
-                                </span>
-                              </button>
-                              <button
-                                type="button"
-                                className="home-v14347-plan-delete"
-                                onClick={() => deleteContentPlans([plan.id])}
-                                disabled={contentPlanActionLoading}
-                                aria-label={t("dashboard.deletePlan")}
-                                title={t("dashboard.deletePlan")}
-                              >
-                                <Trash2 aria-hidden="true" />
-                              </button>
-                            </div>
-
-                            {isExpanded ? (
-                              <div className="home-v14347-plan-details">
-                                <div className="home-v14347-plan-details-heading">
-                                  <strong>{t("dashboard.plannedPostsInPlan")}</strong>
-                                  <span>{t("dashboard.planDetailsReadOnly")}</span>
-                                </div>
-                                <div className="home-v14347-plan-detail-list">
-                                  {planRules
-                                    .slice()
-                                    .sort((a, b) => new Date(a.next_run_at || a.run_date || 0) - new Date(b.next_run_at || b.run_date || 0))
-                                    .map((rule) => (
-                                      <div className="home-v14347-plan-detail" key={rule.id}>
-                                        <span className="home-v14347-plan-detail-icon"><CalendarClock /></span>
-                                        <span>
-                                          <strong>{formatRuleContentType(rule, t)}</strong>
-                                          <small>{dashboardText(rule.platform, t("dashboard.platformNotSet"))}</small>
-                                        </span>
-                                        <time>{formatPlanRuleSchedule(rule, t)}</time>
-                                      </div>
-                                    ))}
-                                </div>
-                              </div>
-                            ) : null}
-                          </article>
-                        );
-                      })}
+              {pendingApprovalPosts.length ? (
+                <section className="home-v14369-approval-notice">
+                  <div className="home-v14369-approval-copy">
+                    <span className="home-v14369-approval-icon"><Sparkles /></span>
+                    <div>
+                      <strong>{pendingApprovalPosts.length === 1 ? t("dashboard.reviewNoticeOne") : t("dashboard.reviewNotice", { count: pendingApprovalPosts.length })}</strong>
+                      <small>{t("dashboard.reviewNoticeHelp")}</small>
                     </div>
-                  ) : (
-                    <div className="home-v14335-compact-empty"><strong>{t("dashboard.noActivePlansTitle")}</strong><span>{t("dashboard.noActivePlansText")}</span></div>
-                  )}
-                  {homeActivePlans.length > 4 || showAllHomePlans ? (
-                    <button
-                      type="button"
-                      className="home-v14335-panel-link home-v14347-show-all"
-                      onClick={() => {
-                        setShowAllHomePlans((current) => !current);
-                        if (showAllHomePlans) setExpandedHomePlanIds([]);
-                      }}
-                    >
-                      {showAllHomePlans ? t("dashboard.showFewerActivePlans") : t("dashboard.showAllActivePlans")}
-                      {showAllHomePlans ? <ChevronUp /> : <ArrowRight />}
-                    </button>
-                  ) : null}
-                </section>
-
-                <section className="home-v14335-panel home-v14335-review" id="pending-review">
-                  <div className="home-v14335-panel-heading">
-                    <div><p>{t("dashboard.reviewEyebrow")}</p><h2>{t("dashboard.whatNeedsAttention")}</h2></div>
-                    <a href="#pending-review">{t("dashboard.showAll")}</a>
                   </div>
-
-                  {loading ? (
-                    <div className="home-v14335-compact-empty">{t("dashboard.loadingReviewTitle")}</div>
-                  ) : dashboardReviewPreview.length ? (
-                    <div className="home-v14335-review-list">
-                      {dashboardReviewPreview.map((post, index) => {
-                        const reviewContext = getReviewContext(post, rules, t);
-
-                        return (
-                          <a href={`/posts/${post.id}`} key={post.id}>
-                            <span className={`home-v14335-priority priority-${Math.min(index, 2)}`}><Sparkles /></span>
-                            <span>
-                              <small>
-                                {index === 0 ? t("dashboard.highPriority") : t("dashboard.normalPriority")}
-                                <i> · {reviewContext.source}</i>
-                              </small>
-                              <strong>{reviewContext.title}</strong>
-                              <em>{reviewContext.contentType} · {dashboardText(post.platform, t("dashboard.platformNotSet"))}</em>
-                            </span>
-                            <b>{formatShortDate(post.created_at, t)}</b><ChevronRight />
-                          </a>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="home-v14335-compact-empty"><strong>{t("dashboard.noApprovalTitle")}</strong><span>{t("dashboard.noApprovalText", { brandName: currentBrandName })}</span></div>
-                  )}
-                  <a className="home-v14335-panel-link" href="#pending-review">{t("dashboard.toReviewQueue")} <ArrowRight /></a>
-                </section>
-              </div>
-
-              <section className="home-v14335-panel home-v14335-activity">
-                <div className="home-v14335-panel-heading"><div><p>{t("dashboard.recentActivity")}</p></div></div>
-                {dashboardRecentActivity.length ? (
-                  <div className="home-v14335-activity-list">
-                    {dashboardRecentActivity.map((post) => (
-                      <a href={`/posts/${post.id}`} key={post.id}>
-                        <span className={`status-${post.status}`}><Activity /></span>
-                        <strong>{formatStatus(post.status, t)}</strong>
-                        <b>{dashboardText(post.idea || formatPostKind(post, t), t("dashboard.post"))}</b>
-                        <em>{dashboardText(post.platform, t("dashboard.platformNotSet"))}</em>
-                        <small>{formatShortDate(post.created_at, t)}</small>
-                        <i>{t("dashboard.view")}</i>
-                      </a>
-                    ))}
+                  <div className="home-v14369-approval-previews" aria-hidden="true">
+                    {pendingApprovalPosts.slice(0, 3).map((post) => post.image_url ? <img key={post.id} src={post.image_url} alt="" /> : <span key={post.id}><ImageIcon /></span>)}
                   </div>
-                ) : <div className="home-v14335-compact-empty">{t("dashboard.noRecentActivity")}</div>}
+                  <a href={`/posts/${pendingApprovalPosts[0].id}`}>{t("dashboard.reviewNow")} <ArrowRight /></a>
+                </section>
+              ) : null}
+
+              <section className="home-v14369-operations">
+                <div className="home-v14369-section-heading">
+                  <div>
+                    <p>{t("dashboard.contentPlansEyebrow")}</p>
+                    <h2>{t("dashboard.recurringSchedules")}</h2>
+                    <span>{t("dashboard.recurringSchedulesText")}</span>
+                  </div>
+                  <button type="button" className="home-v14369-history-button" onClick={() => setShowHistory(true)}><History /> {t("dashboard.history")}</button>
+                </div>
+                <div className="home-v14369-operation-list">
+                  {recurringSchedules.length ? recurringSchedules.map((plan) => renderOperationalPlanRow(plan, "recurring")) : <div className="home-v14369-empty">{t("dashboard.noRecurringSchedules")}</div>}
+                </div>
               </section>
+
+              <section className="home-v14369-operations">
+                <div className="home-v14369-section-heading">
+                  <div>
+                    <p>{t("dashboard.upcomingEyebrow")}</p>
+                    <h2>{t("dashboard.scheduledPostsBox")}</h2>
+                    <span>{t("dashboard.scheduledPostsBoxText")}</span>
+                  </div>
+                </div>
+                <div className="home-v14369-operation-list">
+                  {scheduledPlanGroups.length || standaloneScheduledPosts.length ? (
+                    <>
+                      {scheduledPlanGroups.map((plan) => renderOperationalPlanRow(plan, "scheduled"))}
+                      {standaloneScheduledPosts.map((post) => (
+                        <article className="home-v14369-operation-row home-v14369-standalone-post" key={`scheduled-post-${post.id}`}>
+                          <div className="home-v14369-operation-main">
+                            <div className="home-v14369-operation-title">
+                              <span className="home-v14369-operation-status active" />
+                              <div><strong>{dashboardText(post.idea || formatPostKind(post, t), t("dashboard.post"))}</strong><small>{t("dashboard.nextRun", { date: formatShortDate(post.scheduled_for, t) })}</small></div>
+                            </div>
+                            <div className="home-v14369-operation-meta">
+                              <span><b>{t("dashboard.platforms")}</b>{dashboardText(post.platform, t("dashboard.platformNotSet"))}</span>
+                              <span><b>{t("dashboard.contentTypes")}</b>{formatPostKind(post, t)}</span>
+                            </div>
+                          </div>
+                          <a className="home-v14369-open-post" href={`/posts/${post.id}`}>{t("dashboard.view")} <ArrowRight /></a>
+                        </article>
+                      ))}
+                    </>
+                  ) : <div className="home-v14369-empty">{t("dashboard.noScheduledPosts")}</div>}
+                </div>
+              </section>
+
+              <section className="home-v14369-operations">
+                <div className="home-v14369-section-heading">
+                  <div>
+                    <p>{t("dashboard.reviewSourceCampaign")}</p>
+                    <h2>{t("dashboard.calendarCampaignsBox")}</h2>
+                    <span>{t("dashboard.calendarCampaignsBoxText")}</span>
+                  </div>
+                </div>
+                <div className="home-v14369-operation-list">
+                  {calendarCampaignPlans.length ? calendarCampaignPlans.map((plan) => renderOperationalPlanRow(plan, "campaign")) : <div className="home-v14369-empty">{t("dashboard.noCalendarCampaigns")}</div>}
+                </div>
+              </section>
+
+              {showHistory ? (
+                <div className="home-v14369-history-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowHistory(false); }}>
+                  <section className="home-v14369-history-modal" role="dialog" aria-modal="true" aria-label={t("dashboard.historyTitle")}>
+                    <header>
+                      <div><p>{t("dashboard.history")}</p><h2>{t("dashboard.historyTitle")}</h2><span>{t("dashboard.historyText")}</span></div>
+                      <button type="button" onClick={() => setShowHistory(false)} aria-label={t("dashboard.closeHistory")}><X /></button>
+                    </header>
+                    <div className="home-v14369-history-list">
+                      {planHistory.length ? planHistory.map((plan) => (
+                        <article key={`history-${plan.id}`}>
+                          <div><strong>{dashboardText(plan.name, t("dashboard.contentPlan"))}</strong><small>{plan.platforms.join(" · ") || t("dashboard.platformNotSet")}</small></div>
+                          <span>{getOperationalContentLabels(plan).slice(0, 3).join(" · ") || t("dashboard.post")}</span>
+                          <time>{t("dashboard.completedOn", { date: formatShortDate(plan.plan_ended_at || plan.next_run_at || plan.created_at, t) })}</time>
+                        </article>
+                      )) : <div className="home-v14369-empty">{t("dashboard.historyEmpty")}</div>}
+                    </div>
+                  </section>
+                </div>
+              ) : null}
             </main>
 
             <aside className="home-v14335-aside">

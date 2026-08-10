@@ -138,6 +138,22 @@ export async function GET(request) {
       : Promise.resolve({ data: [] }),
   ]);
 
+  let productReviewRows = [];
+  if (postIds.length) {
+    const productReviewResult = await context.admin
+      .from("admin_review_cases")
+      .select("post_id, product_items, updated_at")
+      .in("post_id", postIds)
+      .order("updated_at", { ascending: false });
+    if (!productReviewResult.error) {
+      productReviewRows = productReviewResult.data || [];
+    } else if (!/admin_review_cases|schema cache|does not exist/i.test(String(productReviewResult.error.message || ""))) {
+      console.warn("Admin review product source rows could not be loaded", {
+        message: productReviewResult.error.message,
+      });
+    }
+  }
+
   const userEntries = await Promise.all(
     userIds.map(async (userId) => {
       try {
@@ -152,6 +168,13 @@ export async function GET(request) {
   const brandMap = Object.fromEntries((brands || []).map((item) => [item.id, item.business_name]));
   const userMap = Object.fromEntries(userEntries);
   const feedbackMap = Object.fromEntries((feedbackRows || []).map((item) => [item.post_id, item]));
+  const reviewProductsMap = new Map();
+  for (const row of productReviewRows) {
+    if (!row?.post_id || reviewProductsMap.has(row.post_id)) continue;
+    if (Array.isArray(row.product_items) && row.product_items.length) {
+      reviewProductsMap.set(row.post_id, row.product_items);
+    }
+  }
   const slidesMap = (slideRows || []).reduce((map, slide) => {
     if (!map[slide.post_id]) map[slide.post_id] = [];
     map[slide.post_id].push(slide);
@@ -188,9 +211,11 @@ export async function GET(request) {
         product_image_semantic_verified: slide?.metadata?.product_image_semantic_verified === true,
         existing_slide_order: slide?.slide_order || null,
       }));
-    const storedProducts = Array.isArray(post.admin_product_items)
+    const storedProducts = Array.isArray(post.admin_product_items) && post.admin_product_items.length
       ? post.admin_product_items.slice(0, 5)
-      : [];
+      : Array.isArray(reviewProductsMap.get(post.id))
+        ? reviewProductsMap.get(post.id).slice(0, 5)
+        : [];
     if (storedProducts.length === 0) return slideProducts;
 
     const itemCount = Math.max(slideProducts.length, storedProducts.length);
@@ -473,11 +498,15 @@ function normalizeProductItems(items) {
     product_identifier: String(item?.product_identifier || "").trim().slice(0, 180),
     product_display_type: String(item?.product_display_type || "").trim().slice(0, 220),
     product_color: String(item?.product_color || "").trim().slice(0, 220),
+    product_price: String(item?.product_price || item?.price || "").trim().slice(0, 120),
     product_image_width: Number(item?.product_image_width || 0) || null,
     product_image_height: Number(item?.product_image_height || 0) || null,
     product_identity_locked: item?.product_identity_locked === true,
     product_image_semantic_verified: item?.product_image_semantic_verified === true,
     locked_product_fingerprint: String(item?.locked_product_fingerprint || "").trim().slice(0, 240),
+    manual_override: item?.manual_override === true,
+    manual_image_override: item?.manual_image_override === true,
+    manual_override_note: String(item?.manual_override_note || "").trim().slice(0, 500),
   }));
 }
 

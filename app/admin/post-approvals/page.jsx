@@ -14,7 +14,9 @@ import {
   LoaderCircle,
   Maximize2,
   PackageCheck,
+  Pencil,
   RefreshCw,
+  RotateCcw,
   Save,
   ScanSearch,
   ShieldCheck,
@@ -56,7 +58,31 @@ function statusMeta(status, t) {
 }
 
 const CAROUSEL_PRODUCT_COUNT = 5;
-const emptyCarouselProduct = () => ({ title: "", description: "", url: "", image_url: "", preview_image_url: "" });
+const emptyCarouselProduct = () => ({
+  title: "",
+  description: "",
+  url: "",
+  image_url: "",
+  preview_image_url: "",
+  product_brand: "",
+  product_identifier: "",
+  product_display_type: "",
+  product_color: "",
+  product_price: "",
+  product_image_width: null,
+  product_image_height: null,
+  product_identity_locked: false,
+  product_image_semantic_verified: false,
+  locked_product_fingerprint: "",
+  manual_override: false,
+  manual_image_override: false,
+  manual_override_note: "",
+});
+function isMaterialReady(item) {
+  if (!item) return false;
+  if (item.manual_override === true) return Boolean(item.title?.trim() && item.image_url?.trim());
+  return Boolean(item.url?.trim());
+}
 function isCarouselPost(post) {
   return /carousel/i.test(String(post?.content_format || post?.post_type || ""));
 }
@@ -93,8 +119,8 @@ function MediaPreview({ post, t, onOpen }) {
     return (
       <div className="admin-review-media-section">
         <div className="admin-review-section-heading">
-          <div><span>Visual review</span><strong>{mediaItems.length} images</strong></div>
-          <small>Click any image to inspect it full size</small>
+          <div><span>{t("admin.approvals.visualReview")}</span><strong>{t(mediaItems.length === 1 ? "admin.approvals.oneImage" : "admin.approvals.imageCount", { count: mediaItems.length })}</strong></div>
+          <small>{t("admin.approvals.inspectImagesHelp")}</small>
         </div>
         <div className="admin-v74-slide-grid admin-review-slide-grid">
           {post.slides.map((slide) => {
@@ -104,7 +130,7 @@ function MediaPreview({ post, t, onOpen }) {
                 {slide.image_url ? (
                   <button type="button" className="admin-review-image-button" onClick={() => onOpen?.(Math.max(0, mediaIndex))}>
                     <img src={slide.image_url} alt="" />
-                    <span className="admin-review-image-zoom"><Maximize2 size={16} /> Inspect</span>
+                    <span className="admin-review-image-zoom"><Maximize2 size={16} /> {t("admin.approvals.inspect")}</span>
                   </button>
                 ) : <span><ImageIcon size={22} /></span>}
                 <div>
@@ -131,7 +157,7 @@ function MediaPreview({ post, t, onOpen }) {
       <div className="admin-v74-media-frame admin-review-primary-media">
         <button type="button" className="admin-review-image-button admin-review-single-image" onClick={() => onOpen?.(0)}>
           <img src={post.image_url} alt="" />
-          <span className="admin-review-image-zoom"><ZoomIn size={17} /> Inspect full size</span>
+          <span className="admin-review-image-zoom"><ZoomIn size={17} /> {t("admin.approvals.inspectFullSize")}</span>
         </button>
       </div>
     );
@@ -162,6 +188,10 @@ export default function AdminPostApprovalsPage() {
   const [lightboxIndex, setLightboxIndex] = useState(null);
   const [resolvingProductIndex, setResolvingProductIndex] = useState(null);
   const [savingReviewChanges, setSavingReviewChanges] = useState(false);
+  const [editorDirty, setEditorDirty] = useState(false);
+  const [productDirty, setProductDirty] = useState(false);
+  const [editorPostId, setEditorPostId] = useState("");
+  const [manualEditingIndices, setManualEditingIndices] = useState([]);
 
   const selectedPost = useMemo(
     () => posts.find((post) => post.id === selectedPostId) || null,
@@ -171,14 +201,15 @@ export default function AdminPostApprovalsPage() {
   const carouselReady =
     isCarouselPost(selectedPost) &&
     materials.length === CAROUSEL_PRODUCT_COUNT &&
-    materials.every((item) => item.url?.trim());
+    materials.every(isMaterialReady);
   const singleProductReady =
     Boolean(selectedPost) &&
     !isCarouselPost(selectedPost) &&
-    Boolean(materials?.[0]?.url?.trim());
+    isMaterialReady(materials?.[0]);
   const verifiedMaterialCount = materials.filter(
     (item) => item.product_identity_locked === true && item.product_image_semantic_verified === true
   ).length;
+  const manualMaterialCount = materials.filter((item) => item.manual_override === true).length;
   const lowResolutionMaterialCount = materials.filter((item) => {
     const width = Number(item?.product_image_width || 0);
     const height = Number(item?.product_image_height || 0);
@@ -211,6 +242,22 @@ export default function AdminPostApprovalsPage() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [selectedPostId, lightboxIndex, lightboxItems.length]);
   useEffect(() => {
+    if (!selectedPost) {
+      setMaterials([]);
+      setPostCopy("");
+      setOutroSlide(null);
+      setOutroRemoved(false);
+      setRegenerationError("");
+      setRegenerationSuccess("");
+      setLightboxIndex(null);
+      setEditorPostId("");
+      setEditorDirty(false);
+      setProductDirty(false);
+      setManualEditingIndices([]);
+      return;
+    }
+    // Do not let the 15-second admin polling overwrite an open edit session.
+    if (editorPostId === selectedPost.id && (editorDirty || productDirty)) return;
     setMaterials(
       isCarouselPost(selectedPost)
         ? getFiveCarouselProducts(selectedPost?.admin_product_items)
@@ -224,7 +271,80 @@ export default function AdminPostApprovalsPage() {
     setRegenerationError("");
     setRegenerationSuccess("");
     setLightboxIndex(null);
-  }, [selectedPost]);
+    setEditorPostId(selectedPost.id);
+    setEditorDirty(false);
+    setProductDirty(false);
+    setManualEditingIndices([]);
+  }, [selectedPost, editorPostId, editorDirty, productDirty]);
+
+  function markEditorDirty({ product = false } = {}) {
+    setEditorDirty(true);
+    if (product) setProductDirty(true);
+  }
+
+  function updateMaterial(index, patch, { manual = false } = {}) {
+    setMaterials((items) => items.map((item, itemIndex) => {
+      if (itemIndex !== index) return item;
+      return {
+        ...item,
+        ...patch,
+        ...(manual ? {
+          manual_override: true,
+          product_identity_locked: false,
+          product_image_semantic_verified: false,
+          locked_product_fingerprint: "",
+        } : {}),
+      };
+    }));
+    markEditorDirty({ product: true });
+  }
+
+  function toggleManualEditor(index) {
+    setManualEditingIndices((current) =>
+      current.includes(index)
+        ? current.filter((value) => value !== index)
+        : [...current, index]
+    );
+  }
+
+  function renderManualProductEditor(item, index) {
+    if (!manualEditingIndices.includes(index)) return null;
+    const setField = (field, value) => updateMaterial(index, { [field]: value }, { manual: true });
+    return (
+      <div className="admin-product-manual-editor">
+        <div className="admin-product-manual-heading">
+          <div>
+            <Pencil size={15} />
+            <span>
+              <strong>{t("admin.approvals.manualOverride")}</strong>
+              <small>{t("admin.approvals.manualOverrideHelp")}</small>
+            </span>
+          </div>
+          <span className="admin-product-manual-warning">{t("admin.approvals.notSourceVerified")}</span>
+        </div>
+        <div className="admin-product-manual-fields">
+          <label><span>{t("admin.approvals.brand")}</span><input value={item.product_brand || ""} onChange={(event) => setField("product_brand", event.target.value)} /></label>
+          <label><span>{t("admin.approvals.productName")}</span><input value={item.title || ""} onChange={(event) => setField("title", event.target.value)} /></label>
+          <label><span>{t("admin.approvals.productType")}</span><input value={item.product_display_type || ""} onChange={(event) => setField("product_display_type", event.target.value)} /></label>
+          <label><span>{t("admin.approvals.variant")}</span><input value={item.product_color || ""} onChange={(event) => setField("product_color", event.target.value)} /></label>
+          <label><span>{t("admin.approvals.sku")}</span><input value={item.product_identifier || ""} onChange={(event) => setField("product_identifier", event.target.value)} /></label>
+          <label><span>{t("admin.approvals.priceOptional")}</span><input value={item.product_price || ""} onChange={(event) => setField("product_price", event.target.value)} /></label>
+          <label className="admin-product-manual-description"><span>{t("admin.approvals.productDescription")}</span><textarea value={item.description || ""} onChange={(event) => setField("description", event.target.value)} /></label>
+        </div>
+        <div className="admin-product-manual-actions">
+          <label className="admin-product-upload-button">
+            <Upload size={15} /> {t("admin.approvals.uploadProductImage")}
+            <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => uploadProductImage(index, event.target.files?.[0])} />
+          </label>
+          {item.url ? (
+            <button type="button" onClick={() => resolveMaterialProduct(index)} disabled={resolvingProductIndex === index}>
+              <RotateCcw size={15} /> {t("admin.approvals.resetToSource")}
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   async function loadPosts(preferredSelectedPostId = "") {
     return fetchPosts(preferredSelectedPostId, false);
@@ -333,9 +453,14 @@ export default function AdminPostApprovalsPage() {
         content: postCopy,
         product_items: materials,
       });
+      setEditorDirty(false);
       await loadPosts(selectedPost.id);
       setSelectedPostId(selectedPost.id);
-      setRegenerationSuccess("Review changes saved.");
+      setRegenerationSuccess(
+        productDirty
+          ? t("admin.approvals.savedNeedsRegeneration")
+          : t("admin.approvals.reviewChangesSaved")
+      );
     } catch (actionError) {
       setRegenerationError(actionError.message || "Could not save review changes.");
     } finally {
@@ -354,9 +479,11 @@ export default function AdminPostApprovalsPage() {
       const response = await fetch("/api/admin/post-approvals/regenerate", { method: "POST", headers, body: JSON.stringify({ post_id: selectedPost.status === "failed" ? null : selectedPost.id, occurrence_id: selectedPost.occurrence_id || null, content: postCopy, product_items: materials, preserve_outro: !outroRemoved && Boolean(outroSlide?.image_url), outro_slide: !outroRemoved ? outroSlide : null }) });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result?.error || "Regeneration failed.");
+      setEditorDirty(false);
+      setProductDirty(false);
       await loadPosts(result.post_id);
       setSelectedPostId(result.post_id);
-      setRegenerationSuccess(`Carousel regenerated successfully with ${result.slide_count || 6} slides.`);
+      setRegenerationSuccess(t("admin.approvals.carouselRegenerated", { count: result.slide_count || 6 }));
     } catch (actionError) {
       const message = actionError.message || "Regeneration failed.";
       setRegenerationError(message);
@@ -378,18 +505,21 @@ export default function AdminPostApprovalsPage() {
         body: JSON.stringify({
           post_id: selectedPost.id,
           product_url: materials[0].url,
+          product_item: materials[0],
         }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result?.error || "Product post regeneration failed.");
+      setEditorDirty(false);
+      setProductDirty(false);
       await loadPosts(result.post_id);
       setSelectedPostId(result.post_id);
       setRegenerationSuccess(
         result.format === "animated_product_reel"
-          ? "Product Reel regenerated from the verified original product page."
+          ? t("admin.approvals.productReelRegenerated")
           : result.format === "ai_product_ad"
-            ? "AI product ad regenerated from the verified original product page."
-            : "Product post regenerated from the verified original product page."
+            ? t("admin.approvals.productAdRegenerated")
+            : t("admin.approvals.productPostRegenerated")
       );
     } catch (actionError) {
       const message = actionError.message || "Product post regeneration failed.";
@@ -421,12 +551,14 @@ export default function AdminPostApprovalsPage() {
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result?.error || "Could not verify product URL.");
       setMaterials((items) => items.map((item, itemIndex) =>
-        itemIndex === index ? { ...emptyCarouselProduct(), ...(result.product || {}) } : item
+        itemIndex === index ? { ...emptyCarouselProduct(), ...(result.product || {}), manual_override: false, manual_image_override: false } : item
       ));
+      setEditorDirty(true);
+      setProductDirty(true);
       setRegenerationSuccess(
         isCarouselPost(selectedPost)
-          ? `Product ${index + 1} was fetched and verified from its original page.`
-          : "The replacement product was fetched and verified from its original page. Regenerate the post when you are ready."
+          ? t("admin.approvals.productFetched", { number: index + 1 })
+          : t("admin.approvals.replacementFetched")
       );
     } catch (actionError) {
       setRegenerationError(actionError.message || "Could not verify product URL.");
@@ -445,7 +577,19 @@ export default function AdminPostApprovalsPage() {
       if (!response.ok) throw new Error(result?.error || "Could not prepare image upload.");
       const { error: uploadError } = await supabase.storage.from(result.bucket).uploadToSignedUrl(result.path, result.token, file, { contentType: file.type });
       if (uploadError) throw uploadError;
-      setMaterials((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, image_url: result.public_url, preview_image_url: "" } : item));
+      setMaterials((items) => items.map((item, itemIndex) => itemIndex === index ? {
+        ...item,
+        image_url: result.public_url,
+        preview_image_url: "",
+        product_image_width: null,
+        product_image_height: null,
+        manual_override: true,
+        manual_image_override: true,
+        product_identity_locked: false,
+        product_image_semantic_verified: false,
+        locked_product_fingerprint: "",
+      } : item));
+      markEditorDirty({ product: true });
     } catch (uploadError) { setError(uploadError.message || "Image upload failed."); }
   }
 
@@ -527,8 +671,8 @@ export default function AdminPostApprovalsPage() {
         </div>
         {selectedIds.length ? (
           <div className="admin-workbench-bulkbar">
-            <strong>{selectedIds.length} selected</strong>
-            <button type="button" onClick={() => archiveSelected(selectedIds)}><Trash2 size={15} /> Archive selected</button>
+            <strong>{t("admin.approvals.selectedCount", { count: selectedIds.length })}</strong>
+            <button type="button" onClick={() => archiveSelected(selectedIds)}><Trash2 size={15} /> {t("admin.approvals.archiveSelected")}</button>
           </div>
         ) : null}
 
@@ -563,7 +707,7 @@ export default function AdminPostApprovalsPage() {
                     checked={selectedIds.includes(post.id)}
                     onClick={(event) => event.stopPropagation()}
                     onChange={(event) => setSelectedIds((ids) => event.target.checked ? [...ids, post.id] : ids.filter((id) => id !== post.id))}
-                    aria-label="Select post"
+                    aria-label={t("admin.approvals.selectPost")}
                   />
                   <strong>{post.brand_name || t("admin.approvals.unknownBrand")}</strong>
                   <span>{formatDate(post.created_at)}</span>
@@ -590,34 +734,40 @@ export default function AdminPostApprovalsPage() {
 
               <div className="admin-v74-detail-body">
                 <div className="admin-v74-email-preview admin-review-workspace-main">
-                  <div className="admin-v74-email-topline">SPREELO REVIEW WORKSPACE</div>
+                  <div className="admin-v74-email-topline">{t("admin.approvals.reviewWorkspace")}</div>
                   <div className="admin-review-title-row">
                     <div>
                       <span>{selectedPost.post_type || selectedPost.content_format || t("admin.approvals.post")}</span>
-                      <h3>Quality review</h3>
+                      <h3>{t("admin.approvals.qualityReview")}</h3>
                     </div>
                     <div className="admin-review-title-actions">
+                      {!isCarouselPost(selectedPost) && materials[0]?.url ? (
+                        <a className="admin-review-source-quick" href={materials[0].url} target="_blank" rel="noreferrer">
+                          <ExternalLink size={15} /> {t("admin.approvals.openProductSource")}
+                        </a>
+                      ) : null}
                       {(isCarouselPost(selectedPost) || materials.length) ? (
                         <button type="button" className="admin-review-jump-products" onClick={() => document.getElementById(`admin-review-products-${selectedPost.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}>
-                          <PackageCheck size={15} /> Edit products
+                          <PackageCheck size={15} /> {t("admin.approvals.editProducts")}
                         </button>
                       ) : null}
                       <span className="admin-review-post-id">{String(selectedPost.id || "").slice(0, 8)}</span>
+                      {(editorDirty || productDirty) ? <span className="admin-review-unsaved">{t("admin.approvals.unsavedChanges")}</span> : null}
                     </div>
                   </div>
 
                   <div className="admin-review-quality-strip">
-                    <div className={materials.length && verifiedMaterialCount === materials.length ? "ok" : "neutral"}>
-                      <ShieldCheck size={18} /><span>Product identity</span><strong>{materials.length ? `${verifiedMaterialCount}/${materials.length}` : "Ready"}</strong>
+                    <div className={manualMaterialCount ? "warning" : materials.length && verifiedMaterialCount === materials.length ? "ok" : "neutral"}>
+                      <ShieldCheck size={18} /><span>{t("admin.approvals.productIdentity")}</span><strong>{manualMaterialCount ? t("admin.approvals.identityWithManual", { verified: verifiedMaterialCount, manual: manualMaterialCount }) : materials.length ? `${verifiedMaterialCount}/${materials.length}` : t("admin.approvals.ready")}</strong>
                     </div>
                     <div className={lowResolutionMaterialCount ? "warning" : "ok"}>
-                      <ImageIcon size={18} /><span>Image quality</span><strong>{lowResolutionMaterialCount ? `${lowResolutionMaterialCount} low-res` : "Checked"}</strong>
+                      <ImageIcon size={18} /><span>{t("admin.approvals.imageQuality")}</span><strong>{lowResolutionMaterialCount ? t("admin.approvals.lowResolution", { count: lowResolutionMaterialCount }) : t("admin.approvals.checked")}</strong>
                     </div>
                     <div className={lightboxItems.length ? "ok" : "neutral"}>
-                      <PackageCheck size={18} /><span>Media</span><strong>{lightboxItems.length ? `${lightboxItems.length} image${lightboxItems.length === 1 ? "" : "s"}` : selectedPost.video_url ? "Video" : "None"}</strong>
+                      <PackageCheck size={18} /><span>{t("admin.approvals.media")}</span><strong>{lightboxItems.length ? t(lightboxItems.length === 1 ? "admin.approvals.oneImage" : "admin.approvals.imageCount", { count: lightboxItems.length }) : selectedPost.video_url ? t("admin.approvals.video") : t("admin.approvals.none")}</strong>
                     </div>
                     <div className={selectedPost.content ? "ok" : "warning"}>
-                      <FileCheck2 size={18} /><span>Post copy</span><strong>{selectedPost.content ? "Ready" : "Missing"}</strong>
+                      <FileCheck2 size={18} /><span>{t("admin.approvals.postCopy")}</span><strong>{selectedPost.content ? t("admin.approvals.ready") : t("admin.approvals.missing")}</strong>
                     </div>
                   </div>
 
@@ -625,21 +775,21 @@ export default function AdminPostApprovalsPage() {
 
                   <section className="admin-review-copy-editor">
                     <div className="admin-review-section-heading">
-                      <div><span>Caption</span><strong>Post copy</strong></div>
-                      <small>Edit before regeneration if needed</small>
+                      <div><span>{t("admin.approvals.caption")}</span><strong>{t("admin.approvals.postCopy")}</strong></div>
+                      <small>{t("admin.approvals.editCaptionHelp")}</small>
                     </div>
-                    <textarea value={postCopy} onChange={(event) => setPostCopy(event.target.value)} placeholder={t("admin.approvals.noContent")} />
+                    <textarea value={postCopy} onChange={(event) => { setPostCopy(event.target.value); markEditorDirty(); }} placeholder={t("admin.approvals.noContent")} />
                   </section>
 
                   {isCarouselPost(selectedPost) ? (
                     <section id={`admin-review-products-${selectedPost.id}`} className="admin-carousel-editor admin-review-product-workspace">
                       <div className="admin-carousel-editor-heading">
                         <div>
-                          <span>Product source</span>
-                          <strong>Five exact product URLs</strong>
-                          <p>Paste the original product URL. Spreelo fetches the name, brand, product type, variant and best verified main image itself. You do not need to type product information manually.</p>
+                          <span>{t("admin.approvals.productSource")}</span>
+                          <strong>{t("admin.approvals.fiveProductSources")}</strong>
+                          <p>{t("admin.approvals.productSourceHelp")}</p>
                         </div>
-                        <b className={carouselReady ? "ready" : ""}>{materials.filter((item) => item.url?.trim()).length}/5</b>
+                        <b className={carouselReady ? "ready" : ""}>{materials.filter(isMaterialReady).length}/5</b>
                       </div>
                       <div className="admin-carousel-product-grid admin-review-product-grid">
                         {materials.map((item, index) => {
@@ -647,49 +797,57 @@ export default function AdminPostApprovalsPage() {
                           const width = Number(item.product_image_width || 0);
                           const height = Number(item.product_image_height || 0);
                           return (
-                            <article className={item.url ? "complete" : "empty"} key={`${selectedPost.id}-product-${index}`}>
+                            <article className={isMaterialReady(item) ? "complete" : "empty"} key={`${selectedPost.id}-product-${index}`}>
                               <span className="admin-carousel-number">{index + 1}</span>
-                              <button type="button" className="admin-carousel-clear" onClick={() => setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? emptyCarouselProduct() : row))} aria-label="Remove product"><X size={16} /></button>
+                              <button type="button" className="admin-carousel-clear" onClick={() => { setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? emptyCarouselProduct() : row)); markEditorDirty({ product: true }); }} aria-label={t("admin.approvals.removeProduct")}><X size={16} /></button>
                               <div className="admin-carousel-product-image admin-review-product-image">
                                 {(item.image_url || item.preview_image_url) ? <img src={item.image_url || item.preview_image_url} alt="" /> : <ImageIcon size={28} />}
-                                <span className={`admin-product-verification-badge ${verified ? "verified" : "pending"}`}>{verified ? <ShieldCheck size={13} /> : <ScanSearch size={13} />}{verified ? "Verified source" : "Fetch from URL"}</span>
+                                <span className={`admin-product-verification-badge ${item.manual_override ? "manual" : verified ? "verified" : "pending"}`}>
+                                  {item.manual_override ? <Pencil size={13} /> : verified ? <ShieldCheck size={13} /> : <ScanSearch size={13} />}
+                                  {item.manual_override ? t("admin.approvals.manualOverride") : verified ? t("admin.approvals.verifiedSource") : t("admin.approvals.fetchFromUrl")}
+                                </span>
                               </div>
                               <div className="admin-carousel-product-fields admin-review-product-fields">
                                 <label className="admin-product-url-field">
-                                  <span>Replace product · Original product URL</span>
+                                  <span>{t("admin.approvals.replaceProductUrl")}</span>
                                   <div>
                                     <Link2 size={15} />
                                     <input value={item.url || ""} placeholder="https://.../product" onChange={(event) => {
                                       const url = event.target.value;
                                       setMaterials((items) => items.map((row, rowIndex) => rowIndex === index ? { ...emptyCarouselProduct(), url } : row));
+                                      markEditorDirty({ product: true });
                                     }} />
                                     <button type="button" disabled={!item.url?.trim() || resolvingProductIndex === index} onClick={() => resolveMaterialProduct(index)}>
                                       {resolvingProductIndex === index ? <LoaderCircle className="admin-spin" size={15} /> : <ScanSearch size={15} />}
-                                      {item.title ? "Refresh" : "Fetch"}
+                                      {item.title ? t("admin.approvals.refresh") : t("admin.approvals.fetch")}
                                     </button>
                                   </div>
                                 </label>
                                 {item.title ? (
                                   <div className="admin-product-facts">
-                                    <div><span>Brand</span><strong>{item.product_brand || "—"}</strong></div>
-                                    <div><span>Product</span><strong>{item.title}</strong></div>
-                                    <div><span>Type</span><strong>{item.product_display_type || "—"}</strong></div>
-                                    <div><span>Variant</span><strong>{item.product_color || "—"}</strong></div>
-                                    <div><span>SKU / ID</span><strong>{item.product_identifier || "—"}</strong></div>
-                                    <div><span>Source image</span><strong>{width && height ? `${width} × ${height}` : "—"}</strong></div>
+                                    <div><span>{t("admin.approvals.brand")}</span><strong>{item.product_brand || "—"}</strong></div>
+                                    <div><span>{t("admin.approvals.productName")}</span><strong>{item.title}</strong></div>
+                                    <div><span>{t("admin.approvals.productType")}</span><strong>{item.product_display_type || "—"}</strong></div>
+                                    <div><span>{t("admin.approvals.variant")}</span><strong>{item.product_color || "—"}</strong></div>
+                                    <div><span>{t("admin.approvals.sku")}</span><strong>{item.product_identifier || "—"}</strong></div>
+                                    <div><span>{t("admin.approvals.sourceImage")}</span><strong>{width && height ? `${width} × ${height}` : "—"}</strong></div>
                                   </div>
-                                ) : <p className="admin-product-url-help">Paste a product URL and click Fetch. Spreelo will fill everything else.</p>}
-                                <p className="admin-product-refresh-help">Paste a different URL to replace this product. Keep the same URL and click Refresh to re-fetch the verified product image and data.</p>
-                                {item.url ? <a className="admin-product-original-link" href={item.url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Open original product</a> : null}
+                                ) : <p className="admin-product-url-help">{t("admin.approvals.pasteProductUrl")}</p>}
+                                <div className="admin-product-source-actions">
+                                  {item.url ? <a className="admin-product-original-link" href={item.url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> {t("admin.approvals.openOriginalProduct")}</a> : null}
+                                  <button type="button" className="admin-product-manual-toggle" onClick={() => toggleManualEditor(index)}><Pencil size={14} /> {manualEditingIndices.includes(index) ? t("admin.approvals.closeManualEdit") : t("admin.approvals.editManually")}</button>
+                                </div>
+                                {renderManualProductEditor(item, index)}
+                                <p className="admin-product-refresh-help">{t("admin.approvals.productRefreshHelp")}</p>
                               </div>
                             </article>
                           );
                         })}
                         <article className={`admin-carousel-outro ${outroSlide?.image_url && !outroRemoved ? "complete" : "empty"}`}>
                           <span className="admin-carousel-number">AI</span>
-                          {outroSlide?.image_url && !outroRemoved ? <button type="button" className="admin-carousel-clear" onClick={() => setOutroRemoved(true)} aria-label="Create a new AI closing image"><X size={16} /></button> : null}
+                          {outroSlide?.image_url && !outroRemoved ? <button type="button" className="admin-carousel-clear" onClick={() => { setOutroRemoved(true); markEditorDirty({ product: true }); }} aria-label={t("admin.approvals.replaceAiOutro")}><X size={16} /></button> : null}
                           <div className="admin-carousel-product-image">
-                            {outroSlide?.image_url && !outroRemoved ? <img src={outroSlide.image_url} alt="" /> : <><Sparkles size={30} /><strong>A new AI closing image will be created</strong></>}
+                            {outroSlide?.image_url && !outroRemoved ? <img src={outroSlide.image_url} alt="" /> : <><Sparkles size={30} /><strong>{t("admin.approvals.newAiOutro")}</strong></>}
                           </div>
                         </article>
                       </div>
@@ -699,8 +857,8 @@ export default function AdminPostApprovalsPage() {
                   ) : selectedPost.admin_product_items?.length || materials.length ? (
                     <section id={`admin-review-products-${selectedPost.id}`} className="admin-review-single-product">
                       <div className="admin-review-section-heading">
-                        <div><span>Product source</span><strong>Locked product object</strong></div>
-                        <small>Replace the product by pasting only its original URL</small>
+                        <div><span>{t("admin.approvals.productSource")}</span><strong>{t("admin.approvals.lockedProductObject")}</strong></div>
+                        <small>{t("admin.approvals.singleProductSourceHelp")}</small>
                       </div>
                       {materials.slice(0, 1).map((item, index) => {
                         const verified = item.product_identity_locked === true && item.product_image_semantic_verified === true;
@@ -709,38 +867,43 @@ export default function AdminPostApprovalsPage() {
                             <div className="admin-review-single-product-source">
                               <div className="admin-review-product-image">
                                 {item.image_url ? <img src={item.image_url} alt="" /> : <ImageIcon size={30} />}
-                                <span className={`admin-product-verification-badge ${verified ? "verified" : "pending"}`}>
-                                  {verified ? <ShieldCheck size={13} /> : <ScanSearch size={13} />}
-                                  {verified ? "Verified source" : "Fetch from URL"}
+                                <span className={`admin-product-verification-badge ${item.manual_override ? "manual" : verified ? "verified" : "pending"}`}>
+                                  {item.manual_override ? <Pencil size={13} /> : verified ? <ShieldCheck size={13} /> : <ScanSearch size={13} />}
+                                  {item.manual_override ? t("admin.approvals.manualOverride") : verified ? t("admin.approvals.verifiedSource") : t("admin.approvals.fetchFromUrl")}
                                 </span>
                               </div>
                               <label className="admin-product-url-field">
-                                <span>Replace product · Original product URL</span>
+                                <span>{t("admin.approvals.replaceProductUrl")}</span>
                                 <div>
                                   <Link2 size={15} />
                                   <input value={item.url || ""} placeholder="https://.../product" onChange={(event) => {
                                     const url = event.target.value;
                                     setMaterials([{ ...emptyCarouselProduct(), url }]);
+                                    markEditorDirty({ product: true });
                                   }} />
                                   <button type="button" disabled={!item.url?.trim() || resolvingProductIndex === 0} onClick={() => resolveMaterialProduct(0)}>
                                     {resolvingProductIndex === 0 ? <LoaderCircle className="admin-spin" size={15} /> : <ScanSearch size={15} />}
-                                    {item.title ? "Refresh" : "Fetch"}
+                                    {item.title ? t("admin.approvals.refresh") : t("admin.approvals.fetch")}
                                   </button>
                                 </div>
                               </label>
                             </div>
                             {item.title ? (
                               <div className="admin-product-facts admin-product-facts-single">
-                                <div><span>Brand</span><strong>{item.product_brand || "—"}</strong></div>
-                                <div><span>Product</span><strong>{item.title || "—"}</strong></div>
-                                <div><span>Type</span><strong>{item.product_display_type || "—"}</strong></div>
-                                <div><span>Variant</span><strong>{item.product_color || "—"}</strong></div>
-                                <div><span>SKU / ID</span><strong>{item.product_identifier || "—"}</strong></div>
-                                <div><span>Source image</span><strong>{item.product_image_width && item.product_image_height ? `${item.product_image_width} × ${item.product_image_height}` : "—"}</strong></div>
+                                <div><span>{t("admin.approvals.brand")}</span><strong>{item.product_brand || "—"}</strong></div>
+                                <div><span>{t("admin.approvals.productName")}</span><strong>{item.title || "—"}</strong></div>
+                                <div><span>{t("admin.approvals.productType")}</span><strong>{item.product_display_type || "—"}</strong></div>
+                                <div><span>{t("admin.approvals.variant")}</span><strong>{item.product_color || "—"}</strong></div>
+                                <div><span>{t("admin.approvals.sku")}</span><strong>{item.product_identifier || "—"}</strong></div>
+                                <div><span>{t("admin.approvals.sourceImage")}</span><strong>{item.product_image_width && item.product_image_height ? `${item.product_image_width} × ${item.product_image_height}` : "—"}</strong></div>
                               </div>
-                            ) : <p className="admin-product-url-help">Paste the original product URL and click Fetch. Spreelo will fetch the product name, brand, type, variant and best verified image itself.</p>}
-                            <p className="admin-product-refresh-help">Use a different URL to replace the product, or keep the same URL and click Refresh to re-fetch its verified image and data.</p>
-                            {item.url ? <a className="admin-product-original-link" href={item.url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Open original product</a> : null}
+                            ) : <p className="admin-product-url-help">{t("admin.approvals.pasteProductUrl")}</p>}
+                            <div className="admin-product-source-actions">
+                              {item.url ? <a className="admin-product-original-link" href={item.url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> {t("admin.approvals.openOriginalProduct")}</a> : null}
+                              <button type="button" className="admin-product-manual-toggle" onClick={() => toggleManualEditor(index)}><Pencil size={14} /> {manualEditingIndices.includes(index) ? t("admin.approvals.closeManualEdit") : t("admin.approvals.editManually")}</button>
+                            </div>
+                            {renderManualProductEditor(item, index)}
+                            <p className="admin-product-refresh-help">{t("admin.approvals.productRefreshHelp")}</p>
                             {regenerationError ? <div className="admin-alert error admin-regeneration-inline-alert"><AlertTriangle size={16} /> <span>{regenerationError}</span></div> : null}
                             {regenerationSuccess ? <div className="admin-alert success admin-regeneration-inline-alert"><CheckCircle2 size={16} /> <span>{regenerationSuccess}</span></div> : null}
                           </div>
@@ -758,9 +921,9 @@ export default function AdminPostApprovalsPage() {
                     <div><dt>{t("admin.approvals.platform")}</dt><dd>{selectedPost.platform || "—"}</dd></div>
                   </dl>
                   <div className="admin-brand-review-policy">
-                    <strong>Brand review policy</strong>
-                    <p>Every post stays visible here. Choose whether complete posts also need Spreelo approval before the customer email.</p>
-                    <label><input type="checkbox" checked={selectedPost.brand_admin_review_required !== false} onChange={(event) => setBrandPolicy(event.target.checked)} /> Require Spreelo review for {selectedPost.brand_name || "this brand"}</label>
+                    <strong>{t("admin.approvals.brandReviewPolicy")}</strong>
+                    <p>{t("admin.approvals.brandReviewPolicyText")}</p>
+                    <label><input type="checkbox" checked={selectedPost.brand_admin_review_required !== false} onChange={(event) => setBrandPolicy(event.target.checked)} /> {t("admin.approvals.requireBrandReview", { brandName: selectedPost.brand_name || t("admin.approvals.thisBrand") })}</label>
                   </div>
 
                   {selectedPost.status === "failed" ? (
@@ -785,7 +948,7 @@ export default function AdminPostApprovalsPage() {
                     </div>
                   ) : null}
 
-                  {!isSyntheticAdminCaseId(selectedPost.id) ? <button type="button" className="admin-archive-button" onClick={() => archiveSelected([selectedPost.id])}><Trash2 size={15} /> Archive post</button> : null}
+                  {!isSyntheticAdminCaseId(selectedPost.id) ? <button type="button" className="admin-archive-button" onClick={() => archiveSelected([selectedPost.id])}><Trash2 size={15} /> {t("admin.approvals.archivePost")}</button> : null}
 
                   {selectedPost.rejection ? (
                     <div className="admin-v74-rejection-review">
@@ -801,27 +964,28 @@ export default function AdminPostApprovalsPage() {
                 </aside>
               </div>
               <footer className="admin-review-actionbar">
-                <button type="button" className="admin-review-secondary-action" onClick={() => setSelectedPostId("")}><X size={16} /> Close</button>
+                <button type="button" className="admin-review-secondary-action" onClick={() => setSelectedPostId("")}><X size={16} /> {t("admin.approvals.close")}</button>
                 <div>
                   {!isSyntheticAdminCaseId(selectedPost.id) ? (
                     <button type="button" className="admin-review-secondary-action" disabled={savingReviewChanges} onClick={saveCurrentReviewChanges}>
                       {savingReviewChanges ? <LoaderCircle className="admin-spin" size={16} /> : <Save size={16} />}
-                      Save changes
+                      {t("admin.approvals.saveChanges")}
                     </button>
                   ) : null}
                   {isCarouselPost(selectedPost) ? (
                     <button type="button" className="admin-review-secondary-action admin-review-regenerate-action" disabled={regenerating || !carouselReady} onClick={regenerateFromMaterials}>
                       {regenerating ? <LoaderCircle className="admin-spin" size={16} /> : <RefreshCw size={16} />}
-                      Regenerate complete carousel
+                      {t("admin.approvals.regenerateCarousel")}
                     </button>
                   ) : selectedPost.admin_product_items?.length || materials.length ? (
                     <button type="button" className="admin-review-secondary-action admin-review-regenerate-action" disabled={regenerating || !singleProductReady} onClick={regenerateSingleProduct}>
                       {regenerating ? <LoaderCircle className="admin-spin" size={16} /> : <RefreshCw size={16} />}
-                      Regenerate with product
+                      {t("admin.approvals.regenerateProduct")}
                     </button>
                   ) : null}
+                  {productDirty ? <span className="admin-review-regeneration-required"><AlertTriangle size={14} /> {t("admin.approvals.regenerationRequired")}</span> : editorDirty ? <span className="admin-review-regeneration-required"><AlertTriangle size={14} /> {t("admin.approvals.saveBeforeApproval")}</span> : null}
                   {selectedPost.admin_review_status === "pending" && selectedPost.status !== "failed" ? (
-                    <button type="button" className="admin-primary-button admin-review-approve-action" disabled={releasingPostId === selectedPost.id} onClick={() => releaseToCustomer(selectedPost.id)}>
+                    <button type="button" className="admin-primary-button admin-review-approve-action" disabled={releasingPostId === selectedPost.id || productDirty || editorDirty} onClick={() => releaseToCustomer(selectedPost.id)}>
                       {releasingPostId === selectedPost.id ? <LoaderCircle className="admin-spin" size={16} /> : <CheckCircle2 size={16} />}
                       {t("admin.approvals.releaseToCustomer")}
                     </button>
@@ -834,7 +998,7 @@ export default function AdminPostApprovalsPage() {
 
         {lightboxIndex !== null && lightboxItems[lightboxIndex] ? (
           <div className="admin-review-lightbox-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setLightboxIndex(null); }}>
-            <section className="admin-review-lightbox" role="dialog" aria-modal="true" aria-label="Large image review">
+            <section className="admin-review-lightbox" role="dialog" aria-modal="true" aria-label={t("admin.approvals.largeImageReview")}>
             <header>
               <div>
                 <span>{selectedPost?.brand_name || "Spreelo"}</span>
@@ -842,16 +1006,16 @@ export default function AdminPostApprovalsPage() {
                 <small>{lightboxIndex + 1} / {lightboxItems.length}</small>
               </div>
               <div>
-                {lightboxItems[lightboxIndex].productUrl ? <a href={lightboxItems[lightboxIndex].productUrl} target="_blank" rel="noreferrer"><ExternalLink size={16} /> Original product</a> : null}
-                <button type="button" onClick={() => setLightboxIndex(null)} aria-label="Close full size image"><X size={21} /></button>
+                {lightboxItems[lightboxIndex].productUrl ? <a href={lightboxItems[lightboxIndex].productUrl} target="_blank" rel="noreferrer"><ExternalLink size={16} /> {t("admin.approvals.originalProduct")}</a> : null}
+                <button type="button" onClick={() => setLightboxIndex(null)} aria-label={t("admin.approvals.closeImage")}><X size={21} /></button>
               </div>
             </header>
             <div className="admin-review-lightbox-stage">
-              {lightboxItems.length > 1 ? <button type="button" className="previous" onClick={() => setLightboxIndex((lightboxIndex - 1 + lightboxItems.length) % lightboxItems.length)} aria-label="Previous image"><ChevronLeft size={26} /></button> : null}
+              {lightboxItems.length > 1 ? <button type="button" className="previous" onClick={() => setLightboxIndex((lightboxIndex - 1 + lightboxItems.length) % lightboxItems.length)} aria-label={t("admin.approvals.previousImage")}><ChevronLeft size={26} /></button> : null}
               <img src={lightboxItems[lightboxIndex].url} alt="" />
-              {lightboxItems.length > 1 ? <button type="button" className="next" onClick={() => setLightboxIndex((lightboxIndex + 1) % lightboxItems.length)} aria-label="Next image"><ChevronRight size={26} /></button> : null}
+              {lightboxItems.length > 1 ? <button type="button" className="next" onClick={() => setLightboxIndex((lightboxIndex + 1) % lightboxItems.length)} aria-label={t("admin.approvals.nextImage")}><ChevronRight size={26} /></button> : null}
             </div>
-            <footer><span>Use ← → to browse · Esc to close</span><strong><ZoomIn size={15} /> Large preview</strong></footer>
+            <footer><span>{t("admin.approvals.lightboxHelp")}</span><strong><ZoomIn size={15} /> {t("admin.approvals.largePreview")}</strong></footer>
             </section>
           </div>
         ) : null}

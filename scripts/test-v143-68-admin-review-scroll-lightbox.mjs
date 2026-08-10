@@ -4,8 +4,8 @@ const css = fs.readFileSync(new URL('../app/styles/38-current-experience-v143.cs
 const expect = (ok, message) => { if (!ok) throw new Error(message); };
 expect(css.includes('grid-template-rows: auto minmax(0, 1fr) auto !important'), 'Review modal must have bounded header/body/footer rows.');
 expect(css.includes('overflow-y: auto !important') && css.includes('scrollbar-gutter: stable'), 'Review body must own vertical scrolling.');
-expect(page.includes('admin-review-jump-products') && page.includes('Edit products'), 'Admin must expose a visible Edit products jump action.');
-expect(page.includes('Replace product · Original product URL') && page.includes('Refresh to re-fetch'), 'Product replacement workflow must be explicit in the review UI.');
+expect(page.includes('admin-review-jump-products') && page.includes('admin.approvals.editProducts'), 'Admin must expose a visible Edit products jump action.');
+expect(page.includes('admin.approvals.replaceProductUrl') && page.includes('admin.approvals.productRefreshHelp'), 'Product replacement workflow must be explicit in the review UI.');
 expect(page.includes('admin-review-lightbox-backdrop'), 'Lightbox must have a dedicated foreground backdrop.');
 expect(css.includes('z-index: 22000'), 'Lightbox backdrop must stack above admin detail backdrop.');
 expect(css.includes('width: min(920px, calc(100vw - 72px))') && css.includes('max-height: min(66dvh, 610px)'), 'Image inspector must use restrained dimensions.');

@@ -27,13 +27,25 @@ export async function POST(request) {
       product_image_height: Number(item?.product_image_height || 0) || null,
       product_identity_locked: item?.product_identity_locked === true,
       product_image_semantic_verified: item?.product_image_semantic_verified === true,
+      locked_product_fingerprint: String(item?.locked_product_fingerprint || "").trim(),
+      product_price: String(item?.product_price || item?.price || "").trim(),
+      manual_override: item?.manual_override === true,
+      manual_image_override: item?.manual_image_override === true,
+      manual_override_note: String(item?.manual_override_note || "").trim(),
     }))
     .filter((item) => item.url || item.title || item.image_url || item.description)
     .slice(0, 5);
-  if (products.length !== 5 || products.some((item) => !item.url)) {
+  const incompleteManualProduct = (item) =>
+    item.manual_override === true && (!item.title || !item.image_url);
+  const incompleteAutomaticProduct = (item) =>
+    item.manual_override !== true && !item.url;
+  if (
+    products.length !== 5 ||
+    products.some((item) => incompleteManualProduct(item) || incompleteAutomaticProduct(item))
+  ) {
     return Response.json({
       ok: false,
-      error: "A carousel must contain exactly five product URLs. Spreelo fetches the product name, brand, product type, variant and main image from each original product page automatically."
+      error: "A carousel must contain exactly five complete products. Normally Spreelo needs each original product URL. If Manual override is enabled, a product name and image are required instead."
     }, { status: 400 });
   }
 
@@ -59,12 +71,23 @@ export async function POST(request) {
   let content = String(body?.content || "").trim();
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-  // v143.67: admin replacement/regeneration follows the exact same locked
-  // product-page pipeline as automatic Spreelo discovery. The URL is the only
-  // authoritative admin input; stale/manual title or image fields are never
-  // allowed to override the original product page.
+  // v143.69: URL-first remains the default. A deliberate admin manual
+  // override is a safety valve for sites that cannot be fetched. Manual data is
+  // never mislabeled as verified source data and is preserved until the admin
+  // explicitly refreshes from the original URL.
   const resolvedProducts = [];
   for (const product of products) {
+    if (product.manual_override === true) {
+      resolvedProducts.push({
+        ...product,
+        product_identity_locked: false,
+        product_image_semantic_verified: false,
+        locked_product_fingerprint: "",
+        manual_override: true,
+        admin_materials_authoritative: true,
+      });
+      continue;
+    }
     try {
       const resolved = await resolveLockedProductUrlForUse({
         supabase: context.admin,
@@ -84,11 +107,14 @@ export async function POST(request) {
         product_display_type: resolved.product_display_type || resolved.display_product_type || resolved.locked_product_category || resolved.category || "",
         product_color: resolved.product_color || resolved.locked_product_color || "",
         product_identifier: resolved.product_identifier || resolved.locked_product_identifier || "",
+        product_price: resolved.locked_product_price || resolved.price || "",
         product_image_width: Number(resolved.product_image_width || 0) || null,
         product_image_height: Number(resolved.product_image_height || 0) || null,
         product_identity_locked: resolved.product_identity_locked === true,
         product_image_semantic_verified: resolved.product_image_semantic_verified === true,
         locked_product_fingerprint: resolved.locked_product_fingerprint || "",
+        manual_override: false,
+        manual_image_override: false,
       });
     } catch (error) {
       return Response.json({
@@ -184,6 +210,8 @@ export async function POST(request) {
         carousel_slide_role: "product",
         admin_regenerated: true,
         admin_materials_authoritative: true,
+        admin_manual_override: product.manual_override === true,
+        admin_manual_image_override: product.manual_image_override === true,
         product_label_applied: rendered.productLabelApplied,
         product_label_placement: rendered.productLabelPlacement,
         product_label_layout: rendered.productLabelLayout,

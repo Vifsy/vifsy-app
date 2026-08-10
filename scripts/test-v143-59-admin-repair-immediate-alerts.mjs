@@ -41,22 +41,26 @@ check(
     adminApi.includes('admin_product_items: Array.isArray(reviewCase.product_items)')
 );
 check(
-  'Admin carousel is ready with exactly five image + name + URL products',
-  adminPage.includes('item.image_url && item.title?.trim() && item.url?.trim()')
+  'Admin carousel is ready with five complete URL-backed or deliberate manual products',
+  adminPage.includes('materials.length === CAROUSEL_PRODUCT_COUNT') &&
+    adminPage.includes('materials.every(isMaterialReady)') &&
+    adminPage.includes('manual_override')
 );
 check(
   'Admin repair no longer requires product description',
   !/carouselReady[\s\S]{0,500}description\?\.trim/.test(adminPage) &&
-    regenerate.includes('Product information/description is optional')
+    regenerate.includes('Product descriptions may be empty')
 );
 check(
-  'Admin repair requires product URL',
-  regenerate.includes('!item.image_url || !item.title || !item.url') &&
-    adminPage.includes('Product URL (required)')
+  'Admin repair is URL-first with an explicit manual fallback',
+  regenerate.includes('incompleteAutomaticProduct') &&
+    regenerate.includes('incompleteManualProduct') &&
+    adminPage.includes('admin.approvals.replaceProductUrl') &&
+    adminPage.includes('admin.approvals.manualOverride')
 );
 check(
   'Old and newly added products may be mixed without replacing all five',
-  adminPage.includes('Keep any products that are already correct and replace only the ones you want') &&
+  adminPage.includes('admin.approvals.productSourceHelp') &&
     regenerate.includes('may be a mix of old products and newly added products')
 );
 check(

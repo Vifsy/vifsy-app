@@ -45,7 +45,7 @@ check(
 check(
   'Successful regeneration is confirmed inside the detail modal',
   adminPage.includes('regenerationSuccess') &&
-    adminPage.includes('Carousel regenerated successfully with')
+    adminPage.includes('admin.approvals.carouselRegenerated')
 );
 check(
   'A newly created repaired post stays selected after the admin list refresh',

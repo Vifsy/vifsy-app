@@ -24517,6 +24517,26 @@ export async function resolveLockedProductUrlForUse({
     cachedItem: candidate,
   });
 
+  // v143.69: hydrateAuthoritativeWebAgentProduct deliberately converts a
+  // technical fetch failure into a null result so campaign research can try a
+  // bounded repair. For a direct locked-product resolution, however, an
+  // active domain cooldown must remain a retryable rate-limit signal instead
+  // of later becoming a misleading terminal "could not build locked object".
+  if (!hydrated) {
+    const domainState = await getWebsiteDomainFetchState(canonicalUrl);
+    if (domainState.cooldownActive) {
+      throw new WebsiteRateLimitError(
+        `Website domain cooldown active for ${domainState.domain}`,
+        {
+          url: canonicalUrl,
+          domain: domainState.domain,
+          retryAfterMs: domainState.waitMs,
+          status: 429,
+        }
+      );
+    }
+  }
+
   if (!hydrated && openai && supabase) {
     const repair = await repairAuthoritativeWebAgentProductAssets({
       supabase,
@@ -24546,6 +24566,18 @@ export async function resolveLockedProductUrlForUse({
   }
 
   if (!hydrated?.product_identity_locked || !hydrated?.url || !hydrated?.image_url) {
+    const domainState = await getWebsiteDomainFetchState(canonicalUrl);
+    if (domainState.cooldownActive) {
+      throw new WebsiteRateLimitError(
+        `Website domain cooldown active for ${domainState.domain}`,
+        {
+          url: canonicalUrl,
+          domain: domainState.domain,
+          retryAfterMs: domainState.waitMs,
+          status: 429,
+        }
+      );
+    }
     throw new Error("Spreelo could not build a locked product object from that exact product page.");
   }
 

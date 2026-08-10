@@ -38,6 +38,10 @@ function normalizeProduct(product, productUrl) {
     product_identity_locked: product?.product_identity_locked === true,
     product_image_semantic_verified: product?.product_image_semantic_verified === true,
     locked_product_fingerprint: product?.locked_product_fingerprint || "",
+    product_price: product?.product_price || product?.locked_product_price || product?.price || "",
+    manual_override: product?.manual_override === true,
+    manual_image_override: product?.manual_image_override === true,
+    manual_override_note: product?.manual_override_note || "",
   };
 }
 
@@ -60,10 +64,24 @@ export async function POST(request) {
 
   const body = await request.json().catch(() => ({}));
   const postId = String(body?.post_id || "").trim();
-  const productUrl = String(body?.product_url || "").trim();
-  if (!postId || !productUrl || !/^https?:\/\//i.test(productUrl)) {
+  const suppliedProduct = normalizeProduct(body?.product_item || {}, String(body?.product_url || "").trim());
+  const productUrl = String(body?.product_url || suppliedProduct.url || "").trim();
+  const useManualOverride = suppliedProduct.manual_override === true;
+  if (!postId) {
+    return Response.json({ ok: false, error: "A post ID is required." }, { status: 400 });
+  }
+  if (
+    useManualOverride
+      ? (!suppliedProduct.title || !suppliedProduct.image_url)
+      : (!productUrl || !/^https?:\/\//i.test(productUrl))
+  ) {
     return Response.json(
-      { ok: false, error: "A post ID and complete original product URL are required." },
+      {
+        ok: false,
+        error: useManualOverride
+          ? "Manual override requires at least a product name and product image."
+          : "A complete original product URL is required."
+      },
       { status: 400 }
     );
   }
@@ -85,20 +103,48 @@ export async function POST(request) {
     ? await context.admin.from("brand_profiles").select("*").eq("id", brandProfileId).maybeSingle()
     : { data: null };
   const websiteUrl = String(
-    brandProfile?.website_product_source_url || brandProfile?.website_url || productUrl
+    brandProfile?.website_product_source_url ||
+      brandProfile?.website_url ||
+      productUrl ||
+      suppliedProduct.url ||
+      ""
   ).trim();
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   try {
-    const lockedProduct = await resolveLockedProductUrlForUse({
-      supabase: context.admin,
-      openai,
-      productUrl,
-      websiteUrl,
-      titleHint: "",
-      rule: rule || { id: post.automation_rule_id || "admin-product-regeneration", brand_profile_id: brandProfileId },
-      ruleId: post.automation_rule_id || "admin-product-regeneration",
-    });
+    const lockedProduct = useManualOverride
+      ? {
+          ...suppliedProduct,
+          title: suppliedProduct.title,
+          description: suppliedProduct.description || "",
+          url: suppliedProduct.url || productUrl || "",
+          image_url: suppliedProduct.image_url,
+          product_brand: suppliedProduct.product_brand || "",
+          product_identifier: suppliedProduct.product_identifier || "",
+          product_display_type: suppliedProduct.product_display_type || "",
+          product_color: suppliedProduct.product_color || "",
+          locked_product_title: suppliedProduct.title,
+          locked_product_url: suppliedProduct.url || productUrl || "",
+          locked_product_primary_image_url: suppliedProduct.image_url,
+          locked_product_brand: suppliedProduct.product_brand || "",
+          locked_product_identifier: suppliedProduct.product_identifier || "",
+          locked_product_category: suppliedProduct.product_display_type || "",
+          locked_product_color: suppliedProduct.product_color || "",
+          locked_product_price: suppliedProduct.product_price || "",
+          product_identity_locked: false,
+          product_image_semantic_verified: false,
+          manual_override: true,
+          manual_image_override: suppliedProduct.manual_image_override === true,
+        }
+      : await resolveLockedProductUrlForUse({
+          supabase: context.admin,
+          openai,
+          productUrl,
+          websiteUrl,
+          titleHint: "",
+          rule: rule || { id: post.automation_rule_id || "admin-product-regeneration", brand_profile_id: brandProfileId },
+          ruleId: post.automation_rule_id || "admin-product-regeneration",
+        });
     const product = normalizeProduct(lockedProduct, productUrl);
     const enhancedRule = {
       ...(rule || {}),
@@ -201,7 +247,9 @@ export async function POST(request) {
       });
       imageUrl = uploaded.imageUrl;
       imageStoragePath = uploaded.imageStoragePath;
-      imagePrompt = "Verified product-page image rendered with Spreelo product identity label.";
+      imagePrompt = useManualOverride
+        ? "Admin-supplied product image rendered with Spreelo product label."
+        : "Verified product-page image rendered with Spreelo product identity label.";
       const logoResult = await applyLogoOverlayIfNeeded({
         supabase: context.admin,
         userId: post.user_id,

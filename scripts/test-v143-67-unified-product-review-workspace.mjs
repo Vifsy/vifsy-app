@@ -47,7 +47,7 @@ assert.match(cron, /No page-wide image scan is performed here/);
 
 assert.match(adminResolve, /resolveLockedProductUrlForUse/);
 assert.match(adminResolve, /website_product_source_url/);
-assert.match(adminCarouselRegenerate, /exactly five product URLs/);
+assert.match(adminCarouselRegenerate, /exactly five complete products/);
 assert.match(adminCarouselRegenerate, /resolveLockedProductUrlForUse/);
 assert.match(adminSingleRegenerate, /generateWebsiteItemAdImage/);
 assert.match(adminSingleRegenerate, /generateAnimatedProductVideo/);
@@ -59,10 +59,10 @@ for (const token of [
   "admin-review-lightbox",
   "admin-review-quality-strip",
   "admin-review-actionbar",
-  "Original product URL",
-  "Regenerate complete carousel",
-  "Regenerate with product",
-  "Save changes",
+  "admin.approvals.replaceProductUrl",
+  "admin.approvals.regenerateCarousel",
+  "admin.approvals.regenerateProduct",
+  "admin.approvals.saveChanges",
   "/api/admin/post-approvals/resolve-product",
   "/api/admin/post-approvals/regenerate-product",
 ]) {
