@@ -92,7 +92,8 @@
     "test:v143.67": "node scripts/test-v143-67-unified-product-review-workspace.mjs",
     "test:v143.69": "node scripts/test-v143-69-admin-home-lifecycle.mjs",
     "test:v143.70": "node scripts/test-v143-70-spreelo-home-review-queue.mjs",
-    "test:v143.71": "node scripts/test-v143-71-customer-admin-separation-home-actions.mjs"
+    "test:v143.71": "node scripts/test-v143-71-customer-admin-separation-home-actions.mjs",
+    "test:v143.74": "node scripts/test-v143-74-content-economics.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

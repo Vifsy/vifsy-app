@@ -7,6 +7,7 @@ import {
   Building2,
   CheckCircle2,
   CircleDollarSign,
+  Coins,
   FileVideo2,
   FileCheck2,
   ImagePlay,
@@ -314,6 +315,16 @@ export default function AdminDashboardPage() {
                   <p>Look up an account by email, add compensation credits or correct a balance with an audit trail.</p>
                 </div>
                 <strong>Manage credits →</strong>
+              </a>
+
+              <a className="admin-tool-card" href="/admin/content-credits">
+                <span className="admin-tool-icon"><Coins size={24} aria-hidden="true" /></span>
+                <div>
+                  <span className="admin-card-kicker">{t("admin.contentCredits.kicker")}</span>
+                  <h2>{t("admin.contentCredits.title")}</h2>
+                  <p>{t("admin.contentCredits.dashboardDescription")}</p>
+                </div>
+                <strong>{t("admin.contentCredits.open")} →</strong>
               </a>
 
               <a className="admin-tool-card" href="/admin/content-formats">

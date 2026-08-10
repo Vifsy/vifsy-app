@@ -58,6 +58,7 @@ import { supabase } from "../../lib/supabaseClient";
 import { useUiText } from "../../lib/i18n/useUiText";
 import { normalizeSingleContentLanguage } from "../../lib/contentLanguage";
 import { getCreditCostForContent } from "../../lib/credits";
+import { getConfiguredContentCreditCost } from "../../lib/contentEconomics";
 import {
   DEFAULT_CONTENT_FORMAT_MAP,
   normalizeContentFormatRows,
@@ -6040,6 +6041,25 @@ const [slots, setSlots] = useState([]);
   const [formatGuardMessage, setFormatGuardMessage] = useState("");
   const [editingRuleId, setEditingRuleId] = useState("");
 
+  const contentEconomicsByType = useMemo(
+    () => Object.fromEntries(contentFormatLibrary.map((item) => [item.content_type_id, item])),
+    [contentFormatLibrary]
+  );
+
+  const getCurrentCreditCost = useCallback((input = {}) => {
+    const contentTypeId = String(input.contentTypeId || input.content_type_id || "").trim();
+    const configured = getConfiguredContentCreditCost(contentEconomicsByType[contentTypeId]);
+    return getCreditCostForContent({ ...input, configuredCreditCost: configured || undefined });
+  }, [contentEconomicsByType]);
+
+  const currentPlanKey = useMemo(() => {
+    const raw = String(creditBalance?.subscription_plan || creditBalance?.plan_name || "").toLowerCase();
+    if (raw.includes("pro")) return "pro";
+    if (raw.includes("growth")) return "growth";
+    if (raw.includes("starter")) return "starter";
+    return "";
+  }, [creditBalance]);
+
   const [planName, setPlanName] = useState("");
   const [platform, setPlatform] = useState("");
 const [platformDropdownOpen, setPlatformDropdownOpen] = useState(false);
@@ -6174,10 +6194,10 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
 
   const plannedCredits = useMemo(() => {
     return slots.reduce(
-      (total, slot) => total + getCreditCostForContent(slot),
+      (total, slot) => total + getCurrentCreditCost(slot),
       0
     );
-  }, [slots]);
+  }, [slots, getCurrentCreditCost]);
 
   const textOnlyCount = useMemo(() => {
     return slots.filter((slot) => !slot.generateImage).length;
@@ -6230,8 +6250,13 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
   );
 
   const visibleContentTypes = useMemo(() => {
-    return getVisibleContentTypes(websiteProductModeAvailable);
-  }, [websiteProductModeAvailable]);
+    return getVisibleContentTypes(websiteProductModeAvailable).filter((type) => {
+      const config = contentEconomicsByType[type.id];
+      if (config?.active === false) return false;
+      if (!currentPlanKey) return true;
+      return config?.[`available_${currentPlanKey}`] !== false;
+    });
+  }, [websiteProductModeAvailable, contentEconomicsByType, currentPlanKey]);
 
   const selectedPlatformSignature = selectedPlatformKeys.join("|");
 
@@ -6267,7 +6292,11 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
     );
 
     return contentFormatLibrary
-      .filter((config) => config.active !== false)
+      .filter((config) => {
+        if (config.active === false) return false;
+        if (!currentPlanKey) return true;
+        return config[`available_${currentPlanKey}`] !== false;
+      })
       .map((config) => {
         const formatId = config.content_type_id;
 
@@ -6276,8 +6305,8 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
             ...config,
             id: formatId,
             kind: "offer_campaign",
-            label: t("automation.formatCard.offer_campaign.label"),
-            description: t("automation.formatCard.offer_campaign.description"),
+            label: config.display_label || t("automation.formatCard.offer_campaign.label"),
+            description: config.description || t("automation.formatCard.offer_campaign.description"),
             howItWorks: t("automation.formatCard.offer_campaign.howItWorks"),
             benefit: t("automation.formatCard.offer_campaign.benefit"),
           };
@@ -6288,8 +6317,8 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
             ...config,
             id: formatId,
             kind: "focus_source",
-            label: t("automation.formatCard.focus_source.label"),
-            description: t("automation.formatCard.focus_source.description"),
+            label: config.display_label || t("automation.formatCard.focus_source.label"),
+            description: config.description || t("automation.formatCard.focus_source.description"),
             howItWorks: t("automation.formatCard.focus_source.howItWorks"),
             benefit: t("automation.formatCard.focus_source.benefit"),
           };
@@ -6306,8 +6335,8 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
           id: formatId,
           kind: "content_type",
           type,
-          label: translateContentTypeShortLabel(type),
-          description: getSafeText(
+          label: config.display_label || translateContentTypeShortLabel(type),
+          description: config.description || getSafeText(
             isCleanProductPost
               ? "automation.formatCard.website_item.descriptionV127"
               : `automation.formatCard.${formatId}.description`,
@@ -6329,7 +6358,7 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
       })
       .filter(Boolean)
       .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0));
-  }, [contentFormatLibrary, visibleContentTypes, locale]);
+  }, [contentFormatLibrary, visibleContentTypes, locale, currentPlanKey]);
 
   const filteredExploreFormatItems = useMemo(() => {
     if (formatFilter === "all") return exploreFormatItems;
@@ -6362,6 +6391,11 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
     return fallback || t("automation.contentPlan");
   }
 
+  function getCurrentSlotCreditLabel(slot) {
+    const credits = getCurrentCreditCost(slot);
+    return `${credits} ${credits === 1 ? "credit" : "credits"}`;
+  }
+
   const hasInitialGoalPlan = Boolean(autoPlanGoal && slots.length > 0);
 
   const nextWeekPlanPreview = useMemo(() => {
@@ -6381,7 +6415,7 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
       return {
         contentTypeId: nextVariant?.contentTypeId || slot.contentTypeId,
         contentTypeLabel: nextVariant?.contentTypeLabel || slot.contentTypeLabel,
-        creditCost: Number(nextVariant?.creditCost || getCreditCostForContent(slot) || 1),
+        creditCost: Number(getCurrentCreditCost(nextVariant || slot) || 1),
         startDate: slot.startDate,
         publishTime: slot.publishTime,
       };
@@ -6392,6 +6426,7 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
     varyWeeklyContentTypes,
     autoPlanGoal,
     websiteProductModeAvailable,
+    getCurrentCreditCost,
   ]);
 
   const nextWeekCredits = useMemo(
@@ -9308,7 +9343,7 @@ ${slot.campaignSummary}`
             : typeof slot.includeLogo === "boolean"
             ? slot.includeLogo
             : Boolean(currentBrandProfile?.logo_url) && currentBrandProfile?.logo_enabled_by_default !== false,
-        credit_cost: getCreditCostForContent(slot),
+        credit_cost: getCurrentCreditCost(slot),
         schedule_type: scheduleType,
         run_date: slot.startDate,
         timezone: selectedTimeZone,
@@ -10505,7 +10540,7 @@ function blockFormatCardClickAfterDrag(event) {
                             )}
                           </div>
                           <div className="plan-v143-planned-cost">
-                            <strong>{getSlotCreditLabel(slot)}</strong>
+                            <strong>{getCurrentSlotCreditLabel(slot)}</strong>
                           </div>
                           <button
                             type="button"
@@ -10835,7 +10870,7 @@ function blockFormatCardClickAfterDrag(event) {
                             </div>
                           ) : null}
                         </div>
-                        {expandedInstructionSlotIds.includes(slot.id) ? <div className="campaign-v14335-slot-detail"><strong>{t("automation.whatPostWillBeAbout")}</strong><p>{getSlotContentExplanation(slot)}</p><small>{getSlotCreditLabel(slot)}</small></div> : null}
+                        {expandedInstructionSlotIds.includes(slot.id) ? <div className="campaign-v14335-slot-detail"><strong>{t("automation.whatPostWillBeAbout")}</strong><p>{getSlotContentExplanation(slot)}</p><small>{getCurrentSlotCreditLabel(slot)}</small></div> : null}
                       </article>
                       );
                     })}
@@ -11552,7 +11587,7 @@ function blockFormatCardClickAfterDrag(event) {
                 <span>▧</span>
                 <div>
                   <strong>{formatLabel}</strong>
-                  <small>{getSlotCreditLabel(slot)}</small>
+                  <small>{getCurrentSlotCreditLabel(slot)}</small>
                 </div>
               </div>
 
@@ -11806,7 +11841,7 @@ function blockFormatCardClickAfterDrag(event) {
                     {t("automation.hashtags")}
                   </label>
 
-                  <span>{getSlotCreditLabel(slot)}</span>
+                  <span>{getCurrentSlotCreditLabel(slot)}</span>
                 </div>
               </div>
             )}
