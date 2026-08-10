@@ -167,7 +167,11 @@ function MediaPreview({ post, t, onOpen }) {
 
 export default function AdminPostApprovalsPage() {
   const { t } = useUiText(["admin"]);
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState(() => {
+    if (typeof window === "undefined") return "queue";
+    const view = new URLSearchParams(window.location.search).get("view");
+    return ["queue", "failed", "history"].includes(view) ? view : "queue";
+  });
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -664,11 +668,28 @@ export default function AdminPostApprovalsPage() {
           ><span /></button>
         </section>
 
-        <div className="admin-approval-tabs">
-          {[["all", t("admin.approvals.all")], ["pending_approval", t("admin.approvals.pending")], ["failed", t("admin.approvals.failed")], ["approved", t("admin.approvals.approved")], ["rejected", t("admin.approvals.rejected")]].map(([value, label]) => (
-            <button type="button" key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{label}</button>
+        <div className="admin-approval-tabs admin-v14370-review-tabs">
+          {[["queue", t("admin.approvals.queue")], ["failed", t("admin.approvals.needsRepair")], ["history", t("admin.approvals.history")]].map(([value, label]) => (
+            <button type="button" key={value} className={filter === value ? "active" : ""} onClick={() => {
+              setSelectedPostId("");
+              setSelectedIds([]);
+              setFilter(value);
+              if (typeof window !== "undefined") {
+                const nextUrl = new URL(window.location.href);
+                nextUrl.searchParams.set("view", value);
+                window.history.replaceState({}, "", nextUrl);
+              }
+            }}>{label}</button>
           ))}
         </div>
+        <section className="admin-v14370-queue-intro">
+          <div>
+            <span>{filter === "history" ? t("admin.approvals.historyEyebrow") : filter === "failed" ? t("admin.approvals.repairEyebrow") : t("admin.approvals.queueEyebrow")}</span>
+            <strong>{filter === "history" ? t("admin.approvals.historyTitle") : filter === "failed" ? t("admin.approvals.repairTitle") : t("admin.approvals.queueTitle")}</strong>
+            <p>{filter === "history" ? t("admin.approvals.historyText") : filter === "failed" ? t("admin.approvals.repairText") : t("admin.approvals.queueText")}</p>
+          </div>
+          <b>{posts.length}</b>
+        </section>
         {selectedIds.length ? (
           <div className="admin-workbench-bulkbar">
             <strong>{t("admin.approvals.selectedCount", { count: selectedIds.length })}</strong>
@@ -683,14 +704,7 @@ export default function AdminPostApprovalsPage() {
         ) : posts.length === 0 ? (
           <div className="admin-empty-state"><FileCheck2 size={28} /><strong>{t("admin.approvals.empty")}</strong></div>
         ) : (
-          <section className="admin-v74-approval-table">
-            <div className="admin-v74-approval-head" aria-hidden="true">
-              <span>{t("admin.approvals.tableCompany")}</span>
-              <span>{t("admin.approvals.tableCreated")}</span>
-              <span>{t("admin.approvals.tableScheduled")}</span>
-              <span>{t("admin.approvals.tableStatus")}</span>
-              <span />
-            </div>
+          <section className="admin-v74-approval-table admin-v14370-review-list">
             {posts.map((post) => {
               const displayStatus = post.admin_review_status === "approved_by_spreelo"
                 ? "approved_by_spreelo"
@@ -701,7 +715,7 @@ export default function AdminPostApprovalsPage() {
                     : post.status;
               const meta = statusMeta(displayStatus, t);
               return (
-                <button type="button" className="admin-v74-approval-row" key={post.id} onClick={() => setSelectedPostId(post.id)}>
+                <button type="button" className="admin-v74-approval-row admin-v14370-review-row" key={post.id} onClick={() => setSelectedPostId(post.id)}>
                   <input
                     type="checkbox"
                     checked={selectedIds.includes(post.id)}
@@ -709,11 +723,18 @@ export default function AdminPostApprovalsPage() {
                     onChange={(event) => setSelectedIds((ids) => event.target.checked ? [...ids, post.id] : ids.filter((id) => id !== post.id))}
                     aria-label={t("admin.approvals.selectPost")}
                   />
-                  <strong>{post.brand_name || t("admin.approvals.unknownBrand")}</strong>
-                  <span>{formatDate(post.created_at)}</span>
-                  <span>{formatDate(post.scheduled_for)}</span>
+                  <span className="admin-v14370-review-thumb">
+                    {(post.slides?.[0]?.image_url || post.image_url) ? <img src={post.slides?.[0]?.image_url || post.image_url} alt="" /> : post.video_url ? <Video size={20} /> : <ImageIcon size={20} />}
+                  </span>
+                  <span className="admin-v14370-review-main">
+                    <small>{post.platform || t("admin.approvals.platformUnknown")} · {post.content_format || post.post_type || t("admin.approvals.post")}</small>
+                    <strong>{post.brand_name || t("admin.approvals.unknownBrand")}</strong>
+                    <em>{String(post.content || "").replace(/\s+/g, " ").slice(0, 120) || t("admin.approvals.noContent")}</em>
+                  </span>
+                  <span className="admin-v14370-review-time"><small>{t("admin.approvals.created")}</small><strong>{formatDate(post.created_at)}</strong></span>
+                  <span className="admin-v14370-review-time"><small>{t("admin.approvals.scheduled")}</small><strong>{formatDate(post.scheduled_for)}</strong></span>
                   <span className={`admin-approval-status ${meta.className}`}><meta.Icon size={15} />{meta.label}</span>
-                  <ChevronRight size={18} />
+                  <span className="admin-v14370-review-open">{t("admin.approvals.reviewPost")} <ChevronRight size={18} /></span>
                 </button>
               );
             })}
@@ -984,7 +1005,7 @@ export default function AdminPostApprovalsPage() {
                     </button>
                   ) : null}
                   {productDirty ? <span className="admin-review-regeneration-required"><AlertTriangle size={14} /> {t("admin.approvals.regenerationRequired")}</span> : editorDirty ? <span className="admin-review-regeneration-required"><AlertTriangle size={14} /> {t("admin.approvals.saveBeforeApproval")}</span> : null}
-                  {selectedPost.admin_review_status === "pending" && selectedPost.status !== "failed" ? (
+                  {selectedPost.status === "pending_approval" && !["approved_by_spreelo", "released", "not_required", "archived"].includes(String(selectedPost.admin_review_status || "").toLowerCase()) ? (
                     <button type="button" className="admin-primary-button admin-review-approve-action" disabled={releasingPostId === selectedPost.id || productDirty || editorDirty} onClick={() => releaseToCustomer(selectedPost.id)}>
                       {releasingPostId === selectedPost.id ? <LoaderCircle className="admin-spin" size={16} /> : <CheckCircle2 size={16} />}
                       {t("admin.approvals.releaseToCustomer")}

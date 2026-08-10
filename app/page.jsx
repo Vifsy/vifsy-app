@@ -657,7 +657,7 @@ export default function Home() {
     const { data: postsData, error: postsError } = await supabase
       .from("posts")
       .select(
-        "id, brand_profile_id, platform, tone, language, post_type, idea, content, status, created_at, source, source_label, automation_rule_id, approval_required, approved_at, published_at, scheduled_for, image_url, image_status, video_url, video_status, content_format"
+        "id, brand_profile_id, platform, tone, language, post_type, idea, content, status, created_at, source, source_label, automation_rule_id, approval_required, approved_at, published_at, scheduled_for, image_url, image_status, video_url, video_status, content_format, admin_review_status, admin_reviewed_at, approval_email_sent_at"
       )
       .eq("user_id", user.id)
       .eq("brand_profile_id", selectedBrand.id)
@@ -784,8 +784,12 @@ export default function Home() {
   }
 
   const pendingApprovalPosts = useMemo(() => {
+    const completedAdminStates = new Set(["approved_by_spreelo", "released", "archived", "not_required"]);
     return posts
-      .filter((post) => post.status === "pending_approval")
+      .filter((post) =>
+        post.status === "pending_approval" &&
+        !completedAdminStates.has(String(post.admin_review_status || "").toLowerCase())
+      )
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }, [posts]);
 
@@ -1279,38 +1283,43 @@ export default function Home() {
                 </article>
               </section>
 
-              {pendingApprovalPosts.length ? (
-                <section className="home-v14369-approval-notice">
-                  <div className="home-v14369-approval-copy">
-                    <span className="home-v14369-approval-icon"><Sparkles /></span>
-                    <div>
-                      <strong>{pendingApprovalPosts.length === 1 ? t("dashboard.reviewNoticeOne") : t("dashboard.reviewNotice", { count: pendingApprovalPosts.length })}</strong>
-                      <small>{t("dashboard.reviewNoticeHelp")}</small>
-                    </div>
+              <section className={`home-v14369-approval-notice home-v14370-review-hub ${pendingApprovalPosts.length ? "has-pending" : "is-clear"}`}>
+                <div className="home-v14369-approval-copy">
+                  <span className="home-v14369-approval-icon">{pendingApprovalPosts.length ? <Sparkles /> : <CheckCircle2 />}</span>
+                  <div>
+                    <strong>{pendingApprovalPosts.length ? (pendingApprovalPosts.length === 1 ? t("dashboard.reviewNoticeOne") : t("dashboard.reviewNotice", { count: pendingApprovalPosts.length })) : t("dashboard.reviewClearTitle")}</strong>
+                    <small>{pendingApprovalPosts.length ? t("dashboard.reviewNoticeHelp") : t("dashboard.reviewClearText")}</small>
                   </div>
+                </div>
+                {pendingApprovalPosts.length ? (
                   <div className="home-v14369-approval-previews" aria-hidden="true">
                     {pendingApprovalPosts.slice(0, 3).map((post) => post.image_url ? <img key={post.id} src={post.image_url} alt="" /> : <span key={post.id}><ImageIcon /></span>)}
                   </div>
-                  <a href={`/posts/${pendingApprovalPosts[0].id}`}>{t("dashboard.reviewNow")} <ArrowRight /></a>
-                </section>
-              ) : null}
+                ) : null}
+                <div className="home-v14370-review-actions">
+                  {pendingApprovalPosts.length ? <a href="/admin/post-approvals?view=queue">{t("dashboard.reviewNow")} <ArrowRight /></a> : null}
+                  <a className="history" href="/admin/post-approvals?view=history"><History /> {t("dashboard.contentHistory")}</a>
+                </div>
+              </section>
 
-              <section className="home-v14369-operations">
+              <section className="home-v14369-operations home-v14370-module recurring">
                 <div className="home-v14369-section-heading">
+                  <span className="home-v14370-module-icon"><RefreshCw /></span>
                   <div>
                     <p>{t("dashboard.contentPlansEyebrow")}</p>
                     <h2>{t("dashboard.recurringSchedules")}</h2>
                     <span>{t("dashboard.recurringSchedulesText")}</span>
                   </div>
-                  <button type="button" className="home-v14369-history-button" onClick={() => setShowHistory(true)}><History /> {t("dashboard.history")}</button>
+                  <button type="button" className="home-v14369-history-button" onClick={() => setShowHistory(true)}><History /> {t("dashboard.planHistory")}</button>
                 </div>
                 <div className="home-v14369-operation-list">
                   {recurringSchedules.length ? recurringSchedules.map((plan) => renderOperationalPlanRow(plan, "recurring")) : <div className="home-v14369-empty">{t("dashboard.noRecurringSchedules")}</div>}
                 </div>
               </section>
 
-              <section className="home-v14369-operations">
+              <section className="home-v14369-operations home-v14370-module scheduled">
                 <div className="home-v14369-section-heading">
+                  <span className="home-v14370-module-icon"><CalendarClock /></span>
                   <div>
                     <p>{t("dashboard.upcomingEyebrow")}</p>
                     <h2>{t("dashboard.scheduledPostsBox")}</h2>
@@ -1341,8 +1350,9 @@ export default function Home() {
                 </div>
               </section>
 
-              <section className="home-v14369-operations">
+              <section className="home-v14369-operations home-v14370-module campaign">
                 <div className="home-v14369-section-heading">
+                  <span className="home-v14370-module-icon"><Gift /></span>
                   <div>
                     <p>{t("dashboard.reviewSourceCampaign")}</p>
                     <h2>{t("dashboard.calendarCampaignsBox")}</h2>
@@ -1382,7 +1392,7 @@ export default function Home() {
                 <span>{t("dashboard.coachIntro", { brandName: currentBrandName })}</span>
                 <div className="home-v14335-coach-actions">
                   <h3><Bot /> {t("dashboard.whatToDoNow")}</h3>
-                  <a href="#pending-review"><Sparkles /><span>{t("dashboard.reviewCount", { count: pendingApprovalPosts.length })}</span><ChevronRight /></a>
+                  <a href="/admin/post-approvals?view=queue"><Sparkles /><span>{t("dashboard.reviewCount", { count: pendingApprovalPosts.length })}</span><ChevronRight /></a>
                   <a href="/automation"><CalendarDays /><span>{t("dashboard.planNextWeek")}</span><ChevronRight /></a>
                   <a href={suggestedCampaign ? `/automation?campaign=${suggestedCampaign.id}` : "/calendar"}><Lightbulb /><span>{dashboardText(suggestedCampaign?.title, t("dashboard.reviewCampaignIdeas"))}</span><ChevronRight /></a>
                 </div>

@@ -31,7 +31,20 @@ export async function GET(request) {
     return Response.json({ ok: false, error: error.message }, { status: 500 });
   }
 
-  const postRows = posts || [];
+  let postRows = posts || [];
+  const completedAdminReviewStates = new Set(["approved_by_spreelo", "released", "archived", "not_required"]);
+  if (status === "queue") {
+    postRows = postRows.filter((post) =>
+      post.status === "pending_approval" &&
+      !completedAdminReviewStates.has(String(post.admin_review_status || "").toLowerCase()) &&
+      String(post.admin_review_status || "").toLowerCase() !== "not_required"
+    );
+  } else if (status === "history") {
+    postRows = postRows.filter((post) =>
+      ["approved", "rejected"].includes(post.status) ||
+      completedAdminReviewStates.has(String(post.admin_review_status || "").toLowerCase())
+    );
+  }
 
   // v143.63: failures are queried explicitly in SQL instead of fetching the
   // newest 200 occurrences of every status and filtering afterwards. A busy

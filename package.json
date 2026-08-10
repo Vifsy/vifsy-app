@@ -90,7 +90,8 @@
     "test:v143.64": "node scripts/test-v143-64-locked-product-page-object.mjs",
     "test:v143.65": "node scripts/test-v143-65-brand-aware-product-labels.mjs",
     "test:v143.67": "node scripts/test-v143-67-unified-product-review-workspace.mjs",
-    "test:v143.69": "node scripts/test-v143-69-admin-home-lifecycle.mjs"
+    "test:v143.69": "node scripts/test-v143-69-admin-home-lifecycle.mjs",
+    "test:v143.70": "node scripts/test-v143-70-spreelo-home-review-queue.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
