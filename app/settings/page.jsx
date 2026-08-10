@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import AppLayout from "../../components/AppLayout";
+import StripeBillingPanel from "../../components/StripeBillingPanel";
 import { supabase } from "../../lib/supabaseClient";
 import { useUiText } from "../../lib/i18n/useUiText";
 import { Bell, CreditCard, Languages, ShieldCheck, UserRound } from "lucide-react";
@@ -30,7 +31,7 @@ const SETTINGS_DELETE_COPY = {
     reasonPlaceholder: "Choose a reason",
     reasonDetailsLabel: "Anything else you want to tell us?",
     reasonDetailsPlaceholder: "Optional details",
-    billingNotice: "If you later have an active paid subscription, deletion should also cancel it through the billing provider or ask you to cancel first. Spreelo does not have payments connected yet.",
+    billingNotice: "If you have an active paid subscription, cancel it through the billing provider before permanently deleting the Spreelo account.",
     reasonNotUsing: "I do not use Spreelo enough",
     reasonTooExpensive: "Too expensive",
     reasonMissingFeature: "Missing a feature I need",
@@ -57,7 +58,7 @@ const SETTINGS_DELETE_COPY = {
     reasonPlaceholder: "Välj en orsak",
     reasonDetailsLabel: "Vill du berätta något mer?",
     reasonDetailsPlaceholder: "Frivilliga detaljer",
-    billingNotice: "Om du senare har en aktiv betalprenumeration bör radering även avsluta den hos betalningsleverantören eller be dig avsluta den först. Spreelo har ingen betalning kopplad ännu.",
+    billingNotice: "Om du har en aktiv betalprenumeration, avsluta den via betalningsleverantören innan du raderar Spreelo-kontot permanent.",
     reasonNotUsing: "Jag använder inte Spreelo tillräckligt",
     reasonTooExpensive: "För dyrt",
     reasonMissingFeature: "Jag saknar en funktion jag behöver",
@@ -378,7 +379,7 @@ export default function Settings() {
         setLoadingCredits(true);
         const { data: creditData } = await supabase
           .from("user_credit_balances")
-          .select("credits_remaining, monthly_credit_limit, plan_name, subscription_plan, current_period_end, credits_renewed_at")
+          .select("credits_remaining, monthly_credit_limit, plan_name, subscription_status, subscription_plan, current_period_end, credits_renewed_at, next_credit_refresh_at, cancel_at_period_end, payment_provider, provider_customer_id, provider_subscription_id, subscription_price_amount, subscription_currency, subscription_interval, subscription_price_lookup_key, purchased_credits_remaining")
           .eq("user_id", user.id)
           .maybeSingle();
         setCreditBalance(creditData || null);
@@ -543,9 +544,9 @@ export default function Settings() {
               <p className="eyebrow">{t("settings.subscriptionEyebrow")}</p>
               <h3>{t("settings.subscriptionTitle")}</h3>
               <p>{t("settings.subscriptionText")}</p>
-              <div className="settings-v14339-status"><i />{t("settings.subscriptionActive")}</div>
+              <div className="settings-v14339-status"><i />{creditBalance?.subscription_status ? String(creditBalance.subscription_status).replace(/_/g, " ") : t("billing.notConnected")}</div>
               <div className="settings-v14339-plan-row"><span>{t("settings.planStatus")}</span><strong>{planName}</strong></div>
-              <small>{t("settings.billingComingLater")}</small>
+              <small>{t("settings.billingManagedByStripe")}</small>
             </div>
           </article>
 
@@ -567,6 +568,8 @@ export default function Settings() {
             </div>
           </article>
         </section>
+
+        <StripeBillingPanel initialBalance={creditBalance} onBalanceChange={setCreditBalance} />
 
         <section className="settings-danger-zone settings-danger-zone-compact settings-v14339-danger">
           <div>
@@ -648,7 +651,7 @@ export default function Settings() {
                 disabled={deletingAccount}
               />
 
-              <p>{getDeleteCopy(locale, "billingNotice", deleteConfirmWord, "If you later have an active paid subscription, deletion should also cancel it through the billing provider or ask you to cancel first. Spreelo does not have payments connected yet.")}</p>
+              <p>{getDeleteCopy(locale, "billingNotice", deleteConfirmWord, "If you have an active paid subscription, cancel it through the billing provider before permanently deleting the Spreelo account.")}</p>
             </div>
 
             {deleteMessage && (
