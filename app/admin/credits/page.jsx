@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import AppLayout from "../../../components/AppLayout";
 import { supabase } from "../../../lib/supabaseClient";
+import { useUiText } from "../../../lib/i18n/useUiText";
 
 function formatDateTime(value) {
   if (!value) return "—";
@@ -33,6 +34,7 @@ async function getAdminHeaders(json = false) {
 }
 
 export default function AdminCreditsPage() {
+  const { t } = useUiText(["admin"]);
   const [email, setEmail] = useState("");
   const [account, setAccount] = useState(null);
   const [recentAdjustments, setRecentAdjustments] = useState([]);
@@ -62,10 +64,10 @@ export default function AdminCreditsPage() {
       const headers = await getAdminHeaders();
       const response = await fetch("/api/admin/credits", { headers });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.error || "Could not load credit history.");
+      if (!response.ok) throw new Error(payload?.error || t("admin.credits.loadError"));
       setRecentAdjustments(payload?.recentAdjustments || []);
     } catch (loadError) {
-      setError(loadError.message || "Could not load credit history.");
+      setError(loadError.message || t("admin.credits.loadError"));
     } finally {
       setLoading(false);
     }
@@ -88,11 +90,11 @@ export default function AdminCreditsPage() {
         { headers }
       );
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.error || "Could not find the account.");
+      if (!response.ok) throw new Error(payload?.error || t("admin.credits.findError"));
       setAccount(payload?.account || null);
       setRecentAdjustments(payload?.recentAdjustments || []);
     } catch (lookupError) {
-      setError(lookupError.message || "Could not find the account.");
+      setError(lookupError.message || t("admin.credits.findError"));
     } finally {
       setSearching(false);
     }
@@ -104,12 +106,12 @@ export default function AdminCreditsPage() {
 
     const parsedAmount = Math.abs(Number.parseInt(amount, 10));
     if (!Number.isInteger(parsedAmount) || parsedAmount <= 0) {
-      setError("Enter a positive whole number of credits.");
+      setError(t("admin.credits.amountError"));
       return;
     }
 
     const signedAmount = direction === "remove" ? -parsedAmount : parsedAmount;
-    if (signedAmount < 0 && !window.confirm(`Remove ${parsedAmount} credits from ${account.email}?`)) {
+    if (signedAmount < 0 && !window.confirm(t("admin.credits.confirmRemove", { count: parsedAmount, email: account.email }))) {
       return;
     }
 
@@ -129,16 +131,16 @@ export default function AdminCreditsPage() {
         }),
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.error || "Could not adjust credits.");
+      if (!response.ok) throw new Error(payload?.error || t("admin.credits.adjustError"));
 
       setAccount(payload?.account || account);
       setRecentAdjustments(payload?.recentAdjustments || []);
       setReason("");
       setMessage(
-        `${signedAmount > 0 ? "Added" : "Removed"} ${Math.abs(signedAmount)} credits. New balance: ${payload?.account?.balance?.credits_remaining ?? "—"}.`
+        signedAmount > 0 ? t("admin.credits.adjustSuccessAdd", { count: Math.abs(signedAmount), balance: payload?.account?.balance?.credits_remaining ?? "—" }) : t("admin.credits.adjustSuccessRemove", { count: Math.abs(signedAmount), balance: payload?.account?.balance?.credits_remaining ?? "—" })
       );
     } catch (saveError) {
-      setError(saveError.message || "Could not adjust credits.");
+      setError(saveError.message || t("admin.credits.adjustError"));
     } finally {
       setSaving(false);
     }
@@ -153,18 +155,18 @@ export default function AdminCreditsPage() {
     <AppLayout active="admin">
       <div className="admin-page">
         <a className="admin-back-link" href="/admin">
-          <ArrowLeft size={16} aria-hidden="true" /> Admin dashboard
+          <ArrowLeft size={16} aria-hidden="true" /> {t("admin.credits.back")}
         </a>
 
         <header className="admin-hero compact">
           <div>
-            <span className="admin-eyebrow">Customer support</span>
-            <h1>Credit adjustments</h1>
-            <p>Find a Spreelo account by its exact login email and adjust credits with a permanent audit record.</p>
+            <span className="admin-eyebrow">{t("admin.credits.kicker")}</span>
+            <h1>{t("admin.credits.title")}</h1>
+            <p>{t("admin.credits.description")}</p>
           </div>
           <div className="admin-hero-badge">
             <ShieldCheck size={24} aria-hidden="true" />
-            <div><strong>Protected tool</strong><span>All changes are logged</span></div>
+            <div><strong>{t("admin.credits.protected")}</strong><span>{t("admin.credits.logged")}</span></div>
           </div>
         </header>
 
@@ -174,14 +176,14 @@ export default function AdminCreditsPage() {
         <section className="admin-panel">
           <div className="admin-panel-heading">
             <div>
-              <span className="admin-card-kicker">Account lookup</span>
-              <h2>Find customer</h2>
+              <span className="admin-card-kicker">{t("admin.credits.lookupKicker")}</span>
+              <h2>{t("admin.credits.findCustomer")}</h2>
             </div>
           </div>
 
           <form className="admin-search-form" onSubmit={lookupAccount}>
             <label>
-              Spreelo login email
+              {t("admin.credits.loginEmail")}
               <input
                 type="email"
                 value={email}
@@ -192,7 +194,7 @@ export default function AdminCreditsPage() {
             </label>
             <button type="submit" disabled={searching || !email.trim()}>
               {searching ? <LoaderCircle className="admin-spin" size={18} /> : <Search size={18} />}
-              {searching ? "Searching…" : "Find account"}
+              {searching ? t("admin.credits.searching") : t("admin.credits.findAccount")}
             </button>
           </form>
         </section>
@@ -200,40 +202,40 @@ export default function AdminCreditsPage() {
         {account ? (
           <section className="admin-credit-layout">
             <article className="admin-panel admin-account-card">
-              <span className="admin-card-kicker">Selected account</span>
+              <span className="admin-card-kicker">{t("admin.credits.selectedAccount")}</span>
               <h2>{account.email}</h2>
 
               <div className="admin-account-balance">
                 <CircleDollarSign size={24} aria-hidden="true" />
                 <div>
-                  <strong>{account.balance?.credits_remaining ?? "No balance row"}</strong>
-                  <span>available credits</span>
+                  <strong>{account.balance?.credits_remaining ?? t("admin.credits.noBalance")}</strong>
+                  <span>{t("admin.credits.availableCredits")}</span>
                 </div>
               </div>
 
               <dl className="admin-account-details">
-                <div><dt>Plan</dt><dd>{account.balance?.plan_name || account.balance?.subscription_plan || "—"}</dd></div>
-                <div><dt>Status</dt><dd>{account.balance?.subscription_status || "—"}</dd></div>
-                <div><dt>Brands</dt><dd>{account.brandCount}</dd></div>
-                <div><dt>Account created</dt><dd>{formatDateTime(account.createdAt)}</dd></div>
-                <div><dt>Last sign-in</dt><dd>{formatDateTime(account.lastSignInAt)}</dd></div>
-                <div><dt>User ID</dt><dd className="admin-mono">{account.id}</dd></div>
+                <div><dt>{t("admin.credits.plan")}</dt><dd>{account.balance?.plan_name || account.balance?.subscription_plan || "—"}</dd></div>
+                <div><dt>{t("admin.credits.status")}</dt><dd>{account.balance?.subscription_status || "—"}</dd></div>
+                <div><dt>{t("admin.credits.brands")}</dt><dd>{account.brandCount}</dd></div>
+                <div><dt>{t("admin.credits.created")}</dt><dd>{formatDateTime(account.createdAt)}</dd></div>
+                <div><dt>{t("admin.credits.lastSignIn")}</dt><dd>{formatDateTime(account.lastSignInAt)}</dd></div>
+                <div><dt>{t("admin.credits.userId")}</dt><dd className="admin-mono">{account.id}</dd></div>
               </dl>
             </article>
 
             <article className="admin-panel">
-              <span className="admin-card-kicker">Manual adjustment</span>
-              <h2>Change credit balance</h2>
-              <p className="admin-panel-copy">Use this for goodwill credits, compensation or a clearly documented correction.</p>
+              <span className="admin-card-kicker">{t("admin.credits.manualKicker")}</span>
+              <h2>{t("admin.credits.changeBalance")}</h2>
+              <p className="admin-panel-copy">{t("admin.credits.manualText")}</p>
 
               <form className="admin-adjust-form" onSubmit={adjustCredits}>
                 <div className="admin-direction-toggle">
-                  <button type="button" className={direction === "add" ? "active" : ""} onClick={() => setDirection("add")}>Add credits</button>
-                  <button type="button" className={direction === "remove" ? "active danger" : ""} onClick={() => setDirection("remove")}>Remove credits</button>
+                  <button type="button" className={direction === "add" ? "active" : ""} onClick={() => setDirection("add")}>{t("admin.credits.add")}</button>
+                  <button type="button" className={direction === "remove" ? "active danger" : ""} onClick={() => setDirection("remove")}>{t("admin.credits.remove")}</button>
                 </div>
 
                 <label>
-                  Number of credits
+                  {t("admin.credits.amount")}
                   <input
                     type="number"
                     min="1"
@@ -245,18 +247,18 @@ export default function AdminCreditsPage() {
                 </label>
 
                 <label>
-                  Reason
+                  {t("admin.credits.reason")}
                   <textarea
                     value={reason}
                     onChange={(event) => setReason(event.target.value)}
-                    placeholder="Example: Compensation for failed video render"
+                    placeholder={t("admin.credits.reasonPlaceholder")}
                     rows="4"
                   />
                 </label>
 
                 <button className={direction === "remove" ? "danger" : ""} type="submit" disabled={saving || !reason.trim()}>
                   {saving ? <LoaderCircle className="admin-spin" size={18} /> : <CircleDollarSign size={18} />}
-                  {saving ? "Saving…" : direction === "add" ? "Add credits" : "Remove credits"}
+                  {saving ? t("admin.credits.saving") : direction === "add" ? t("admin.credits.add") : t("admin.credits.remove")}
                 </button>
               </form>
             </article>
@@ -266,17 +268,17 @@ export default function AdminCreditsPage() {
         <section className="admin-panel">
           <div className="admin-panel-heading">
             <div>
-              <span className="admin-card-kicker">Audit trail</span>
-              <h2>{account ? `Adjustments for ${account.email}` : "Recent adjustments"}</h2>
+              <span className="admin-card-kicker">{t("admin.credits.audit")}</span>
+              <h2>{account ? t("admin.credits.forAccount", { email: account.email }) : t("admin.credits.recent")}</h2>
             </div>
           </div>
 
           {loading ? (
-            <div className="admin-empty-state"><LoaderCircle className="admin-spin" size={20} /> Loading history…</div>
+            <div className="admin-empty-state"><LoaderCircle className="admin-spin" size={20} /> {t("admin.credits.loadingHistory")}</div>
           ) : (account ? accountAdjustments : recentAdjustments).length ? (
             <div className="admin-table-wrap">
               <table className="admin-table">
-                <thead><tr><th>Account</th><th>Change</th><th>Before</th><th>After</th><th>Reason</th><th>Admin</th><th>Date</th></tr></thead>
+                <thead><tr><th>{t("admin.credits.account")}</th><th>{t("admin.credits.change")}</th><th>{t("admin.credits.before")}</th><th>{t("admin.credits.after")}</th><th>{t("admin.credits.reason")}</th><th>{t("admin.credits.admin")}</th><th>{t("admin.credits.date")}</th></tr></thead>
                 <tbody>
                   {(account ? accountAdjustments : recentAdjustments).map((item) => (
                     <tr key={item.id}>
@@ -293,7 +295,7 @@ export default function AdminCreditsPage() {
               </table>
             </div>
           ) : (
-            <div className="admin-empty-state">No credit adjustments found.</div>
+            <div className="admin-empty-state">{t("admin.credits.none")}</div>
           )}
         </section>
       </div>

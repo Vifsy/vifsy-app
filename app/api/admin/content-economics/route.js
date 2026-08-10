@@ -30,6 +30,7 @@ const ECONOMICS_COLUMNS = [
   "pending_credit_cost",
   "pending_effective_at",
   "is_custom",
+  "stats_reset_at",
   "updated_by",
   "updated_at",
 ].join(", ");
@@ -70,6 +71,7 @@ function changedFields(before = {}, after = {}) {
     "available_pro",
     "pending_credit_cost",
     "pending_effective_at",
+    "stats_reset_at",
   ];
   const changed = {};
   keys.forEach((key) => {
@@ -120,12 +122,21 @@ function sanitizeUpdate(body, existing, userId) {
     available_pro: body?.available_pro !== false,
     pending_credit_cost: pendingCredit,
     pending_effective_at: pendingAt ? pendingAt.toISOString() : null,
+    stats_reset_at: existing.stats_reset_at || null,
     updated_by: userId,
     updated_at: new Date().toISOString(),
   };
 }
 
-function aggregateUsage(logRows = [], creditRows = []) {
+function aggregateUsage(logRows = [], creditRows = [], formats = [], period = "30d") {
+  const formatMap = new Map((formats || []).map((row) => [String(row.content_type_id), row]));
+  const now = Date.now();
+  const periodStart = period === "7d"
+    ? now - 7 * 24 * 60 * 60 * 1000
+    : period === "all"
+      ? 0
+      : now - 30 * 24 * 60 * 60 * 1000;
+
   const map = new Map();
   const get = (id) => {
     const key = String(id || "unknown");
@@ -142,7 +153,17 @@ function aggregateUsage(logRows = [], creditRows = []) {
     return map.get(key);
   };
 
+  const allowedAfter = (id, value) => {
+    const time = new Date(value || 0).getTime();
+    if (!Number.isFinite(time)) return false;
+    const row = formatMap.get(String(id || ""));
+    const resetAt = period === "reset" && row?.stats_reset_at ? new Date(row.stats_reset_at).getTime() : 0;
+    const threshold = period === "reset" ? resetAt : periodStart;
+    return time >= threshold;
+  };
+
   logRows.forEach((row) => {
+    if (!allowedAfter(row.content_type_id, row.started_at)) return;
     const item = get(row.content_type_id);
     if (row.status === "success") {
       item.generated += 1;
@@ -158,6 +179,7 @@ function aggregateUsage(logRows = [], creditRows = []) {
   });
 
   creditRows.forEach((row) => {
+    if (!allowedAfter(row.content_type_id, row.created_at)) return;
     const item = get(row.content_type_id);
     item.netCreditsCharged += -Number(row.amount || 0);
   });
@@ -176,21 +198,42 @@ function aggregateUsage(logRows = [], creditRows = []) {
   );
 }
 
-async function loadPayload(context) {
-  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  const [formatsResult, settingsResult, logsResult, creditResult, auditResult] = await Promise.all([
-    context.admin.from("content_format_library").select(ECONOMICS_COLUMNS).order("sort_order", { ascending: true }),
+async function loadPayload(context, period = "30d") {
+  const safePeriod = ["7d", "30d", "reset", "all"].includes(period) ? period : "30d";
+  const earliest = safePeriod === "7d"
+    ? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    : safePeriod === "30d"
+      ? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+      : null;
+
+  const formatsResult = await context.admin.from("content_format_library").select(ECONOMICS_COLUMNS).order("sort_order", { ascending: true });
+  if (formatsResult.error) throw formatsResult.error;
+  const rawFormats = formatsResult.data || [];
+
+  let queryStart = earliest;
+  if (safePeriod === "reset") {
+    const resets = rawFormats.map((row) => row.stats_reset_at).filter(Boolean).map((value) => new Date(value).getTime()).filter(Number.isFinite);
+    queryStart = resets.length ? new Date(Math.min(...resets)).toISOString() : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  }
+
+  let logsQuery = context.admin.from("automation_run_logs").select("content_type_id, status, duration_ms, started_at").order("started_at", { ascending: false }).limit(MAX_ROWS);
+  let creditsQuery = context.admin.from("credit_reservation_events").select("content_type_id, event_type, amount, created_at").order("created_at", { ascending: false }).limit(MAX_ROWS);
+  if (queryStart) {
+    logsQuery = logsQuery.gte("started_at", queryStart);
+    creditsQuery = creditsQuery.gte("created_at", queryStart);
+  }
+
+  const [settingsResult, logsResult, creditResult, auditResult] = await Promise.all([
     context.admin.from("content_economics_settings").select("setting_key, numeric_value, text_value, updated_at"),
-    context.admin.from("automation_run_logs").select("content_type_id, status, duration_ms, started_at").gte("started_at", since).limit(MAX_ROWS),
-    context.admin.from("credit_reservation_events").select("content_type_id, event_type, amount, created_at").gte("created_at", since).limit(MAX_ROWS),
+    logsQuery,
+    creditsQuery,
     context.admin.from("content_credit_audit").select("id, content_type_id, change_type, changed_fields, changed_by_email, created_at").order("created_at", { ascending: false }).limit(50),
   ]);
 
-  if (formatsResult.error) throw formatsResult.error;
   if (settingsResult.error) throw settingsResult.error;
 
-  const usage = aggregateUsage(logsResult.data || [], creditResult.data || []);
-  const formats = normalizeContentFormatRows(formatsResult.data || [], { includeCustom: true }).map((row) => ({
+  const usage = aggregateUsage(logsResult.data || [], creditResult.data || [], rawFormats, safePeriod);
+  const formats = normalizeContentFormatRows(rawFormats, { includeCustom: true }).map((row) => ({
     ...row,
     effective_credit_cost: getConfiguredContentCreditCost(row),
     usage_30d: usage[row.content_type_id] || {
@@ -223,6 +266,7 @@ async function loadPayload(context) {
     formats,
     referenceCreditValueSek,
     audit: auditResult.data || [],
+    period: safePeriod,
     warnings: [logsResult.error?.message, creditResult.error?.message, auditResult.error?.message].filter(Boolean),
     summary: {
       activeTypes: overall.activeTypes,
@@ -253,7 +297,8 @@ export async function GET(request) {
   if (context.error) return adminContextError(context);
 
   try {
-    return Response.json({ ok: true, ...(await loadPayload(context)) });
+    const period = new URL(request.url).searchParams.get("period") || "30d";
+    return Response.json({ ok: true, ...(await loadPayload(context, period)) });
   } catch (error) {
     return Response.json({
       ok: false,
@@ -270,6 +315,30 @@ export async function POST(request) {
   try {
     const body = await request.json().catch(() => ({}));
     const action = String(body?.action || "create_type");
+
+    if (action === "reset_reliability") {
+      const ids = Array.isArray(body?.content_type_ids)
+        ? body.content_type_ids.map((value) => String(value || "").trim()).filter(Boolean)
+        : [String(body?.content_type_id || "").trim()].filter(Boolean);
+      if (!ids.length || ids.length > 100) {
+        return Response.json({ ok: false, error: "Choose between 1 and 100 content types to reset." }, { status: 400 });
+      }
+      const resetAt = new Date().toISOString();
+      const { error } = await context.admin
+        .from("content_format_library")
+        .update({ stats_reset_at: resetAt, updated_by: context.user.id, updated_at: resetAt })
+        .in("content_type_id", ids);
+      if (error) throw error;
+      for (const contentTypeId of ids) {
+        await insertAudit(context, {
+          contentTypeId,
+          changeType: "reliability_reset",
+          before: {},
+          after: { stats_reset_at: resetAt },
+        });
+      }
+      return Response.json({ ok: true, ...(await loadPayload(context, "reset")) });
+    }
 
     if (action === "update_settings") {
       const value = Number(body?.reference_credit_value_sek);
@@ -325,6 +394,7 @@ export async function POST(request) {
       pending_credit_cost: null,
       pending_effective_at: null,
       is_custom: true,
+      stats_reset_at: null,
       updated_by: context.user.id,
       updated_at: new Date().toISOString(),
     };

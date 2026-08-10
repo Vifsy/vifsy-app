@@ -66,6 +66,7 @@ export default function AdminDashboardPage() {
   const [stats, setStats] = useState(initialStats);
   const [recentAdjustments, setRecentAdjustments] = useState([]);
   const [warnings, setWarnings] = useState([]);
+  const [insights, setInsights] = useState({ periodDays: 30, topCustomersByCredits: [], topCustomersByPosts: [], topBrands: [], topFormats: [], platforms: [], totals: {} });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [translationLocales, setTranslationLocales] = useState([]);
@@ -102,6 +103,7 @@ export default function AdminDashboardPage() {
       setStats({ ...initialStats, ...(overviewPayload?.stats || {}) });
       setRecentAdjustments(overviewPayload?.recentAdjustments || []);
       setWarnings(overviewPayload?.warnings || []);
+      setInsights(overviewPayload?.insights || { periodDays: 30, topCustomersByCredits: [], topCustomersByPosts: [], topBrands: [], topFormats: [], platforms: [], totals: {} });
 
       if (translationsResponse.ok) {
         setTranslationLocales(
@@ -194,17 +196,17 @@ export default function AdminDashboardPage() {
   );
 
   const statCards = [
-    { label: "Accounts", value: stats.users, Icon: Users },
-    { label: "Brands", value: stats.brands, Icon: Building2 },
-    { label: "Posts", value: stats.posts, Icon: Sparkles },
-    { label: "Active automations", value: stats.activeAutomations, Icon: Bot },
-    { label: "Video backgrounds", value: stats.backgrounds, Icon: ImagePlay },
-    { label: "Image backgrounds", value: stats.imageBackgrounds, Icon: ImagePlus },
-    { label: "Pending approval", value: stats.pendingApproval, Icon: FileVideo2 },
-    { label: "Completed this month", value: stats.completedOccurrences, Icon: CheckCircle2 },
-    { label: "Failed this month", value: stats.failedOccurrences, Icon: AlertTriangle },
-    { label: "Refunded credits", value: stats.refundedCredits, Icon: CircleDollarSign },
-    { label: "Unexpected reruns", value: stats.unexpectedAutomaticReruns, Icon: RefreshCw },
+    { label: t("admin.dashboard.accounts"), value: stats.users, Icon: Users },
+    { label: t("admin.dashboard.brands"), value: stats.brands, Icon: Building2 },
+    { label: t("admin.dashboard.posts"), value: stats.posts, Icon: Sparkles },
+    { label: t("admin.dashboard.activeAutomations"), value: stats.activeAutomations, Icon: Bot },
+    { label: t("admin.dashboard.videoBackgrounds"), value: stats.backgrounds, Icon: ImagePlay },
+    { label: t("admin.dashboard.imageBackgrounds"), value: stats.imageBackgrounds, Icon: ImagePlus },
+    { label: t("admin.dashboard.pendingApproval"), value: stats.pendingApproval, Icon: FileVideo2 },
+    { label: t("admin.dashboard.completedMonth"), value: stats.completedOccurrences, Icon: CheckCircle2 },
+    { label: t("admin.dashboard.failedMonth"), value: stats.failedOccurrences, Icon: AlertTriangle },
+    { label: t("admin.dashboard.refundedCredits"), value: stats.refundedCredits, Icon: CircleDollarSign },
+    { label: t("admin.dashboard.unexpectedReruns"), value: stats.unexpectedAutomaticReruns, Icon: RefreshCw },
   ];
 
   return (
@@ -212,18 +214,16 @@ export default function AdminDashboardPage() {
       <div className="admin-page">
         <header className="admin-hero">
           <div>
-            <span className="admin-eyebrow">Spreelo administration</span>
-            <h1>Admin dashboard</h1>
-            <p>
-              Manage shared creative assets, customer credits, translations and operational checks from one protected workspace.
-            </p>
+            <span className="admin-eyebrow">{t("admin.dashboard.kicker")}</span>
+            <h1>{t("admin.dashboard.title")}</h1>
+            <p>{t("admin.dashboard.description")}</p>
           </div>
 
           <div className="admin-hero-badge">
             <ShieldCheck size={24} aria-hidden="true" />
             <div>
-              <strong>Administrator</strong>
-              <span>Server-protected access</span>
+              <strong>{t("admin.dashboard.administrator")}</strong>
+              <span>{t("admin.dashboard.protectedAccess")}</span>
             </div>
           </div>
         </header>
@@ -252,7 +252,7 @@ export default function AdminDashboardPage() {
         {loading ? (
           <section className="admin-loading-card">
             <LoaderCircle className="admin-spin" size={24} aria-hidden="true" />
-            Loading admin data…
+            {t("admin.dashboard.loading")}
           </section>
         ) : (
           <>
@@ -280,41 +280,41 @@ export default function AdminDashboardPage() {
               <a className="admin-tool-card" href="/admin/customers">
                 <span className="admin-tool-icon"><Users size={24} aria-hidden="true" /></span>
                 <div>
-                  <span className="admin-card-kicker">Kunder och drift</span>
-                  <h2>Kundlista och kundkort</h2>
-                  <p>Se företag, inlägg, misslyckanden, återförda krediter och teknisk statistik per kund och månad.</p>
+                  <span className="admin-card-kicker">{t("admin.dashboard.customersKicker")}</span>
+                  <h2>{t("admin.dashboard.customersTitle")}</h2>
+                  <p>{t("admin.dashboard.customersText")}</p>
                 </div>
-                <strong>Öppna kundlistan →</strong>
+                <strong>{t("admin.dashboard.openCustomers")} →</strong>
               </a>
 
               <a className="admin-tool-card" href="/video-backgrounds">
                 <span className="admin-tool-icon"><ImagePlay size={24} aria-hidden="true" /></span>
                 <div>
-                  <span className="admin-card-kicker">Creative library</span>
-                  <h2>Video backgrounds</h2>
-                  <p>Upload, tag, preview, edit and manage the reusable 9:16 motion background library.</p>
+                  <span className="admin-card-kicker">{t("admin.dashboard.libraryKicker")}</span>
+                  <h2>{t("admin.dashboard.videoBackgrounds")}</h2>
+                  <p>{t("admin.dashboard.videoText")}</p>
                 </div>
-                <strong>Open library →</strong>
+                <strong>{t("admin.dashboard.openLibrary")} →</strong>
               </a>
 
               <a className="admin-tool-card" href="/admin/image-backgrounds">
                 <span className="admin-tool-icon"><ImagePlus size={24} aria-hidden="true" /></span>
                 <div>
-                  <span className="admin-card-kicker">Creative library</span>
-                  <h2>Image backgrounds</h2>
-                  <p>Upload, tag, preview, edit and manage the reusable 1:1 background library for carousel product cards.</p>
+                  <span className="admin-card-kicker">{t("admin.dashboard.libraryKicker")}</span>
+                  <h2>{t("admin.dashboard.imageBackgrounds")}</h2>
+                  <p>{t("admin.dashboard.imageText")}</p>
                 </div>
-                <strong>Open library →</strong>
+                <strong>{t("admin.dashboard.openLibrary")} →</strong>
               </a>
 
               <a className="admin-tool-card" href="/admin/credits">
                 <span className="admin-tool-icon"><CircleDollarSign size={24} aria-hidden="true" /></span>
                 <div>
-                  <span className="admin-card-kicker">Customer support</span>
-                  <h2>Credit adjustments</h2>
-                  <p>Look up an account by email, add compensation credits or correct a balance with an audit trail.</p>
+                  <span className="admin-card-kicker">{t("admin.dashboard.supportKicker")}</span>
+                  <h2>{t("admin.dashboard.creditsTitle")}</h2>
+                  <p>{t("admin.dashboard.creditsText")}</p>
                 </div>
-                <strong>Manage credits →</strong>
+                <strong>{t("admin.dashboard.manageCredits")} →</strong>
               </a>
 
               <a className="admin-tool-card" href="/admin/content-credits">
@@ -357,6 +357,45 @@ export default function AdminDashboardPage() {
                 </div>
                 <strong>{t("admin.approvals.open")} →</strong>
               </a>
+            </section>
+
+            <section className="admin-panel admin-insights-panel">
+              <div className="admin-panel-heading admin-insights-heading">
+                <div>
+                  <span className="admin-card-kicker">{t("admin.insights.kicker")}</span>
+                  <h2>{t("admin.insights.title")}</h2>
+                  <p>{t("admin.insights.description")}</p>
+                </div>
+                <span className="admin-insights-period">30D</span>
+              </div>
+
+              <div className="admin-insight-metrics">
+                <article><span>{t("admin.insights.postsCreated")}</span><strong>{Number(insights?.totals?.postsCreated || 0).toLocaleString()}</strong></article>
+                <article><span>{t("admin.insights.published")}</span><strong>{Number(insights?.totals?.postsPublished || 0).toLocaleString()}</strong></article>
+                <article><span>{t("admin.insights.successRate")}</span><strong>{Math.round(Number(insights?.totals?.successRate ?? 1) * 100)}%</strong></article>
+                <article><span>{t("admin.insights.refunded")}</span><strong>{Number(insights?.totals?.creditsRefunded || 0).toLocaleString()}</strong></article>
+              </div>
+
+              <div className="admin-insight-grid">
+                {[
+                  [t("admin.insights.topCredits"), insights?.topCustomersByCredits || [], t("admin.insights.credits"), true],
+                  [t("admin.insights.topPosts"), insights?.topCustomersByPosts || [], t("admin.insights.posts"), true],
+                  [t("admin.insights.topBrands"), insights?.topBrands || [], t("admin.insights.posts"), false],
+                  [t("admin.insights.topFormats"), insights?.topFormats || [], t("admin.insights.posts"), false],
+                  [t("admin.insights.platformMix"), insights?.platforms || [], t("admin.insights.posts"), false],
+                ].map(([title, rows, unit, customerLinks]) => (
+                  <article className="admin-insight-card" key={title}>
+                    <h3>{title}</h3>
+                    {rows.length ? <div className="admin-insight-list">{rows.slice(0, 5).map((row, index) => (
+                      <a key={`${title}-${row.key}`} href={customerLinks && row.userId ? `/admin/customers/${row.userId}` : "#"} onClick={(event) => { if (!(customerLinks && row.userId)) event.preventDefault(); }}>
+                        <span className="admin-insight-rank">{index + 1}</span>
+                        <span className="admin-insight-name"><strong>{row.name || row.key}</strong>{row.email ? <small>{row.email}</small> : null}</span>
+                        <b>{Number(row.value || 0).toLocaleString()} <small>{unit}</small></b>
+                      </a>
+                    ))}</div> : <p className="admin-insight-empty">{t("admin.insights.noData")}</p>}
+                  </article>
+                ))}
+              </div>
             </section>
 
             <section className="admin-panel admin-translation-panel">
@@ -439,10 +478,10 @@ export default function AdminDashboardPage() {
             <section className="admin-panel">
               <div className="admin-panel-heading">
                 <div>
-                  <span className="admin-card-kicker">Audit trail</span>
-                  <h2>Recent credit adjustments</h2>
+                  <span className="admin-card-kicker">{t("admin.dashboard.auditKicker")}</span>
+                  <h2>{t("admin.dashboard.recentAdjustments")}</h2>
                 </div>
-                <a href="/admin/credits">View all</a>
+                <a href="/admin/credits">{t("admin.dashboard.viewAll")}</a>
               </div>
 
               {recentAdjustments.length ? (
@@ -450,11 +489,11 @@ export default function AdminDashboardPage() {
                   <table className="admin-table">
                     <thead>
                       <tr>
-                        <th>Account</th>
-                        <th>Change</th>
-                        <th>New balance</th>
-                        <th>Reason</th>
-                        <th>Date</th>
+                        <th>{t("admin.dashboard.account")}</th>
+                        <th>{t("admin.dashboard.change")}</th>
+                        <th>{t("admin.dashboard.newBalance")}</th>
+                        <th>{t("admin.dashboard.reason")}</th>
+                        <th>{t("admin.dashboard.date")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -473,7 +512,7 @@ export default function AdminDashboardPage() {
                   </table>
                 </div>
               ) : (
-                <div className="admin-empty-state">No manual credit adjustments have been made yet.</div>
+                <div className="admin-empty-state">{t("admin.dashboard.noAdjustments")}</div>
               )}
             </section>
           </>

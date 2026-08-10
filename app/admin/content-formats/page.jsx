@@ -290,7 +290,7 @@ export default function AdminContentFormatsPage() {
                         ))}
                       </select>
                     </label>
-                    <label>
+                    <label className="admin-format-order-field">
                       <span>{t("admin.formats.order")}</span>
                       <input
                         type="number"
@@ -299,6 +299,7 @@ export default function AdminContentFormatsPage() {
                         value={item.sort_order ?? defaults.sort_order}
                         onChange={(event) => updateFormat(item.content_type_id, { sort_order: Number(event.target.value) })}
                       />
+                      <small>{t("admin.formats.orderHelp")}</small>
                     </label>
                   </div>
 

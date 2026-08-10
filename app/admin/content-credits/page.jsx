@@ -16,6 +16,7 @@ import {
   LockKeyhole,
   Pencil,
   Plus,
+  RotateCcw,
   Save,
   Search,
   ShieldCheck,
@@ -92,6 +93,8 @@ export default function AdminContentCreditsPage() {
   const [bulkCredits, setBulkCredits] = useState("");
   const [editorId, setEditorId] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [statsPeriod, setStatsPeriod] = useState("30d");
+  const [resettingId, setResettingId] = useState("");
   const [createDraft, setCreateDraft] = useState({
     content_type_id: "",
     display_label: "",
@@ -104,14 +107,14 @@ export default function AdminContentCreditsPage() {
     available_pro: true,
   });
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(statsPeriod); }, [statsPeriod]);
 
-  async function loadData() {
+  async function loadData(period = statsPeriod) {
     setLoading(true);
     setError("");
     try {
       const headers = await getAdminHeaders();
-      const response = await fetch("/api/admin/content-economics", { headers, cache: "no-store" });
+      const response = await fetch(`/api/admin/content-economics?period=${encodeURIComponent(period)}`, { headers, cache: "no-store" });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.error || t("admin.contentCredits.loadError"));
       applyPayload(payload);
@@ -190,6 +193,38 @@ export default function AdminContentCreditsPage() {
       setError(saveError.message || t("admin.contentCredits.referenceSaveError"));
     } finally {
       setSavingReference(false);
+    }
+  }
+
+  async function resetReliability(contentTypeIds) {
+    const ids = Array.isArray(contentTypeIds) ? contentTypeIds : [contentTypeIds];
+    const validIds = ids.filter(Boolean);
+    if (!validIds.length) return;
+    const isAll = validIds.length === formats.length;
+    const confirmText = isAll ? t("admin.contentCredits.resetAllConfirm") : t("admin.contentCredits.resetConfirm");
+    if (!window.confirm(confirmText)) return;
+
+    setResettingId(isAll ? "__all__" : validIds[0]);
+    setError("");
+    setMessage("");
+    try {
+      const headers = await getAdminHeaders();
+      const response = await fetch("/api/admin/content-economics", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ action: "reset_reliability", content_type_ids: validIds }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || t("admin.contentCredits.resetError"));
+      setStatsPeriod("reset");
+      applyPayload(payload);
+      setMessage(isAll
+        ? t("admin.contentCredits.resetAllDone", { count: validIds.length })
+        : t("admin.contentCredits.resetDone"));
+    } catch (resetError) {
+      setError(resetError.message || t("admin.contentCredits.resetError"));
+    } finally {
+      setResettingId("");
     }
   }
 
@@ -338,6 +373,15 @@ export default function AdminContentCreditsPage() {
                 <option value="all">{t("admin.contentCredits.allCategories")}</option>
                 {CATEGORY_VALUES.map((value) => <option value={value} key={value}>{t(`admin.formats.category.${value}`)}</option>)}
               </select>
+              <label className="admin-econ-period-select">
+                <span>{t("admin.contentCredits.period")}</span>
+                <select value={statsPeriod} onChange={(event) => setStatsPeriod(event.target.value)}>
+                  {["reset", "7d", "30d", "all"].map((value) => <option value={value} key={value}>{t(`admin.contentCredits.period.${value}`)}</option>)}
+                </select>
+              </label>
+              <button type="button" className="admin-econ-reset-all" onClick={() => resetReliability(formats.map((row) => row.content_type_id))} disabled={resettingId === "__all__"}>
+                {resettingId === "__all__" ? <LoaderCircle className="admin-spin" size={15} /> : <RotateCcw size={15} />} {t("admin.contentCredits.resetAll")}
+              </button>
               <div className="admin-econ-bulk">
                 <span>{t("admin.contentCredits.selected", { count: selectedIds.length })}</span>
                 <input type="number" min="1" placeholder={t("admin.contentCredits.creditCost")} value={bulkCredits} onChange={(event) => setBulkCredits(event.target.value)} />
@@ -411,6 +455,7 @@ export default function AdminContentCreditsPage() {
                         <strong>{usage.generated || usage.failed ? formatPercent(1 - Number(usage.failureRate || 0)) : "—"}</strong>
                         <small>{usage.failed ? t("admin.contentCredits.failedCount", { count: usage.failed }) : t("admin.contentCredits.noFailures")}</small>
                         <em><Clock3 size={11} /> {formatDuration(usage.avgDurationMs)}</em>
+                        {row.stats_reset_at ? <em className="reset-note">{t("admin.contentCredits.resetAt", { date: formatDateTime(row.stats_reset_at) })}</em> : null}
                       </div>
 
                       <div className="admin-econ-plan-cell">
@@ -426,6 +471,7 @@ export default function AdminContentCreditsPage() {
                       </label>
 
                       <div className="admin-econ-row-actions">
+                        <button type="button" title={t("admin.contentCredits.resetOne")} onClick={() => resetReliability(row.content_type_id)} disabled={resettingId === row.content_type_id}>{resettingId === row.content_type_id ? <LoaderCircle className="admin-spin" size={15} /> : <RotateCcw size={15} />}</button>
                         <button type="button" title={t("admin.contentCredits.editDetails")} onClick={() => setEditorId(row.content_type_id)}><Pencil size={15} /></button>
                         <button type="button" className="save" onClick={() => saveRow(row)} disabled={isSaving}>{isSaving ? <LoaderCircle className="admin-spin" size={15} /> : <Save size={15} />}</button>
                       </div>

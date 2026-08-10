@@ -29,6 +29,102 @@ async function safeAdminQuery(label, fallback, queryFunction) {
   }
 }
 
+
+function topEntries(map, limit = 5) {
+  return [...map.entries()]
+    .map(([key, value]) => ({ key, ...value }))
+    .sort((a, b) => Number(b.value || 0) - Number(a.value || 0))
+    .slice(0, limit);
+}
+
+async function loadBusinessInsights(context) {
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const [postsResult, occurrencesResult, creditResult, brandsResult] = await Promise.all([
+    context.admin.from("posts").select("id, user_id, brand_profile_id, status, platform, content_format, post_type, created_at").gte("created_at", since).limit(10000),
+    context.admin.from("automation_occurrences").select("id, user_id, brand_profile_id, status, content_type_id, refunded_credits, started_at").gte("started_at", since).limit(10000),
+    context.admin.from("credit_reservation_events").select("user_id, content_type_id, amount, event_type, created_at").gte("created_at", since).limit(10000),
+    context.admin.from("brand_profiles").select("id, user_id, business_name").limit(10000),
+  ]);
+  if (postsResult.error) throw postsResult.error;
+  if (occurrencesResult.error) throw occurrencesResult.error;
+  if (creditResult.error) throw creditResult.error;
+  if (brandsResult.error) throw brandsResult.error;
+
+  const brandMap = new Map((brandsResult.data || []).map((row) => [row.id, { name: row.business_name || "Unnamed brand", userId: row.user_id }]));
+  const customerUsage = new Map();
+  const brandUsage = new Map();
+  const formatUsage = new Map();
+  const platformUsage = new Map();
+
+  const bump = (map, key, extra = {}) => {
+    const id = String(key || "unknown");
+    const current = map.get(id) || { value: 0, ...extra };
+    current.value += 1;
+    map.set(id, current);
+  };
+
+  for (const row of postsResult.data || []) {
+    bump(customerUsage, row.user_id, { name: row.user_id || "Unknown customer", userId: row.user_id });
+    const brand = brandMap.get(row.brand_profile_id) || {};
+    bump(brandUsage, row.brand_profile_id, { name: brand.name || "Unknown brand", userId: brand.userId || row.user_id, brandId: row.brand_profile_id });
+    bump(formatUsage, row.content_format || row.post_type || "unknown", { name: row.content_format || row.post_type || "Unknown" });
+    bump(platformUsage, row.platform || "unknown", { name: row.platform || "Unknown" });
+  }
+
+  const creditsByUser = new Map();
+  for (const row of creditResult.data || []) {
+    const amount = Number(row.amount || 0);
+    if (amount >= 0) continue;
+    const current = creditsByUser.get(row.user_id) || { value: 0, name: row.user_id || "Unknown customer", userId: row.user_id };
+    current.value += Math.abs(amount);
+    creditsByUser.set(row.user_id, current);
+  }
+
+  let topCustomersByCredits = topEntries(creditsByUser);
+  let topCustomersByPosts = topEntries(customerUsage);
+  const topUserIds = [...new Set([...topCustomersByCredits, ...topCustomersByPosts].map((row) => row.userId).filter(Boolean))];
+  const userDetails = new Map();
+  await Promise.all(topUserIds.map(async (userId) => {
+    try {
+      const { data, error } = await context.admin.auth.admin.getUserById(userId);
+      if (error) return;
+      const user = data?.user;
+      const metadata = user?.user_metadata || {};
+      userDetails.set(userId, {
+        name: String(metadata.full_name || metadata.name || metadata.display_name || metadata.company_name || user?.email || userId).trim(),
+        email: user?.email || "",
+      });
+    } catch {}
+  }));
+  const enrichCustomer = (row) => ({ ...row, ...(userDetails.get(row.userId) || {}) });
+  topCustomersByCredits = topCustomersByCredits.map(enrichCustomer);
+  topCustomersByPosts = topCustomersByPosts.map(enrichCustomer);
+
+  const occurrences = occurrencesResult.data || [];
+  const completed = occurrences.filter((row) => row.status === "completed").length;
+  const failed = occurrences.filter((row) => row.status === "failed_terminal").length;
+  const attempts = completed + failed;
+  const published = (postsResult.data || []).filter((row) => row.status === "published").length;
+  const refunded = occurrences.reduce((sum, row) => sum + Math.max(0, Number(row.refunded_credits || 0)), 0);
+
+  return {
+    periodDays: 30,
+    topCustomersByCredits,
+    topCustomersByPosts,
+    topBrands: topEntries(brandUsage),
+    topFormats: topEntries(formatUsage),
+    platforms: topEntries(platformUsage, 8),
+    totals: {
+      postsCreated: (postsResult.data || []).length,
+      postsPublished: published,
+      completed,
+      failed,
+      successRate: attempts ? completed / attempts : 1,
+      creditsRefunded: refunded,
+    },
+  };
+}
+
 export async function GET(request) {
   const context = await getAdminContext(request);
   if (context.error) return adminContextError(context);
@@ -93,6 +189,7 @@ export async function GET(request) {
         unexpectedAutomaticReruns: totals.unexpectedAutomaticReruns + Math.max(0, Number(row.automatic_run_count || 1) - 1),
       }), { refundedCredits: 0, unexpectedAutomaticReruns: 0 });
     }),
+    safeAdminQuery("businessInsights", { periodDays: 30, topCustomersByCredits: [], topCustomersByPosts: [], topBrands: [], topFormats: [], platforms: [], totals: {} }, () => loadBusinessInsights(context)),
     safeAdminQuery("recentAdjustments", [], async () => {
       const { data, error } = await context.admin
         .from("admin_credit_adjustments")
@@ -119,6 +216,7 @@ export async function GET(request) {
     completedOccurrences,
     failedOccurrences,
     monthlyOccurrenceTotals,
+    businessInsights,
     recentAdjustments,
   ] = results;
   const warnings = results.map((result) => result.warning).filter(Boolean);
@@ -142,5 +240,6 @@ export async function GET(request) {
       unexpectedAutomaticReruns: monthlyOccurrenceTotals.value.unexpectedAutomaticReruns,
     },
     recentAdjustments: recentAdjustments.value,
+    insights: businessInsights.value,
   });
 }
