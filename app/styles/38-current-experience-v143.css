@@ -12152,3 +12152,73 @@ html body .campaign-v14335-slot-list article:has(.custom-time-popover) {
   .spreelo-action-v14371.compact { min-height:38px;font-size:11.5px; }
   .home-v14369-section-heading span { font-size:11.5px; }
 }
+
+/* v143.73 — premium rounded Spreelo action system; coral is an accent, never the whole CTA */
+.spreelo-action-v14371,
+.spreelo-action-v14371.compact,
+.home-v14370-review-actions a,
+.home-v14369-history-button,
+.admin-v14370-review-open {
+  border-radius:14px !important;
+}
+
+.spreelo-action-v14371.primary {
+  color:#fff;
+  border:1px solid rgba(255,255,255,.08);
+  background:linear-gradient(135deg,#1d2940 0%,#121d30 58%,#18243a 100%);
+  box-shadow:0 8px 20px rgba(20,31,50,.14),0 2px 6px rgba(20,31,50,.08);
+}
+.spreelo-action-v14371.primary svg {
+  color:#f09a80;
+}
+.spreelo-action-v14371.primary:hover {
+  background:linear-gradient(135deg,#23314b 0%,#17243a 58%,#1d2b43 100%);
+  box-shadow:0 10px 24px rgba(20,31,50,.18),0 3px 8px rgba(20,31,50,.09);
+  border-color:rgba(240,154,128,.20);
+}
+
+.spreelo-action-v14371.secondary,
+.spreelo-action-v14371.ghost {
+  color:#3d4960;
+  border:1px solid #dfe5ed;
+  background:linear-gradient(135deg,#ffffff 0%,#fbfcff 100%);
+  box-shadow:0 4px 12px rgba(26,37,56,.045);
+}
+.spreelo-action-v14371.secondary:hover,
+.spreelo-action-v14371.ghost:hover {
+  color:#27354d;
+  border-color:#cfd8e5;
+  background:linear-gradient(135deg,#fff 0%,#f7f8fc 100%);
+  box-shadow:0 6px 16px rgba(26,37,56,.065);
+}
+
+.home-v14370-review-actions a:not(.history) {
+  color:#fff;
+  border:1px solid rgba(255,255,255,.08);
+  background:linear-gradient(135deg,#1d2940 0%,#121d30 58%,#18243a 100%);
+  box-shadow:0 8px 20px rgba(20,31,50,.14),0 2px 6px rgba(20,31,50,.08);
+}
+.home-v14370-review-actions a:not(.history) svg {
+  color:#f09a80;
+}
+.home-v14370-review-actions a:not(.history):hover {
+  background:linear-gradient(135deg,#23314b 0%,#17243a 58%,#1d2b43 100%);
+  border-color:rgba(240,154,128,.20);
+  box-shadow:0 10px 24px rgba(20,31,50,.18),0 3px 8px rgba(20,31,50,.09);
+}
+.home-v14370-review-actions a.history,
+.home-v14369-history-button,
+.admin-v14370-review-open {
+  color:#445168;
+  border:1px solid #dfe5ed;
+  background:linear-gradient(135deg,#fff 0%,#fbfcff 100%);
+  box-shadow:0 4px 12px rgba(26,37,56,.045);
+}
+.home-v14370-review-actions a.history:hover,
+.home-v14369-history-button:hover,
+.admin-v14370-review-open:hover {
+  color:#27354d !important;
+  border-color:#cfd8e5 !important;
+  background:linear-gradient(135deg,#fff 0%,#f7f8fc 100%) !important;
+  box-shadow:0 6px 16px rgba(26,37,56,.065);
+}
