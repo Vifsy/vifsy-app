@@ -12034,3 +12034,121 @@ html body .campaign-v14335-slot-list article:has(.custom-time-popover) {
 .home-v14370-module .home-v14369-section-heading { border-radius:18px 18px 0 0; }
 .home-v14370-module .home-v14369-operation-list { border-radius:0 0 18px 18px;overflow:hidden; }
 .home-v14371-help[open] { z-index:150; }
+
+/* v143.72 — softer Spreelo actions and legible compact typography */
+.spreelo-action-v14371 {
+  min-height:40px;
+  padding:0 15px;
+  border-radius:13px;
+  font-size:12px;
+  font-weight:850;
+  letter-spacing:-.005em;
+}
+.spreelo-action-v14371.compact {
+  min-height:36px;
+  padding:0 13px;
+  border-radius:12px;
+  font-size:11.5px;
+}
+.spreelo-action-v14371 svg { width:15px;height:15px; }
+.spreelo-action-v14371.primary {
+  color:#fff;
+  border-color:rgba(224,83,53,.18);
+  background:linear-gradient(135deg,#ef6846 0%,#f27d59 56%,#8b63e9 145%);
+  box-shadow:0 8px 20px rgba(224,92,62,.17),0 3px 10px rgba(124,91,220,.07);
+}
+.spreelo-action-v14371.primary:hover {
+  background:linear-gradient(135deg,#ea5e3c 0%,#f07751 56%,#825be2 145%);
+  box-shadow:0 11px 24px rgba(224,92,62,.22),0 4px 12px rgba(124,91,220,.09);
+}
+.spreelo-action-v14371.secondary {
+  color:#344056;
+  border-color:#e2dfeb;
+  background:linear-gradient(135deg,rgba(255,255,255,.98),rgba(249,247,255,.96));
+  box-shadow:0 5px 14px rgba(29,38,54,.05);
+}
+.spreelo-action-v14371.secondary:hover {
+  color:#d25738;
+  border-color:#ebc4b8;
+  background:linear-gradient(135deg,#fff,#fff8f4);
+}
+.spreelo-action-v14371.ghost {
+  color:#566174;
+  border-color:#e2e6ec;
+  background:rgba(255,255,255,.78);
+  box-shadow:0 3px 10px rgba(29,38,54,.025);
+}
+
+.home-v14370-review-actions a {
+  min-height:38px;
+  padding:0 14px;
+  border-radius:13px;
+  font-size:11.5px;
+  font-weight:850;
+  background:linear-gradient(135deg,#ef6846 0%,#f27d59 56%,#8b63e9 145%);
+  box-shadow:0 8px 20px rgba(224,92,62,.16),0 3px 10px rgba(124,91,220,.06);
+}
+.home-v14370-review-actions a.history {
+  color:#485469;
+  border:1px solid #e2dfeb;
+  background:linear-gradient(135deg,#fff,#faf8ff);
+  box-shadow:0 4px 12px rgba(29,38,54,.04);
+}
+.home-v14370-review-actions a.history:hover {
+  color:#d25738;
+  border-color:#ebc4b8;
+  background:#fff9f5;
+}
+.home-v14370-review-actions svg { width:15px;height:15px; }
+
+.home-v14369-section-heading p { font-size:9px; }
+.home-v14370-module .home-v14369-section-heading h2 { font-size:18.5px; }
+.home-v14369-section-heading span {
+  color:#6f7a8b;
+  font-size:11.5px;
+  line-height:1.48;
+}
+.home-v14371-help > div {
+  font-size:11.5px;
+  line-height:1.55;
+}
+.home-v14371-empty-state > span {
+  color:#7d8796;
+  font-size:11.5px;
+  line-height:1.45;
+}
+
+/* Keep operational rows compact, but never tiny. */
+.home-v14369-operation-title strong { font-size:12px !important; }
+.home-v14369-operation-title small,
+.home-v14369-operation-meta,
+.home-v14369-operation-meta span,
+.home-v14369-operation-actions button,
+.home-v14369-open-post,
+.home-v14369-history-button { font-size:10.5px !important; }
+
+/* Review/history should read like a dense professional work queue, not microcopy. */
+.admin-v14370-review-main small { font-size:9px; }
+.admin-v14370-review-main strong { font-size:12.5px; }
+.admin-v14370-review-main em { font-size:10px; }
+.admin-v14370-review-time small { font-size:8.5px; }
+.admin-v14370-review-time strong { font-size:10px; }
+.admin-v14370-review-open {
+  min-height:34px;
+  padding:0 11px;
+  border-radius:11px;
+  font-size:10.5px;
+}
+.admin-v14370-queue-intro p { font-size:11px; }
+
+.customer-review-main-v14371 small { font-size:8.5px; }
+.customer-review-main-v14371 strong { font-size:12.5px; }
+.customer-review-main-v14371 p { font-size:10px; }
+.customer-review-meta-v14371 small { font-size:8px; }
+.customer-review-meta-v14371 strong { font-size:9.5px; }
+.customer-review-status-v14371 { font-size:9.5px; }
+
+@media(max-width:760px){
+  .spreelo-action-v14371.compact { min-height:38px;font-size:11.5px; }
+  .home-v14369-section-heading span { font-size:11.5px; }
+}
