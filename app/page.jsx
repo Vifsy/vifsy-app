@@ -24,6 +24,7 @@ import {
   Sparkles,
   Trash2,
   History,
+  HelpCircle,
   X,
 } from "lucide-react";
 import AppLayout from "../components/AppLayout";
@@ -784,11 +785,11 @@ export default function Home() {
   }
 
   const pendingApprovalPosts = useMemo(() => {
-    const completedAdminStates = new Set(["approved_by_spreelo", "released", "archived", "not_required"]);
+    const customerReadyAdminStates = new Set(["approved_by_spreelo", "released", "not_required"]);
     return posts
       .filter((post) =>
         post.status === "pending_approval" &&
-        !completedAdminStates.has(String(post.admin_review_status || "").toLowerCase())
+        customerReadyAdminStates.has(String(post.admin_review_status || "").toLowerCase())
       )
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }, [posts]);
@@ -1297,8 +1298,8 @@ export default function Home() {
                   </div>
                 ) : null}
                 <div className="home-v14370-review-actions">
-                  {pendingApprovalPosts.length ? <a href="/admin/post-approvals?view=queue">{t("dashboard.reviewNow")} <ArrowRight /></a> : null}
-                  <a className="history" href="/admin/post-approvals?view=history"><History /> {t("dashboard.contentHistory")}</a>
+                  {pendingApprovalPosts.length ? <a href="/review?view=queue">{t("dashboard.reviewNow")} <ArrowRight /></a> : null}
+                  <a className="history" href="/review?view=history"><History /> {t("dashboard.contentHistory")}</a>
                 </div>
               </section>
 
@@ -1307,13 +1308,27 @@ export default function Home() {
                   <span className="home-v14370-module-icon"><RefreshCw /></span>
                   <div>
                     <p>{t("dashboard.contentPlansEyebrow")}</p>
-                    <h2>{t("dashboard.recurringSchedules")}</h2>
+                    <div className="home-v14371-title-line">
+                      <h2>{t("dashboard.recurringSchedules")}</h2>
+                      <details className="home-v14371-help">
+                        <summary aria-label={t("dashboard.sectionHelp")}><HelpCircle /></summary>
+                        <div>{t("dashboard.recurringSchedulesHelp")}</div>
+                      </details>
+                    </div>
                     <span>{t("dashboard.recurringSchedulesText")}</span>
                   </div>
-                  <button type="button" className="home-v14369-history-button" onClick={() => setShowHistory(true)}><History /> {t("dashboard.planHistory")}</button>
+                  <div className="home-v14371-header-actions">
+                    <button type="button" className="spreelo-action-v14371 ghost compact" onClick={() => setShowHistory(true)}><History /> {t("dashboard.planHistory")}</button>
+                    <a className="spreelo-action-v14371 primary compact" href="/automation"><Plus /> {t("dashboard.createSchedule")}</a>
+                  </div>
                 </div>
                 <div className="home-v14369-operation-list">
-                  {recurringSchedules.length ? recurringSchedules.map((plan) => renderOperationalPlanRow(plan, "recurring")) : <div className="home-v14369-empty">{t("dashboard.noRecurringSchedules")}</div>}
+                  {recurringSchedules.length ? recurringSchedules.map((plan) => renderOperationalPlanRow(plan, "recurring")) : (
+                    <div className="home-v14369-empty home-v14371-empty-state">
+                      <span>{t("dashboard.noRecurringSchedules")}</span>
+                      <a className="spreelo-action-v14371 secondary compact" href="/automation">{t("dashboard.createSchedule")} <ArrowRight /></a>
+                    </div>
+                  )}
                 </div>
               </section>
 
@@ -1322,8 +1337,17 @@ export default function Home() {
                   <span className="home-v14370-module-icon"><CalendarClock /></span>
                   <div>
                     <p>{t("dashboard.upcomingEyebrow")}</p>
-                    <h2>{t("dashboard.scheduledPostsBox")}</h2>
+                    <div className="home-v14371-title-line">
+                      <h2>{t("dashboard.scheduledPostsBox")}</h2>
+                      <details className="home-v14371-help">
+                        <summary aria-label={t("dashboard.sectionHelp")}><HelpCircle /></summary>
+                        <div>{t("dashboard.scheduledPostsHelp")}</div>
+                      </details>
+                    </div>
                     <span>{t("dashboard.scheduledPostsBoxText")}</span>
+                  </div>
+                  <div className="home-v14371-header-actions">
+                    <a className="spreelo-action-v14371 primary compact" href="/automation"><Plus /> {t("dashboard.schedulePosts")}</a>
                   </div>
                 </div>
                 <div className="home-v14369-operation-list">
@@ -1346,7 +1370,12 @@ export default function Home() {
                         </article>
                       ))}
                     </>
-                  ) : <div className="home-v14369-empty">{t("dashboard.noScheduledPosts")}</div>}
+                  ) : (
+                    <div className="home-v14369-empty home-v14371-empty-state">
+                      <span>{t("dashboard.noScheduledPosts")}</span>
+                      <a className="spreelo-action-v14371 secondary compact" href="/automation">{t("dashboard.schedulePosts")} <ArrowRight /></a>
+                    </div>
+                  )}
                 </div>
               </section>
 
@@ -1355,12 +1384,26 @@ export default function Home() {
                   <span className="home-v14370-module-icon"><Gift /></span>
                   <div>
                     <p>{t("dashboard.reviewSourceCampaign")}</p>
-                    <h2>{t("dashboard.calendarCampaignsBox")}</h2>
+                    <div className="home-v14371-title-line">
+                      <h2>{t("dashboard.calendarCampaignsBox")}</h2>
+                      <details className="home-v14371-help">
+                        <summary aria-label={t("dashboard.sectionHelp")}><HelpCircle /></summary>
+                        <div>{t("dashboard.calendarCampaignsHelp")}</div>
+                      </details>
+                    </div>
                     <span>{t("dashboard.calendarCampaignsBoxText")}</span>
+                  </div>
+                  <div className="home-v14371-header-actions">
+                    <a className="spreelo-action-v14371 primary compact" href="/calendar"><Plus /> {t("dashboard.createCampaign")}</a>
                   </div>
                 </div>
                 <div className="home-v14369-operation-list">
-                  {calendarCampaignPlans.length ? calendarCampaignPlans.map((plan) => renderOperationalPlanRow(plan, "campaign")) : <div className="home-v14369-empty">{t("dashboard.noCalendarCampaigns")}</div>}
+                  {calendarCampaignPlans.length ? calendarCampaignPlans.map((plan) => renderOperationalPlanRow(plan, "campaign")) : (
+                    <div className="home-v14369-empty home-v14371-empty-state">
+                      <span>{t("dashboard.noCalendarCampaigns")}</span>
+                      <a className="spreelo-action-v14371 secondary compact" href="/calendar">{t("dashboard.createCampaign")} <ArrowRight /></a>
+                    </div>
+                  )}
                 </div>
               </section>
 
@@ -1392,7 +1435,7 @@ export default function Home() {
                 <span>{t("dashboard.coachIntro", { brandName: currentBrandName })}</span>
                 <div className="home-v14335-coach-actions">
                   <h3><Bot /> {t("dashboard.whatToDoNow")}</h3>
-                  <a href="/admin/post-approvals?view=queue"><Sparkles /><span>{t("dashboard.reviewCount", { count: pendingApprovalPosts.length })}</span><ChevronRight /></a>
+                  <a href="/review?view=queue"><Sparkles /><span>{t("dashboard.reviewCount", { count: pendingApprovalPosts.length })}</span><ChevronRight /></a>
                   <a href="/automation"><CalendarDays /><span>{t("dashboard.planNextWeek")}</span><ChevronRight /></a>
                   <a href={suggestedCampaign ? `/automation?campaign=${suggestedCampaign.id}` : "/calendar"}><Lightbulb /><span>{dashboardText(suggestedCampaign?.title, t("dashboard.reviewCampaignIdeas"))}</span><ChevronRight /></a>
                 </div>

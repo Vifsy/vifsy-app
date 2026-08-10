@@ -11880,3 +11880,157 @@ html body .campaign-v14335-slot-list article:has(.custom-time-popover) {
   .admin-v14370-review-open { display:none; }
   .admin-v14370-review-row .admin-approval-status { grid-column:3; }
 }
+
+/* v143.71 — customer/admin separation, compact rhythm and Spreelo actions */
+.home-v14335-main { gap:14px; }
+.home-v14335-main > .home-v14369-approval-notice { margin-bottom:0; }
+.home-v14335-main > .home-v14369-operations { margin-top:0; }
+
+.spreelo-action-v14371 {
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px;padding:0 14px;
+  border:1px solid transparent;border-radius:11px;font:inherit;font-size:10px;font-weight:900;line-height:1;
+  text-decoration:none;white-space:nowrap;cursor:pointer;transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease,background .16s ease;
+}
+.spreelo-action-v14371 svg { width:14px;height:14px; }
+.spreelo-action-v14371:hover { transform:translateY(-1px); }
+.spreelo-action-v14371.primary {
+  color:#fff;background:linear-gradient(135deg,#172033,#0d1828 72%);box-shadow:0 8px 20px rgba(23,32,51,.14),inset 3px 0 0 #ed6846;
+}
+.spreelo-action-v14371.primary:hover { box-shadow:0 11px 24px rgba(23,32,51,.19),inset 3px 0 0 #f27655; }
+.spreelo-action-v14371.secondary {
+  color:#273247;border-color:#e0dfe8;background:linear-gradient(135deg,#fff,#fbf9ff);box-shadow:0 5px 14px rgba(29,38,54,.055);
+}
+.spreelo-action-v14371.secondary:hover { border-color:#d7c9eb;background:#fff; }
+.spreelo-action-v14371.ghost { color:#586376;border-color:#e0e5ec;background:rgba(255,255,255,.72);box-shadow:none; }
+.spreelo-action-v14371.ghost:hover { color:#d45737;border-color:#efc5b8;background:#fff8f4; }
+.spreelo-action-v14371.compact { min-height:33px;padding:0 11px;border-radius:9px;font-size:9px; }
+
+.home-v14370-review-actions a {
+  min-height:35px;border-radius:10px;font-weight:900;letter-spacing:-.005em;
+  background:linear-gradient(135deg,#172033,#0d1828 74%);box-shadow:0 8px 20px rgba(23,32,51,.13),inset 3px 0 0 #ed6846;
+}
+.home-v14370-review-actions a.history {
+  color:#4c5769;border:1px solid #e0dfe8;background:linear-gradient(135deg,#fff,#fbf9ff);box-shadow:0 5px 14px rgba(29,38,54,.045);
+}
+.home-v14370-review-actions a.history:hover { color:#c95232;border-color:#efc3b6;background:#fff9f5; }
+
+.home-v14371-title-line { display:flex;align-items:center;gap:7px;min-width:0; }
+.home-v14371-title-line h2 { min-width:0; }
+.home-v14371-help { position:relative;display:inline-flex;flex:0 0 auto; }
+.home-v14371-help summary {
+  list-style:none;width:24px;height:24px;display:grid;place-items:center;border:1px solid #e1e5eb;border-radius:8px;
+  background:rgba(255,255,255,.82);color:#8b94a3;cursor:pointer;transition:.16s ease;
+}
+.home-v14371-help summary::-webkit-details-marker { display:none; }
+.home-v14371-help summary:hover,.home-v14371-help[open] summary { color:var(--module-accent,#e56545);border-color:color-mix(in srgb,var(--module-accent,#e56545) 28%,#dfe4eb);background:#fff; }
+.home-v14371-help summary svg { width:14px;height:14px; }
+.home-v14371-help > div {
+  position:absolute;z-index:120;left:30px;top:-4px;width:min(300px,70vw);padding:11px 12px;border:1px solid #e2e6ed;border-radius:12px;
+  background:#fff;color:#596476;font-size:10px;line-height:1.55;box-shadow:0 16px 38px rgba(22,31,47,.14);
+}
+.home-v14371-header-actions { display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap; }
+.home-v14371-empty-state { display:flex;align-items:center;justify-content:center;gap:12px;min-height:62px;padding:10px 14px !important; }
+.home-v14371-empty-state > span { color:#8993a2;font-size:9.5px; }
+
+.admin-approvals-page.admin-v74-approvals-page { gap:14px !important;padding-top:20px !important; }
+.admin-approvals-page .admin-hero.compact { padding-block:23px; }
+.admin-v14370-queue-intro { margin-top:0; }
+.admin-v14370-review-list { gap:5px;margin-top:0; }
+.admin-v14370-review-row { padding:8px 11px !important;border-radius:13px !important;box-shadow:0 4px 13px rgba(27,35,49,.03); }
+.admin-v14370-review-thumb { width:56px;height:56px;border-radius:10px; }
+.admin-v14370-review-open {
+  min-height:31px;padding:0 9px;border:1px solid #e1e5eb;border-radius:9px;background:#fff;color:#2c374a;
+  box-shadow:0 4px 12px rgba(24,32,47,.04);
+}
+.admin-v14370-review-row:hover .admin-v14370-review-open { color:#c84e2f;border-color:#efc4b8;background:#fff8f4; }
+
+.admin-route-guard { min-height:100dvh;display:grid;place-items:center;padding:24px;background:linear-gradient(135deg,#f1f6ff,#fff8f2); }
+.admin-route-guard-card { width:min(430px,100%);display:grid;justify-items:center;gap:9px;padding:28px;border:1px solid #e2e6ec;border-radius:20px;background:#fff;box-shadow:0 24px 70px rgba(20,28,42,.12);text-align:center; }
+.admin-route-guard-card > span { width:46px;height:46px;display:grid;place-items:center;border-radius:14px;background:#fff0e9;color:#dd5b3b; }
+.admin-route-guard-card strong { color:#172033;font-size:18px; }
+.admin-route-guard-card p { margin:0;color:#748092;font-size:11px;line-height:1.55; }
+
+.customer-review-page-v14371 { min-height:100vh;padding:22px 26px 36px;background:linear-gradient(135deg,rgba(237,245,255,.94),rgba(255,248,243,.90)),url('/backgrounds/spreelo-background-v97.png') center top/cover fixed;color:#172033; }
+.customer-review-hero-v14371 { max-width:1280px;margin:0 auto 14px;display:flex;align-items:center;justify-content:space-between;gap:20px;padding:26px 30px;border:1px solid rgba(255,255,255,.92);border-radius:22px;background:radial-gradient(circle at 90% 10%,rgba(139,92,246,.13),transparent 30%),linear-gradient(115deg,#fff7f2,#fff 62%,#faf7ff);box-shadow:0 16px 42px rgba(28,38,58,.08); }
+.customer-review-hero-v14371 > div { display:grid;gap:5px; }
+.customer-review-hero-v14371 span { color:#e15c3b;font-size:9px;font-weight:900;letter-spacing:.1em;text-transform:uppercase; }
+.customer-review-hero-v14371 h1 { margin:0;font-size:clamp(28px,3vw,42px);letter-spacing:-.04em; }
+.customer-review-hero-v14371 p { margin:0;color:#6f7a8c;font-size:11px;line-height:1.55; }
+.customer-review-hero-v14371 > strong { padding:8px 11px;border:1px solid #e3e7ed;border-radius:10px;background:#fff;color:#596476;font-size:10px; }
+.customer-review-tabs-v14371 { max-width:1280px;margin:0 auto 14px;display:flex;gap:5px;padding:4px;border:1px solid #e0e5ec;border-radius:13px;background:rgba(244,247,250,.9); }
+.customer-review-tabs-v14371 a { display:inline-flex;align-items:center;gap:7px;min-height:36px;padding:0 13px;border-radius:9px;color:#697486;font-size:10px;font-weight:850;text-decoration:none; }
+.customer-review-tabs-v14371 a svg { width:14px;height:14px; }
+.customer-review-tabs-v14371 a b { min-width:22px;height:22px;display:grid;place-items:center;border-radius:8px;background:#e9edf2;color:#5f6979;font-size:9px; }
+.customer-review-tabs-v14371 a.active { background:#fff;color:#172033;box-shadow:0 5px 15px rgba(24,34,52,.08); }
+.customer-review-tabs-v14371 a.active b { background:#172033;color:#fff; }
+.customer-review-list-v14371 { max-width:1280px;margin:0 auto;display:grid;gap:6px; }
+.customer-review-list-v14371 article { display:grid;grid-template-columns:60px minmax(260px,1.5fr) minmax(270px,.9fr) auto auto;align-items:center;gap:14px;padding:9px 11px;border:1px solid #e1e6ed;border-radius:14px;background:rgba(255,255,255,.94);box-shadow:0 6px 18px rgba(27,35,49,.035); }
+.customer-review-thumb-v14371 { width:58px;height:58px;display:grid;place-items:center;overflow:hidden;border:1px solid #e7ebf0;border-radius:11px;background:#f5f6f8;color:#97a0ad; }
+.customer-review-thumb-v14371 img { width:100%;height:100%;object-fit:cover; }
+.customer-review-main-v14371 { min-width:0;display:grid;gap:2px; }
+.customer-review-main-v14371 small { color:#df5c3c;font-size:7.5px;font-weight:900;letter-spacing:.055em; }
+.customer-review-main-v14371 strong { color:#172033;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.customer-review-main-v14371 p { margin:0;color:#7b8594;font-size:8.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.customer-review-meta-v14371 { display:flex;gap:15px;min-width:0; }
+.customer-review-meta-v14371 > span { display:grid;grid-template-columns:auto 1fr;column-gap:5px;align-items:center;min-width:0; }
+.customer-review-meta-v14371 svg { grid-row:1/span 2;width:13px;height:13px;color:#9aa3af; }
+.customer-review-meta-v14371 small { color:#a0a7b1;font-size:7px;font-weight:900;text-transform:uppercase; }
+.customer-review-meta-v14371 strong { color:#596374;font-size:8.5px;white-space:nowrap; }
+.customer-review-status-v14371 { min-height:27px;padding:0 9px;display:inline-flex;align-items:center;border-radius:999px;font-size:8.5px;font-weight:900;white-space:nowrap; }
+.customer-review-status-v14371.pending { background:#fff3ce;color:#8f6617; }
+.customer-review-status-v14371.approved,.customer-review-status-v14371.published { background:#e9f8ef;color:#247b50; }
+.customer-review-status-v14371.rejected { background:#fff0ed;color:#b44e3b; }
+.customer-review-empty-v14371,.customer-review-message-v14371 { max-width:1280px;margin:0 auto;padding:28px;border:1px dashed #dde3ea;border-radius:17px;background:rgba(255,255,255,.82);text-align:center;color:#768294; }
+.customer-review-empty-v14371 { display:grid;justify-items:center;gap:7px; }
+.customer-review-empty-v14371 > span { width:40px;height:40px;display:grid;place-items:center;border-radius:12px;background:#eaf9f1;color:#289761; }
+.customer-review-empty-v14371 strong { color:#253044;font-size:13px; }
+.customer-review-empty-v14371 p { margin:0;font-size:10px; }
+.customer-review-message-v14371.error { border-color:#efc9bf;background:#fff8f5;color:#a84a32; }
+.post-customer-not-ready-v14371 { max-width:650px;margin:8vh auto;padding:34px;display:grid;justify-items:center;gap:10px;border:1px solid #e2e6ec;border-radius:20px;background:#fff;text-align:center;box-shadow:0 20px 60px rgba(20,28,42,.09); }
+.post-customer-not-ready-v14371 > span { width:46px;height:46px;display:grid;place-items:center;border-radius:14px;background:#fff0e9;color:#df5b3b; }
+.post-customer-not-ready-v14371 h3 { margin:0;color:#172033;font-size:22px; }
+.post-customer-not-ready-v14371 p { margin:0 0 5px;color:#758092;font-size:11px;line-height:1.55; }
+
+@media(max-width:1000px){
+  .home-v14371-header-actions { grid-column:1/-1;justify-content:flex-start; }
+  .customer-review-list-v14371 article { grid-template-columns:54px minmax(0,1fr) auto auto; }
+  .customer-review-meta-v14371 { display:none; }
+}
+@media(max-width:760px){
+  .home-v14370-module .home-v14369-section-heading { grid-template-columns:auto minmax(0,1fr); }
+  .home-v14371-header-actions { grid-column:1/-1;width:100%;justify-content:flex-start; }
+  .home-v14371-help > div { left:auto;right:0;top:30px; }
+  .home-v14371-empty-state { flex-direction:column; }
+  .customer-review-page-v14371 { padding:14px 12px 28px; }
+  .customer-review-hero-v14371 { padding:20px;align-items:flex-start;flex-direction:column; }
+  .customer-review-tabs-v14371 { display:grid;grid-template-columns:1fr 1fr; }
+  .customer-review-tabs-v14371 a { justify-content:center;padding:0 8px; }
+  .customer-review-list-v14371 article { grid-template-columns:50px minmax(0,1fr) auto;gap:9px;padding:8px; }
+  .customer-review-thumb-v14371 { width:48px;height:48px; }
+  .customer-review-status-v14371 { grid-column:2;justify-self:start; }
+  .customer-review-list-v14371 .spreelo-action-v14371 { grid-column:3;grid-row:1/span 2; }
+}
+@media(max-width:520px){
+  .home-v14371-header-actions .spreelo-action-v14371 { flex:1 1 auto; }
+  .customer-review-list-v14371 article { grid-template-columns:46px minmax(0,1fr); }
+  .customer-review-list-v14371 .spreelo-action-v14371 { grid-column:1/-1;grid-row:auto;width:100%; }
+  .customer-review-status-v14371 { grid-column:2; }
+}
+
+/* v143.71 — align operational controls with the same Spreelo action language */
+.home-v14369-operation-actions button,
+.home-v14369-open-post,
+.home-v14369-history-button {
+  border-radius:9px !important;font-weight:900 !important;transition:.16s ease;
+}
+.home-v14369-pause {
+  border:1px solid #dfe4eb !important;background:linear-gradient(135deg,#fff,#fbf9ff) !important;color:#354056 !important;box-shadow:0 4px 12px rgba(26,35,51,.04);
+}
+.home-v14369-pause:hover { color:#c95132 !important;border-color:#efc5b8 !important;background:#fff9f5 !important;transform:translateY(-1px); }
+.home-v14369-end { border:1px solid transparent !important;background:transparent !important;color:#b45b46 !important; }
+.home-v14369-end:hover { background:#fff4f0 !important;border-color:#f1d3c9 !important; }
+.home-v14369-open-post { background:linear-gradient(135deg,#172033,#0d1828) !important;box-shadow:0 6px 16px rgba(23,32,51,.11),inset 3px 0 0 #ed6846 !important; }
+.home-v14370-module { overflow:visible !important; }
+.home-v14370-module .home-v14369-section-heading { border-radius:18px 18px 0 0; }
+.home-v14370-module .home-v14369-operation-list { border-radius:0 0 18px 18px;overflow:hidden; }
+.home-v14371-help[open] { z-index:150; }

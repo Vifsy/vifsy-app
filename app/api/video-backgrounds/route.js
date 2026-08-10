@@ -12,13 +12,6 @@ function getBearerToken(request) {
   return header.startsWith("Bearer ") ? header.slice(7).trim() : "";
 }
 
-function getAdminValues(name) {
-  return String(process.env[name] || "")
-    .split(",")
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean);
-}
-
 function normalizeText(value, maxLength = 160) {
   return String(value || "")
     .replace(/\s+/g, " ")
@@ -99,20 +92,14 @@ async function getAdminContext(request) {
     return { error: "Your login session is not valid.", status: 401 };
   }
 
-  const adminEmails = getAdminValues("SPREELO_ADMIN_EMAILS");
-  const adminUserIds = getAdminValues("SPREELO_ADMIN_USER_IDS");
-  const email = String(user.email || "").toLowerCase();
-  const isConfigured = adminEmails.length > 0 || adminUserIds.length > 0;
-  const isAdmin = adminEmails.includes(email) || adminUserIds.includes(String(user.id).toLowerCase());
-
-  if (!isConfigured) {
-    return {
-      error: "Set SPREELO_ADMIN_EMAILS or SPREELO_ADMIN_USER_IDS in Vercel before managing the shared background library.",
-      status: 503,
-      configurationMissing: true,
-      user,
-    };
-  }
+  const primaryAdminEmail = String(
+    process.env.SPREELO_PRIMARY_ADMIN_EMAIL ||
+      "johan@foldern.com"
+  )
+    .trim()
+    .toLowerCase();
+  const email = String(user.email || "").trim().toLowerCase();
+  const isAdmin = Boolean(primaryAdminEmail && email === primaryAdminEmail);
 
   if (!isAdmin) {
     return { error: "This page is only available to Spreelo administrators.", status: 403, user };

@@ -223,7 +223,7 @@ export default function EditPostPage() {
       const { data, error } = await supabase
         .from("posts")
         .select(
-          "id, user_id, brand_profile_id, platform, tone, language, post_type, idea, content, status, created_at, updated_at, source, source_label, automation_rule_id, approval_required, approved_at, published_at, scheduled_for, image_url, image_status, image_storage_path, image_prompt, video_url, video_status, video_storage_path, video_error, content_format"
+          "id, user_id, brand_profile_id, platform, tone, language, post_type, idea, content, status, created_at, updated_at, source, source_label, automation_rule_id, approval_required, approved_at, published_at, scheduled_for, image_url, image_status, image_storage_path, image_prompt, video_url, video_status, video_storage_path, video_error, content_format, admin_review_status"
         )
         .eq("id", postId)
         .eq("user_id", user.id)
@@ -310,7 +310,7 @@ export default function EditPostPage() {
       .eq("id", postId)
       .eq("user_id", user.id)
       .select(
-        "id, user_id, brand_profile_id, platform, tone, language, post_type, idea, content, status, created_at, updated_at, source, source_label, automation_rule_id, approval_required, approved_at, published_at, scheduled_for, image_url, image_status, image_storage_path, image_prompt, video_url, video_status, video_storage_path, video_error, content_format"
+        "id, user_id, brand_profile_id, platform, tone, language, post_type, idea, content, status, created_at, updated_at, source, source_label, automation_rule_id, approval_required, approved_at, published_at, scheduled_for, image_url, image_status, image_storage_path, image_prompt, video_url, video_status, video_storage_path, video_error, content_format, admin_review_status"
       )
       .single();
 
@@ -367,7 +367,7 @@ export default function EditPostPage() {
       .eq("id", postId)
       .eq("user_id", user.id)
       .select(
-        "id, user_id, brand_profile_id, platform, tone, language, post_type, idea, content, status, created_at, updated_at, source, source_label, automation_rule_id, approval_required, approved_at, published_at, scheduled_for, image_url, image_status, image_storage_path, image_prompt, video_url, video_status, video_storage_path, video_error, content_format"
+        "id, user_id, brand_profile_id, platform, tone, language, post_type, idea, content, status, created_at, updated_at, source, source_label, automation_rule_id, approval_required, approved_at, published_at, scheduled_for, image_url, image_status, image_storage_path, image_prompt, video_url, video_status, video_storage_path, video_error, content_format, admin_review_status"
       )
       .single();
 
@@ -438,6 +438,26 @@ export default function EditPostPage() {
           <br />
           <a className="primary-button" href="/">
             {t("posts.backToDashboard")}
+          </a>
+        </section>
+      </AppLayout>
+    );
+  }
+
+  const customerReadyAdminStates = new Set(["approved_by_spreelo", "released", "not_required"]);
+  const waitingForInternalReview =
+    post.status === "pending_approval" &&
+    !customerReadyAdminStates.has(String(post.admin_review_status || "").toLowerCase());
+
+  if (waitingForInternalReview) {
+    return (
+      <AppLayout active="dashboard">
+        <section className="post-customer-not-ready-v14371">
+          <span><Sparkles size={22} /></span>
+          <h3>{t("posts.preparingTitle")}</h3>
+          <p>{t("posts.preparingText")}</p>
+          <a className="primary-button" href="/review?view=queue">
+            {t("posts.backToReviewQueue")}
           </a>
         </section>
       </AppLayout>

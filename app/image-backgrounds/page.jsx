@@ -288,7 +288,7 @@ export default function ImageBackgroundsPage() {
 
         {configurationMissing ? (
           <div className="video-backgrounds-alert warning">
-            <ShieldAlert size={18} /> Configure SPREELO_ADMIN_EMAILS or SPREELO_ADMIN_USER_IDS to unlock the shared library.
+            <ShieldAlert size={18} /> Configure SPREELO_PRIMARY_ADMIN_EMAIL if the primary admin is not johan@foldern.com.
           </div>
         ) : null}
         {error ? <div className="video-backgrounds-alert error">{error}</div> : null}
