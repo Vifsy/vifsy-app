@@ -78,6 +78,6 @@ for (const key of [
   assert.ok(labels.includes(key), `English label missing ${key}`);
   assert.ok(sv.includes(key), `Swedish built-in label missing ${key}`);
 }
-assert.ok(cache.includes('TRANSLATION_CACHE_VERSION = "v18"'), "translation cache version must be v18");
+assert.ok(cache.includes('TRANSLATION_CACHE_VERSION = "v19"'), "translation cache version must be v19");
 
 console.log("v143.78 trial/subscription lifecycle regression checks passed.");

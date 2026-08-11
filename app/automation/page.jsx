@@ -9949,8 +9949,8 @@ function blockFormatCardClickAfterDrag(event) {
                 </div>
                 <div className="plan-v14341-studio-hero-art" aria-hidden="true">
                   <picture>
-                    <source media="(max-width: 760px)" srcSet="/backgrounds/spreelo-studio-hero-mobile-v143-39.svg" />
-                    <img src="/backgrounds/spreelo-ai-content-studio-hero-wide-v143-48.png" alt="" />
+                    <source media="(max-width: 760px)" srcSet="/backgrounds/spreelo-ai-studio-hero-mobile-v14379.png" />
+                    <img src="/backgrounds/spreelo-ai-studio-hero-desktop-v14379.png" alt="" />
                   </picture>
                 </div>
                 <div className="plan-v95-header-actions">

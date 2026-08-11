@@ -6,9 +6,24 @@ import { supabase } from "../lib/supabaseClient";
 import { useUiText } from "../lib/i18n/useUiText";
 
 const PLANS = [
-  { key: "starter", name: "Starter", credits: 150, month: 299, year: 2990, monthLookup: "spreelo_starter_monthly", yearLookup: "spreelo_starter_yearly", rank: 1 },
-  { key: "growth", name: "Growth", credits: 350, month: 599, year: 5990, monthLookup: "spreelo_growth_monthly", yearLookup: "spreelo_growth_yearly", featured: true, rank: 2 },
-  { key: "pro", name: "Pro", credits: 750, month: 999, year: 9990, monthLookup: "spreelo_pro_monthly", yearLookup: "spreelo_pro_yearly", rank: 3 },
+  {
+    key: "starter", name: "Starter", credits: 150, month: 299, year: 2990,
+    monthLookup: "spreelo_starter_monthly", yearLookup: "spreelo_starter_yearly", rank: 1,
+    audienceKey: "billing.planAudienceStarter",
+    featureKeys: ["billing.aiContent", "billing.scheduling", "billing.campaigns", "billing.featureStarterPace", "billing.featureStarterFit"],
+  },
+  {
+    key: "growth", name: "Growth", credits: 350, month: 599, year: 5990,
+    monthLookup: "spreelo_growth_monthly", yearLookup: "spreelo_growth_yearly", featured: true, rank: 2,
+    audienceKey: "billing.planAudienceGrowth",
+    featureKeys: ["billing.aiContent", "billing.scheduling", "billing.campaigns", "billing.featureGrowthPace", "billing.featureGrowthFormats", "billing.featureGrowthFit"],
+  },
+  {
+    key: "pro", name: "Pro", credits: 750, month: 999, year: 9990,
+    monthLookup: "spreelo_pro_monthly", yearLookup: "spreelo_pro_yearly", rank: 3,
+    audienceKey: "billing.planAudiencePro",
+    featureKeys: ["billing.aiContent", "billing.scheduling", "billing.campaigns", "billing.featureProPace", "billing.featureProFormats", "billing.featureProFit"],
+  },
 ];
 
 const CREDIT_PACKS = [
@@ -210,6 +225,8 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
         <button type="button" className={interval === "year" ? "active" : ""} onClick={() => setInterval("year")}>{t("billing.yearly")} <span>{t("billing.twoMonthsFree")}</span></button>
       </div>
 
+      <div className="stripe-billing-main-grid">
+        <div className="stripe-billing-plan-area">
       <div className="stripe-plan-grid">
         {PLANS.map((plan) => {
           const selected = currentPlan === plan.key && billing?.subscription_interval === interval;
@@ -229,12 +246,11 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
             <article key={plan.key} className={`stripe-plan-card ${plan.featured ? "featured" : ""} ${selected ? "current" : ""}`}>
               {plan.featured && <span className="stripe-plan-recommended"><Sparkles size={13} />{t("billing.recommended")}</span>}
               <div className="stripe-plan-name"><h3>{plan.name}</h3>{selected && <span><Check size={12} />{t("billing.current")}</span>}</div>
+              <span className={`stripe-plan-audience ${plan.key}`}>{t(plan.audienceKey)}</span>
               <div className="stripe-plan-price"><strong>{price.toLocaleString("sv-SE")} kr</strong><span>/{interval === "month" ? t("billing.monthShort") : t("billing.yearShort")}</span></div>
-              <p>{t("billing.creditsPerMonth", { count: plan.credits })}</p>
+              <p className="stripe-plan-credit-line">{t("billing.creditsPerMonth", { count: plan.credits })}</p>
               <ul>
-                <li><Check size={14} />{t("billing.aiContent")}</li>
-                <li><Check size={14} />{t("billing.scheduling")}</li>
-                <li><Check size={14} />{t("billing.campaigns")}</li>
+                {plan.featureKeys.map((featureKey) => <li key={featureKey}><Check size={15} />{t(featureKey)}</li>)}
               </ul>
               <button
                 type="button"
@@ -251,6 +267,9 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
         })}
       </div>
 
+        </div>
+
+        <aside className="stripe-billing-side-rail">
       <div className="stripe-credit-packs">
         <div className="stripe-credit-packs-copy">
           <p className="eyebrow">{t("billing.extraCreditsEyebrow")}</p>
@@ -269,7 +288,14 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
         </div>
       </div>
 
+        </aside>
+      </div>
+
       {!canBuyExtraCredits && <p className="stripe-billing-pack-note">{t("billing.extraCreditsRequiresSubscription")}</p>}
+      <div className="stripe-credit-explainer">
+        <Sparkles size={18} />
+        <div><strong>{t("billing.howCreditsWorkTitle")}</strong><p>{t("billing.howCreditsWorkText")}</p></div>
+      </div>
       <p className="stripe-billing-footnote">{t("billing.managedPaymentsNote")}</p>
       {message && <p className="stripe-billing-message">{message}</p>}
     </section>

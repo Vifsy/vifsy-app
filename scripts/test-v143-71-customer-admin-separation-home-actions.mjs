@@ -59,7 +59,7 @@ for (const key of [
 ]) {
   expect(builtIn.includes(`"${key}"`), `Missing Swedish built-in label ${key}.`);
 }
-expect(/TRANSLATION_CACHE_VERSION = "v1[5678]"/.test(uiText), 'UI translation cache must include the v143.71 labels or a later refresh.');
+expect(/TRANSLATION_CACHE_VERSION = "v1[56789]"/.test(uiText), 'UI translation cache must include the v143.71 labels or a later refresh.');
 expect(css.includes('.home-v14335-main { gap:14px; }'), 'Home vertical rhythm must be tightened.');
 expect(css.includes('.admin-approvals-page.admin-v74-approvals-page { gap:14px'), 'Admin review vertical rhythm must be tightened.');
 expect(css.includes('.customer-review-page-v14371') && css.includes('.spreelo-action-v14371'), 'Customer review and Spreelo action styles must exist.');

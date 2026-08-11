@@ -30,7 +30,7 @@ for (const key of ['dashboard.contentHistory', 'dashboard.planHistory', 'admin.a
   expect(labels.includes(`"${key}"`), `Missing English source label ${key}.`);
   expect(builtIn.includes(`"${key}"`), `Missing Swedish built-in label ${key}.`);
 }
-expect(/TRANSLATION_CACHE_VERSION = "v1[45678]"/.test(uiText), 'Translation cache must be refreshed so newly added labels are fetched in other languages.');
+expect(/TRANSLATION_CACHE_VERSION = "v1[456789]"/.test(uiText), 'Translation cache must be refreshed so newly added labels are fetched in other languages.');
 expect(css.includes('home-v14370-review-hub') && css.includes('home-v14370-module') && css.includes('admin-v14370-review-list'), 'v143.70 Spreelo Home/review visual styles must exist.');
 
 console.log('v143.70 Spreelo Home/review queue regression checks passed');

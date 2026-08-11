@@ -49,7 +49,7 @@ expect(automation.includes('config[`available_${currentPlanKey}`] !== false'), '
 expect(automation.includes('config.display_label || translateContentTypeShortLabel(type)'), 'Customer-visible name overrides must be respected.');
 expect(dashboard.includes('href="/admin/content-credits"'), 'Admin dashboard must link to Content & Credits.');
 expect(css.includes('v143.74 — Admin Content & Credits economics control center'), 'v143.74 styles are missing.');
-expect(uiText.includes('TRANSLATION_CACHE_VERSION = "v18"'), 'Translation cache must be refreshed for v143.74 labels.');
+expect(uiText.includes('TRANSLATION_CACHE_VERSION = "v19"'), 'Translation cache must include the current refreshed label version.');
 expect(labels.includes('"admin.contentCredits.title": "Content & Credits"'), 'English source labels are missing.');
 expect(sv.includes('"admin.contentCredits.title": "Innehåll & krediter"'), 'Swedish critical fallback labels are missing.');
 

@@ -48,7 +48,7 @@ expect(css.includes('home-v14369-operation-row') && css.includes('home-v14369-hi
 for (const key of ['dashboard.recurringSchedules', 'dashboard.scheduledPostsBox', 'dashboard.calendarCampaignsBox', 'dashboard.reviewNoticeHelp', 'admin.approvals.manualOverride', 'admin.approvals.openProductSource']) {
   expect(labels.includes(`"${key}"`), `Missing i18n source key ${key}.`);
 }
-expect(/TRANSLATION_CACHE_VERSION = "v1[45678]"/.test(uiText), 'UI translation cache must be bumped for the new labels.');
+expect(/TRANSLATION_CACHE_VERSION = "v1[456789]"/.test(uiText), 'UI translation cache must be bumped for the new labels.');
 
 // Durable history migration must preserve rows and release reserved credits.
 expect(migration.includes("plan_state text not null default 'active'") && migration.includes('plan_ended_at timestamptz'), 'Lifecycle columns must be created.');

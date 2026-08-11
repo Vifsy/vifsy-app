@@ -5,7 +5,7 @@ import AppLayout from "../../components/AppLayout";
 import StripeBillingPanel from "../../components/StripeBillingPanel";
 import { supabase } from "../../lib/supabaseClient";
 import { useUiText } from "../../lib/i18n/useUiText";
-import { Bell, CreditCard, Languages, ShieldCheck, UserRound } from "lucide-react";
+import { Bell, ChevronRight, CreditCard, Languages, Mail, ShieldCheck, UserRound } from "lucide-react";
 import {
   SUPPORTED_UI_LOCALES,
   getUiLanguageName,
@@ -484,94 +484,84 @@ export default function Settings() {
 
   return (
     <AppLayout active="settings">
-      <div className="settings-v14315-page settings-v14339-page">
-        <header className="settings-v14339-hero">
-          <div>
-            <p className="eyebrow">{t("settings.eyebrow")}</p>
-            <h2>{t("settings.title")}</h2>
-            <p>{t("settings.heroText")}</p>
-          </div>
-          <span className="settings-v14339-hero-art" aria-hidden="true" />
-        </header>
-
-        <section className="settings-v14339-grid">
-          <article className="settings-v14339-card">
-            <span className="settings-v14339-icon coral"><UserRound size={20} /></span>
-            <div className="settings-v14339-card-copy">
-              <p className="eyebrow">{t("settings.accountEyebrow")}</p>
-              <h3>{t("settings.accountTitle")}</h3>
-              <p>{t("settings.accountText")}</p>
-              <label>{t("settings.signedInAs")}</label>
-              <div className="settings-v14339-value">{currentUserEmail || t("settings.signedInUserFallback")}</div>
+      <div className="settings-v14315-page settings-v14339-page settings-v14379-page">
+        <section className="settings-v14379-overview">
+          <header className="settings-v14339-hero settings-v14379-hero">
+            <div>
+              <p className="eyebrow">{t("settings.eyebrow")}</p>
+              <h2>{t("settings.title")}</h2>
+              <p>{t("settings.heroText")}</p>
             </div>
-          </article>
+          </header>
 
-          <article className="settings-v14339-card">
-            <span className="settings-v14339-icon amber"><Languages size={20} /></span>
-            <div className="settings-v14339-card-copy">
-              <p className="eyebrow">{t("settings.languageEyebrow")}</p>
-              <h3>{t("settings.languageTitle")}</h3>
-              <p>{t("settings.languageText")}</p>
-              <label>{t("settings.appLanguage")}</label>
-              <select className="input" value={recommendedLocale} onChange={(event) => handleLanguageChange(event.target.value)} disabled={savingLanguage}>
-                {!recommendedLocale && <option value="">{getUiLanguageName(locale)}</option>}
-                {SUPPORTED_UI_LOCALES.map((item) => <option key={item.locale} value={item.locale}>{item.nativeName || item.language}</option>)}
-              </select>
-              <small>{t("settings.appLanguageHelp")}</small>
-            </div>
-          </article>
+          <section className="settings-v14379-quick-grid" aria-label={t("settings.quickSettingsLabel")}>
+            <article className="settings-v14379-quick-card">
+              <span className="settings-v14339-icon coral"><UserRound size={20} /></span>
+              <div>
+                <h3>{t("settings.accountTitle")}</h3>
+                <p>{t("settings.accountTextShort")}</p>
+                <strong className="settings-v14379-inline-value">{currentUserEmail || t("settings.signedInUserFallback")}</strong>
+              </div>
+              <ChevronRight size={18} aria-hidden="true" />
+            </article>
 
-          <article className="settings-v14339-card settings-v14339-credit-card">
-            <span className="settings-v14339-icon violet"><CreditCard size={20} /></span>
-            <div className="settings-v14339-card-copy">
-              <p className="eyebrow">{t("settings.planEyebrow")}</p>
-              <h3>{t("settings.planTitle")}</h3>
-              <p>{t("settings.planText")}</p>
-              {loadingCredits ? <div className="settings-v14339-skeleton" /> : (
-                <>
-                  <div className="settings-v14339-plan-row"><span>{t("settings.currentPlan")}</span><strong>{planName}</strong></div>
-                  <div className="settings-v14339-credit-number"><strong>{creditRemaining}</strong><span>/ {creditLimit || "—"} {t("layout.creditsLeft")}</span></div>
-                  <div className="settings-v14339-credit-track"><i style={{ width: `${creditPercent}%` }} /></div>
-                  <div className="settings-v14339-plan-row muted"><span>{t("settings.renews")}</span><strong>{renewalLabel}</strong></div>
-                </>
-              )}
-            </div>
-          </article>
+            <article className="settings-v14379-quick-card settings-v14379-language-card">
+              <span className="settings-v14339-icon amber"><Languages size={20} /></span>
+              <div>
+                <h3>{t("settings.languageTitle")}</h3>
+                <p>{t("settings.languageTextShort")}</p>
+                <select className="input" value={recommendedLocale} onChange={(event) => handleLanguageChange(event.target.value)} disabled={savingLanguage}>
+                  {!recommendedLocale && <option value="">{getUiLanguageName(locale)}</option>}
+                  {SUPPORTED_UI_LOCALES.map((item) => <option key={item.locale} value={item.locale}>{item.nativeName || item.language}</option>)}
+                </select>
+              </div>
+            </article>
 
-          <article className="settings-v14339-card">
-            <span className="settings-v14339-icon green"><CreditCard size={20} /></span>
-            <div className="settings-v14339-card-copy">
-              <p className="eyebrow">{t("settings.subscriptionEyebrow")}</p>
-              <h3>{t("settings.subscriptionTitle")}</h3>
-              <p>{t("settings.subscriptionText")}</p>
-              <div className="settings-v14339-status"><i />{creditBalance?.subscription_status ? String(creditBalance.subscription_status).replace(/_/g, " ") : t("billing.notConnected")}</div>
-              <div className="settings-v14339-plan-row"><span>{t("settings.planStatus")}</span><strong>{planName}</strong></div>
-              <small>{t("settings.billingManagedByStripe")}</small>
-            </div>
-          </article>
+            <article className="settings-v14379-quick-card">
+              <span className="settings-v14339-icon violet"><CreditCard size={20} /></span>
+              <div>
+                <h3>{t("settings.planSubscriptionTitle")}</h3>
+                <p>{t("settings.planSubscriptionText")}</p>
+                <div className="settings-v14379-plan-summary">
+                  <strong>{planName}</strong>
+                  <span>{creditRemaining} / {creditLimit || "—"} {t("layout.creditsLeft")}</span>
+                </div>
+              </div>
+              <ChevronRight size={18} aria-hidden="true" />
+            </article>
 
-          <article className="settings-v14339-card compact-info">
-            <span className="settings-v14339-icon lavender"><Bell size={20} /></span>
-            <div className="settings-v14339-card-copy">
-              <p className="eyebrow">{t("settings.notificationsEyebrow")}</p>
-              <h3>{t("settings.notificationsTitle")}</h3>
-              <p>{t("settings.notificationsText")}</p>
-            </div>
-          </article>
+            <article className="settings-v14379-quick-card">
+              <span className="settings-v14339-icon lavender"><Bell size={20} /></span>
+              <div>
+                <h3>{t("settings.alertsTitle")}</h3>
+                <p>{t("settings.alertsText")}</p>
+              </div>
+              <ChevronRight size={18} aria-hidden="true" />
+            </article>
 
-          <article className="settings-v14339-card compact-info">
-            <span className="settings-v14339-icon blue"><ShieldCheck size={20} /></span>
-            <div className="settings-v14339-card-copy">
-              <p className="eyebrow">{t("settings.securityEyebrow")}</p>
-              <h3>{t("settings.securityTitle")}</h3>
-              <p>{t("settings.securityText")}</p>
-            </div>
-          </article>
+            <article className="settings-v14379-quick-card">
+              <span className="settings-v14339-icon blue"><ShieldCheck size={20} /></span>
+              <div>
+                <h3>{t("settings.securityTitle")}</h3>
+                <p>{t("settings.securityText")}</p>
+              </div>
+              <ChevronRight size={18} aria-hidden="true" />
+            </article>
+
+            <article className="settings-v14379-quick-card">
+              <span className="settings-v14339-icon green"><Mail size={20} /></span>
+              <div>
+                <h3>{t("settings.notificationsTitle")}</h3>
+                <p>{t("settings.notificationsText")}</p>
+              </div>
+              <ChevronRight size={18} aria-hidden="true" />
+            </article>
+          </section>
         </section>
 
         <StripeBillingPanel initialBalance={creditBalance} onBalanceChange={setCreditBalance} />
 
-        <section className="settings-danger-zone settings-danger-zone-compact settings-v14339-danger">
+        <section className="settings-danger-zone settings-danger-zone-compact settings-v14339-danger settings-v14379-danger">
           <div>
             <p className="eyebrow danger-eyebrow">{t("settings.dangerEyebrow")}</p>
             <h3>{t("settings.deleteTitle")}</h3>
