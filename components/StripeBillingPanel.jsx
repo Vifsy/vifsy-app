@@ -228,6 +228,63 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
   }, [billing, currentPlan, t]);
 
   return (
+    <section id="spreelo-plans" className="stripe-reference-billing">
+      <div className="stripe-reference-layout">
+        <div className="stripe-reference-table">
+          <div className="stripe-reference-labels">
+            <div className="head" />
+            <div><strong>Pris</strong><small>Faktureras årligen</small></div>
+            <div><strong>Krediter/månad</strong><small>Återställs varje månad</small></div>
+            <div><strong>Företag</strong></div>
+            <div><strong>Sociala konton</strong></div>
+            <div><strong>Rullande planer</strong><small>Innehållsplaner</small></div>
+            <div className="fit"><span>Passar för</span></div>
+            <div className="action" />
+          </div>
+          {PLANS.map((plan) => {
+            const selected = currentPlan === plan.key;
+            const lookup = plan.yearLookup;
+            const isUpgrade = canChangePlan && plan.rank > currentRank;
+            const isImmediatePaidChange = Boolean(canChangePlan && plan.rank > currentRank);
+            const disabled = busyLookup === lookup || (selected && hasStripeSubscription) || (isTrialing && !selected);
+            let buttonLabel = selected && hasStripeSubscription ? "Hantera min plan" : `Välj ${plan.name}`;
+            if (!selected && isUpgrade) buttonLabel = `Uppgradera till ${plan.name}`;
+            if (!selected && canChangePlan && plan.rank < currentRank) buttonLabel = `Nedgradera till ${plan.name}`;
+            const fitText = plan.key === "starter"
+              ? "Småföretag som vill komma igång med konsekvent innehåll och publicering."
+              : plan.key === "growth"
+                ? "Växande varumärken som hanterar flera kanaler och behöver mer kapacitet."
+                : "Byråer och marknadsföringsteam som driver flera varumärken och större innehållsproduktion.";
+            return (
+              <article key={plan.key} className={`stripe-reference-plan ${selected ? "current" : ""}`}>
+                <header><h2>{plan.name}</h2>{selected ? <span>Nuvarande plan</span> : null}</header>
+                <div className="price"><strong>{plan.year.toLocaleString("sv-SE")} kr</strong><small>/år</small></div>
+                <div>{plan.credits} krediter/månad</div>
+                <div>{plan.brands} {plan.brands === 1 ? "företag" : "företag"}</div>
+                <div>{plan.socialAccounts === 1 ? "1 socialt konto" : `upp till ${plan.socialAccounts} sociala konton`}</div>
+                <div>{plan.recurringPlans === 1 ? "1 rullande innehållsplan" : `upp till ${plan.recurringPlans} rullande innehållsplaner`}</div>
+                <div className="fit">{fitText}</div>
+                <div className="action"><button type="button" disabled={disabled} onClick={() => selected && hasStripeSubscription ? null : hasStripeSubscription ? changeSubscription(lookup, isImmediatePaidChange) : startCheckout(lookup, Boolean(trialInfo?.eligible))}>{busyLookup === lookup ? <LoaderCircle className="billing-spin" /> : null}{buttonLabel}</button></div>
+              </article>
+            );
+          })}
+        </div>
+        <aside className="stripe-reference-packs">
+          <h2>Fyll på extra krediter</h2>
+          <p>Engångsköp av krediter läggs till ditt saldo och förfaller inte.</p>
+          <div>{CREDIT_PACKS.map((pack) => <article key={pack.lookup}><span>+&nbsp; {pack.credits} krediter</span><strong>{pack.price} kr</strong><button type="button" disabled={Boolean(busyLookup) || Boolean(busyAction) || !canBuyExtraCredits} onClick={() => startCheckout(pack.lookup, false)}>{busyLookup === pack.lookup ? <LoaderCircle className="billing-spin" /> : "Köp"}</button></article>)}</div>
+          <small>Priser inkl. moms.</small>
+          <a href="#spreelo-credit-info">Läs mer om krediter →</a>
+        </aside>
+      </div>
+      <div id="spreelo-credit-info" className="stripe-reference-benefits"><span><Check />Detta ingår i alla planer</span><span>Alla innehållstyper</span><span>AI-bilder</span><span>AI-video / Reels</span><span>Kampanjer</span><span>Automatisk publicering</span></div>
+      <p className="stripe-reference-footnote">Planerna förnyas årligen. Du kan när som helst uppgradera, nedgradera eller avsluta.</p>
+      {message ? <p className="stripe-billing-message">{message}</p> : null}
+      {paymentLink ? <a className="stripe-billing-payment-link" href={paymentLink} target="_blank" rel="noreferrer">{t("billing.openPayment")} <ExternalLink /></a> : null}
+    </section>
+  );
+
+  return (
     <section id="spreelo-plans" className="stripe-billing-v14377 stripe-billing-v14378">
       <header className="stripe-billing-heading">
         <div>

@@ -1,0 +1,168 @@
+/* v143.87 — calibration against the six approved 1536/1643px reference renders. */
+@media (min-width: 801px) {
+  html body .app-shell.spreelo-shell:has(.settings-reference-page),
+  html body .app-shell.spreelo-shell:has(.home-reference-page) { grid-template-columns:255px minmax(0,1fr) !important; }
+  html body .app-shell.spreelo-shell:has(.settings-reference-page) > .sidebar.spreelo-sidebar,
+  html body .app-shell.spreelo-shell:has(.home-reference-page) > .sidebar.spreelo-sidebar { width:255px !important; min-width:255px !important; }
+}
+
+html body .content.spreelo-content:has(.settings-reference-page) { padding:34px 40px 36px !important; background:#fbfbfa !important; }
+html body .settings-reference-page { display:block !important; width:100% !important; max-width:none !important; margin:0 !important; padding:0 !important; color:#101d30 !important; font-size:14px !important; }
+html body .settings-reference-page > .settings-v14379-overview,
+html body .settings-reference-page > .settings-v14379-danger { display:none !important; }
+html body .settings-reference-page .settings-reference-header { min-height:72px !important; }
+html body .settings-reference-page .settings-reference-header h1 { color:#081527 !important; font-size:44px !important; line-height:1 !important; letter-spacing:-.045em !important; }
+html body .settings-reference-page .settings-reference-tabs { margin-top:20px !important; }
+html body .settings-reference-page .settings-reference-tabs button { min-height:48px !important; padding:0 14px !important; color:#536178 !important; font-size:14px !important; }
+html body .settings-reference-page .settings-reference-tabs button.active { color:#0c192b !important; }
+html body .settings-reference-page .settings-reference-workspace { margin-top:34px !important; }
+html body .settings-reference-page .settings-ref-labelled-section > div:first-child h3,
+html body .settings-reference-page .settings-ref-section-intro h2 { color:#101d30 !important; font-size:16px !important; }
+html body .settings-reference-page .settings-ref-labelled-section > div:first-child p { color:#5f6d82 !important; font-size:13px !important; line-height:1.55 !important; }
+html body .settings-reference-page .settings-ref-rows strong,
+html body .settings-reference-page .settings-ref-rows span,
+html body .settings-reference-page .settings-ref-rows input,
+html body .settings-reference-page .settings-ref-rows button,
+html body .settings-reference-page .settings-ref-rows em { font-size:14px !important; }
+html body .settings-reference-page .settings-ref-action-rows span strong { color:#101d30 !important; font-size:14px !important; }
+html body .settings-reference-page .settings-ref-action-rows span small { color:#5e6c81 !important; font-size:13px !important; }
+html body .settings-reference-page .settings-ref-action-rows .danger strong { color:#d32d1d !important; }
+html body .settings-reference-page .settings-ref-account-aside h2,
+html body .settings-reference-page .settings-ref-security-aside h2,
+html body .settings-reference-page .settings-ref-delivery h2 { color:#101d30 !important; font-size:16px !important; }
+html body .settings-reference-page .settings-ref-account-aside dt { font-size:13px !important; }
+html body .settings-reference-page .settings-ref-account-aside dd { font-size:16px !important; }
+
+html body .settings-reference-page .settings-ref-card strong { color:#101d30 !important; font-size:14px !important; }
+html body .settings-reference-page .settings-ref-card small,
+html body .settings-reference-page .settings-ref-card span { color:#526078 !important; font-size:13px !important; }
+html body .settings-reference-page .settings-ref-card em { color:#188447 !important; font-size:12px !important; }
+html body .settings-reference-page .settings-ref-security-aside h3 { color:#101d30 !important; font-size:17px !important; }
+html body .settings-reference-page .settings-ref-security-aside > p { color:#607087 !important; font-size:13px !important; }
+html body .settings-reference-page .settings-ref-security-aside li { color:#101d30 !important; font-size:12px !important; }
+
+html body .settings-reference-page .settings-ref-notification-table > header strong,
+html body .settings-reference-page .settings-ref-notification-table section h2 { color:#101d30 !important; font-size:16px !important; }
+html body .settings-reference-page .settings-ref-notification-table section > div { color:#101d30 !important; font-size:14px !important; }
+html body .settings-reference-page .settings-ref-delivery p,
+html body .settings-reference-page .settings-ref-delivery label { color:#526078 !important; font-size:13px !important; }
+html body .settings-reference-page .settings-ref-delivery p strong { color:#101d30 !important; font-size:15px !important; }
+
+html body .settings-reference-page .settings-ref-language-section h2 { color:#101d30 !important; font-size:15px !important; }
+html body .settings-reference-page .settings-ref-language-section p { color:#5d6c82 !important; font-size:13px !important; }
+html body .settings-reference-page .settings-ref-language-list span { color:#101d30 !important; font-size:14px !important; }
+html body .settings-reference-page .settings-ref-language-list em,
+html body .settings-reference-page .settings-ref-language-list strong,
+html body .settings-reference-page .settings-ref-language-section.date-time label { font-size:13px !important; }
+
+html body .settings-reference-page .settings-ref-benefits { color:#fff !important; }
+html body .settings-reference-page .settings-ref-benefits strong { color:#fff !important; font-size:15px !important; }
+html body .settings-reference-page .settings-ref-benefits small { color:#d7dfeb !important; font-size:13px !important; }
+html body .settings-reference-page .settings-ref-pause,
+html body .settings-reference-page .settings-ref-pause span,
+html body .settings-reference-page .settings-ref-pause p { color:#fff !important; }
+
+html body .settings-reference-page > .stripe-reference-billing { margin-top:34px !important; color:#101d30 !important; }
+html body .settings-reference-page .stripe-reference-layout { display:grid !important; grid-template-columns:minmax(0,1fr) 235px !important; gap:32px !important; align-items:stretch !important; }
+html body .settings-reference-page .stripe-reference-table { display:grid !important; grid-template-columns:195px repeat(3,minmax(0,1fr)) !important; border:1px solid #d9dde3 !important; background:#fff !important; }
+html body .settings-reference-page .stripe-reference-labels,
+html body .settings-reference-page .stripe-reference-plan { display:grid !important; grid-template-rows:74px 78px 70px 66px 66px 88px 150px 84px !important; min-width:0 !important; }
+html body .settings-reference-page .stripe-reference-labels { padding:0 24px !important; }
+html body .settings-reference-page .stripe-reference-plan { border-left:1px solid #dfe2e7 !important; }
+html body .settings-reference-page .stripe-reference-plan.current { background:linear-gradient(180deg,#fff1eb,#fffaf8) !important; }
+html body .settings-reference-page .stripe-reference-labels > div,
+html body .settings-reference-page .stripe-reference-plan > div,
+html body .settings-reference-page .stripe-reference-plan > header { display:flex !important; align-items:center !important; min-width:0 !important; padding:0 24px !important; border-bottom:1px solid #e2e5e9 !important; }
+html body .settings-reference-page .stripe-reference-labels > div { padding:0 !important; }
+html body .settings-reference-page .stripe-reference-labels .head { border-bottom:0 !important; }
+html body .settings-reference-page .stripe-reference-labels strong,
+html body .settings-reference-page .stripe-reference-labels small { display:block !important; }
+html body .settings-reference-page .stripe-reference-labels strong { color:#101d30 !important; font-size:14px !important; }
+html body .settings-reference-page .stripe-reference-labels small { margin-top:5px !important; color:#5f6d82 !important; font-size:12px !important; }
+html body .settings-reference-page .stripe-reference-labels .fit { color:#101d30 !important; font-size:14px !important; }
+html body .settings-reference-page .stripe-reference-plan > header { justify-content:space-between !important; background:#fff !important; }
+html body .settings-reference-page .stripe-reference-plan.current > header { color:#fff !important; background:#03172a !important; }
+html body .settings-reference-page .stripe-reference-plan h2 { margin:0 !important; color:#101d30 !important; font-size:20px !important; }
+html body .settings-reference-page .stripe-reference-plan.current h2 { color:#fff !important; }
+html body .settings-reference-page .stripe-reference-plan header span { padding:6px 10px !important; border-radius:7px !important; color:#e1462a !important; background:#fff !important; font-size:10px !important; font-weight:800 !important; }
+html body .settings-reference-page .stripe-reference-plan > div { color:#101d30 !important; font-size:13px !important; }
+html body .settings-reference-page .stripe-reference-plan .price { align-items:baseline !important; gap:4px !important; }
+html body .settings-reference-page .stripe-reference-plan .price strong { color:#101d30 !important; font-size:31px !important; letter-spacing:-.04em !important; }
+html body .settings-reference-page .stripe-reference-plan .price small { color:#526078 !important; font-size:12px !important; }
+html body .settings-reference-page .stripe-reference-plan .fit { align-items:flex-start !important; padding-top:24px !important; color:#28364b !important; font-size:13px !important; line-height:1.45 !important; }
+html body .settings-reference-page .stripe-reference-plan .action { border-bottom:0 !important; }
+html body .settings-reference-page .stripe-reference-plan .action button { width:100% !important; min-height:43px !important; border:0 !important; border-radius:7px !important; color:#fff !important; background:#03172a !important; font:inherit !important; font-size:12px !important; font-weight:800 !important; }
+html body .settings-reference-page .stripe-reference-plan.current .action button { background:#f4512d !important; opacity:1 !important; }
+html body .settings-reference-page .stripe-reference-packs { display:flex !important; flex-direction:column !important; min-height:676px !important; padding:28px 0 0 !important; }
+html body .settings-reference-page .stripe-reference-packs h2 { margin:0 !important; color:#101d30 !important; font-size:17px !important; }
+html body .settings-reference-page .stripe-reference-packs > p { margin:10px 0 30px !important; color:#526078 !important; font-size:13px !important; line-height:1.45 !important; }
+html body .settings-reference-page .stripe-reference-packs > div { display:grid !important; gap:28px !important; margin-top:auto !important; }
+html body .settings-reference-page .stripe-reference-packs article { display:grid !important; grid-template-columns:1fr auto !important; gap:16px !important; padding:16px 10px 10px !important; border:1px solid #dfe2e7 !important; border-radius:8px !important; background:#fff !important; box-shadow:0 4px 10px rgba(22,34,52,.06) !important; }
+html body .settings-reference-page .stripe-reference-packs article span,
+html body .settings-reference-page .stripe-reference-packs article strong { color:#101d30 !important; font-size:13px !important; }
+html body .settings-reference-page .stripe-reference-packs article button { grid-column:1/-1 !important; min-height:37px !important; border:0 !important; border-radius:6px !important; color:#fff !important; background:#03172a !important; font:inherit !important; font-size:12px !important; font-weight:800 !important; }
+html body .settings-reference-page .stripe-reference-packs > small { margin-top:26px !important; color:#657187 !important; font-size:11px !important; }
+html body .settings-reference-page .stripe-reference-packs > a { margin-top:14px !important; color:#101d30 !important; font-size:12px !important; font-weight:800 !important; text-decoration:none !important; }
+html body .settings-reference-page .stripe-reference-benefits { display:grid !important; grid-template-columns:1.25fr repeat(5,1fr) !important; align-items:center !important; min-height:92px !important; margin-top:32px !important; padding:0 26px !important; border-radius:7px !important; color:#fff !important; background:#03172a !important; }
+html body .settings-reference-page .stripe-reference-benefits span { display:flex !important; align-items:center !important; justify-content:center !important; gap:9px !important; min-height:52px !important; padding:0 14px !important; border-right:1px solid rgba(255,255,255,.18) !important; color:#fff !important; font-size:12px !important; }
+html body .settings-reference-page .stripe-reference-benefits span:last-child { border-right:0 !important; }
+html body .settings-reference-page .stripe-reference-benefits svg { width:18px !important; }
+html body .settings-reference-page .stripe-reference-footnote { margin:18px 0 0 !important; color:#657187 !important; text-align:center !important; font-size:11px !important; }
+
+html body .content.spreelo-content:has(.home-reference-page) { padding:38px 46px 42px !important; background:#fbfbfa !important; }
+html body .home-reference-page { width:100% !important; max-width:none !important; margin:0 !important; }
+html body .home-reference-page .home-reference-header h1 { color:#081527 !important; font-size:48px !important; }
+html body .home-reference-page .home-reference-header p { color:#58667c !important; font-size:16px !important; }
+html body .home-reference-page .home-reference-stats h2 { color:#101d30 !important; font-size:15px !important; }
+html body .home-reference-page .home-reference-stats strong { color:#081527 !important; font-size:38px !important; }
+html body .home-reference-page .home-reference-stats p { color:#6d7788 !important; font-size:13px !important; }
+html body .home-reference-page .home-reference-review,
+html body .home-reference-page .home-reference-review strong,
+html body .home-reference-page .home-reference-review a { color:#fff !important; }
+html body .home-reference-page .home-reference-review strong { font-size:16px !important; }
+html body .home-reference-page .home-reference-review small { color:#d7dfea !important; font-size:12px !important; }
+html body .home-reference-page .home-reference-plans { grid-column:auto !important; }
+html body .home-reference-page .home-reference-workspace { grid-template-columns:minmax(0,1fr) 360px !important; }
+html body .home-reference-page .home-reference-plans > header h2 { color:#101d30 !important; font-size:19px !important; }
+html body .home-reference-page .home-reference-plans article h3 { color:#101d30 !important; font-size:16px !important; }
+html body .home-reference-page .home-reference-plans article p { color:#637087 !important; font-size:12px !important; }
+html body .home-reference-page .home-reference-plans article > strong { color:#101d30 !important; font-size:25px !important; }
+html body .home-reference-page .home-reference-plans article > span,
+html body .home-reference-page .home-reference-plans article > a { color:#101d30 !important; font-size:12px !important; }
+html body .home-reference-page .home-reference-coach h2,
+html body .home-reference-page .home-reference-coach h3,
+html body .home-reference-page .home-reference-coach li a,
+html body .home-reference-page .home-reference-coach li span { color:#101d30 !important; }
+html body .home-reference-page .home-reference-coach > h2 { font-size:20px !important; }
+html body .home-reference-page .home-reference-coach > h3 { font-size:14px !important; }
+html body .home-reference-page .home-reference-coach li a { font-size:12px !important; }
+html body .home-reference-page .home-reference-suggestion small { color:#f34d2c !important; }
+html body .home-reference-page .home-reference-suggestion strong { color:#101d30 !important; font-size:15px !important; }
+html body .home-reference-page .home-reference-suggestion span { color:#536178 !important; font-size:12px !important; }
+html body .home-reference-page .home-reference-suggestion a { color:#fff !important; }
+html body .home-reference-page .home-reference-focus,
+html body .home-reference-page .home-reference-focus h2,
+html body .home-reference-page .home-reference-focus span { color:#fff !important; }
+html body .home-reference-page .home-reference-focus h2 { font-size:19px !important; }
+html body .home-reference-page .home-reference-focus span { font-size:13px !important; }
+html body .home-reference-page .home-reference-focus a { color:#ff5b3b !important; font-size:13px !important; }
+
+@media (max-width:1180px) {
+  html body .home-reference-page .home-reference-workspace { grid-template-columns:1fr !important; }
+  html body .settings-reference-page .stripe-reference-layout { grid-template-columns:1fr !important; }
+  html body .settings-reference-page .stripe-reference-packs { min-height:0 !important; }
+  html body .settings-reference-page .stripe-reference-packs > div { grid-template-columns:repeat(3,minmax(0,1fr)) !important; margin-top:0 !important; }
+}
+@media (max-width:800px) {
+  html body .content.spreelo-content:has(.settings-reference-page),
+  html body .content.spreelo-content:has(.home-reference-page) { padding:20px 16px 32px !important; }
+  html body .settings-reference-page .settings-reference-header h1,
+  html body .home-reference-page .home-reference-header h1 { font-size:31px !important; }
+  html body .settings-reference-page .stripe-reference-table { display:block !important; }
+  html body .settings-reference-page .stripe-reference-labels { display:none !important; }
+  html body .settings-reference-page .stripe-reference-plan { display:block !important; padding:22px !important; border-left:0 !important; border-bottom:1px solid #dfe2e7 !important; }
+  html body .settings-reference-page .stripe-reference-plan > header,
+  html body .settings-reference-page .stripe-reference-plan > div { min-height:52px !important; padding:0 !important; }
+  html body .settings-reference-page .stripe-reference-packs > div { grid-template-columns:1fr !important; }
+  html body .settings-reference-page .stripe-reference-benefits { grid-template-columns:1fr 1fr !important; padding:14px !important; }
+}

@@ -597,7 +597,7 @@ export default function Settings() {
 
   return (
     <AppLayout active="settings">
-      <div className="settings-v14315-page settings-v14339-page settings-v14379-page settings-v14380-page">
+      <div className="settings-reference-page">
         <header className="settings-reference-header">
           <h1>{settingsTabTitle}</h1>
           <div className="settings-reference-credits"><span /><div><small>{isSwedish ? "Nuvarande krediter" : "Current credits"}</small><strong>{creditRemaining} <em>/ {creditLimit || "—"} {isSwedish ? "krediter kvar" : "credits left"}</em></strong></div></div>
