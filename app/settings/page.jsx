@@ -473,7 +473,7 @@ export default function Settings() {
     account: isSwedish ? "Ditt konto" : "Your account",
     security: isSwedish ? "Säkerhet" : "Security",
     notifications: isSwedish ? "Aviseringar" : "Notifications",
-    language: isSwedish ? "Språk & region" : "Language & region",
+    language: isSwedish ? "Språk" : "Language",
     billing: isSwedish ? "Välj rätt plan" : "Choose the right plan",
   }[activeTab];
 
@@ -600,7 +600,7 @@ export default function Settings() {
       <div className="settings-reference-page">
         <header className="settings-reference-header">
           <h1>{settingsTabTitle}</h1>
-          <div className="settings-reference-credits"><span /><div><small>{isSwedish ? "Nuvarande krediter" : "Current credits"}</small><strong>{creditRemaining} <em>/ {creditLimit || "—"} {isSwedish ? "krediter kvar" : "credits left"}</em></strong></div></div>
+          <div className="settings-reference-credits"><span /><div><small>{isSwedish ? "Tillgängliga Spreelo-krediter" : "Available Spreelo credits"}</small><strong>{creditRemaining} <em>{creditLimit ? (isSwedish ? `· ${creditLimit} plan-krediter/mån` : `· ${creditLimit} plan credits/month`) : ""}</em></strong></div></div>
         </header>
         <nav className="settings-reference-tabs" aria-label={t("settings.quickSettingsLabel")}>
           <button type="button" className={activeTab === "account" ? "active" : ""} onClick={() => selectTab("account")}><UserRound />{isSwedish ? "Konto" : "Account"}</button>

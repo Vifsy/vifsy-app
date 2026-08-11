@@ -255,14 +255,19 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
               : plan.key === "growth"
                 ? "Växande varumärken som hanterar flera kanaler och behöver mer kapacitet."
                 : "Byråer och marknadsföringsteam som driver flera varumärken och större innehållsproduktion.";
+            const audienceText = plan.key === "starter"
+              ? "För mindre företag"
+              : plan.key === "growth"
+                ? "För växande varumärken"
+                : "För team med större behov";
             return (
               <article key={plan.key} className={`stripe-reference-plan ${selected ? "current" : ""}`}>
-                <header><h2>{plan.name}</h2>{selected ? <span>Nuvarande plan</span> : null}</header>
+                <header><div><h2>{plan.name}</h2><small>{audienceText}</small></div>{selected ? <span>Nuvarande plan</span> : null}</header>
                 <div className="price"><strong>{plan.year.toLocaleString("sv-SE")} kr</strong><small>/år</small></div>
-                <div>{plan.credits} krediter/månad</div>
-                <div>{plan.brands} {plan.brands === 1 ? "företag" : "företag"}</div>
-                <div>{plan.socialAccounts === 1 ? "1 socialt konto" : `upp till ${plan.socialAccounts} sociala konton`}</div>
-                <div>{plan.recurringPlans === 1 ? "1 rullande innehållsplan" : `upp till ${plan.recurringPlans} rullande innehållsplaner`}</div>
+                <div className="plan-feature credits">{plan.credits} krediter/månad</div>
+                <div className="plan-feature brands">{plan.brands} {plan.brands === 1 ? "företag" : "företag"}</div>
+                <div className="plan-feature social">{plan.socialAccounts === 1 ? "1 socialt konto" : `upp till ${plan.socialAccounts} sociala konton`}</div>
+                <div className="plan-feature recurring">{plan.recurringPlans === 1 ? "1 rullande innehållsplan" : `upp till ${plan.recurringPlans} rullande innehållsplaner`}</div>
                 <div className="fit">{fitText}</div>
                 <div className="action"><button type="button" disabled={disabled} onClick={() => selected && hasStripeSubscription ? null : hasStripeSubscription ? changeSubscription(lookup, isImmediatePaidChange) : startCheckout(lookup, Boolean(trialInfo?.eligible))}>{busyLookup === lookup ? <LoaderCircle className="billing-spin" /> : null}{buttonLabel}</button></div>
               </article>

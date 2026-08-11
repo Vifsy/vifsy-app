@@ -2,43 +2,26 @@
 
 import {
   ArrowRight,
-  CalendarDays,
   CircleCheck,
-  Clock3,
   Download,
-  Flag,
-  Globe2,
-  KeyRound,
   Laptop,
   LockKeyhole,
   LogOut,
   Mail,
-  Moon,
-  Save,
   ShieldCheck,
-  Smartphone,
   Trash2,
 } from "lucide-react";
 import { SUPPORTED_UI_LOCALES } from "../lib/i18n/defaultLabels";
 
-function Toggle({ checked, onChange, label }) {
-  return <label className="settings-ref-toggle" aria-label={label}><input type="checkbox" checked={checked} onChange={onChange} /><i /></label>;
-}
-
-function DarkBenefits({ items }) {
-  return <div className="settings-ref-benefits">{items.map(({ Icon, title, text }) => <div key={title}><span><Icon /></span><p><strong>{title}</strong><small>{text}</small></p></div>)}</div>;
-}
-
 export default function SettingsPanels({
   activeTab, locale, currentUser, currentUserEmail, profileName, setProfileName,
   profileMessage, savingProfile, saveProfile, signOutOtherSessions, exportAccountData,
-  notificationPreferences, setNotificationPreferences, notificationMessage,
-  savingNotifications, saveNotifications, recommendedLocale, savingLanguage,
-  handleLanguageChange, planName, renewalLabel, onDeleteAccount,
+  recommendedLocale, savingLanguage, handleLanguageChange, planName, onDeleteAccount,
 }) {
   const sv = String(locale || "").toLowerCase().startsWith("sv");
   const name = profileName || currentUserEmail?.split("@")[0] || (sv ? "Användare" : "User");
   const initials = name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+  const emailVerified = Boolean(currentUser?.email_confirmed_at || currentUser?.confirmed_at);
 
   if (activeTab === "account") {
     return (
@@ -73,11 +56,6 @@ export default function SettingsPanels({
           {profileMessage && <p className="settings-ref-message">{profileMessage}</p>}
         </div>
         <aside className="settings-ref-account-aside"><h2>{sv ? "Kontoöversikt" : "Account overview"}</h2><dl><dt>{sv ? "Roll" : "Role"}</dt><dd>{sv ? "Ägare" : "Owner"}</dd><dt>{sv ? "Plan" : "Plan"}</dt><dd>{planName}</dd><dt>{sv ? "Medlem sedan" : "Member since"}</dt><dd>{currentUser?.created_at ? new Date(currentUser.created_at).getFullYear() : "—"}</dd></dl><a href="/brand">{sv ? "Hantera arbetsyta" : "Manage workspace"}</a></aside>
-        <DarkBenefits items={[
-          { Icon: ShieldCheck, title: sv ? "Dina uppgifter är skyddade" : "Your information is protected", text: sv ? "Branschledande säkerhet skyddar din data." : "Industry-leading security protects your data." },
-          { Icon: LockKeyhole, title: sv ? "Säker inloggning" : "Secure sign-in", text: sv ? "Stark kryptering och verifierad autentisering." : "Strong encryption and verified authentication." },
-          { Icon: Flag, title: sv ? "Svensk datalagring" : "Swedish data storage", text: sv ? "All data lagras säkert i svenska datacenter." : "All data is stored securely in Swedish data centers." },
-        ]} />
       </section>
     );
   }
@@ -86,60 +64,39 @@ export default function SettingsPanels({
     return (
       <section className="settings-reference-workspace settings-ref-security">
         <div className="settings-ref-security-main">
-          <div className="settings-ref-labelled-section"><div><h3>{sv ? "Inloggning" : "Sign-in"}</h3><p>{sv ? "Hantera hur du loggar in på ditt konto." : "Manage how you sign in to your account."}</p></div><div className="settings-ref-card"><header><LockKeyhole /><span><strong>{sv ? "Lösenordsfri inloggning" : "Passwordless sign-in"}</strong><small>{sv ? "Spreelo använder säkra engångskoder och sparar inget kontolösenord." : "Spreelo uses secure one-time codes and stores no account password."}</small></span><em>{sv ? "Aktiv" : "Active"}</em></header><div><strong>{sv ? "Primär e-post" : "Primary email"}</strong><span>{currentUserEmail}</span><em>{sv ? "Verifierad" : "Verified"}</em></div><div><strong>{sv ? "Inloggningskod" : "Sign-in code"}</strong><span>{sv ? "Skickas via e-post" : "Sent by email"}</span><ArrowRight /></div><div><strong>{sv ? "Senast verifierad" : "Last verified"}</strong><span>{currentUser?.last_sign_in_at ? new Date(currentUser.last_sign_in_at).toLocaleDateString(locale) : "—"}</span></div></div></div>
-          <div className="settings-ref-labelled-section"><div><h3>{sv ? "Aktiva sessioner" : "Active sessions"}</h3><p>{sv ? "Översikt över var du är inloggad." : "Overview of where you are signed in."}</p></div><div className="settings-ref-card sessions"><div><Laptop /><strong>{sv ? "Den här enheten" : "This device"}</strong><em>{sv ? "Aktiv nu" : "Active now"}</em></div></div></div>
-          <div className="settings-ref-labelled-section"><div><h3>{sv ? "Säkerhetsåtgärder" : "Security actions"}</h3><p>{sv ? "Extra skydd för ditt konto och din data." : "Extra protection for your account and data."}</p></div><div className="settings-ref-action-rows"><button type="button" onClick={signOutOtherSessions}><LogOut /><span><strong>{sv ? "Logga ut från andra enheter" : "Sign out other devices"}</strong><small>{sv ? "Behåll den här sessionen och avsluta övriga." : "Keep this session and end all others."}</small></span><ArrowRight /></button></div></div>
+          <div className="settings-ref-labelled-section"><div><h3>{sv ? "Inloggning" : "Sign-in"}</h3><p>{sv ? "Spreelo använder en engångskod i stället för ett lösenord." : "Spreelo uses a one-time code instead of a password."}</p></div><div className="settings-ref-card"><header><LockKeyhole /><span><strong>{sv ? "Inloggning med e-postkod" : "Email code sign-in"}</strong><small>{sv ? "En ny sexsiffrig kod skickas när du loggar in. Koden kan bara användas en gång." : "A new six-digit code is sent whenever you sign in. It can only be used once."}</small></span><em>{sv ? "Aktiv" : "Active"}</em></header><div><strong>{sv ? "E-postadress" : "Email address"}</strong><span>{currentUserEmail}</span><em className={emailVerified ? "" : "pending"}>{emailVerified ? (sv ? "Verifierad" : "Verified") : (sv ? "Ej verifierad" : "Not verified")}</em></div><div><strong>{sv ? "Inloggningsmetod" : "Sign-in method"}</strong><span>{sv ? "Engångskod via e-post" : "One-time code by email"}</span></div><div><strong>{sv ? "Senast inloggad" : "Last signed in"}</strong><span>{currentUser?.last_sign_in_at ? new Date(currentUser.last_sign_in_at).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" }) : "—"}</span></div></div></div>
+          <div className="settings-ref-labelled-section"><div><h3>{sv ? "Den här sessionen" : "This session"}</h3><p>{sv ? "Webbläsaren du använder just nu." : "The browser you are using right now."}</p></div><div className="settings-ref-card sessions"><div><Laptop /><strong>{sv ? "Den här enheten" : "This device"}</strong><em>{sv ? "Aktiv nu" : "Active now"}</em></div></div></div>
+          <div className="settings-ref-labelled-section"><div><h3>{sv ? "Andra enheter" : "Other devices"}</h3><p>{sv ? "Spreelo kan avsluta andra inloggningar men visar ännu ingen komplett enhetslista." : "Spreelo can end other sign-ins but does not yet show a complete device list."}</p></div><div className="settings-ref-action-rows"><button type="button" onClick={signOutOtherSessions}><LogOut /><span><strong>{sv ? "Logga ut från andra enheter" : "Sign out other devices"}</strong><small>{sv ? "Din nuvarande session behålls. Övriga Supabase-sessioner återkallas." : "Your current session is kept. Other Supabase sessions are revoked."}</small></span><ArrowRight /></button></div></div>
           {profileMessage && <p className="settings-ref-message">{profileMessage}</p>}
         </div>
-        <aside className="settings-ref-security-aside"><h2>{sv ? "Säkerhetsstatus" : "Security status"}</h2><ShieldCheck /><h3>{sv ? "Allt ser bra ut" : "Everything looks good"}</h3><p>{sv ? "Ditt konto är skyddat med starka säkerhetsinställningar." : "Your account is protected with strong security settings."}</p><ul><li><CircleCheck />{sv ? "Lösenordsfri inloggning är aktiv" : "Passwordless sign-in is active"}</li><li><CircleCheck />{sv ? "E-postadressen är verifierad" : "Email address is verified"}</li><li><CircleCheck />{sv ? "Aktiva sessioner ser bra ut" : "Active sessions look good"}</li></ul><button type="button" onClick={signOutOtherSessions}>{sv ? "Logga ut från alla enheter" : "Sign out all devices"}</button></aside>
-        <DarkBenefits items={[
-          { Icon: KeyRound, title: sv ? "Engångskoder" : "One-time codes", text: sv ? "Säkra koder skickas till din e-post." : "Secure codes are sent to your email." },
-          { Icon: LockKeyhole, title: sv ? "Krypterad anslutning" : "Encrypted connection", text: sv ? "All data överförs med stark kryptering." : "All data is transferred with strong encryption." },
-          { Icon: Smartphone, title: sv ? "Sessionskontroll" : "Session control", text: sv ? "Se och hantera dina aktiva sessioner." : "View and manage your active sessions." },
-        ]} />
+        <aside className="settings-ref-security-aside factual"><h2>{sv ? "Kontoskydd" : "Account protection"}</h2><ShieldCheck /><h3>{emailVerified ? (sv ? "E-postadressen är verifierad" : "Email address verified") : (sv ? "Verifiera din e-post" : "Verify your email")}</h3><p>{sv ? "E-postadressen verifieras när en giltig inloggningskod används. Inloggningen hanteras av Supabase Auth över HTTPS." : "The email is verified when a valid sign-in code is used. Sign-in is handled by Supabase Auth over HTTPS."}</p><ul><li><CircleCheck />{sv ? "Inget återanvändbart lösenord lagras av Spreelo" : "Spreelo stores no reusable password"}</li><li><CircleCheck />{sv ? "Varje inloggningskod är tillfällig" : "Every sign-in code is temporary"}</li><li><CircleCheck />{sv ? "Andra sessioner kan återkallas" : "Other sessions can be revoked"}</li></ul></aside>
       </section>
     );
   }
 
   if (activeTab === "notifications") {
-    const groups = [
-      [sv ? "Granskning" : "Review", [["review", sv ? "Innehåll redo för granskning" : "Content ready for review"], ["comments", sv ? "Kommentarer och ändringar" : "Comments and changes"]]],
-      [sv ? "Publicering" : "Publishing", [["published", sv ? "Publicering lyckades" : "Publishing succeeded"], ["failed", sv ? "Publicering misslyckades" : "Publishing failed"]]],
-      [sv ? "Kampanjer" : "Campaigns", [["campaign_start", sv ? "Kampanj startar" : "Campaign starts"], ["campaign_end", sv ? "Kampanj avslutad" : "Campaign ended"]]],
-      [sv ? "Produkt & konto" : "Product & account", [["credits", sv ? "Krediter börjar ta slut" : "Credits running low"], ["account", sv ? "Viktiga kontouppdateringar" : "Important account updates"]]],
-    ];
     return (
-      <section className="settings-reference-workspace settings-ref-notifications">
-        <div className="settings-ref-notification-table"><header><span /><strong>{sv ? "I appen" : "In app"}</strong><strong>{sv ? "E-post" : "Email"}</strong></header>{groups.map(([group, rows]) => <section key={group}><h2>{group}</h2>{rows.map(([key, label]) => <div key={key}><span>{label}</span><Toggle label={`${label} app`} checked={notificationPreferences[`${key}_app`]} onChange={(event) => setNotificationPreferences((current) => ({ ...current, [`${key}_app`]: event.target.checked }))} /><Toggle label={`${label} email`} checked={notificationPreferences[`${key}_email`]} onChange={(event) => setNotificationPreferences((current) => ({ ...current, [`${key}_email`]: event.target.checked }))} /></div>)}</section>)}</div>
-        <aside className="settings-ref-delivery"><h2>{sv ? "Leverans" : "Delivery"}</h2><p>{sv ? "E-postadress:" : "Email address:"}<strong>{currentUserEmail}</strong></p><p>{sv ? "Status:" : "Status:"}<em>{sv ? "Verifierad" : "Verified"}</em></p><hr /><label>{sv ? "Sammanfattning:" : "Digest:"}<select><option>{sv ? "Direkt" : "Instant"}</option><option>{sv ? "Dagligen" : "Daily"}</option></select></label><button type="button"><Mail />{sv ? "Skicka testavisering" : "Send test notification"}</button></aside>
-        <div className="settings-ref-pause"><Moon /><span>{sv ? "Pausa alla aviseringar" : "Pause all notifications"}</span><Toggle label="Pause notifications" checked={notificationPreferences.paused} onChange={(event) => setNotificationPreferences((current) => ({ ...current, paused: event.target.checked }))} /><p>{sv ? "Kritiska konto- och säkerhetsmeddelanden skickas alltid." : "Critical account and security messages are always sent."}</p></div>
-        <div className="settings-ref-save"><button type="button" onClick={saveNotifications} disabled={savingNotifications}><Save />{savingNotifications ? (sv ? "Sparar…" : "Saving…") : (sv ? "Spara aviseringar" : "Save notifications")}</button>{notificationMessage && <p>{notificationMessage}</p>}</div>
-        <DarkBenefits items={[
-          { Icon: CircleCheck, title: sv ? "Detta ingår i alla planer" : "Included in every plan", text: "" },
-          { Icon: Mail, title: sv ? "Alla innehållstyper" : "All content types", text: "" },
-          { Icon: CalendarDays, title: sv ? "Kampanjer" : "Campaigns", text: "" },
-        ]} />
+      <section className="settings-reference-workspace settings-ref-notifications settings-ref-notifications-factual">
+        <div className="settings-ref-notification-summary">
+          <header><span><Mail /></span><div><h2>{sv ? "Viktiga e-postmeddelanden" : "Important email messages"}</h2><p>{sv ? "Spreelo skickar i dag endast meddelanden som krävs för inloggning eller när något behöver din uppmärksamhet." : "Spreelo currently sends only messages required for sign-in or when something needs your attention."}</p></div></header>
+          <div><CircleCheck /><span><strong>{sv ? "Inloggningskod" : "Sign-in code"}</strong><small>{sv ? "Skickas när du själv begär att logga in." : "Sent when you request to sign in."}</small></span><em>{sv ? "Alltid" : "Always"}</em></div>
+          <div><CircleCheck /><span><strong>{sv ? "Fel som kräver åtgärd" : "Failures requiring action"}</strong><small>{sv ? "Exempelvis när ett automatiserat inlägg inte kan skapas." : "For example, when an automated post cannot be created."}</small></span><em>{sv ? "Viktigt" : "Important"}</em></div>
+          <div><CircleCheck /><span><strong>{sv ? "Plan- och kontohändelser" : "Plan and account events"}</strong><small>{sv ? "Aktivering, betalningsstatus och andra viktiga kontohändelser." : "Activation, payment status and other important account events."}</small></span><em>{sv ? "Viktigt" : "Important"}</em></div>
+        </div>
+        <aside className="settings-ref-delivery factual"><h2>{sv ? "Leveransadress" : "Delivery address"}</h2><p>{sv ? "E-postadress" : "Email address"}<strong>{currentUserEmail}</strong></p><p>{sv ? "Verifiering" : "Verification"}<em className={emailVerified ? "" : "pending"}>{emailVerified ? (sv ? "Verifierad" : "Verified") : (sv ? "Ej verifierad" : "Not verified")}</em></p><hr /><p className="settings-ref-delivery-note">{sv ? "Valbara sammanfattningar, testaviseringar och pausning visas igen först när de är kopplade till den faktiska utskicksmotorn." : "Digest, test and pause controls will return only when connected to the actual delivery engine."}</p></aside>
       </section>
     );
   }
 
   if (activeTab === "language") {
-    const primaryLanguageCodes = Array.from(new Set([recommendedLocale, "sv", "en", "no"])).filter(Boolean).slice(0, 3);
-    const primaryLanguages = primaryLanguageCodes.map((code) => SUPPORTED_UI_LOCALES.find((item) => item.locale === code)).filter(Boolean);
     return (
-      <section className="settings-reference-workspace settings-ref-language">
+      <section className="settings-reference-workspace settings-ref-language settings-ref-language-factual">
         <div className="settings-ref-language-card">
-          <div className="settings-ref-language-section"><div><h2>{sv ? "Appspråk" : "App language"}</h2><p>{sv ? "Språkvalet gäller menyer, knappar och inställningar. Ditt skapade innehåll påverkas inte." : "The language applies to menus, buttons and settings. Your created content is not affected."}</p></div><div className="settings-ref-language-list">{primaryLanguages.map((item) => <label key={item.locale}><input type="radio" name="app-language" value={item.locale} checked={recommendedLocale === item.locale} onChange={() => handleLanguageChange(item.locale)} disabled={savingLanguage} /><span>{item.nativeName || item.language}</span><em>{item.locale.toUpperCase()}</em>{recommendedLocale === item.locale && <strong>{sv ? "Aktuellt språk" : "Current language"}</strong>}</label>)}</div></div>
-          <div className="settings-ref-language-section compact"><div><h2>{sv ? "Region" : "Region"}</h2></div><select><option>{sv ? "Sverige" : "Sweden"}</option></select></div>
-          <div className="settings-ref-language-section date-time"><div><h2>{sv ? "Datum & tid" : "Date & time"}</h2></div><div><label>{sv ? "Tidszon" : "Time zone"}<select><option>Europe/Stockholm</option></select></label><label>{sv ? "Datumformat" : "Date format"}<select><option>{new Date().toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" })}</option></select></label><label>{sv ? "Tidsformat" : "Time format"}<select><option>{sv ? "24 timmar" : "24 hours"}</option></select></label></div></div>
-          <div className="settings-ref-language-section compact preview"><div><h2>{sv ? "Förhandsvisning" : "Preview"}</h2><p>{sv ? "Så här visas datum och tid i Spreelo." : "This is how dates and times appear in Spreelo."}</p></div><div><span><CalendarDays />{new Date().toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" })}</span><span><Clock3 />14:30</span></div></div>
+          <div className="settings-ref-language-section app-language"><div><h2>{sv ? "Appspråk" : "App language"}</h2><p>{sv ? "Byter språk i menyer, knappar och systemtexter. Det ändrar inte språket i innehållet du skapar." : "Changes menus, buttons and system copy. It does not change the language of the content you create."}</p></div><label className="settings-ref-language-select"><span>{sv ? "Välj språk" : "Choose language"}</span><select value={recommendedLocale} onChange={(event) => handleLanguageChange(event.target.value)} disabled={savingLanguage}>{SUPPORTED_UI_LOCALES.map((item) => <option key={item.locale} value={item.locale}>{item.nativeName || item.language}</option>)}</select><small>{savingLanguage ? (sv ? "Sparar språk…" : "Saving language…") : (sv ? "Valet sparas på ditt konto." : "The choice is saved to your account.")}</small></label></div>
+          <div className="settings-ref-language-section guidance"><div><h2>{sv ? "Marknad & innehållsspråk" : "Market & content language"}</h2><p>{sv ? "Detta är varumärkesspecifikt och används av analysen, kampanjkalendern och innehållsgenereringen." : "These are brand-specific and are used by analysis, the campaign calendar and content generation."}</p></div><a href="/brand"><span><strong>{sv ? "Öppna varumärkesprofilen" : "Open brand profile"}</strong><small>{sv ? "Hantera marknad, land och innehållsspråk där." : "Manage market, country and content language there."}</small></span><ArrowRight /></a></div>
+          <div className="settings-ref-language-section guidance"><div><h2>{sv ? "Tidszon för publicering" : "Publishing time zone"}</h2><p>{sv ? "Tidszonen hör till varje innehållsplan. Den används när nästa körning och publiceringstid beräknas." : "The time zone belongs to each content plan. It is used to calculate the next run and publishing time."}</p></div><a href="/automation"><span><strong>{sv ? "Öppna AI-innehållsstudion" : "Open AI Content Studio"}</strong><small>{sv ? "Välj tidszon när du skapar eller redigerar en plan." : "Choose a time zone when creating or editing a plan."}</small></span><ArrowRight /></a></div>
         </div>
-        <aside className="settings-ref-language-aside"><h2>{sv ? "Förhandsvisning" : "Preview"}</h2><h3>{sv ? "Välkommen tillbaka" : "Welcome back"}</h3><hr /><strong>{sv ? "Nästa publicering" : "Next publication"}</strong><p>{new Date().toLocaleDateString(locale)} kl. 14:30</p><button type="button" onClick={() => handleLanguageChange(recommendedLocale)}>{sv ? "Spara ändringar" : "Save changes"}</button></aside>
-        <DarkBenefits items={[
-          { Icon: Globe2, title: sv ? "Svenska menyer" : "English menus", text: "" },
-          { Icon: Clock3, title: "Europe/Stockholm", text: "" },
-          { Icon: CircleCheck, title: "SEK", text: "" },
-        ]} />
+        <aside className="settings-ref-language-aside factual"><h2>{sv ? "Tre separata val" : "Three separate choices"}</h2><ol><li><strong>{sv ? "Appspråk" : "App language"}</strong><span>{sv ? "Hur Spreelo-gränssnittet visas." : "How the Spreelo interface is shown."}</span></li><li><strong>{sv ? "Marknad" : "Market"}</strong><span>{sv ? "Vilket land och vilken kontext innehållet planeras för." : "The country and context content is planned for."}</span></li><li><strong>{sv ? "Tidszon" : "Time zone"}</strong><span>{sv ? "När planerade körningar sker lokalt." : "When scheduled runs occur locally."}</span></li></ol></aside>
       </section>
     );
   }
