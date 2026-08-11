@@ -9108,6 +9108,11 @@ function toggleContentType(typeId) {
   return;
 }
 
+    if (scheduleType === "weekly" && creditBalance && !currentPlanKey) {
+      setMessage(t("automation.recurringRequiresPaidPlan"));
+      return;
+    }
+
     const invalidDateSlot = slots.find((slot) => !slot.startDate);
 
     if (invalidDateSlot) {

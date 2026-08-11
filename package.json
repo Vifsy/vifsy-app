@@ -95,7 +95,8 @@
     "test:v143.71": "node scripts/test-v143-71-customer-admin-separation-home-actions.mjs",
     "test:v143.74": "node scripts/test-v143-74-content-economics.mjs",
     "test:v143.75": "node scripts/test-v143-75-automation-usecallback-import.mjs",
-    "test:v143.77": "node scripts/test-v143-77-stripe-billing.mjs"
+    "test:v143.77": "node scripts/test-v143-77-stripe-billing.mjs",
+    "test:v143.78": "node scripts/test-v143-78-trial-subscription-lifecycle.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

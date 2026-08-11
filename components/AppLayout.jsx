@@ -229,7 +229,7 @@ export default function AppLayout({ active, children }) {
       const { data, error } = await withTimeout(
         supabase
           .from("user_credit_balances")
-          .select("credits_remaining, monthly_credit_limit, plan_name, subscription_plan, current_period_end, credits_renewed_at")
+          .select("credits_remaining, monthly_credit_limit, plan_name, subscription_plan, subscription_status, current_period_end, credits_renewed_at, trial_end, purchased_credits_remaining")
           .eq("user_id", currentUser.id)
           .maybeSingle(),
         WORKSPACE_REQUEST_TIMEOUT_MS
@@ -265,9 +265,9 @@ export default function AppLayout({ active, children }) {
 
   function getPlanLabel() {
     const raw = String(
-      creditBalance?.plan_name || creditBalance?.subscription_plan || "Pro"
+      creditBalance?.plan_name || creditBalance?.subscription_plan || "Free"
     ).trim();
-    if (!raw) return "Pro";
+    if (!raw) return "Free";
     return raw.replace(/^plan\s*:\s*/i, "");
   }
 

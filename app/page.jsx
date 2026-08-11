@@ -956,6 +956,11 @@ export default function Home() {
 
   async function setOperationalPlanState(plan, nextState) {
     if (!plan?.ruleIds?.length || !currentBrandId || scheduleActionLoading) return;
+    const planKey = String(creditBalance?.subscription_plan || creditBalance?.plan_name || "").trim().toLowerCase();
+    if (nextState === "active" && plan.schedule_type === "weekly" && (planKey === "free" || !planKey)) {
+      setMessage(t("dashboard.recurringRequiresPaidPlan"));
+      return;
+    }
     setScheduleActionLoading(plan.id);
     setMessage("");
     try {
@@ -1454,7 +1459,7 @@ export default function Home() {
                 <div className="home-v14335-side-title"><CircleDollarSign /><h3>{t("dashboard.creditStatus")}</h3></div>
                 <h2>{creditsRemaining}<span>{t("dashboard.creditsLeft", { limit: monthlyCreditLimit || "—" })}</span></h2>
                 <div><i style={{ width: `${creditUsagePercent}%` }} /></div>
-                <p>{creditBalance?.plan_name || "Starter"}</p>
+                <p>{creditBalance?.plan_name || "Free"}</p>
                 <a href="/settings">{t("dashboard.manageCredits")} <ArrowRight /></a>
               </section>
             </aside>

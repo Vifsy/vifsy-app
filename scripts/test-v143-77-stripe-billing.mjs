@@ -40,6 +40,6 @@ assert.ok(settings.includes("StripeBillingPanel"), "Settings page must include b
 assert.ok(billing.includes("One-time") || billing.includes("extraCredits"), "Extra credit UI missing");
 assert.ok(labels.includes('"billing.title"'), "English billing labels missing");
 assert.ok(sv.includes('"billing.title"'), "Swedish built-in billing labels missing");
-assert.ok(read("lib/i18n/useUiText.js").includes('TRANSLATION_CACHE_VERSION = "v17"'), "translation cache version must be v17");
+assert.ok(read("lib/i18n/useUiText.js").includes('TRANSLATION_CACHE_VERSION = "v18"'), "translation cache version must be v18");
 
 console.log("v143.77 Stripe billing regression checks passed.");

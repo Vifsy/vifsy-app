@@ -12528,3 +12528,9 @@ html body .campaign-v14335-slot-list article:has(.custom-time-popover) {
   font-size: 13px;
   line-height: 1.45;
 }
+
+/* v143.78 trial + subscription lifecycle */
+.stripe-billing-status-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.stripe-billing-manage-action{min-height:38px;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 11px;border:1px solid #dfe4eb;border-radius:12px;background:#fff;color:#3d4b61;font-size:9px;font-weight:850;cursor:pointer}.stripe-billing-manage-action:hover:not(:disabled){border-color:#ccd4df;box-shadow:0 5px 14px rgba(31,43,63,.06)}.stripe-billing-manage-action:disabled{opacity:.6;cursor:not-allowed}
+.stripe-trial-banner{display:flex;align-items:flex-start;gap:10px;margin-top:14px;padding:12px 13px;border:1px solid #e2d8fb;border-radius:15px;background:linear-gradient(145deg,#fbf8ff,#fff);color:#5f4db1}.stripe-trial-banner.active{border-color:#cfeadb;background:linear-gradient(145deg,#f5fcf8,#fff);color:#2a7a55}.stripe-trial-banner.muted{border-color:#e2e6ec;background:#fafbfc;color:#667389}.stripe-trial-banner>svg{flex:0 0 auto;margin-top:1px}.stripe-trial-banner strong,.stripe-trial-banner span{display:block}.stripe-trial-banner strong{color:#26344a;font-size:10px}.stripe-trial-banner span{margin-top:2px;color:#6e798c;font-size:9px;line-height:1.45}
+.stripe-plan-change-note{display:block;margin-top:7px;color:#7a8596;font-size:8px;line-height:1.35}.stripe-credit-packs-copy small{display:block;margin-top:6px;color:#5f4db1;font-size:8.5px;font-weight:800}
+@media(max-width:640px){.stripe-billing-status-wrap{justify-content:stretch}.stripe-billing-manage-action{width:100%}.stripe-trial-banner{padding:11px}.stripe-trial-banner span{font-size:8.5px}}

@@ -31,7 +31,7 @@ const SETTINGS_DELETE_COPY = {
     reasonPlaceholder: "Choose a reason",
     reasonDetailsLabel: "Anything else you want to tell us?",
     reasonDetailsPlaceholder: "Optional details",
-    billingNotice: "If you have an active paid subscription, cancel it through the billing provider before permanently deleting the Spreelo account.",
+    billingNotice: "If you have an active Stripe subscription, Spreelo cancels it automatically before permanently deleting the account.",
     reasonNotUsing: "I do not use Spreelo enough",
     reasonTooExpensive: "Too expensive",
     reasonMissingFeature: "Missing a feature I need",
@@ -58,7 +58,7 @@ const SETTINGS_DELETE_COPY = {
     reasonPlaceholder: "Välj en orsak",
     reasonDetailsLabel: "Vill du berätta något mer?",
     reasonDetailsPlaceholder: "Frivilliga detaljer",
-    billingNotice: "Om du har en aktiv betalprenumeration, avsluta den via betalningsleverantören innan du raderar Spreelo-kontot permanent.",
+    billingNotice: "Om du har en aktiv Stripe-prenumeration avslutar Spreelo den automatiskt innan kontot raderas permanent.",
     reasonNotUsing: "Jag använder inte Spreelo tillräckligt",
     reasonTooExpensive: "För dyrt",
     reasonMissingFeature: "Jag saknar en funktion jag behöver",
@@ -379,7 +379,7 @@ export default function Settings() {
         setLoadingCredits(true);
         const { data: creditData } = await supabase
           .from("user_credit_balances")
-          .select("credits_remaining, monthly_credit_limit, plan_name, subscription_status, subscription_plan, current_period_end, credits_renewed_at, next_credit_refresh_at, cancel_at_period_end, payment_provider, provider_customer_id, provider_subscription_id, subscription_price_amount, subscription_currency, subscription_interval, subscription_price_lookup_key, purchased_credits_remaining")
+          .select("credits_remaining, monthly_credit_limit, plan_name, subscription_status, subscription_plan, current_period_end, credits_renewed_at, next_credit_refresh_at, cancel_at_period_end, payment_provider, provider_customer_id, provider_subscription_id, subscription_price_amount, subscription_currency, subscription_interval, subscription_price_lookup_key, purchased_credits_remaining, trial_start, trial_end, pending_subscription_plan, pending_subscription_lookup_key, pending_subscription_effective_at, provider_subscription_schedule_id")
           .eq("user_id", user.id)
           .maybeSingle();
         setCreditBalance(creditData || null);
@@ -393,8 +393,8 @@ export default function Settings() {
   }, []);
 
   const planName = useMemo(() => {
-    const raw = String(creditBalance?.plan_name || creditBalance?.subscription_plan || "Starter").trim();
-    return raw.replace(/^plan\s*:\s*/i, "") || "Starter";
+    const raw = String(creditBalance?.plan_name || creditBalance?.subscription_plan || "Free").trim();
+    return raw.replace(/^plan\s*:\s*/i, "") || "Free";
   }, [creditBalance]);
 
   const creditRemaining = Number(creditBalance?.credits_remaining || 0);
@@ -651,7 +651,7 @@ export default function Settings() {
                 disabled={deletingAccount}
               />
 
-              <p>{getDeleteCopy(locale, "billingNotice", deleteConfirmWord, "If you have an active paid subscription, cancel it through the billing provider before permanently deleting the Spreelo account.")}</p>
+              <p>{getDeleteCopy(locale, "billingNotice", deleteConfirmWord, "If you have an active Stripe subscription, Spreelo cancels it automatically before permanently deleting the account.")}</p>
             </div>
 
             {deleteMessage && (

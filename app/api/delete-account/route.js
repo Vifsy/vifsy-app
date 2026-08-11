@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { stripeRequest } from "../../../lib/stripeBilling";
 
 export const dynamic = "force-dynamic";
 
@@ -522,7 +523,7 @@ export async function POST(request) {
     const creditBalanceRows = await selectRowsByColumn(
       supabaseAdmin,
       "user_credit_balances",
-      "subscription_status, subscription_plan, plan_name",
+      "subscription_status, subscription_plan, plan_name, provider_subscription_id",
       "user_id",
       userId,
       { optional: true }
@@ -533,6 +534,16 @@ export async function POST(request) {
       creditBalanceRows.find((row) => row.subscription_plan)?.subscription_plan ||
       creditBalanceRows.find((row) => row.plan_name)?.plan_name ||
       null;
+
+    const providerSubscriptionId = creditBalanceRows.find((row) => row.provider_subscription_id)?.provider_subscription_id || null;
+    const normalizedPlanStatus = String(planStatus || "").toLowerCase();
+    if (providerSubscriptionId && !["canceled", "cancelled", "expired", "incomplete_expired"].includes(normalizedPlanStatus)) {
+      try {
+        await stripeRequest(`/v1/subscriptions/${encodeURIComponent(providerSubscriptionId)}`, { method: "DELETE" });
+      } catch (stripeError) {
+        throw new Error(`Stripe subscription could not be canceled before account deletion: ${stripeError?.message || "Unknown Stripe error"}`);
+      }
+    }
 
     await insertDeletionLog({
       supabaseAdmin,
