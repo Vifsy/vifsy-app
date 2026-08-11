@@ -28,6 +28,7 @@ import {
   Megaphone,
   Globe2,
   GalleryHorizontalEnd,
+  Gift,
   Languages,
   LayoutGrid,
   PenLine,
@@ -654,6 +655,7 @@ const slotTypeIconComponents = {
   comparison: Scale,
   mini_guide: BookOpen,
   manual_prompt: PenLine,
+  giveaway: Gift,
   custom: PenLine,
 };
 
@@ -685,6 +687,7 @@ const contentFormatIconComponents = {
   Link2,
   Tag,
   PenLine,
+  Gift,
 };
 
 function ContentFormatGlyph({ name, size = 23 }) {
@@ -3053,6 +3056,7 @@ function getContentTypeIcon(typeId) {
     comparison: "⇄",
     mini_guide: "▤",
     manual_prompt: "✎",
+    giveaway: "🎁",
   };
 
   return icons[typeId] || "✦";
@@ -3078,6 +3082,7 @@ function getContentPreviewCardId(typeId) {
     comparison: "mini_guide",
     mini_guide: "mini_guide",
     manual_prompt: "custom_prompt",
+    giveaway: "giveaway",
   };
 
   return map[typeId] || "content_mix";
@@ -3100,6 +3105,7 @@ function getContentPreviewCardIcon(cardId) {
     local_relevance: "📍",
     problem_solution: "⚡",
     custom_prompt: "✎",
+    giveaway: "🎁",
     content_mix: "✦",
   };
 
@@ -6035,6 +6041,22 @@ const [slots, setSlots] = useState([]);
   );
   const [offerPlannerLoading, setOfferPlannerLoading] = useState(false);
   const [offerPlannerError, setOfferPlannerError] = useState("");
+  const [giveawayPlannerOpen, setGiveawayPlannerOpen] = useState(false);
+  const [giveawayPrize, setGiveawayPrize] = useState("");
+  const [giveawayWinnerCount, setGiveawayWinnerCount] = useState("1");
+  const [giveawayEndDate, setGiveawayEndDate] = useState(
+    addDaysToDateString(initialStartDate, 7)
+  );
+  const [giveawayFollow, setGiveawayFollow] = useState(true);
+  const [giveawayLike, setGiveawayLike] = useState(true);
+  const [giveawayComment, setGiveawayComment] = useState(true);
+  const [giveawayTagCount, setGiveawayTagCount] = useState("2");
+  const [giveawayShareStory, setGiveawayShareStory] = useState(true);
+  const [giveawayWinnerSelection, setGiveawayWinnerSelection] = useState("random");
+  const [giveawayWinnerNotification, setGiveawayWinnerNotification] = useState("dm");
+  const [giveawayCustomNotification, setGiveawayCustomNotification] = useState("");
+  const [giveawayTerms, setGiveawayTerms] = useState("");
+  const [giveawayPlannerError, setGiveawayPlannerError] = useState("");
   const [contentFormatLibrary, setContentFormatLibrary] = useState(() =>
     normalizeContentFormatRows([])
   );
@@ -6073,6 +6095,8 @@ const selectedPlatformKeys = getSelectedPlatformKeys(platform, connectedPlatform
 const selectedPlatformOptions = selectedPlatformKeys
   .map((key) => connectedPlatformOptions.find((item) => item.value === key))
   .filter(Boolean);
+const giveawayInstagramOnly =
+  selectedPlatformKeys.length === 1 && selectedPlatformKeys[0] === "instagram";
   const [tone, setTone] = useState("Friendly");
   const [language, setLanguage] = useState("Auto");
 const baseLanguageOptions = [
@@ -6312,6 +6336,18 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
             description: config.description || t("automation.formatCard.offer_campaign.description"),
             howItWorks: t("automation.formatCard.offer_campaign.howItWorks"),
             benefit: t("automation.formatCard.offer_campaign.benefit"),
+          };
+        }
+
+        if (formatId === "giveaway") {
+          return {
+            ...config,
+            id: formatId,
+            kind: "giveaway",
+            label: config.display_label || t("automation.formatCard.giveaway.label"),
+            description: config.description || t("automation.formatCard.giveaway.description"),
+            howItWorks: t("automation.formatCard.giveaway.howItWorks"),
+            benefit: t("automation.formatCard.giveaway.benefit"),
           };
         }
 
@@ -6873,6 +6909,161 @@ const shouldShowPlannerDetails =
       setOfferPlannerLoading(false);
     }
   }
+
+  function createGiveawayPlan() {
+    setGiveawayPlannerError("");
+    setMessage("");
+
+    const prize = String(giveawayPrize || "").trim();
+    const winners = Math.max(1, Math.min(100, Number.parseInt(giveawayWinnerCount || "1", 10) || 1));
+    const terms = String(giveawayTerms || "").trim();
+    const customNotification = String(giveawayCustomNotification || "").trim();
+
+    if (!prize) {
+      setGiveawayPlannerError(t("automation.giveaway.errorPrize"));
+      return;
+    }
+
+    if (!giveawayEndDate) {
+      setGiveawayPlannerError(t("automation.giveaway.errorEndDate"));
+      return;
+    }
+
+    if (String(giveawayEndDate) < String(planStartDate)) {
+      setGiveawayPlannerError(t("automation.giveaway.errorEndBeforePublish"));
+      return;
+    }
+
+    if (!selectedPlatformKeys.length) {
+      setGiveawayPlannerError(t("automation.giveaway.errorPlatform"));
+      return;
+    }
+
+    const instagramOnly =
+      selectedPlatformKeys.length === 1 && selectedPlatformKeys[0] === "instagram";
+    const effectiveTagCount = instagramOnly ? Number(giveawayTagCount || 0) : 0;
+    const effectiveShareStory = instagramOnly && giveawayShareStory;
+
+    const participation = [];
+    if (giveawayFollow) participation.push("Follow the account running the giveaway.");
+    if (giveawayLike) participation.push("Like the giveaway post.");
+    if (giveawayComment) participation.push("Leave a comment on the giveaway post.");
+    if (effectiveTagCount > 0) {
+      participation.push(`Tag ${effectiveTagCount} friend${effectiveTagCount === 1 ? "" : "s"} in the comments.`);
+    }
+    if (effectiveShareStory) participation.push("Share the giveaway post to an Instagram Story.");
+
+    if (!participation.length) {
+      setGiveawayPlannerError(t("automation.giveaway.errorParticipation"));
+      return;
+    }
+
+    const notificationInstruction = {
+      dm: "The winner will be contacted by direct message from the official business account.",
+      comment: "The winner will be announced in the comments on the giveaway post.",
+      post: "The winner will be announced in a new social media post from the business.",
+      email: "The winner will be contacted by email.",
+      custom: customNotification
+        ? `Winner notification method: ${customNotification}`
+        : "The business will explain how the winner is contacted.",
+    }[giveawayWinnerNotification] || "The winner will be contacted by direct message from the official business account.";
+
+    const selectionInstruction =
+      giveawayWinnerSelection === "business"
+        ? "The winner will be selected manually by the business. Do not claim the draw is random and do not invent judging criteria."
+        : "The winner will be selected by a random draw among valid entries.";
+
+    const platformSafety = selectedPlatformKeys.includes("facebook")
+      ? [
+          "Facebook is one of the destinations. Do not require participants to share the post on a personal timeline, share it on a friend's timeline or tag friends as a condition of entry.",
+          "The participation requirements supplied above have already been reduced to rules that can safely be used in one shared Facebook/Instagram caption.",
+        ]
+      : [];
+
+    if (selectedPlatformKeys.includes("instagram")) {
+      platformSafety.push(
+        "Instagram is one of the destinations. Include a concise acknowledgement that the promotion is not sponsored, endorsed, administered by or associated with Instagram, and make clear that participants release Instagram from responsibility where appropriate. Do not encourage inaccurate tagging in photos or media."
+      );
+    }
+
+    const prompt = [
+      "Create a ready-to-publish giveaway / competition post for this business.",
+      "The following competition details were supplied by the customer and are authoritative. Do not change, add to or invent them.",
+      `Prize: ${prize}`,
+      `Number of winners: ${winners}`,
+      `Competition ends: ${giveawayEndDate}`,
+      "Participation requirements:",
+      ...participation.map((item) => `- ${item}`),
+      `Winner selection: ${selectionInstruction}`,
+      `Winner notification: ${notificationInstruction}`,
+      terms ? `Optional customer-supplied terms: ${terms}` : "No extra customer-supplied eligibility terms were provided.",
+      "Mandatory giveaway writing rules:",
+      "- Make the prize and how to enter immediately easy to understand.",
+      "- State the closing date clearly and state the number of winners.",
+      "- State how the winner is selected and how the winner is notified.",
+      "- Do not invent an age limit, geographic restriction, purchase requirement, value, price, discount, delivery promise or extra eligibility rule.",
+      "- Do not require a purchase or payment unless the customer explicitly supplied that condition above.",
+      "- Do not pretend the winner is already known or imply guaranteed odds of winning.",
+      "- Keep the tone engaging and promotional without sounding spammy.",
+      ...platformSafety.map((item) => `- ${item}`),
+      "- Put any required platform acknowledgement and the customer's optional terms after the main giveaway copy in a compact, readable form.",
+    ].join("\n");
+
+    const imagePrompt = [
+      "Create a premium social-media giveaway image that clearly feels celebratory, desirable and appropriate for this specific brand.",
+      `Giveaway prize: ${prize}`,
+      "Use the business profile, industry, audience and visual tone to decide the scene and styling.",
+      "Make the prize concept the visual focus when it can be represented truthfully.",
+      "If the prize describes a branded or catalog product and no exact verified product reference image is supplied, do not invent a fake version of that product. Instead represent the giveaway through tasteful gift presentation, celebration, lifestyle context or category-relevant atmosphere.",
+      "Do not put legal terms, participation rules, dates, usernames or winner information inside the image.",
+      "Do not invent a price, discount, product design, logo or packaging.",
+      "Keep the composition premium, clean and immediately understandable on a phone.",
+    ].join("\n");
+
+    const giveawaySlot = createSlot({
+      startDate: planStartDate,
+      timeZone,
+      prompt,
+      imagePrompt,
+      generateImage: true,
+      imageSource: "ai",
+      contentTypeId: "giveaway",
+      contentTypeLabel: t("automation.formatCard.giveaway.label"),
+      usesWebsiteContent: false,
+      contentFormat: "single_image",
+      destinationPlatforms: selectedPlatformKeys,
+      platformAdaptations: getContentTypePlatformAdaptations({
+        contentTypeId: "giveaway",
+        contentFormat: "single_image",
+        selectedPlatforms: selectedPlatformKeys,
+      }),
+      campaignRole: t("automation.giveaway.slotRole"),
+      campaignSummary: t("automation.giveaway.slotSummary", { prize }),
+      marketingAngle: "engagement",
+      customerStage: "warm",
+      ctaStrength: "medium",
+      campaignGoal: `Giveaway prize: ${prize}`,
+      strategyNotes: `Giveaway closes ${giveawayEndDate}. Winners: ${winners}.`,
+    });
+
+    setPlanCreationMode("manual");
+    setAutoPlanGoal("");
+    setAutoPlanPostCount(1);
+    setSelectedContentTypeIds(["giveaway"]);
+    setSlots([giveawaySlot]);
+    setScheduleType("once");
+    setVaryWeeklyContentTypes(false);
+    setPlanName(t("automation.giveaway.generatedPlanName", { prize }));
+    setPostType("Giveaway");
+    setGiveawayPlannerOpen(false);
+    setFormatPreviewId("");
+    setReturnToAllFormatsAfterPreview(false);
+
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => scrollToPlannerSchedule());
+    }
+  }
+
 async function getCurrentBrandIdForUser(currentUser, preferredBrandId = "") {
   if (preferredBrandId) {
     const { data: preferredBrand, error: preferredBrandError } = await supabase
@@ -9748,17 +9939,18 @@ setRules((currentRules) =>
 }
 
  function requestFormatPreview(formatId, options = {}) {
-  if (!hasInitialGoalPlan) {
+  const item = exploreFormatItems.find((formatItem) => formatItem.id === formatId);
+  if (!item) return;
+
+  if (!hasInitialGoalPlan && item.kind !== "giveaway") {
     showChooseGoalFirstMessage();
     return;
   }
 
-  const item = exploreFormatItems.find((formatItem) => formatItem.id === formatId);
-  if (!item) return;
-
   setMessage("");
   setFormatGuardMessage("");
   setOfferPlannerOpen(false);
+  setGiveawayPlannerOpen(false);
   setReturnToAllFormatsAfterPreview(Boolean(options?.fromAllFormats));
   setShowAddPostModal(false);
   setFormatPreviewId(formatId);
@@ -9797,6 +9989,23 @@ setRules((currentRules) =>
     if (typeof window !== "undefined") {
       window.requestAnimationFrame(() => {
         document.getElementById("plan-v72-offer-builder")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+    }
+    return;
+  }
+
+  if (selectedFormatPreview.kind === "giveaway") {
+    setReturnToAllFormatsAfterPreview(false);
+    setFormatPreviewId("");
+    setOfferPlannerOpen(false);
+    setGiveawayPlannerError("");
+    setGiveawayPlannerOpen(true);
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        document.getElementById("plan-v14383-giveaway-builder")?.scrollIntoView({
           behavior: "smooth",
           block: "start",
         });
@@ -9844,6 +10053,8 @@ setRules((currentRules) =>
   setScheduleType("weekly");
   setVaryWeeklyContentTypes(true);
   setOfferPlannerOpen(false);
+  setGiveawayPlannerOpen(false);
+  setGiveawayPlannerError("");
   setFormatPreviewId("");
   setReturnToAllFormatsAfterPreview(false);
   setFormatGuardMessage("");
@@ -10301,7 +10512,7 @@ function blockFormatCardClickAfterDrag(event) {
                       item={item}
                       index={index}
                       view="grid"
-                      disabled={!hasInitialGoalPlan}
+                      disabled={!hasInitialGoalPlan && item.kind !== "giveaway"}
                       key={`v72-${item.id}`}
                       onClick={() => requestFormatPreview(item.id, { fromAllFormats: true })}
                     />
@@ -10453,6 +10664,153 @@ function blockFormatCardClickAfterDrag(event) {
                       {offerPlannerLoading
                         ? t("automation.offerPlan.creating")
                         : t("automation.offerPlan.createButton")}
+                    </button>
+                  </div>
+                </section>
+              ) : null}
+
+
+              {giveawayPlannerOpen ? (
+                <section className="plan-v14383-giveaway-builder" id="plan-v14383-giveaway-builder">
+                  <div className="plan-v14383-giveaway-heading">
+                    <span className="plan-v14383-giveaway-icon"><Gift size={20} /></span>
+                    <div>
+                      <h2>{t("automation.giveaway.title")}</h2>
+                      <p>{t("automation.giveaway.description")}</p>
+                    </div>
+                    <button type="button" className="plan-v14383-giveaway-close" onClick={() => setGiveawayPlannerOpen(false)} aria-label={t("automation.format.close")}>×</button>
+                  </div>
+
+                  <div className="plan-v14383-giveaway-grid">
+                    <label className="plan-v14383-giveaway-field span-2">
+                      <span>{t("automation.giveaway.prizeLabel")}</span>
+                      <input
+                        value={giveawayPrize}
+                        onChange={(event) => setGiveawayPrize(event.target.value)}
+                        placeholder={t("automation.giveaway.prizePlaceholder")}
+                      />
+                    </label>
+
+                    <label className="plan-v14383-giveaway-field">
+                      <span>{t("automation.giveaway.winnersLabel")}</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={giveawayWinnerCount}
+                        onChange={(event) => setGiveawayWinnerCount(event.target.value)}
+                      />
+                    </label>
+
+                    <div className="plan-v14383-giveaway-field">
+                      <span>{t("automation.giveaway.endDateLabel")}</span>
+                      <DatePickerField
+                        value={giveawayEndDate}
+                        onChange={setGiveawayEndDate}
+                        pickerId="v14383-giveaway-end-date"
+                        openPickerId={openPickerId}
+                        setOpenPickerId={setOpenPickerId}
+                        timeZone={timeZone}
+                        compact
+                        weekdayLabels={weekdayLabels}
+                        locale={locale}
+                        ariaLabel={t("automation.giveaway.endDateLabel")}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="plan-v14383-giveaway-section">
+                    <div className="plan-v14383-giveaway-section-head">
+                      <div>
+                        <strong>{t("automation.giveaway.participationTitle")}</strong>
+                        <p>{t("automation.giveaway.participationText")}</p>
+                      </div>
+                      {selectedPlatformOptions.length ? (
+                        <span className="plan-v14383-giveaway-platforms">
+                          {selectedPlatformOptions.map((item) => item.label).join(" + ")}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <div className="plan-v14383-giveaway-options">
+                      <label><input type="checkbox" checked={giveawayFollow} onChange={(event) => setGiveawayFollow(event.target.checked)} /><span>{t("automation.giveaway.follow")}</span></label>
+                      <label><input type="checkbox" checked={giveawayLike} onChange={(event) => setGiveawayLike(event.target.checked)} /><span>{t("automation.giveaway.like")}</span></label>
+                      <label><input type="checkbox" checked={giveawayComment} onChange={(event) => setGiveawayComment(event.target.checked)} /><span>{t("automation.giveaway.comment")}</span></label>
+                      <label className={!giveawayInstagramOnly ? "disabled" : ""}>
+                        <input type="checkbox" checked={giveawayInstagramOnly && giveawayTagCount === "1"} disabled={!giveawayInstagramOnly} onChange={(event) => setGiveawayTagCount(event.target.checked ? "1" : "0")} />
+                        <span>{t("automation.giveaway.tagOne")}</span>
+                      </label>
+                      <label className={!giveawayInstagramOnly ? "disabled" : ""}>
+                        <input type="checkbox" checked={giveawayInstagramOnly && giveawayTagCount === "2"} disabled={!giveawayInstagramOnly} onChange={(event) => setGiveawayTagCount(event.target.checked ? "2" : "0")} />
+                        <span>{t("automation.giveaway.tagTwo")}</span>
+                      </label>
+                      <label className={!giveawayInstagramOnly ? "disabled" : ""}>
+                        <input type="checkbox" checked={giveawayInstagramOnly && giveawayShareStory} disabled={!giveawayInstagramOnly} onChange={(event) => setGiveawayShareStory(event.target.checked)} />
+                        <span>{t("automation.giveaway.shareStory")}</span>
+                      </label>
+                    </div>
+
+                    {!giveawayInstagramOnly ? (
+                      <div className="plan-v14383-giveaway-platform-note">
+                        <Info size={15} />
+                        <span>{selectedPlatformKeys.length === 0 ? t("automation.giveaway.choosePlatformNote") : t("automation.giveaway.instagramOnlyNote")}</span>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="plan-v14383-giveaway-grid secondary-grid">
+                    <label className="plan-v14383-giveaway-field">
+                      <span>{t("automation.giveaway.selectionLabel")}</span>
+                      <select value={giveawayWinnerSelection} onChange={(event) => setGiveawayWinnerSelection(event.target.value)}>
+                        <option value="random">{t("automation.giveaway.selectionRandom")}</option>
+                        <option value="business">{t("automation.giveaway.selectionBusiness")}</option>
+                      </select>
+                    </label>
+
+                    <label className="plan-v14383-giveaway-field">
+                      <span>{t("automation.giveaway.notificationLabel")}</span>
+                      <select value={giveawayWinnerNotification} onChange={(event) => setGiveawayWinnerNotification(event.target.value)}>
+                        <option value="dm">{t("automation.giveaway.notificationDm")}</option>
+                        <option value="comment">{t("automation.giveaway.notificationComment")}</option>
+                        <option value="post">{t("automation.giveaway.notificationPost")}</option>
+                        <option value="email">{t("automation.giveaway.notificationEmail")}</option>
+                        <option value="custom">{t("automation.giveaway.notificationCustom")}</option>
+                      </select>
+                    </label>
+
+                    {giveawayWinnerNotification === "custom" ? (
+                      <label className="plan-v14383-giveaway-field span-2">
+                        <span>{t("automation.giveaway.customNotificationLabel")}</span>
+                        <input value={giveawayCustomNotification} onChange={(event) => setGiveawayCustomNotification(event.target.value)} placeholder={t("automation.giveaway.customNotificationPlaceholder")} />
+                      </label>
+                    ) : null}
+
+                    <label className="plan-v14383-giveaway-field span-2">
+                      <span>{t("automation.giveaway.termsLabel")} <small>{t("automation.giveaway.optional")}</small></span>
+                      <textarea
+                        value={giveawayTerms}
+                        onChange={(event) => setGiveawayTerms(event.target.value)}
+                        placeholder={t("automation.giveaway.termsPlaceholder")}
+                        rows={3}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="plan-v14383-giveaway-ai-note">
+                    <WandSparkles size={18} />
+                    <div>
+                      <strong>{t("automation.giveaway.aiImageTitle")}</strong>
+                      <p>{t("automation.giveaway.aiImageText")}</p>
+                    </div>
+                  </div>
+
+                  {giveawayPlannerError ? <p className="plan-v70-offer-error">{giveawayPlannerError}</p> : null}
+
+                  <div className="plan-v14383-giveaway-actions">
+                    <p>{t("automation.giveaway.actionHelp")}</p>
+                    <button type="button" onClick={createGiveawayPlan}>
+                      <WandSparkles size={17} />
+                      {t("automation.giveaway.createButton")}
                     </button>
                   </div>
                 </section>
@@ -12360,7 +12718,11 @@ function blockFormatCardClickAfterDrag(event) {
                     <ContentFormatIconVisual item={selectedFormatPreview} size={24} />
                   </span>
                   <div>
-                    <p>{t("automation.format.recommendedForGoal", { goal: translateAutoPlanGoalLabel(autoPlanGoal) })}</p>
+                    <p>
+                      {selectedFormatPreview.kind === "giveaway"
+                        ? t("automation.giveaway.modalEyebrow")
+                        : t("automation.format.recommendedForGoal", { goal: translateAutoPlanGoalLabel(autoPlanGoal) })}
+                    </p>
                     <h2 id="plan-v72-format-title">{selectedFormatPreview.label}</h2>
                   </div>
                 </div>
@@ -12390,6 +12752,8 @@ function blockFormatCardClickAfterDrag(event) {
                       ? t("automation.format.currentPlan")
                       : selectedFormatPreview.kind === "offer_campaign"
                       ? t("automation.format.offerCampaignImpactLabel")
+                      : selectedFormatPreview.kind === "giveaway"
+                      ? t("automation.giveaway.impactLabel")
                       : t("automation.format.focusSourceImpactLabel")}
                   </span>
                   <strong>
@@ -12397,6 +12761,8 @@ function blockFormatCardClickAfterDrag(event) {
                       ? t("automation.format.planCountChange", { before: slots.length, after: slots.length + 1 })
                       : selectedFormatPreview.kind === "offer_campaign"
                       ? t("automation.format.offerCampaignImpactText")
+                      : selectedFormatPreview.kind === "giveaway"
+                      ? t("automation.giveaway.impactText")
                       : t("automation.format.focusSourceImpactText")}
                   </strong>
                 </div>
@@ -12411,6 +12777,8 @@ function blockFormatCardClickAfterDrag(event) {
                       ? t("automation.format.addToPlan")
                       : selectedFormatPreview.kind === "offer_campaign"
                       ? t("automation.format.addAndConfigure")
+                      : selectedFormatPreview.kind === "giveaway"
+                      ? t("automation.giveaway.configureButton")
                       : t("automation.format.choosePage")}
                   </button>
                 </div>

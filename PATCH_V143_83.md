@@ -1,0 +1,22 @@
+# v143.83 changed areas
+
+- `app/automation/page.jsx`
+  - Giveaway / Competition one-off builder and AI prompt construction.
+- `app/api/cron/run-automations/route.js`
+  - giveaway-specific caption rules and no forced website CTA.
+- `components/StripeBillingPanel.jsx`
+  - interval-aware plan-change labels and scheduled-change notes.
+- `lib/contentFormatLibrary.js`
+  - featured Giveaway format.
+- `lib/contentEconomics.js`
+  - default Giveaway cost: 10 credits.
+- `lib/platformContentCompatibility.js`
+  - Giveaway uses single-image delivery.
+- `lib/i18n/defaultLabels.js`
+  - Giveaway and billing interval copy.
+- `app/styles/43-v143-83-giveaway-billing.css`
+  - responsive Giveaway builder styling.
+- `app/admin/content-formats/page.jsx`
+  - Gift icon support in the content-format admin UI.
+- `scripts/test-v143-83-giveaway-billing-interval.mjs`
+  - regression checks for the new behavior.

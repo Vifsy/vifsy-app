@@ -287,19 +287,35 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
         <div className="stripe-billing-plan-area">
       <div className="stripe-plan-grid">
         {PLANS.map((plan) => {
-          const selected = currentPlan === plan.key && billing?.subscription_interval === interval;
-          const samePlanDifferentInterval = currentPlan === plan.key && billing?.subscription_interval && billing.subscription_interval !== interval;
+          const currentInterval = String(billing?.subscription_interval || "").toLowerCase();
+          const selected = currentPlan === plan.key && currentInterval === interval;
+          const samePlanDifferentInterval = currentPlan === plan.key && currentInterval && currentInterval !== interval;
+          const viewingDifferentInterval = Boolean(canChangePlan && currentInterval && currentInterval !== interval);
           const lookup = interval === "month" ? plan.monthLookup : plan.yearLookup;
           const price = interval === "month" ? plan.month : plan.year;
-          const isUpgrade = canChangePlan && (plan.rank > currentRank || samePlanDifferentInterval && billing?.subscription_interval === "month" && interval === "year");
-          const isDowngrade = canChangePlan && (plan.rank < currentRank || samePlanDifferentInterval && billing?.subscription_interval === "year" && interval === "month");
+          const isUpgrade = canChangePlan && plan.rank > currentRank;
+          const isDowngrade = canChangePlan && plan.rank < currentRank;
+          const isScheduledAtPeriodEnd = Boolean(
+            canChangePlan &&
+              (plan.rank < currentRank ||
+                (plan.rank === currentRank && currentInterval === "year" && interval === "month"))
+          );
+          const isImmediatePaidChange = Boolean(
+            canChangePlan &&
+              (plan.rank > currentRank ||
+                (plan.rank === currentRank && currentInterval === "month" && interval === "year"))
+          );
           const disabled = busyLookup === lookup || (selected && hasStripeSubscription) || (isTrialing && !selected);
           let buttonLabel = t("billing.choosePlan", { plan: plan.name });
           if (!hasStripeSubscription && trialInfo?.eligible) buttonLabel = t("billing.startTrial");
           else if (selected && hasStripeSubscription) buttonLabel = t("billing.currentPlan");
+          else if (viewingDifferentInterval) {
+            buttonLabel = interval === "year"
+              ? t("billing.switchToYearlyPlan", { plan: plan.name })
+              : t("billing.switchToMonthlyPlan", { plan: plan.name });
+          }
           else if (isUpgrade) buttonLabel = t("billing.upgradeTo", { plan: plan.name });
           else if (isDowngrade) buttonLabel = t("billing.downgradeTo", { plan: plan.name });
-          else if (samePlanDifferentInterval && canChangePlan) buttonLabel = interval === "year" ? t("billing.switchYearly") : t("billing.switchMonthly");
           return (
             <article key={plan.key} className={`stripe-plan-card ${plan.featured ? "featured" : ""} ${selected ? "current" : ""}`}>
               {plan.featured && <span className="stripe-plan-recommended"><Sparkles size={13} />{t("billing.recommended")}</span>}
@@ -317,12 +333,20 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
                 type="button"
                 className="stripe-plan-action"
                 disabled={disabled}
-                onClick={() => hasStripeSubscription ? changeSubscription(lookup, Boolean(isUpgrade)) : startCheckout(lookup, Boolean(trialInfo?.eligible))}
+                onClick={() => hasStripeSubscription ? changeSubscription(lookup, isImmediatePaidChange) : startCheckout(lookup, Boolean(trialInfo?.eligible))}
               >
                 {busyLookup === lookup ? <LoaderCircle className="billing-spin" size={16} /> : <CreditCard size={15} />}
                 {buttonLabel}
               </button>
-              {isDowngrade && <small className="stripe-plan-change-note">{t("billing.downgradeAtPeriodEnd")}</small>}
+              {samePlanDifferentInterval && hasStripeSubscription && (
+                <small className="stripe-plan-change-note stripe-plan-current-interval-note">
+                  {t("billing.currentIntervalPlan", {
+                    plan: currentPlanConfig?.name || plan.name,
+                    interval: currentInterval === "year" ? t("billing.intervalYearlyWord") : t("billing.intervalMonthlyWord"),
+                  })}
+                </small>
+              )}
+              {isScheduledAtPeriodEnd && <small className="stripe-plan-change-note">{t("billing.downgradeAtPeriodEnd")}</small>}
             </article>
           );
         })}

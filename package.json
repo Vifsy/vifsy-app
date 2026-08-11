@@ -98,7 +98,8 @@
     "test:v143.77": "node scripts/test-v143-77-stripe-billing.mjs",
     "test:v143.78": "node scripts/test-v143-78-trial-subscription-lifecycle.mjs",
     "test:v143.81": "node scripts/test-v143-81-plan-entitlements.mjs",
-    "test:v143.82": "node scripts/test-v143-82-admin-plan-limit-bypass.mjs"
+    "test:v143.82": "node scripts/test-v143-82-admin-plan-limit-bypass.mjs",
+    "test:v143.83": "node scripts/test-v143-83-giveaway-billing-interval.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

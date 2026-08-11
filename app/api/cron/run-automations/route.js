@@ -9718,6 +9718,7 @@ function removePricesFromAnimatedCaption(postContent, rule) {
 }
 
 function buildAutomationPrompt(rule) {
+  const isGiveawayRule = String(rule?.content_type_id || "").trim() === "giveaway";
   const brandProfileText = formatBrandProfileForPrompt(rule.brand_profile);
   const carouselProducts = getCarouselProducts(rule).filter(isValidCarouselProduct);
   const hasCarouselProducts = isCarouselRule(rule) && carouselProducts.length > 0;
@@ -9735,7 +9736,7 @@ function buildAutomationPrompt(rule) {
   const authorizedCampaignOfferText = formatAuthorizedCampaignOfferForPrompt(rule);
   const hasAuthorizedCampaignOffer = Boolean(getAuthorizedCampaignOffer(rule));
   const focusedPageContextText = formatFocusedPageContextForPrompt(rule);
-  const destinationUrl = getPostDestinationUrl(rule);
+  const destinationUrl = isGiveawayRule ? "" : getPostDestinationUrl(rule);
   const productContract = rule?.product_content_contract ||
     buildProductContentContract(
       hasCarouselProducts ? carouselProducts : rule?.website_item ? [rule.website_item] : [],
@@ -9791,7 +9792,7 @@ ${getLanguageInstruction(rule.language)}
 Tone: ${rule.tone || "Professional"}
 Post type: ${rule.post_type || "General post"}
 Length: ${rule.length || "Medium"}
-CTA type: ${rule.cta_type || "Soft CTA"}
+CTA type: ${isGiveawayRule ? "Participate in the giveaway" : rule.cta_type || "Soft CTA"}
 Destination URL: ${destinationUrl || "Not provided"}
 
 Include emojis: ${rule.include_emojis ? "Yes" : "No"}
@@ -9852,7 +9853,10 @@ Output rules:
 - Return only the final post text.
 - Do not explain anything.
 - Make it suitable for the selected platform.
-- Keep the caption compact: normally 2 to 4 short sentences plus optional hashtags. Avoid repeating the same selling point.
+${isGiveawayRule
+  ? `- This is a giveaway/competition. Prioritize complete, unambiguous participation instructions, closing date, winner count, selection method, notification method and any mandatory platform acknowledgement over the normal short-caption target. Use short lines or bullets when that improves clarity.
+- Never remove customer-supplied giveaway rules just to make the caption shorter.`
+  : `- Keep the caption compact: normally 2 to 4 short sentences plus optional hashtags. Avoid repeating the same selling point.`}
 - For carousels, write one short intro and one clear CTA. Do not list every product in the caption if the slides already show them.
 - For carousel slide titles, use benefit/occasion/gift-angle wording instead of only copying product names when a campaign theme is provided.
 - If the selected platform includes both Facebook and Instagram, write a strong core post that works on both. Avoid platform-specific wording such as "click the link" unless a Destination URL is actually included.

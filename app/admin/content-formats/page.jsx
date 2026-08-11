@@ -9,6 +9,7 @@ import {
   CircleHelp,
   Clapperboard,
   GalleryHorizontalEnd,
+  Gift,
   ImagePlus,
   Lightbulb,
   Link2,
@@ -58,6 +59,7 @@ const iconComponents = {
   Link2,
   Tag,
   PenLine,
+  Gift,
 };
 
 const categoryValues = ["popular", "text", "image_ads", "video", "educational", "sales"];
