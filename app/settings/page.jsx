@@ -3,9 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 import AppLayout from "../../components/AppLayout";
 import StripeBillingPanel from "../../components/StripeBillingPanel";
+import SettingsPanels from "../../components/SettingsPanels";
 import { supabase } from "../../lib/supabaseClient";
 import { useUiText } from "../../lib/i18n/useUiText";
-import { Bell, ChevronRight, CreditCard, Languages, Mail, ShieldCheck, UserRound } from "lucide-react";
+import {
+  Bell,
+  ChevronRight,
+  CreditCard,
+  Languages,
+  Mail,
+  ShieldCheck,
+  UserRound,
+} from "lucide-react";
 import {
   SUPPORTED_UI_LOCALES,
   getUiLanguageName,
@@ -338,6 +347,18 @@ export default function Settings() {
   const { t, locale, setLocale } = useUiText(["settings", "layout"]);
 
   const [currentUserEmail, setCurrentUserEmail] = useState("");
+  const [currentUser, setCurrentUser] = useState(null);
+  const [activeTab, setActiveTab] = useState("account");
+  const [profileName, setProfileName] = useState("");
+  const [profileMessage, setProfileMessage] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingNotifications, setSavingNotifications] = useState(false);
+  const [notificationMessage, setNotificationMessage] = useState("");
+  const [notificationPreferences, setNotificationPreferences] = useState({
+    review: true,
+    publishing: true,
+    product: false,
+  });
   const [creditBalance, setCreditBalance] = useState(null);
   const [loadingCredits, setLoadingCredits] = useState(true);
   const [savingLanguage, setSavingLanguage] = useState(false);
@@ -373,7 +394,14 @@ export default function Settings() {
         data: { user },
       } = await supabase.auth.getUser();
 
+      setCurrentUser(user || null);
       setCurrentUserEmail(user?.email || "");
+      setProfileName(user?.user_metadata?.full_name || user?.user_metadata?.name || "");
+      setNotificationPreferences({
+        review: user?.user_metadata?.notification_preferences?.review !== false,
+        publishing: user?.user_metadata?.notification_preferences?.publishing !== false,
+        product: user?.user_metadata?.notification_preferences?.product === true,
+      });
 
       if (user?.id) {
         setLoadingCredits(true);
@@ -390,6 +418,13 @@ export default function Settings() {
     }
 
     loadUser();
+  }, []);
+
+  useEffect(() => {
+    const requestedTab = new URLSearchParams(window.location.search).get("tab");
+    if (["account", "security", "notifications", "language", "billing"].includes(requestedTab)) {
+      setActiveTab(requestedTab);
+    }
   }, []);
 
   const planName = useMemo(() => {
@@ -431,6 +466,55 @@ export default function Settings() {
     } finally {
       setSavingLanguage(false);
     }
+  }
+
+  function selectTab(tab) {
+    setActiveTab(tab);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", tab);
+    window.history.replaceState({}, "", url);
+  }
+
+  async function saveProfile() {
+    if (savingProfile) return;
+    setSavingProfile(true);
+    setProfileMessage("");
+    const { error } = await supabase.auth.updateUser({ data: { full_name: profileName.trim() } });
+    setProfileMessage(error ? error.message : (getLocaleBase(locale) === "sv" ? "Profilen är sparad." : "Profile saved."));
+    setSavingProfile(false);
+  }
+
+  async function saveNotifications() {
+    if (savingNotifications) return;
+    setSavingNotifications(true);
+    setNotificationMessage("");
+    const { error } = await supabase.auth.updateUser({
+      data: { notification_preferences: notificationPreferences },
+    });
+    setNotificationMessage(error ? error.message : (getLocaleBase(locale) === "sv" ? "Aviseringarna är sparade." : "Notifications saved."));
+    setSavingNotifications(false);
+  }
+
+  async function signOutOtherSessions() {
+    setProfileMessage("");
+    const { error } = await supabase.auth.signOut({ scope: "others" });
+    setProfileMessage(error ? error.message : (getLocaleBase(locale) === "sv" ? "Övriga sessioner har loggats ut." : "Other sessions have been signed out."));
+  }
+
+  function exportAccountData() {
+    const payload = {
+      exported_at: new Date().toISOString(),
+      account: { id: currentUser?.id || null, email: currentUserEmail, name: profileName },
+      preferences: { language: locale, notifications: notificationPreferences },
+      subscription: creditBalance,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "spreelo-account-export.json";
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
   async function handleDeleteAccount() {
@@ -494,7 +578,14 @@ export default function Settings() {
             </div>
           </header>
 
-          <section className="settings-v14379-quick-grid" aria-label={t("settings.quickSettingsLabel")}>
+          <nav className="settings-unified-tabs" aria-label={t("settings.quickSettingsLabel")}>
+            <button type="button" className={activeTab === "account" ? "active" : ""} onClick={() => selectTab("account")}><UserRound />{t("settings.accountTitle")}</button>
+            <button type="button" className={activeTab === "security" ? "active" : ""} onClick={() => selectTab("security")}><ShieldCheck />{t("settings.securityTitle")}</button>
+            <button type="button" className={activeTab === "notifications" ? "active" : ""} onClick={() => selectTab("notifications")}><Bell />{t("settings.notificationsTitle")}</button>
+            <button type="button" className={activeTab === "language" ? "active" : ""} onClick={() => selectTab("language")}><Languages />{t("settings.languageTitle")}</button>
+            <button type="button" className={activeTab === "billing" ? "active" : ""} onClick={() => selectTab("billing")}><CreditCard />{t("settings.planSubscriptionTitle")}</button>
+          </nav>
+          <section className="settings-v14379-quick-grid settings-unified-legacy-cards" aria-label={t("settings.quickSettingsLabel")}>
             <article className="settings-v14379-quick-card">
               <span className="settings-v14339-icon coral"><UserRound size={20} /></span>
               <div>
@@ -559,9 +650,31 @@ export default function Settings() {
           </section>
         </section>
 
-        <StripeBillingPanel initialBalance={creditBalance} onBalanceChange={setCreditBalance} />
+        <SettingsPanels
+          activeTab={activeTab}
+          locale={locale}
+          currentUser={currentUser}
+          currentUserEmail={currentUserEmail}
+          profileName={profileName}
+          setProfileName={setProfileName}
+          profileMessage={profileMessage}
+          savingProfile={savingProfile}
+          saveProfile={saveProfile}
+          signOutOtherSessions={signOutOtherSessions}
+          exportAccountData={exportAccountData}
+          notificationPreferences={notificationPreferences}
+          setNotificationPreferences={setNotificationPreferences}
+          notificationMessage={notificationMessage}
+          savingNotifications={savingNotifications}
+          saveNotifications={saveNotifications}
+          recommendedLocale={recommendedLocale}
+          savingLanguage={savingLanguage}
+          handleLanguageChange={handleLanguageChange}
+        />
 
-        <section className="settings-danger-zone settings-danger-zone-compact settings-v14339-danger settings-v14379-danger">
+        {activeTab === "billing" && <StripeBillingPanel initialBalance={creditBalance} onBalanceChange={setCreditBalance} />}
+
+        {activeTab === "account" && <section className="settings-danger-zone settings-danger-zone-compact settings-v14339-danger settings-v14379-danger">
           <div>
             <p className="eyebrow danger-eyebrow">{t("settings.dangerEyebrow")}</p>
             <h3>{t("settings.deleteTitle")}</h3>
@@ -570,7 +683,7 @@ export default function Settings() {
           <button type="button" className="danger-button compact" onClick={() => { setDeleteMessage(""); setDeleteModalOpen(true); }} disabled={deletingAccount}>
             {getDeleteCopy(locale, "openDeleteDialog", deleteConfirmWord, deleteButtonLabel)}
           </button>
-        </section>
+        </section>}
 
       {deleteModalOpen && (
         <div className="settings-modal-backdrop" role="presentation">
