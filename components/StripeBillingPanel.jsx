@@ -49,7 +49,7 @@ function formatDate(value) {
 }
 
 export default function StripeBillingPanel({ initialBalance = null, onBalanceChange }) {
-  const { t } = useUiText();
+  const { t } = useUiText(["settings"]);
   const [billing, setBilling] = useState(initialBalance);
   const [trialInfo, setTrialInfo] = useState(null);
   const [interval, setInterval] = useState("month");
@@ -231,43 +231,33 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
     <section id="spreelo-plans" className="stripe-reference-billing">
       <div className="stripe-reference-layout">
         <div className="stripe-reference-table">
-          <div className="stripe-reference-labels">
-            <div className="head" />
-            <div><strong>Pris</strong><small>Faktureras årligen</small></div>
-            <div><strong>Krediter/månad</strong><small>Återställs varje månad</small></div>
-            <div><strong>Företag</strong></div>
-            <div><strong>Sociala konton</strong></div>
-            <div><strong>Rullande planer</strong><small>Innehållsplaner</small></div>
-            <div className="fit"><span>Passar för</span></div>
-            <div className="action" />
-          </div>
           {PLANS.map((plan) => {
             const selected = currentPlan === plan.key;
             const lookup = plan.yearLookup;
             const isUpgrade = canChangePlan && plan.rank > currentRank;
             const isImmediatePaidChange = Boolean(canChangePlan && plan.rank > currentRank);
             const disabled = busyLookup === lookup || (selected && hasStripeSubscription) || (isTrialing && !selected);
-            let buttonLabel = selected && hasStripeSubscription ? "Hantera min plan" : `Välj ${plan.name}`;
-            if (!selected && isUpgrade) buttonLabel = `Uppgradera till ${plan.name}`;
-            if (!selected && canChangePlan && plan.rank < currentRank) buttonLabel = `Nedgradera till ${plan.name}`;
+            let buttonLabel = selected && hasStripeSubscription ? t("billing.currentPlan") : t("billing.choosePlan", { plan: plan.name });
+            if (!selected && isUpgrade) buttonLabel = t("billing.upgradeTo", { plan: plan.name });
+            if (!selected && canChangePlan && plan.rank < currentRank) buttonLabel = t("billing.downgradeTo", { plan: plan.name });
             const fitText = plan.key === "starter"
-              ? "Småföretag som vill komma igång med konsekvent innehåll och publicering."
+              ? t("billing.fitStarter")
               : plan.key === "growth"
-                ? "Växande varumärken som hanterar flera kanaler och behöver mer kapacitet."
-                : "Byråer och marknadsföringsteam som driver flera varumärken och större innehållsproduktion.";
+                ? t("billing.fitGrowth")
+                : t("billing.fitPro");
             const audienceText = plan.key === "starter"
-              ? "För mindre företag"
+              ? t("billing.audienceStarterShort")
               : plan.key === "growth"
-                ? "För växande varumärken"
-                : "För team med större behov";
+                ? t("billing.audienceGrowthShort")
+                : t("billing.audienceProShort");
             return (
               <article key={plan.key} className={`stripe-reference-plan ${selected ? "current" : ""}`}>
-                <header><div><h2>{plan.name}</h2><small>{audienceText}</small></div>{selected ? <span>Nuvarande plan</span> : null}</header>
-                <div className="price"><strong>{plan.year.toLocaleString("sv-SE")} kr</strong><small>/år</small></div>
-                <div className="plan-feature credits">{plan.credits} krediter/månad</div>
-                <div className="plan-feature brands">{plan.brands} {plan.brands === 1 ? "företag" : "företag"}</div>
-                <div className="plan-feature social">{plan.socialAccounts === 1 ? "1 socialt konto" : `upp till ${plan.socialAccounts} sociala konton`}</div>
-                <div className="plan-feature recurring">{plan.recurringPlans === 1 ? "1 rullande innehållsplan" : `upp till ${plan.recurringPlans} rullande innehållsplaner`}</div>
+                <header><div><h2>{plan.name}</h2><small>{audienceText}</small></div>{selected ? <span>{t("billing.currentPlan")}</span> : null}</header>
+                <div className="price"><strong>{plan.year.toLocaleString()} kr</strong><small>/{t("billing.yearShort")}</small><em>{t("billing.priceBilledYearly")}</em></div>
+                <div className="plan-feature credits">{t("billing.creditsPerMonth", { count: plan.credits })}</div>
+                <div className="plan-feature brands">{plan.brands === 1 ? t("billing.businessOne") : t("billing.businesses", { count: plan.brands })}</div>
+                <div className="plan-feature social">{plan.socialAccounts === 1 ? t("billing.socialAccountLimitOne") : t("billing.socialAccountLimit", { count: plan.socialAccounts })}</div>
+                <div className="plan-feature recurring">{plan.recurringPlans === 1 ? t("billing.recurringPlanLimitOne") : t("billing.recurringPlanLimit", { count: plan.recurringPlans })}</div>
                 <div className="fit">{fitText}</div>
                 <div className="action"><button type="button" disabled={disabled} onClick={() => selected && hasStripeSubscription ? null : hasStripeSubscription ? changeSubscription(lookup, isImmediatePaidChange) : startCheckout(lookup, Boolean(trialInfo?.eligible))}>{busyLookup === lookup ? <LoaderCircle className="billing-spin" /> : null}{buttonLabel}</button></div>
               </article>
@@ -275,15 +265,19 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
           })}
         </div>
         <aside className="stripe-reference-packs">
-          <h2>Fyll på extra krediter</h2>
-          <p>Engångsköp av krediter läggs till ditt saldo och förfaller inte.</p>
-          <div>{CREDIT_PACKS.map((pack) => <article key={pack.lookup}><span>+&nbsp; {pack.credits} krediter</span><strong>{pack.price} kr</strong><button type="button" disabled={Boolean(busyLookup) || Boolean(busyAction) || !canBuyExtraCredits} onClick={() => startCheckout(pack.lookup, false)}>{busyLookup === pack.lookup ? <LoaderCircle className="billing-spin" /> : "Köp"}</button></article>)}</div>
-          <small>Priser inkl. moms.</small>
-          <a href="#spreelo-credit-info">Läs mer om krediter →</a>
+          <h2>{t("billing.extraCreditsTitle")}</h2>
+          <p>{t("billing.extraCreditsText")}</p>
+          <div>{CREDIT_PACKS.map((pack) => <article key={pack.lookup}><span>+&nbsp; {pack.credits} {t("billing.credits")}</span><strong>{pack.price} kr</strong><button type="button" disabled={Boolean(busyLookup) || Boolean(busyAction) || !canBuyExtraCredits} onClick={() => startCheckout(pack.lookup, false)}>{busyLookup === pack.lookup ? <LoaderCircle className="billing-spin" /> : t("billing.buy")}</button></article>)}</div>
+          <small>{t("billing.pricesIncludeVat")}</small>
+          <a href="#spreelo-credit-info">{t("billing.learnMoreCredits")} →</a>
         </aside>
       </div>
-      <div id="spreelo-credit-info" className="stripe-reference-benefits"><span><Check />Detta ingår i alla planer</span><span>Alla innehållstyper</span><span>AI-bilder</span><span>AI-video / Reels</span><span>Kampanjer</span><span>Automatisk publicering</span></div>
-      <p className="stripe-reference-footnote">Planerna förnyas årligen. Du kan när som helst uppgradera, nedgradera eller avsluta.</p>
+      <div className="stripe-reference-benefits"><span><Check />{t("billing.includedAllPlans")}</span><span>{t("billing.allContentTypes")}</span><span>{t("billing.aiImages")}</span><span>{t("billing.aiVideoReels")}</span><span>{t("billing.campaignsIncluded")}</span><span>{t("billing.automaticPublishing")}</span></div>
+      <section id="spreelo-credit-info" className="stripe-reference-credit-info">
+        <header><Sparkles /><div><h2>{t("billing.howCreditsWorkTitle")}</h2><p>{t("billing.howCreditsWorkText")}</p></div></header>
+        <div><article><strong>{t("billing.creditInfoRefreshTitle")}</strong><span>{t("billing.creditInfoRefreshText")}</span></article><article><strong>{t("billing.creditInfoPurchasedTitle")}</strong><span>{t("billing.creditInfoPurchasedText")}</span></article><article><strong>{t("billing.creditInfoUsageTitle")}</strong><span>{t("billing.creditInfoUsageText")}</span></article></div>
+      </section>
+      <p className="stripe-reference-footnote">{t("billing.plansRenewYearly")}</p>
       {message ? <p className="stripe-billing-message">{message}</p> : null}
       {paymentLink ? <a className="stripe-billing-payment-link" href={paymentLink} target="_blank" rel="noreferrer">{t("billing.openPayment")} <ExternalLink /></a> : null}
     </section>

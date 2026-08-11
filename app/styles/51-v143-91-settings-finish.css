@@ -1,0 +1,171 @@
+/* v143.91 — finished settings hierarchy, plan cards and explicit time-zone save. */
+
+:root { --spreelo-head-gradient:linear-gradient(90deg,#05101b 0%,#1c3d5b 100%); }
+.settings-reference-credits em::before { content:"" !important; }
+
+html body .settings-reference-page .settings-ref-labelled-section > div:first-child,
+html body .settings-reference-page .settings-ref-account-aside > h2,
+html body .settings-reference-page .settings-ref-security-aside > h2,
+html body .settings-reference-page .settings-ref-delivery > h2,
+html body .settings-reference-page .settings-ref-language-aside > h2,
+html body .settings-reference-page .settings-ref-notification-summary > header,
+html body .settings-reference-page .settings-ref-language-section > div:first-child {
+  background:var(--spreelo-head-gradient) !important;
+}
+
+/* Profile is a compact component, not a floating row. */
+html body .settings-reference-page .settings-ref-profile-block {
+  display:grid;
+  grid-template-columns:minmax(160px,260px) minmax(0,1fr);
+  align-items:center;
+  gap:30px;
+  margin:0 0 18px;
+  padding:20px 24px;
+  border:1px solid var(--spreelo-line);
+  border-radius:var(--spreelo-radius);
+  background:linear-gradient(135deg,#fff 0%,#f7f9fc 100%);
+  box-shadow:0 10px 30px rgba(14,28,47,.055);
+}
+html body .settings-reference-page .settings-ref-profile-block h2 { margin:0 0 5px; font-size:17px; }
+html body .settings-reference-page .settings-ref-profile-block p { margin:0; color:#607087; font-size:13px; }
+html body .settings-reference-page .settings-ref-profile { margin:0 !important; }
+html body .settings-reference-page .settings-ref-profile button,
+html body .settings-reference-page .settings-ref-account-aside a { border-radius:11px !important; font-size:14px !important; font-weight:600 !important; }
+
+html body .settings-reference-page .settings-ref-account-aside { align-self:start !important; height:auto !important; min-height:0 !important; }
+html body .settings-reference-page .settings-ref-account-facts { display:grid; margin:0 0 24px; }
+html body .settings-reference-page .settings-ref-account-facts > div { display:grid; gap:5px; padding:15px 0; border-bottom:1px solid var(--spreelo-line); }
+html body .settings-reference-page .settings-ref-account-facts > div:first-child { padding-top:0; }
+html body .settings-reference-page .settings-ref-account-facts span { color:#637086; font-size:13px; }
+html body .settings-reference-page .settings-ref-account-facts strong { color:#122035; font-size:16px; }
+
+/* Explicit and legible time-zone action. */
+html body .settings-reference-page .settings-ref-language-section > .settings-ref-language-select { display:grid; gap:12px; margin:22px 24px 24px !important; }
+html body .settings-reference-page .settings-ref-language-select label { display:grid; gap:8px; }
+html body .settings-reference-page .settings-ref-language-select label > span { color:#17243a; font-size:13px; font-weight:700; }
+html body .settings-reference-page .settings-ref-timezone-save {
+  justify-self:start;
+  min-height:44px;
+  padding:0 20px;
+  border:0;
+  border-radius:11px;
+  color:#fff;
+  background:#f4512d;
+  font:inherit;
+  font-size:14px;
+  font-weight:600;
+  cursor:pointer;
+}
+html body .settings-reference-page .settings-ref-timezone-save:disabled { color:#617086; background:#e8edf2; cursor:default; }
+
+/* Three distinct cards replace the spreadsheet-like comparison table. */
+html body .settings-reference-page .stripe-reference-layout { grid-template-columns:minmax(0,1fr) 245px !important; gap:24px !important; align-items:start !important; }
+html body .settings-reference-page .stripe-reference-table {
+  display:grid !important;
+  grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+  gap:18px !important;
+  border:0 !important;
+  background:transparent !important;
+}
+html body .settings-reference-page .stripe-reference-plan {
+  display:flex !important;
+  flex-direction:column !important;
+  min-width:0 !important;
+  overflow:hidden !important;
+  border:1px solid #dce2e9 !important;
+  border-radius:18px !important;
+  background:#fff !important;
+  box-shadow:0 14px 34px rgba(14,28,47,.075) !important;
+}
+html body .settings-reference-page .stripe-reference-plan.current { border-color:#f3b7a8 !important; background:linear-gradient(180deg,#fff4ef 0%,#fffaf8 100%) !important; }
+html body .settings-reference-page .stripe-reference-plan > header {
+  display:flex !important;
+  align-items:flex-start !important;
+  justify-content:space-between !important;
+  gap:12px !important;
+  min-height:112px !important;
+  padding:22px !important;
+  border:0 !important;
+  border-radius:0 !important;
+  background:linear-gradient(145deg,#f8fafc,#fff) !important;
+}
+html body .settings-reference-page .stripe-reference-plan.current > header { color:#fff !important; background:var(--spreelo-head-gradient) !important; }
+html body .settings-reference-page .stripe-reference-plan > header h2 { margin:0 0 8px !important; font-size:23px !important; }
+html body .settings-reference-page .stripe-reference-plan > header small { display:block !important; color:#66758a !important; font-size:13px !important; line-height:1.35 !important; }
+html body .settings-reference-page .stripe-reference-plan.current > header small { color:#d7e2ec !important; }
+html body .settings-reference-page .stripe-reference-plan header > span {
+  flex:0 0 auto;
+  padding:6px 9px !important;
+  border:1px solid rgba(255,255,255,.28) !important;
+  border-radius:999px !important;
+  color:#fff !important;
+  background:rgba(255,255,255,.12) !important;
+  font-size:11px !important;
+  font-weight:650 !important;
+  white-space:nowrap;
+}
+html body .settings-reference-page .stripe-reference-plan > div { min-height:0 !important; padding:0 22px !important; border-bottom:1px solid #e5e9ee !important; font-size:14px !important; }
+html body .settings-reference-page .stripe-reference-plan .price {
+  display:flex !important;
+  flex-wrap:wrap;
+  align-items:center !important;
+  align-content:center !important;
+  gap:5px !important;
+  min-height:118px !important;
+  padding-block:20px !important;
+}
+html body .settings-reference-page .stripe-reference-plan .price strong { font-size:32px !important; }
+html body .settings-reference-page .stripe-reference-plan .price small { font-size:13px !important; }
+html body .settings-reference-page .stripe-reference-plan .price em { flex-basis:100%; color:#69778b; font-size:12px; font-style:normal; }
+html body .settings-reference-page .stripe-reference-plan .plan-feature { display:flex !important; align-items:center !important; min-height:58px !important; padding-left:47px !important; position:relative; line-height:1.35; }
+html body .settings-reference-page .stripe-reference-plan .plan-feature::before { left:22px !important; }
+html body .settings-reference-page .stripe-reference-plan .fit { display:flex !important; align-items:flex-start !important; min-height:124px !important; padding-top:22px !important; color:#3f4f65 !important; font-size:14px !important; line-height:1.5 !important; background:rgba(244,247,250,.72); }
+html body .settings-reference-page .stripe-reference-plan .action { margin-top:auto; padding:18px 22px 22px !important; border:0 !important; }
+html body .settings-reference-page .stripe-reference-plan .action button,
+html body .settings-reference-page .stripe-reference-packs article button,
+html body .settings-reference-page .settings-ref-rows button,
+html body .settings-reference-page .settings-ref-action-rows button { font-size:14px !important; font-weight:600 !important; }
+html body .settings-reference-page .stripe-reference-plan .action button { min-height:48px !important; border-radius:10px !important; }
+html body .settings-reference-page .stripe-reference-plan.current .action button:disabled { opacity:1 !important; background:#f4512d !important; }
+
+html body .settings-reference-page .stripe-reference-packs { min-height:0 !important; padding:24px !important; border:1px solid #dce2e9; border-radius:18px; background:#f5f8fb; }
+html body .settings-reference-page .stripe-reference-packs > div { gap:14px !important; margin-top:22px !important; }
+html body .settings-reference-page .stripe-reference-packs article { border-radius:12px !important; }
+html body .settings-reference-page .stripe-reference-packs article button { min-height:42px !important; border-radius:9px !important; }
+html body .settings-reference-page .stripe-reference-benefits { border-radius:14px !important; background:var(--spreelo-head-gradient) !important; }
+html body .settings-reference-page .stripe-reference-credit-info { margin-top:18px; scroll-margin-top:24px; overflow:hidden; border:1px solid #dce2e9; border-radius:16px; background:#fff; }
+html body .settings-reference-page .stripe-reference-credit-info > header { display:flex; gap:14px; padding:20px 22px; color:#fff; background:var(--spreelo-head-gradient); }
+html body .settings-reference-page .stripe-reference-credit-info > header svg { flex:0 0 auto; width:23px; color:#ff7255; }
+html body .settings-reference-page .stripe-reference-credit-info h2 { margin:0 0 5px; color:#fff; font-size:17px; }
+html body .settings-reference-page .stripe-reference-credit-info p { margin:0; color:#d2dde8; font-size:13px; }
+html body .settings-reference-page .stripe-reference-credit-info > div { display:grid; grid-template-columns:repeat(3,1fr); }
+html body .settings-reference-page .stripe-reference-credit-info article { display:grid; gap:7px; padding:20px 22px; border-right:1px solid #e2e7ed; }
+html body .settings-reference-page .stripe-reference-credit-info article:last-child { border-right:0; }
+html body .settings-reference-page .stripe-reference-credit-info article strong { font-size:14px; }
+html body .settings-reference-page .stripe-reference-credit-info article span { color:#607087; font-size:13px; line-height:1.45; }
+
+@media (max-width:1050px) {
+  html body .settings-reference-page .stripe-reference-layout { grid-template-columns:1fr !important; }
+  html body .settings-reference-page .stripe-reference-packs { display:block !important; }
+  html body .settings-reference-page .stripe-reference-packs > div { grid-template-columns:repeat(3,1fr); }
+}
+
+@media (max-width:800px) {
+  html body .settings-reference-page .settings-ref-profile-block { grid-template-columns:1fr; gap:16px; padding:20px; }
+  html body .settings-reference-page .settings-ref-profile { justify-content:flex-start; }
+  html body .settings-reference-page .stripe-reference-table { grid-template-columns:1fr !important; }
+  html body .settings-reference-page .stripe-reference-plan.current { order:-1; }
+  html body .settings-reference-page .stripe-reference-plan > header { min-height:106px !important; border-radius:0 !important; }
+  html body .settings-reference-page .stripe-reference-packs > div { grid-template-columns:1fr; }
+  html body .settings-reference-page .stripe-reference-credit-info > div { grid-template-columns:1fr; }
+  html body .settings-reference-page .stripe-reference-credit-info article { border-right:0; border-bottom:1px solid #e2e7ed; }
+  html body .settings-reference-page .stripe-reference-credit-info article:last-child { border-bottom:0; }
+}
+
+@media (max-width:520px) {
+  html body .settings-reference-page .settings-reference-credits em::before { content:"" !important; }
+  html body .settings-reference-page .settings-ref-language-section > .settings-ref-language-select { margin:18px !important; }
+  html body .settings-reference-page .stripe-reference-plan .price strong { font-size:31px !important; }
+  html body .settings-reference-page .stripe-reference-benefits { grid-template-columns:1fr 1fr !important; padding:12px !important; }
+  html body .settings-reference-page .stripe-reference-benefits span { border-right:0 !important; border-bottom:1px solid rgba(255,255,255,.14); font-size:12px !important; }
+}
