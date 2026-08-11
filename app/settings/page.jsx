@@ -484,7 +484,7 @@ export default function Settings() {
 
   return (
     <AppLayout active="settings">
-      <div className="settings-v14315-page settings-v14339-page settings-v14379-page">
+      <div className="settings-v14315-page settings-v14339-page settings-v14379-page settings-v14380-page">
         <section className="settings-v14379-overview">
           <header className="settings-v14339-hero settings-v14379-hero">
             <div>

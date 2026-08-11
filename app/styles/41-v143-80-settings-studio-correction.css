@@ -1,0 +1,423 @@
+/* v143.80 — implementation correction for approved Settings mockup + AI Studio mobile layout */
+
+/* --------------------------------------------------------------------------
+   SETTINGS — preserve the approved composition:
+   1) hero + quick settings side by side
+   2) billing/pricing full width below
+   3) danger zone full width
+   The older settings page was itself a two-column grid, which squeezed the
+   entire new overview and billing panel into separate columns in v143.79.
+   -------------------------------------------------------------------------- */
+html body .settings-v14380-page {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 14px !important;
+  width: min(1540px, calc(100% - 38px)) !important;
+  max-width: none !important;
+  margin: 0 auto !important;
+  padding: 24px 0 52px !important;
+}
+
+html body .settings-v14380-page > * {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+}
+
+html body .settings-v14380-page .settings-v14379-overview {
+  display: grid !important;
+  grid-template-columns: minmax(460px, .92fr) minmax(560px, 1.08fr) !important;
+  gap: 14px !important;
+  align-items: stretch !important;
+}
+
+html body .settings-v14380-page .settings-v14379-hero {
+  min-width: 0 !important;
+  min-height: 326px !important;
+  padding: 42px 40px !important;
+  align-items: flex-start !important;
+}
+html body .settings-v14380-page .settings-v14379-hero > div {
+  width: min(60%, 560px) !important;
+}
+html body .settings-v14380-page .settings-v14379-hero h2 {
+  font-size: clamp(38px, 3vw, 52px) !important;
+  line-height: 1.01 !important;
+  max-width: 560px !important;
+}
+html body .settings-v14380-page .settings-v14379-hero > div > p:last-child {
+  max-width: 470px !important;
+  font-size: 14px !important;
+  line-height: 1.55 !important;
+}
+
+html body .settings-v14380-page .settings-v14379-quick-grid {
+  min-width: 0 !important;
+  height: 100% !important;
+  grid-template-columns: repeat(2,minmax(0,1fr)) !important;
+  gap: 10px !important;
+}
+html body .settings-v14380-page .settings-v14379-quick-card {
+  min-width: 0 !important;
+  min-height: 98px !important;
+  padding: 16px !important;
+}
+html body .settings-v14380-page .settings-v14379-quick-card h3 {
+  font-size: 15.5px !important;
+}
+html body .settings-v14380-page .settings-v14379-quick-card p,
+html body .settings-v14380-page .settings-v14379-inline-value,
+html body .settings-v14380-page .settings-v14379-language-card select.input,
+html body .settings-v14380-page .settings-v14379-plan-summary span {
+  font-size: 12px !important;
+  line-height: 1.44 !important;
+}
+
+/* Billing panel is a full-width second row, matching the approved mockup. */
+html body .settings-v14380-page .stripe-billing-v14377 {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 24px !important;
+}
+html body .settings-v14380-page .stripe-billing-heading h2 {
+  font-size: 29px !important;
+}
+html body .settings-v14380-page .stripe-billing-heading > div > p:last-child {
+  font-size: 13.5px !important;
+}
+html body .settings-v14380-page .stripe-billing-main-grid {
+  grid-template-columns: minmax(0,1fr) 300px !important;
+  gap: 14px !important;
+}
+html body .settings-v14380-page .stripe-plan-grid {
+  grid-template-columns: repeat(3,minmax(0,1fr)) !important;
+  gap: 11px !important;
+}
+html body .settings-v14380-page .stripe-plan-card {
+  min-height: 410px !important;
+  padding: 18px !important;
+}
+html body .settings-v14380-page .stripe-plan-name h3 {
+  font-size: 20px !important;
+}
+html body .settings-v14380-page .stripe-plan-audience {
+  font-size: 10.5px !important;
+  line-height: 1.25 !important;
+}
+html body .settings-v14380-page .stripe-plan-price strong {
+  font-size: 30px !important;
+}
+html body .settings-v14380-page .stripe-plan-credit-line,
+html body .settings-v14380-page .stripe-plan-card li {
+  font-size: 12.5px !important;
+  line-height: 1.42 !important;
+}
+html body .settings-v14380-page .stripe-plan-card ul {
+  gap: 8px !important;
+}
+html body .settings-v14380-page .stripe-plan-action {
+  min-height: 44px !important;
+  height: 44px !important;
+  font-size: 12px !important;
+}
+html body .settings-v14380-page .stripe-credit-packs-copy > p:last-child,
+html body .settings-v14380-page .stripe-credit-pack-grid button span,
+html body .settings-v14380-page .stripe-credit-explainer p {
+  font-size: 12px !important;
+  line-height: 1.45 !important;
+}
+html body .settings-v14380-page .stripe-credit-pack-grid button strong {
+  font-size: 13px !important;
+}
+html body .settings-v14380-page .stripe-credit-explainer strong {
+  font-size: 13.5px !important;
+}
+html body .settings-v14380-page .stripe-billing-footnote {
+  font-size: 10.5px !important;
+}
+
+html body .settings-v14380-page .settings-v14379-danger {
+  width: 100% !important;
+  margin: 0 !important;
+}
+
+/* --------------------------------------------------------------------------
+   AI CONTENT STUDIO — mobile width, readable helper copy, no overflow.
+   -------------------------------------------------------------------------- */
+html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v14380-platform-note {
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 7px !important;
+  width: 100% !important;
+  margin: 9px 0 0 !important;
+  padding: 9px 11px !important;
+  border: 1px solid rgba(229,157,134,.28) !important;
+  border-radius: 11px !important;
+  background: rgba(255,248,244,.7) !important;
+  color: #677286 !important;
+  font-size: 11.5px !important;
+  font-weight: 550 !important;
+  line-height: 1.42 !important;
+}
+html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v14380-platform-note svg {
+  flex: 0 0 auto !important;
+  margin-top: 1px !important;
+  color: #ef745f !important;
+}
+
+/* Readability pass across the whole visible studio, not just one helper line. */
+html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v89-settings-heading p,
+html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v70-formats-head p,
+html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v74-content-types-note,
+html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v72-format-library.grid article p,
+html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v72-format-library.grid article small,
+html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v70-activate-card:not(.saved) .plan-v70-activate-copy p,
+html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v70-activate-card:not(.saved) .plan-v74-approval-publishing-note {
+  font-size: 12px !important;
+  line-height: 1.45 !important;
+}
+html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v90-setting-copy small {
+  font-size: 11px !important;
+  line-height: 1.32 !important;
+}
+
+@media (max-width: 1180px) {
+  html body .settings-v14380-page .settings-v14379-overview {
+    grid-template-columns: 1fr !important;
+  }
+  html body .settings-v14380-page .settings-v14379-hero {
+    min-height: 230px !important;
+  }
+  html body .settings-v14380-page .settings-v14379-quick-grid {
+    grid-template-columns: repeat(3,minmax(0,1fr)) !important;
+  }
+  html body .settings-v14380-page .stripe-billing-main-grid {
+    grid-template-columns: 1fr !important;
+  }
+  html body .settings-v14380-page .stripe-credit-pack-grid {
+    grid-template-columns: repeat(3,minmax(0,1fr)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  /* Remove the old nested width reductions: one deliberate 7px gutter per side. */
+  html body .content.spreelo-content:has(.automation-page.plan-v14380-polish) {
+    overflow-x: clip !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish {
+    width: calc(100% - 14px) !important;
+    max-width: none !important;
+    margin: 0 auto !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish .wizard-layout,
+  html body .automation-page.plan-v70-active.plan-v14380-polish .wizard-main,
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v70-shell {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v70-shell {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  /* Hero keeps the approved desktop family but is compact enough for mobile. */
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v14341-studio-hero {
+    min-height: 152px !important;
+    padding: 18px 16px !important;
+    border-radius: 20px !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v14341-studio-hero-copy {
+    max-width: 65% !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v14341-studio-hero h1 {
+    font-size: 27px !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v14341-studio-hero p {
+    font-size: 11.5px !important;
+    line-height: 1.4 !important;
+  }
+
+  /* Two compact columns are retained, but the cards are allowed enough height
+     for helper text + control. Nothing may spill beneath its input anymore. */
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v70-settings-card {
+    padding: 12px 8px !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v90-settings-grid {
+    grid-template-columns: repeat(2,minmax(0,1fr)) !important;
+    gap: 7px !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v90-settings-grid .plan-v90-setting-tile {
+    height: auto !important;
+    min-height: 116px !important;
+    grid-template-rows: minmax(56px,auto) 42px !important;
+    align-content: stretch !important;
+    gap: 7px !important;
+    padding: 10px !important;
+    overflow: visible !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v90-setting-head {
+    min-height: 54px !important;
+    margin: 0 !important;
+    align-items: flex-start !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v90-setting-title {
+    display: block !important;
+    font-size: 13px !important;
+    line-height: 1.18 !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v90-setting-copy {
+    min-width: 0 !important;
+    overflow: visible !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v90-setting-copy small {
+    display: -webkit-box !important;
+    max-width: 100% !important;
+    margin-top: 2px !important;
+    overflow: hidden !important;
+    font-size: 10.8px !important;
+    line-height: 1.28 !important;
+    white-space: normal !important;
+    text-overflow: clip !important;
+    -webkit-line-clamp: 2 !important;
+    -webkit-box-orient: vertical !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v90-settings-grid select,
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v90-settings-grid input,
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v90-settings-grid .custom-picker-button,
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v90-settings-grid .platform-multiselect-button,
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v90-settings-grid .plan-v73-platform-loading,
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v90-settings-grid .plan-v73-connect-platform {
+    min-height: 42px !important;
+    height: 42px !important;
+    font-size: 12.5px !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v14341-date-tile {
+    min-height: 122px !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v14341-date-tile .plan-v90-setting-head {
+    grid-template-columns: 27px minmax(0,1fr) !important;
+    position: relative !important;
+    padding-right: 0 !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v14341-date-tile .plan-v14341-timezone-pill {
+    position: absolute !important;
+    top: -1px !important;
+    right: 0 !important;
+    min-width: 60px !important;
+    max-width: 66px !important;
+    height: 23px !important;
+    min-height: 23px !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v14341-date-tile .plan-v90-setting-copy {
+    padding-right: 64px !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v14341-date-tile .plan-v90-setting-copy small {
+    width: calc(100% + 64px) !important;
+    max-width: calc(100% + 64px) !important;
+  }
+
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v14380-platform-note {
+    margin: 9px 0 0 !important;
+    padding: 8px 10px !important;
+    font-size: 11px !important;
+    font-weight: 550 !important;
+    line-height: 1.4 !important;
+  }
+
+  /* Formats and activation area also use the extra width and readable copy. */
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v70-formats-card {
+    padding: 14px 10px !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v70-formats-head p,
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v74-content-types-note {
+    font-size: 11.5px !important;
+    line-height: 1.42 !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v72-format-library.grid {
+    grid-auto-columns: minmax(178px,55vw) !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v72-format-library.grid article p,
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v72-format-library.grid article small {
+    font-size: 11.5px !important;
+    line-height: 1.42 !important;
+  }
+
+  /* SETTINGS mobile: one intentional outer gutter; clean stacked mockup. */
+  html body .settings-v14380-page {
+    width: calc(100% - 14px) !important;
+    gap: 9px !important;
+    padding: 8px 0 34px !important;
+  }
+  html body .settings-v14380-page .settings-v14379-overview {
+    grid-template-columns: 1fr !important;
+    gap: 9px !important;
+  }
+  html body .settings-v14380-page .settings-v14379-hero {
+    min-height: 166px !important;
+    padding: 19px 17px !important;
+  }
+  html body .settings-v14380-page .settings-v14379-hero > div {
+    width: 68% !important;
+  }
+  html body .settings-v14380-page .settings-v14379-hero h2 {
+    font-size: 28px !important;
+  }
+  html body .settings-v14380-page .settings-v14379-hero > div > p:last-child {
+    font-size: 11.8px !important;
+  }
+  html body .settings-v14380-page .settings-v14379-quick-grid {
+    grid-template-columns: repeat(2,minmax(0,1fr)) !important;
+    padding: 7px !important;
+  }
+  html body .settings-v14380-page .settings-v14379-quick-card {
+    min-height: 120px !important;
+    padding: 12px !important;
+  }
+  html body .settings-v14380-page .settings-v14379-quick-card h3 {
+    font-size: 14px !important;
+  }
+  html body .settings-v14380-page .settings-v14379-quick-card p,
+  html body .settings-v14380-page .settings-v14379-inline-value {
+    font-size: 11px !important;
+  }
+  html body .settings-v14380-page .stripe-billing-v14377 {
+    padding: 15px !important;
+  }
+  html body .settings-v14380-page .stripe-plan-grid {
+    grid-template-columns: 1fr !important;
+  }
+  html body .settings-v14380-page .stripe-plan-card {
+    min-height: 0 !important;
+  }
+  html body .settings-v14380-page .stripe-plan-card li {
+    font-size: 12.5px !important;
+  }
+  html body .settings-v14380-page .stripe-credit-pack-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 430px) {
+  html body .automation-page.plan-v70-active.plan-v14380-polish {
+    width: calc(100% - 10px) !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v90-settings-grid {
+    gap: 6px !important;
+  }
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v90-settings-grid .plan-v90-setting-tile {
+    padding: 9px !important;
+  }
+  html body .settings-v14380-page .settings-v14379-quick-grid {
+    grid-template-columns: 1fr !important;
+  }
+  html body .settings-v14380-page .settings-v14379-quick-card {
+    min-height: 0 !important;
+  }
+}

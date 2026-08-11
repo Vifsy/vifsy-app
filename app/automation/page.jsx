@@ -9927,7 +9927,7 @@ function blockFormatCardClickAfterDrag(event) {
   return (
     <AppLayout active="automation">
       <div
-        className={`automation-page planner-wizard-page ${campaignOpportunity ? "campaign-planner-clean" : "plan-v70-active"}`}
+        className={`automation-page planner-wizard-page ${campaignOpportunity ? "campaign-planner-clean" : "plan-v70-active plan-v14380-polish"}`}
         onClick={(event) => {
           if (!event.target.closest(".custom-picker-field")) {
             setOpenPickerId(null);
@@ -10230,14 +10230,14 @@ function blockFormatCardClickAfterDrag(event) {
                         {t("automation.connectSocialChannelFirst")}
                       </a>
                     )}
-                    {selectedPlatformKeys.length > 0 ? (
-                      <span className="plan-v14349-platform-adapter-note">
-                        <Sparkles size={12} aria-hidden="true" />
-                        {t("automation.platformCompatibility.adaptsAutomatically")}
-                      </span>
-                    ) : null}
                   </div>
                 </div>
+                {selectedPlatformKeys.length > 0 ? (
+                  <div className="plan-v14380-platform-note">
+                    <Sparkles size={13} aria-hidden="true" />
+                    <span>{t("automation.platformCompatibility.adaptsAutomatically")}</span>
+                  </div>
+                ) : null}
 
               </section>
 
