@@ -28,6 +28,7 @@ import {
   X,
 } from "lucide-react";
 import AppLayout from "../components/AppLayout";
+import HomeReferenceOverview from "../components/HomeReferenceOverview";
 import PlanLimitModal from "../components/PlanLimitModal";
 import { supabase } from "../lib/supabaseClient";
 import { useUiText } from "../lib/i18n/useUiText";
@@ -1252,6 +1253,32 @@ export default function Home() {
 
   const dashboardRecentActivity = posts.slice(0, 3);
   const dashboardReviewPreview = pendingApprovalPosts.slice(0, 4);
+
+  return (
+    <AppLayout active="dashboard">
+      <HomeReferenceOverview
+        message={message}
+        loading={loading}
+        currentBrandId={currentBrandId}
+        currentBrandName={currentBrandName}
+        creditsRemaining={creditsRemaining}
+        monthlyCreditLimit={monthlyCreditLimit}
+        plannedCount={activeRules.length + scheduledPosts.length}
+        pendingCount={pendingApprovalPosts.length}
+        publishedCount={publishedThisMonthCount}
+        activeSchedulesCount={recurringSchedules.length + calendarCampaignPlans.length}
+        recurringCount={recurringSchedules.length}
+        scheduledCount={scheduledPlanGroups.length + standaloneScheduledPosts.length}
+        campaignCount={calendarCampaignPlans.length}
+        suggestedCampaign={suggestedCampaign ? {
+          id: suggestedCampaign.id,
+          title: dashboardText(suggestedCampaign.title, t("dashboard.suggestedCampaign")),
+          date: formatCampaignDate(suggestedCampaign, t),
+        } : null}
+      />
+      <PlanLimitModal details={planLimitDetails} onClose={() => setPlanLimitDetails(null)} />
+    </AppLayout>
+  );
 
   return (
     <AppLayout active="dashboard">

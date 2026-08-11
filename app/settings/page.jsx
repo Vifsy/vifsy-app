@@ -355,9 +355,15 @@ export default function Settings() {
   const [savingNotifications, setSavingNotifications] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState("");
   const [notificationPreferences, setNotificationPreferences] = useState({
-    review: true,
-    publishing: true,
-    product: false,
+    review_app: true, review_email: true,
+    comments_app: true, comments_email: false,
+    published_app: true, published_email: true,
+    failed_app: true, failed_email: true,
+    campaign_start_app: true, campaign_start_email: true,
+    campaign_end_app: true, campaign_end_email: true,
+    credits_app: true, credits_email: true,
+    account_app: true, account_email: false,
+    paused: false,
   });
   const [creditBalance, setCreditBalance] = useState(null);
   const [loadingCredits, setLoadingCredits] = useState(true);
@@ -398,9 +404,23 @@ export default function Settings() {
       setCurrentUserEmail(user?.email || "");
       setProfileName(user?.user_metadata?.full_name || user?.user_metadata?.name || "");
       setNotificationPreferences({
-        review: user?.user_metadata?.notification_preferences?.review !== false,
-        publishing: user?.user_metadata?.notification_preferences?.publishing !== false,
-        product: user?.user_metadata?.notification_preferences?.product === true,
+        review_app: user?.user_metadata?.notification_preferences?.review_app !== false,
+        review_email: user?.user_metadata?.notification_preferences?.review_email !== false,
+        comments_app: user?.user_metadata?.notification_preferences?.comments_app !== false,
+        comments_email: user?.user_metadata?.notification_preferences?.comments_email === true,
+        published_app: user?.user_metadata?.notification_preferences?.published_app !== false,
+        published_email: user?.user_metadata?.notification_preferences?.published_email !== false,
+        failed_app: user?.user_metadata?.notification_preferences?.failed_app !== false,
+        failed_email: user?.user_metadata?.notification_preferences?.failed_email !== false,
+        campaign_start_app: user?.user_metadata?.notification_preferences?.campaign_start_app !== false,
+        campaign_start_email: user?.user_metadata?.notification_preferences?.campaign_start_email !== false,
+        campaign_end_app: user?.user_metadata?.notification_preferences?.campaign_end_app !== false,
+        campaign_end_email: user?.user_metadata?.notification_preferences?.campaign_end_email !== false,
+        credits_app: user?.user_metadata?.notification_preferences?.credits_app !== false,
+        credits_email: user?.user_metadata?.notification_preferences?.credits_email !== false,
+        account_app: user?.user_metadata?.notification_preferences?.account_app !== false,
+        account_email: user?.user_metadata?.notification_preferences?.account_email === true,
+        paused: user?.user_metadata?.notification_preferences?.paused === true,
       });
 
       if (user?.id) {
@@ -447,6 +467,15 @@ export default function Settings() {
       return date.toLocaleDateString();
     }
   }, [creditBalance, locale, t]);
+
+  const isSwedish = getLocaleBase(locale) === "sv";
+  const settingsTabTitle = {
+    account: isSwedish ? "Ditt konto" : "Your account",
+    security: isSwedish ? "Säkerhet" : "Security",
+    notifications: isSwedish ? "Aviseringar" : "Notifications",
+    language: isSwedish ? "Språk & region" : "Language & region",
+    billing: isSwedish ? "Välj rätt plan" : "Choose the right plan",
+  }[activeTab];
 
   async function handleLanguageChange(nextLocale) {
     if (!nextLocale || savingLanguage) return;
@@ -569,6 +598,17 @@ export default function Settings() {
   return (
     <AppLayout active="settings">
       <div className="settings-v14315-page settings-v14339-page settings-v14379-page settings-v14380-page">
+        <header className="settings-reference-header">
+          <h1>{settingsTabTitle}</h1>
+          <div className="settings-reference-credits"><span /><div><small>{isSwedish ? "Nuvarande krediter" : "Current credits"}</small><strong>{creditRemaining} <em>/ {creditLimit || "—"} {isSwedish ? "krediter kvar" : "credits left"}</em></strong></div></div>
+        </header>
+        <nav className="settings-reference-tabs" aria-label={t("settings.quickSettingsLabel")}>
+          <button type="button" className={activeTab === "account" ? "active" : ""} onClick={() => selectTab("account")}><UserRound />{isSwedish ? "Konto" : "Account"}</button>
+          <button type="button" className={activeTab === "security" ? "active" : ""} onClick={() => selectTab("security")}><ShieldCheck />{isSwedish ? "Säkerhet" : "Security"}</button>
+          <button type="button" className={activeTab === "notifications" ? "active" : ""} onClick={() => selectTab("notifications")}><Bell />{isSwedish ? "Aviseringar" : "Notifications"}</button>
+          <button type="button" className={activeTab === "language" ? "active" : ""} onClick={() => selectTab("language")}><Languages />{isSwedish ? "Språk" : "Language"}</button>
+          <button type="button" className={activeTab === "billing" ? "active" : ""} onClick={() => selectTab("billing")}><CreditCard />{isSwedish ? "Plan & fakturering" : "Plan & billing"}</button>
+        </nav>
         <section className="settings-v14379-overview">
           <header className="settings-v14339-hero settings-v14379-hero">
             <div>
@@ -670,6 +710,11 @@ export default function Settings() {
           recommendedLocale={recommendedLocale}
           savingLanguage={savingLanguage}
           handleLanguageChange={handleLanguageChange}
+          planName={planName}
+          creditRemaining={creditRemaining}
+          creditLimit={creditLimit}
+          renewalLabel={renewalLabel}
+          onDeleteAccount={() => { setDeleteMessage(""); setDeleteModalOpen(true); }}
         />
 
         {activeTab === "billing" && <StripeBillingPanel initialBalance={creditBalance} onBalanceChange={setCreditBalance} />}
