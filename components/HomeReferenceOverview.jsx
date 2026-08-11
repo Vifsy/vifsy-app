@@ -44,7 +44,7 @@ export default function HomeReferenceOverview({
 
       <section className="home-reference-stats" aria-label="Översikt">
         <article><h2>Planerade inlägg</h2><strong>{plannedCount}</strong><p>Kommande</p></article>
-        <article><h2>Väntar på godkännande</h2><strong>{pendingCount}{pendingCount ? <i /> : null}</strong><p>Behöver granskas</p></article>
+        <article><h2>Väntar på godkännande</h2><strong className={pendingCount ? "attention" : ""}>{pendingCount}</strong><p>Behöver granskas</p></article>
         <article><h2>Publicerat denna månad</h2><strong>{publishedCount}</strong><p>Publicerade inlägg</p></article>
         <article><h2>Aktiva scheman</h2><strong>{activeSchedulesCount}</strong><p>Rullande planer</p></article>
       </section>

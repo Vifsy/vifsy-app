@@ -334,6 +334,21 @@ function getLocaleBase(locale) {
   return String(locale || "en").toLowerCase().split("-")[0];
 }
 
+const PUBLISHING_TIME_ZONES = [
+  "UTC", "Europe/Stockholm", "Europe/London", "Europe/Paris",
+  "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
+  "Asia/Dubai", "Asia/Kolkata", "Asia/Shanghai", "Asia/Tokyo", "Australia/Sydney",
+];
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 function formatDeleteCopy(value, word) {
   return String(value || "").replaceAll("{word}", word);
 }
@@ -368,6 +383,8 @@ export default function Settings() {
   const [creditBalance, setCreditBalance] = useState(null);
   const [loadingCredits, setLoadingCredits] = useState(true);
   const [savingLanguage, setSavingLanguage] = useState(false);
+  const [publishingTimeZone, setPublishingTimeZone] = useState("Europe/Stockholm");
+  const [savingTimeZone, setSavingTimeZone] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   const [deleteReason, setDeleteReason] = useState("");
   const [deleteReasonDetails, setDeleteReasonDetails] = useState("");
@@ -403,6 +420,11 @@ export default function Settings() {
       setCurrentUser(user || null);
       setCurrentUserEmail(user?.email || "");
       setProfileName(user?.user_metadata?.full_name || user?.user_metadata?.name || "");
+      setPublishingTimeZone(
+        user?.user_metadata?.publishing_timezone ||
+        Intl.DateTimeFormat().resolvedOptions().timeZone ||
+        "Europe/Stockholm"
+      );
       setNotificationPreferences({
         review_app: user?.user_metadata?.notification_preferences?.review_app !== false,
         review_email: user?.user_metadata?.notification_preferences?.review_email !== false,
@@ -497,6 +519,41 @@ export default function Settings() {
     }
   }
 
+  async function handleTimeZoneChange(nextTimeZone) {
+    if (!nextTimeZone || savingTimeZone || !currentUser?.id) return;
+
+    setSavingTimeZone(true);
+    setProfileMessage("");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error(isSwedish ? "Du behöver logga in igen." : "Please sign in again.");
+
+      const response = await fetch("/api/settings/timezone", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ timeZone: nextTimeZone }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.ok) throw new Error(result?.error || "Timezone could not be saved.");
+
+      setPublishingTimeZone(nextTimeZone);
+      setCurrentUser((current) => current ? {
+        ...current,
+        user_metadata: { ...(current.user_metadata || {}), publishing_timezone: nextTimeZone },
+      } : current);
+      setProfileMessage(isSwedish
+        ? `Tidszonen är sparad och används för ${result.updatedRules || 0} befintliga planerade inlägg.`
+        : `The time zone is saved and is used for ${result.updatedRules || 0} existing scheduled posts.`);
+    } catch (error) {
+      setProfileMessage(error?.message || (isSwedish ? "Tidszonen kunde inte sparas." : "The time zone could not be saved."));
+    } finally {
+      setSavingTimeZone(false);
+    }
+  }
+
   function selectTab(tab) {
     setActiveTab(tab);
     const url = new URL(window.location.href);
@@ -531,17 +588,35 @@ export default function Settings() {
   }
 
   function exportAccountData() {
-    const payload = {
-      exported_at: new Date().toISOString(),
-      account: { id: currentUser?.id || null, email: currentUserEmail, name: profileName },
-      preferences: { language: locale, notifications: notificationPreferences },
-      subscription: creditBalance,
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const exportedAt = new Date();
+    const nextRefresh = creditBalance?.next_credit_refresh_at || creditBalance?.current_period_end;
+    const priceAmount = Number(creditBalance?.subscription_price_amount || 0) / 100;
+    const status = String(creditBalance?.subscription_status || "").replaceAll("_", " ") || "—";
+    const rows = [
+      [isSwedish ? "Namn" : "Name", profileName || "—"],
+      [isSwedish ? "E-postadress" : "Email address", currentUserEmail || "—"],
+      [isSwedish ? "Appspråk" : "App language", locale || "—"],
+      [isSwedish ? "Publiceringstidszon" : "Publishing time zone", publishingTimeZone || "—"],
+      [isSwedish ? "Plan" : "Plan", planName],
+      [isSwedish ? "Abonnemangsstatus" : "Subscription status", status],
+      [isSwedish ? "Tillgängliga krediter" : "Available credits", creditRemaining],
+      [isSwedish ? "Plan-krediter per månad" : "Plan credits per month", creditLimit || "—"],
+      [isSwedish ? "Köpta krediter kvar" : "Purchased credits remaining", Number(creditBalance?.purchased_credits_remaining || 0)],
+      [isSwedish ? "Nästa kreditpåfyllning" : "Next credit refresh", nextRefresh ? new Date(nextRefresh).toLocaleString(locale, { dateStyle: "long", timeStyle: "short", timeZone: publishingTimeZone }) : "—"],
+      [isSwedish ? "Pris" : "Price", priceAmount ? `${priceAmount.toLocaleString(locale)} ${creditBalance?.subscription_currency || "SEK"} / ${creditBalance?.subscription_interval === "year" ? (isSwedish ? "år" : "year") : (isSwedish ? "månad" : "month")}` : "—"],
+    ];
+    const rowHtml = rows.map(([label, value]) => `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`).join("");
+    const documentTitle = isSwedish ? "Spreelo – kontosammanfattning" : "Spreelo – account summary";
+    const createdLabel = isSwedish ? `Skapad ${exportedAt.toLocaleString("sv-SE")}` : `Created ${exportedAt.toLocaleString("en")}`;
+    const note = isSwedish
+      ? "Detta är en lättläst sammanfattning av ditt konto och abonnemang. Den är inte en fullständig GDPR-begäran eller en export av allt innehåll du har skapat i Spreelo."
+      : "This is a readable summary of your account and subscription. It is not a complete GDPR access request or an export of all content you have created in Spreelo.";
+    const html = `<!doctype html><html lang="${escapeHtml(getLocaleBase(locale))}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${documentTitle}</title><style>body{margin:0;background:#f5f7fa;color:#102036;font:16px/1.55 Arial,sans-serif}.page{max-width:760px;margin:40px auto;padding:0 20px}.card{overflow:hidden;border:1px solid #dce3eb;border-radius:18px;background:#fff;box-shadow:0 18px 50px rgba(3,23,42,.10)}header{padding:30px;background:#03172a;color:#fff}h1{margin:0 0 8px;font-size:30px}header p{margin:0;color:#cfdae5}.content{padding:12px 30px 30px}table{width:100%;border-collapse:collapse}th,td{padding:15px 0;border-bottom:1px solid #e4e8ed;text-align:left;vertical-align:top}th{width:45%;color:#5b6b81;font-size:14px}td{font-weight:700}.note{margin:24px 0 0;padding:16px;border-radius:12px;background:#fff3ee;color:#6d392d;font-size:13px}@media(max-width:600px){.page{margin:16px auto}.content,header{padding:22px}th,td{display:block;width:auto}th{padding-bottom:3px;border:0}td{padding-top:0}}</style></head><body><main class="page"><section class="card"><header><h1>${documentTitle}</h1><p>${escapeHtml(createdLabel)}</p></header><div class="content"><table>${rowHtml}</table><p class="note">${escapeHtml(note)}</p></div></section></main></body></html>`;
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "spreelo-account-export.json";
+    anchor.download = `spreelo-kontosammanfattning-${exportedAt.toISOString().slice(0, 10)}.html`;
     anchor.click();
     URL.revokeObjectURL(url);
   }
@@ -600,7 +675,7 @@ export default function Settings() {
       <div className="settings-reference-page">
         <header className="settings-reference-header">
           <h1>{settingsTabTitle}</h1>
-          <div className="settings-reference-credits"><span /><div><small>{isSwedish ? "Tillgängliga Spreelo-krediter" : "Available Spreelo credits"}</small><strong>{creditRemaining} <em>{creditLimit ? (isSwedish ? `· ${creditLimit} plan-krediter/mån` : `· ${creditLimit} plan credits/month`) : ""}</em></strong></div></div>
+          <div className="settings-reference-credits"><span /><div><small>{isSwedish ? "Tillgängliga Spreelo-krediter" : "Available Spreelo credits"}</small><strong>{creditRemaining} <em>{creditLimit ? (isSwedish ? `${creditLimit} plan-krediter/mån` : `${creditLimit} plan credits/month`) : ""}</em></strong></div></div>
         </header>
         <nav className="settings-reference-tabs" aria-label={t("settings.quickSettingsLabel")}>
           <button type="button" className={activeTab === "account" ? "active" : ""} onClick={() => selectTab("account")}><UserRound />{isSwedish ? "Konto" : "Account"}</button>
@@ -710,6 +785,10 @@ export default function Settings() {
           recommendedLocale={recommendedLocale}
           savingLanguage={savingLanguage}
           handleLanguageChange={handleLanguageChange}
+          publishingTimeZone={publishingTimeZone}
+          savingTimeZone={savingTimeZone}
+          handleTimeZoneChange={handleTimeZoneChange}
+          publishingTimeZoneOptions={PUBLISHING_TIME_ZONES}
           planName={planName}
           creditRemaining={creditRemaining}
           creditLimit={creditLimit}

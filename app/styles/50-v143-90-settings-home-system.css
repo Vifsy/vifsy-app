@@ -1,0 +1,237 @@
+/* v143.90 — unified settings card headers, global publishing timezone and home polish. */
+
+:root {
+  --spreelo-navy:#03172a;
+  --spreelo-navy-soft:#0b2944;
+  --spreelo-coral:#f4512d;
+  --spreelo-green:#249b52;
+  --spreelo-line:#dfe4ea;
+  --spreelo-muted:#607087;
+  --spreelo-radius:16px;
+}
+
+/* Credit summary: retain the compact requested slash without losing the explanatory label. */
+.settings-reference-credits strong { align-items:baseline; }
+.settings-reference-credits em::before { content:"/ "; }
+
+/* One visual grammar for the settings area. */
+html body .settings-reference-page .settings-ref-labelled-section {
+  grid-template-columns:1fr !important;
+  gap:0 !important;
+  margin:0 0 18px !important;
+  padding:0 !important;
+  overflow:hidden !important;
+  border:1px solid var(--spreelo-line) !important;
+  border-radius:var(--spreelo-radius) !important;
+  background:#fff !important;
+  box-shadow:0 10px 30px rgba(14,28,47,.055) !important;
+}
+html body .settings-reference-page .settings-ref-labelled-section > div:first-child {
+  padding:21px 24px !important;
+  color:#fff !important;
+  background:linear-gradient(135deg,var(--spreelo-navy),var(--spreelo-navy-soft)) !important;
+}
+html body .settings-reference-page .settings-ref-labelled-section > div:first-child h3 {
+  margin:0 0 6px !important;
+  color:#fff !important;
+  font-size:17px !important;
+}
+html body .settings-reference-page .settings-ref-labelled-section > div:first-child p {
+  max-width:680px !important;
+  margin:0 !important;
+  color:#d1dce7 !important;
+  font-size:13px !important;
+  line-height:1.5 !important;
+}
+html body .settings-reference-page .settings-ref-labelled-section .settings-ref-rows,
+html body .settings-reference-page .settings-ref-labelled-section .settings-ref-action-rows,
+html body .settings-reference-page .settings-ref-labelled-section .settings-ref-card {
+  margin:0 24px !important;
+}
+html body .settings-reference-page .settings-ref-labelled-section .settings-ref-card {
+  margin-top:22px !important;
+  margin-bottom:22px !important;
+}
+html body .settings-reference-page .settings-ref-account-main,
+html body .settings-reference-page .settings-ref-security-main { display:grid; align-content:start; }
+
+html body .settings-reference-page .settings-ref-account-aside,
+html body .settings-reference-page .settings-ref-security-aside,
+html body .settings-reference-page .settings-ref-delivery,
+html body .settings-reference-page .settings-ref-language-aside {
+  overflow:hidden !important;
+  padding:0 24px 24px !important;
+  border:1px solid var(--spreelo-line) !important;
+  border-radius:var(--spreelo-radius) !important;
+  background:#fff !important;
+  box-shadow:0 10px 30px rgba(14,28,47,.055) !important;
+}
+html body .settings-reference-page .settings-ref-account-aside > h2,
+html body .settings-reference-page .settings-ref-security-aside > h2,
+html body .settings-reference-page .settings-ref-delivery > h2,
+html body .settings-reference-page .settings-ref-language-aside > h2 {
+  margin:0 -24px 22px !important;
+  padding:20px 24px !important;
+  border:0 !important;
+  color:#fff !important;
+  background:linear-gradient(135deg,var(--spreelo-navy),var(--spreelo-navy-soft)) !important;
+  font-size:17px !important;
+}
+html body .settings-reference-page .settings-ref-account-aside a,
+html body .settings-reference-page .settings-ref-language-section.guidance > a {
+  border-radius:12px !important;
+}
+
+/* Notifications: navy structure, coral action cues, green facts only. */
+html body .settings-reference-page .settings-ref-notification-summary > header {
+  color:#fff !important;
+  background:linear-gradient(135deg,var(--spreelo-navy),var(--spreelo-navy-soft)) !important;
+}
+html body .settings-reference-page .settings-ref-notification-summary > header h2 { color:#fff !important; }
+html body .settings-reference-page .settings-ref-notification-summary > header p { color:#d1dce7 !important; }
+html body .settings-reference-page .settings-ref-notification-summary header > span {
+  color:var(--spreelo-coral) !important;
+  background:rgba(255,255,255,.1) !important;
+  border:1px solid rgba(255,255,255,.14) !important;
+  box-shadow:none !important;
+}
+
+/* Language, market and timezone become three balanced setting cards. */
+html body .settings-reference-page .settings-ref-language-card {
+  display:grid !important;
+  gap:18px !important;
+  border:0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+}
+html body .settings-reference-page .settings-ref-language-section {
+  grid-template-columns:1fr !important;
+  gap:0 !important;
+  padding:0 !important;
+  overflow:hidden !important;
+  border:1px solid var(--spreelo-line) !important;
+  border-radius:var(--spreelo-radius) !important;
+  background:#fff !important;
+  box-shadow:0 10px 30px rgba(14,28,47,.055) !important;
+}
+html body .settings-reference-page .settings-ref-language-section > div:first-child {
+  padding:21px 24px !important;
+  color:#fff !important;
+  background:linear-gradient(135deg,var(--spreelo-navy),var(--spreelo-navy-soft)) !important;
+}
+html body .settings-reference-page .settings-ref-language-section > div:first-child h2 { margin:0 0 6px !important; color:#fff !important; font-size:17px !important; }
+html body .settings-reference-page .settings-ref-language-section > div:first-child p { margin:0 !important; color:#d1dce7 !important; font-size:13px !important; }
+html body .settings-reference-page .settings-ref-language-section > label,
+html body .settings-reference-page .settings-ref-language-section > a {
+  margin:22px 24px 24px !important;
+}
+html body .settings-reference-page .settings-ref-language-section.guidance > a {
+  min-height:88px !important;
+  background:linear-gradient(145deg,#fff,#f5f8fb) !important;
+}
+html body .settings-reference-page .settings-ref-language-select select { border-radius:12px !important; background:#fbfcfd !important; }
+
+/* Billing: force true cards at mobile widths and remove the compressed comparison columns. */
+@media (max-width:800px) {
+  html body .settings-reference-page .stripe-reference-table {
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) !important;
+    gap:18px !important;
+    width:100% !important;
+  }
+  html body .settings-reference-page .stripe-reference-plan {
+    grid-column:1 !important;
+    width:100% !important;
+    max-width:none !important;
+    margin:0 !important;
+    border-radius:18px !important;
+  }
+  html body .settings-reference-page .stripe-reference-plan.current { order:-1 !important; }
+  html body .settings-reference-page .stripe-reference-plan > header {
+    min-height:96px !important;
+    padding:21px 22px !important;
+    border-radius:17px 17px 0 0 !important;
+  }
+  html body .settings-reference-page .stripe-reference-plan h2 { font-size:24px !important; }
+  html body .settings-reference-page .stripe-reference-plan > header > div > small { font-size:13px !important; line-height:1.4 !important; }
+  html body .settings-reference-page .stripe-reference-plan .price { min-height:106px !important; padding:24px 0 21px !important; }
+  html body .settings-reference-page .stripe-reference-plan .price strong { font-size:34px !important; }
+  html body .settings-reference-page .stripe-reference-plan .plan-feature { min-height:58px !important; font-size:14px !important; }
+  html body .settings-reference-page .stripe-reference-plan .fit { min-height:104px !important; font-size:14px !important; }
+  html body .settings-reference-page .stripe-reference-plan .action button { min-height:52px !important; font-size:14px !important; font-weight:700 !important; }
+}
+
+/* Home: attention is the number itself, never a detached ring. */
+html body .home-reference-page .home-reference-stats strong.attention { color:var(--spreelo-coral) !important; }
+html body .home-reference-page .home-reference-review {
+  border:1px solid rgba(255,255,255,.08) !important;
+  border-radius:14px !important;
+  background:linear-gradient(120deg,#03172a 0%,#082640 100%) !important;
+  box-shadow:0 16px 35px rgba(3,23,42,.14) !important;
+}
+html body .home-reference-page .home-reference-review > div { align-self:center !important; }
+html body .home-reference-page .home-reference-review strong { font-size:16px !important; line-height:1.35 !important; }
+html body .home-reference-page .home-reference-review small { font-size:12px !important; line-height:1.45 !important; }
+html body .home-reference-page .home-reference-review a {
+  min-height:48px !important;
+  border-radius:10px !important;
+  font-size:14px !important;
+  font-weight:600 !important;
+}
+html body .home-reference-page .home-reference-review a:not(.primary) { border:1px solid rgba(255,255,255,.22) !important; padding-inline:18px !important; }
+html body .home-reference-page .home-reference-review a.primary { background:linear-gradient(135deg,#ff6647,#f4512d) !important; }
+
+html body .home-reference-page .home-reference-coach li { min-height:30px !important; }
+html body .home-reference-page .home-reference-coach li span { font-size:13px !important; font-weight:700 !important; }
+html body .home-reference-page .home-reference-coach li a { font-size:13px !important; }
+html body .home-reference-page .home-reference-suggestion {
+  margin-top:16px !important;
+  padding:20px !important;
+  overflow:hidden !important;
+  border:1px solid rgba(244,81,45,.18) !important;
+  border-radius:16px !important;
+  background:linear-gradient(135deg,rgba(255,240,234,.92),rgba(247,241,255,.9)) !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 12px 28px rgba(24,32,48,.07) !important;
+  backdrop-filter:blur(14px) !important;
+}
+html body .home-reference-page .home-reference-suggestion small { color:var(--spreelo-coral) !important; font-size:12px !important; font-weight:800 !important; letter-spacing:.02em !important; }
+html body .home-reference-page .home-reference-suggestion strong { margin-top:8px !important; font-size:16px !important; line-height:1.35 !important; }
+html body .home-reference-page .home-reference-suggestion span { margin-top:7px !important; color:#536178 !important; font-size:13px !important; }
+html body .home-reference-page .home-reference-suggestion a {
+  min-height:44px !important;
+  margin-top:15px !important;
+  padding:0 17px !important;
+  border-radius:10px !important;
+  color:#fff !important;
+  background:var(--spreelo-coral) !important;
+  font-size:13px !important;
+  font-weight:700 !important;
+}
+
+@media (max-width:800px) {
+  html body .settings-reference-page .settings-ref-labelled-section { padding:0 !important; }
+  html body .settings-reference-page .settings-ref-labelled-section > div:first-child { padding:20px !important; }
+  html body .settings-reference-page .settings-ref-labelled-section .settings-ref-rows,
+  html body .settings-reference-page .settings-ref-labelled-section .settings-ref-action-rows { margin:0 18px !important; }
+  html body .settings-reference-page .settings-ref-labelled-section .settings-ref-card { margin:18px !important; }
+  html body .settings-reference-page .settings-ref-language-section > label,
+  html body .settings-reference-page .settings-ref-language-section > a { margin:18px !important; }
+
+  html body .home-reference-page .home-reference-review {
+    grid-template-columns:46px minmax(0,1fr) !important;
+    gap:14px 16px !important;
+    padding:20px 18px !important;
+  }
+  html body .home-reference-page .home-reference-review > svg { grid-row:1 !important; align-self:center !important; }
+  html body .home-reference-page .home-reference-review > div { grid-column:2 !important; }
+  html body .home-reference-page .home-reference-review a { justify-content:center !important; width:100% !important; }
+  html body .home-reference-page .home-reference-review a.primary { grid-column:1 / -1 !important; }
+  html body .home-reference-page .home-reference-review a:not(.primary) { grid-column:1 / -1 !important; }
+}
+
+@media (max-width:520px) {
+  html body .settings-reference-page .settings-reference-credits em { display:inline !important; font-size:11px !important; }
+  html body .settings-reference-page .settings-reference-credits strong { flex-wrap:wrap !important; }
+  html body .home-reference-page .home-reference-coach { border-radius:16px !important; }
+  html body .home-reference-page .home-reference-suggestion { margin-inline:0 !important; }
+}

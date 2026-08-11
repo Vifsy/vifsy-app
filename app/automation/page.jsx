@@ -7799,6 +7799,12 @@ async function loadRules() {
     }
 
     setCurrentUserEmail(user.email || "");
+    const workspaceTimeZone = user?.user_metadata?.publishing_timezone || getBrowserTimeZone() || DEFAULT_TIME_ZONE;
+    const workspaceStartDate = getDateInputValueInTimeZone(new Date(), workspaceTimeZone);
+    const workspaceRecommendedTime = getRecommendedTimeForDate(workspaceStartDate, workspaceTimeZone);
+    setTimeZone(workspaceTimeZone);
+    setPlanStartDate(workspaceStartDate);
+    setDefaultPublishTime(workspaceRecommendedTime);
 
 const searchParams =
   typeof window !== "undefined"
@@ -7934,7 +7940,7 @@ if (campaignOpportunityId) {
     currentUser: user,
     selectedBrandId,
     campaignOpportunityId,
-    selectedTimeZone: timeZone || DEFAULT_TIME_ZONE,
+    selectedTimeZone: workspaceTimeZone,
   });
 
   setCampaignDebugInfo((current) => ({
@@ -10299,34 +10305,6 @@ function blockFormatCardClickAfterDrag(event) {
                         <span className="plan-v90-setting-title">{t("automation.startDate")}</span>
                         <small>{plannerSectionCopy.startDateHelp}</small>
                       </div>
-                      <label className="plan-v143-timezone-inline plan-v14341-timezone-pill" title={`${t("automation.timezone")}: ${timeZone}`}>
-                        <Clock3 size={12} aria-hidden="true" />
-                        <span>{t("automation.timezone")}</span>
-                        <select
-                          aria-label={t("automation.timezone")}
-                          value={timeZone}
-                          onChange={(event) => setTimeZone(event.target.value)}
-                        >
-                          {Array.from(new Set([
-                            timeZone,
-                            getBrowserTimeZone(),
-                            "UTC",
-                            "Europe/Stockholm",
-                            "Europe/London",
-                            "America/New_York",
-                            "America/Los_Angeles",
-                            "Asia/Dubai",
-                            "Asia/Kolkata",
-                            "Asia/Shanghai",
-                            "Asia/Tokyo",
-                            "Australia/Sydney",
-                          ].filter(Boolean))).map((zone) => (
-                            <option key={zone} value={zone}>
-                              {zone === "UTC" ? "UTC" : zone.split("/").pop().replaceAll("_", " ")}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
                     </div>
                     <div className="plan-v143-date-time-row plan-v14341-date-only-row">
                       <DatePickerField
@@ -12367,24 +12345,6 @@ function blockFormatCardClickAfterDrag(event) {
     <p>{safePlannerText("repeatHelpSmart")}</p>
   </label>
 
-
-  <label className="planner-setting-field">
-    <div className="planner-setting-head">
-      <span className="planner-setting-icon">⏱</span>
-      <strong>{t("automation.timezone")}</strong>
-    </div>
-    <select
-      value={timeZone}
-      onChange={(event) => setTimeZone(event.target.value)}
-    >
-      {timeZoneOptions.map((option) => (
-        <option key={option} value={option}>
-          {option}
-        </option>
-      ))}
-    </select>
-    <p>{safePlannerText("timezoneHelpSmart")}</p>
-  </label>
 </div>
             </section>
 
