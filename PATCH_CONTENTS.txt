@@ -1,0 +1,2 @@
+Spreelo v143.81 patch for spreelo-143.80-WINDOWS-FULL.
+Overlay these files on the existing project, then run spreelo-v143.81-SQL.sql in Supabase before deploy.

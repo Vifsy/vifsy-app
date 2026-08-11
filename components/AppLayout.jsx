@@ -26,6 +26,8 @@ import {
 import { supabase } from "../lib/supabaseClient";
 import { useUiText } from "../lib/i18n/useUiText";
 import LanguageSuggestionBanner from "./LanguageSuggestionBanner";
+import PlanLimitModal from "./PlanLimitModal";
+import { buildPlanLimitDetails, getPlanEntitlements, parsePlanLimitDatabaseError } from "../lib/planEntitlements";
 
 const SESSION_CHECK_ATTEMPTS = 3;
 const SESSION_CHECK_RETRY_DELAY_MS = 900;
@@ -134,8 +136,10 @@ export default function AppLayout({ active, children }) {
   const [showCreateBrandModal, setShowCreateBrandModal] = useState(false);
   const [newBrandWebsite, setNewBrandWebsite] = useState("");
   const [newBrandError, setNewBrandError] = useState("");
+  const [planLimitDetails, setPlanLimitDetails] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [adminAccessChecked, setAdminAccessChecked] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [creditBalance, setCreditBalance] = useState(null);
   const [loadingCredits, setLoadingCredits] = useState(true);
@@ -272,6 +276,7 @@ export default function AppLayout({ active, children }) {
   }
 
   async function checkAdminAccess() {
+    let nextIsAdmin = false;
     try {
       const {
         data: { session },
@@ -280,25 +285,27 @@ export default function AppLayout({ active, children }) {
         SESSION_REQUEST_TIMEOUT_MS
       );
 
-      if (!session?.access_token) {
-        setIsAdmin(false);
-        return;
+      if (session?.access_token) {
+        const response = await withTimeout(
+          fetch("/api/admin/me", {
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            cache: "no-store",
+          }),
+          SESSION_REQUEST_TIMEOUT_MS
+        );
+
+        const payload = await response.json().catch(() => ({}));
+        nextIsAdmin = Boolean(response.ok && payload?.isAdmin);
       }
-
-      const response = await withTimeout(
-        fetch("/api/admin/me", {
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        }),
-        SESSION_REQUEST_TIMEOUT_MS
-      );
-
-      const payload = await response.json().catch(() => ({}));
-      setIsAdmin(Boolean(response.ok && payload?.isAdmin));
     } catch {
-      setIsAdmin(false);
+      nextIsAdmin = false;
+    } finally {
+      setIsAdmin(nextIsAdmin);
+      setAdminAccessChecked(true);
     }
+    return nextIsAdmin;
   }
 
   async function loadBrands(currentUser) {
@@ -399,9 +406,38 @@ export default function AppLayout({ active, children }) {
     }
   }
 
+  function getCurrentPlanEntitlements() {
+    return getPlanEntitlements(creditBalance?.subscription_plan || creditBalance?.plan_name || "free");
+  }
+
+  async function requestNewBrand() {
+    if (loadingCredits) return;
+    const hasAdminBypass = adminAccessChecked ? isAdmin : await checkAdminAccess();
+    const entitlements = getCurrentPlanEntitlements();
+    if (!hasAdminBypass && brandProfiles.length >= entitlements.brands) {
+      setPlanLimitDetails(buildPlanLimitDetails({
+        plan: entitlements.key,
+        resource: "brands",
+        current: brandProfiles.length,
+        limit: entitlements.brands,
+      }));
+      setMobileMenuOpen(false);
+      return;
+    }
+    setNewBrandError("");
+    setShowCreateBrandModal(true);
+    setMobileMenuOpen(false);
+  }
+
   async function handleCreateBrand(event) {
     event?.preventDefault?.();
     if (!user?.id || creatingBrand) return;
+    const entitlements = getCurrentPlanEntitlements();
+    if (!isAdmin && brandProfiles.length >= entitlements.brands) {
+      setShowCreateBrandModal(false);
+      setPlanLimitDetails(buildPlanLimitDetails({ plan: entitlements.key, resource: "brands", current: brandProfiles.length, limit: entitlements.brands }));
+      return;
+    }
     const normalizedWebsite = normalizeBrandWebsite(newBrandWebsite);
     const derivedBrandName = getBusinessNameFromWebsite(normalizedWebsite);
 
@@ -432,7 +468,13 @@ export default function AppLayout({ active, children }) {
 
     if (error) {
       console.error("Could not create brand:", error);
-      setNewBrandError(error.message || t("layout.createBrandError"));
+      const limitDetails = parsePlanLimitDatabaseError(error);
+      if (limitDetails) {
+        setShowCreateBrandModal(false);
+        setPlanLimitDetails(limitDetails);
+      } else {
+        setNewBrandError(error.message || t("layout.createBrandError"));
+      }
       setCreatingBrand(false);
       return;
     }
@@ -688,12 +730,8 @@ export default function AppLayout({ active, children }) {
           <button
             type="button"
             className="current-brand-new"
-            onClick={() => {
-              setNewBrandError("");
-              setShowCreateBrandModal(true);
-              setMobileMenuOpen(false);
-            }}
-            disabled={creatingBrand}
+            onClick={requestNewBrand}
+            disabled={creatingBrand || loadingCredits}
           >
             <Plus size={14} strokeWidth={2.2} aria-hidden="true" />
             {creatingBrand ? t("layout.creating") : t("layout.addNewBrand")}
@@ -881,6 +919,8 @@ export default function AppLayout({ active, children }) {
           </section>
         </div>
       ) : null}
+
+      <PlanLimitModal details={planLimitDetails} onClose={() => setPlanLimitDetails(null)} />
 
       <section className="content spreelo-content">
         {active !== "settings" && <LanguageSuggestionBanner />}

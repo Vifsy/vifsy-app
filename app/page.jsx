@@ -28,8 +28,10 @@ import {
   X,
 } from "lucide-react";
 import AppLayout from "../components/AppLayout";
+import PlanLimitModal from "../components/PlanLimitModal";
 import { supabase } from "../lib/supabaseClient";
 import { useUiText } from "../lib/i18n/useUiText";
+import { parsePlanLimitDatabaseError } from "../lib/planEntitlements";
 
 const PENDING_PREVIEW_LIMIT = 3;
 const CONTENT_PLANS_PREVIEW_LIMIT = 3;
@@ -571,6 +573,7 @@ export default function Home() {
   const [expandedHomePlanIds, setExpandedHomePlanIds] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
   const [scheduleActionLoading, setScheduleActionLoading] = useState("");
+  const [planLimitDetails, setPlanLimitDetails] = useState(null);
   const { t, locale } = useUiText(["dashboard"]);
 
   useEffect(() => {
@@ -1004,7 +1007,9 @@ export default function Home() {
       }
       setMessage(t("dashboard.scheduleUpdated"));
     } catch (error) {
-      setMessage(error?.message || t("dashboard.scheduleUpdateError"));
+      const limitDetails = parsePlanLimitDatabaseError(error);
+      if (limitDetails) setPlanLimitDetails(limitDetails);
+      else setMessage(error?.message || t("dashboard.scheduleUpdateError"));
     } finally {
       setScheduleActionLoading("");
     }
@@ -2182,6 +2187,7 @@ export default function Home() {
             </div>
           </>
         )}
+      <PlanLimitModal details={planLimitDetails} onClose={() => setPlanLimitDetails(null)} />
       </div>
     </AppLayout>
   );

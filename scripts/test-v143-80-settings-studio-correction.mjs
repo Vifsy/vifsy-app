@@ -17,6 +17,7 @@ assert.ok(!automation.includes('className="plan-v14349-platform-adapter-note"'),
 assert.ok(css.includes('width: calc(100% - 14px) !important'), 'Mobile studio must use more of the viewport width');
 assert.ok(css.includes('min-height: 116px !important'), 'Mobile setting tiles must have enough height for helper text and controls');
 assert.ok(css.includes('font-size: 11px !important') && css.includes('.plan-v14380-platform-note'), 'Platform note must be compact/readable on mobile');
-assert.ok(globals.trim().endsWith('@import "./styles/41-v143-80-settings-studio-correction.css";'), 'v143.80 correction CSS must load last');
+assert.ok(globals.includes('@import "./styles/41-v143-80-settings-studio-correction.css";'), 'v143.80 correction CSS must remain loaded');
+assert.ok(!globals.includes('42-v143-81-plan-entitlements.css') || globals.indexOf('41-v143-80-settings-studio-correction.css') < globals.indexOf('42-v143-81-plan-entitlements.css'), 'newer entitlement CSS may load after v143.80');
 
 console.log('v143.80 settings/studio correction assertions passed');

@@ -5,6 +5,8 @@ import {
   createSignedPinterestState,
   getPinterestEnv,
 } from "../../../../../lib/pinterestOAuth";
+import { isConfiguredAdminEmail } from "../../../../../lib/adminAuth";
+import { checkSocialConnectionCapacity } from "../../../../../lib/planEntitlements";
 
 function getSupabaseClient(authorizationHeader) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -32,7 +34,7 @@ async function getAuthenticatedBrand({ request, brandProfileId }) {
     .maybeSingle();
   if (brandError) return { error: brandError.message || "Could not verify brand", status: 500 };
   if (!brand?.id) return { error: "Invalid brand", status: 403 };
-  return { user, brand };
+  return { user, brand, supabase };
 }
 
 export async function POST(request) {
@@ -41,6 +43,16 @@ export async function POST(request) {
     const brandProfileId = String(body?.brand_profile_id || body?.brandProfileId || "").trim();
     const auth = await getAuthenticatedBrand({ request, brandProfileId });
     if (auth.error) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
+
+    const capacity = isConfiguredAdminEmail(auth.user.email)
+      ? { allowed: true }
+      : await checkSocialConnectionCapacity(auth.supabase, auth.user.id, {
+          brandProfileId,
+          platform: "pinterest",
+        });
+    if (!capacity.allowed) {
+      return NextResponse.json({ ok: false, error: "PLAN_LIMIT", planLimit: capacity.limitDetails }, { status: 409 });
+    }
 
     const { appId, appSecret, redirectUri } = getPinterestEnv();
     if (!appId || !appSecret || !redirectUri) {

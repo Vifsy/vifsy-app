@@ -4,6 +4,8 @@ import {
   createSignedInstagramState,
   getInstagramEnv,
 } from "../../../../../lib/instagramOAuth";
+import { isConfiguredAdminEmail } from "../../../../../lib/adminAuth";
+import { checkSocialConnectionCapacity } from "../../../../../lib/planEntitlements";
 
 function getSupabaseClient(authorizationHeader) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -58,7 +60,7 @@ async function getAuthenticatedBrand({ request, brandProfileId }) {
     return { error: "Invalid brand", status: 403 };
   }
 
-  return { user, brand };
+  return { user, brand, supabase };
 }
 
 function buildInstagramLoginUrl({ request, userId, brandProfileId }) {
@@ -117,6 +119,16 @@ export async function POST(request) {
 
     if (authResult.error) {
       return NextResponse.json({ ok: false, error: authResult.error }, { status: authResult.status });
+    }
+
+    const capacity = isConfiguredAdminEmail(authResult.user.email)
+      ? { allowed: true }
+      : await checkSocialConnectionCapacity(authResult.supabase, authResult.user.id, {
+          brandProfileId,
+          platform: "instagram",
+        });
+    if (!capacity.allowed) {
+      return NextResponse.json({ ok: false, error: "PLAN_LIMIT", planLimit: capacity.limitDetails }, { status: 409 });
     }
 
     const { state, url } = buildInstagramLoginUrl({

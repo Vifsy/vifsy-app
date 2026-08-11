@@ -288,7 +288,7 @@ export default function ImageBackgroundsPage() {
 
         {configurationMissing ? (
           <div className="video-backgrounds-alert warning">
-            <ShieldAlert size={18} /> Configure SPREELO_PRIMARY_ADMIN_EMAIL if the primary admin is not johan@foldern.com.
+            <ShieldAlert size={18} /> Configure admin login emails with SPREELO_PRIMARY_ADMIN_EMAIL and SPREELO_ADMIN_EMAILS in Vercel.
           </div>
         ) : null}
         {error ? <div className="video-backgrounds-alert error">{error}</div> : null}

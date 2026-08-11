@@ -12,6 +12,7 @@ import {
   Unplug,
 } from "lucide-react";
 import AppLayout from "../../components/AppLayout";
+import PlanLimitModal from "../../components/PlanLimitModal";
 import { supabase } from "../../lib/supabaseClient";
 import { useUiText } from "../../lib/i18n/useUiText";
 
@@ -263,6 +264,7 @@ export default function SocialChannelsPage() {
   const [messageKind, setMessageKind] = useState("info");
   const [connectingPlatform, setConnectingPlatform] = useState("");
   const [connectionSuccess, setConnectionSuccess] = useState(null);
+  const [planLimitDetails, setPlanLimitDetails] = useState(null);
   const selectedPlatforms = useMemo(() => SOCIAL_PLATFORMS, []);
 
   useEffect(() => {
@@ -401,6 +403,11 @@ export default function SocialChannelsPage() {
         body: JSON.stringify({ brand_profile_id: currentBrand.id }),
       });
       const payload = await response.json().catch(() => ({}));
+      if (payload?.planLimit) {
+        setPlanLimitDetails(payload.planLimit);
+        setConnectingPlatform("");
+        return;
+      }
       if (!response.ok || !payload?.url) {
         throw new Error(payload?.error || t("social.errorGenericConnect"));
       }
@@ -503,6 +510,7 @@ export default function SocialChannelsPage() {
             <span>{t("social.securityNoteV2")}</span>
           </div>
         </section>
+        <PlanLimitModal details={planLimitDetails} onClose={() => setPlanLimitDetails(null)} />
         {connectionSuccess ? (
           <div className="social-success-backdrop" role="presentation">
             <section className="social-success-modal" role="dialog" aria-modal="true" aria-label={t("social.success.title")}>

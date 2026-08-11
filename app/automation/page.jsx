@@ -54,11 +54,13 @@ import {
   Zap,
 } from "lucide-react";
 import AppLayout from "../../components/AppLayout";
+import PlanLimitModal from "../../components/PlanLimitModal";
 import { supabase } from "../../lib/supabaseClient";
 import { useUiText } from "../../lib/i18n/useUiText";
 import { normalizeSingleContentLanguage } from "../../lib/contentLanguage";
 import { getCreditCostForContent } from "../../lib/credits";
 import { getConfiguredContentCreditCost } from "../../lib/contentEconomics";
+import { parsePlanLimitDatabaseError } from "../../lib/planEntitlements";
 import {
   DEFAULT_CONTENT_FORMAT_MAP,
   normalizeContentFormatRows,
@@ -6017,6 +6019,7 @@ const [slots, setSlots] = useState([]);
   const [savedPlanSummary, setSavedPlanSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [planLimitDetails, setPlanLimitDetails] = useState(null);
   const [scheduleType, setScheduleType] = useState("weekly");
   const [varyWeeklyContentTypes, setVaryWeeklyContentTypes] = useState(true);
   const [offerPlannerOpen, setOfferPlannerOpen] = useState(false);
@@ -9583,7 +9586,9 @@ ${slot.campaignSummary}`
           .from(POST_IMAGES_BUCKET)
           .remove(newlyUploadedManualImagePaths);
       }
-      setMessage(error.message);
+      const limitDetails = parsePlanLimitDatabaseError(error);
+      if (limitDetails) setPlanLimitDetails(limitDetails);
+      else setMessage(error.message);
     } else {
       const insertedRuleIds = (insertedRules || []).map((rule) => rule.id).filter(Boolean);
       const { data: reservationResult, error: reservationError } =
@@ -12857,6 +12862,7 @@ function blockFormatCardClickAfterDrag(event) {
     </div>
   </div>
 )}
+      <PlanLimitModal details={planLimitDetails} onClose={() => setPlanLimitDetails(null)} />
       </div>
     </AppLayout>
   );

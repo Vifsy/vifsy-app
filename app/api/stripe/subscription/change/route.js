@@ -152,8 +152,22 @@ export async function POST(request) {
           "expand[]": ["latest_invoice.payment_intent"],
         },
       });
-      const paymentUrl = updated?.latest_invoice?.hosted_invoice_url || null;
-      return Response.json({ ok: true, scheduled: false, pendingPayment: Boolean(updated?.pending_update), paymentUrl, changeId: change.id });
+      const invoice = updated?.latest_invoice || null;
+      const invoiceStatus = String(invoice?.status || "").toLowerCase();
+      const paymentIntentStatus = String(invoice?.payment_intent?.status || "").toLowerCase();
+      const requiresCustomerPayment = Boolean(
+        updated?.pending_update ||
+        ["draft", "open"].includes(invoiceStatus) ||
+        ["requires_action", "requires_payment_method", "requires_confirmation"].includes(paymentIntentStatus)
+      );
+      const paymentUrl = requiresCustomerPayment ? invoice?.hosted_invoice_url || null : null;
+      return Response.json({
+        ok: true,
+        scheduled: false,
+        pendingPayment: requiresCustomerPayment,
+        paymentUrl,
+        changeId: change.id,
+      });
     } catch (stripeError) {
       await context.admin.from("stripe_plan_changes").update({ status: "failed", last_error: String(stripeError?.message || "Stripe update failed").slice(0, 1000), updated_at: new Date().toISOString() }).eq("id", change.id);
       throw stripeError;

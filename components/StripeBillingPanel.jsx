@@ -1,28 +1,33 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarClock, Check, CreditCard, LoaderCircle, Plus, ShieldCheck, Sparkles, XCircle } from "lucide-react";
+import { CalendarClock, Check, CreditCard, ExternalLink, LoaderCircle, Plus, ShieldCheck, Sparkles, XCircle } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useUiText } from "../lib/i18n/useUiText";
+
+const COMMON_FEATURE_KEYS = [
+  "billing.allContentTypes",
+  "billing.aiImages",
+  "billing.aiVideoReels",
+  "billing.campaignsIncluded",
+  "billing.automaticPublishing",
+];
 
 const PLANS = [
   {
     key: "starter", name: "Starter", credits: 150, month: 299, year: 2990,
     monthLookup: "spreelo_starter_monthly", yearLookup: "spreelo_starter_yearly", rank: 1,
-    audienceKey: "billing.planAudienceStarter",
-    featureKeys: ["billing.aiContent", "billing.scheduling", "billing.campaigns", "billing.featureStarterPace", "billing.featureStarterFit"],
+    audienceKey: "billing.planAudienceStarter", brands: 1, socialAccounts: 1, recurringPlans: 1,
   },
   {
     key: "growth", name: "Growth", credits: 350, month: 599, year: 5990,
     monthLookup: "spreelo_growth_monthly", yearLookup: "spreelo_growth_yearly", featured: true, rank: 2,
-    audienceKey: "billing.planAudienceGrowth",
-    featureKeys: ["billing.aiContent", "billing.scheduling", "billing.campaigns", "billing.featureGrowthPace", "billing.featureGrowthFormats", "billing.featureGrowthFit"],
+    audienceKey: "billing.planAudienceGrowth", brands: 1, socialAccounts: 3, recurringPlans: 1,
   },
   {
     key: "pro", name: "Pro", credits: 750, month: 999, year: 9990,
     monthLookup: "spreelo_pro_monthly", yearLookup: "spreelo_pro_yearly", rank: 3,
-    audienceKey: "billing.planAudiencePro",
-    featureKeys: ["billing.aiContent", "billing.scheduling", "billing.campaigns", "billing.featureProPace", "billing.featureProFormats", "billing.featureProFit"],
+    audienceKey: "billing.planAudiencePro", brands: 3, socialAccounts: 10, recurringPlans: 3,
   },
 ];
 
@@ -52,6 +57,7 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
   const [busyLookup, setBusyLookup] = useState("");
   const [busyAction, setBusyAction] = useState("");
   const [message, setMessage] = useState("");
+  const [paymentLink, setPaymentLink] = useState("");
 
   const currentPlan = cleanPlanName(billing?.subscription_plan || billing?.plan_name || "free");
   const currentPlanConfig = PLANS.find((plan) => plan.key === currentPlan) || null;
@@ -121,10 +127,31 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
     }
   }
 
-  async function changeSubscription(lookupKey) {
+  async function pollForPlanChange(lookupKey) {
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 900 : 1800));
+      const token = await getToken();
+      if (!token) return false;
+      const response = await fetch("/api/stripe/status", { headers: { Authorization: `Bearer ${token}` } });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) continue;
+      if (payload?.billing) {
+        setBilling(payload.billing);
+        onBalanceChange?.(payload.billing);
+      }
+      if (String(payload?.billing?.subscription_price_lookup_key || "") === lookupKey) return true;
+    }
+    return false;
+  }
+
+  async function changeSubscription(lookupKey, openPaymentWindow = false) {
     if (busyLookup || busyAction) return;
+    const paymentWindow = openPaymentWindow
+      ? window.open("about:blank", "spreelo-stripe-payment")
+      : null;
     setBusyLookup(lookupKey);
     setMessage("");
+    setPaymentLink("");
     try {
       const token = await getToken();
       const response = await fetch("/api/stripe/subscription/change", {
@@ -134,10 +161,34 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.error || t("billing.planChangeError"));
-      if (payload?.paymentUrl) { window.location.href = payload.paymentUrl; return; }
+      if (payload?.paymentUrl) {
+        if (paymentWindow) {
+          paymentWindow.location.href = payload.paymentUrl;
+          try { paymentWindow.focus(); } catch {}
+          setMessage(t("billing.paymentOpenedNewTab"));
+        } else {
+          setPaymentLink(payload.paymentUrl);
+          setMessage(t("billing.paymentNeedsOpening"));
+        }
+        void pollForPlanChange(lookupKey).then((changed) => {
+          if (changed) {
+            setPaymentLink("");
+            setMessage(t("billing.planChanged"));
+          }
+        });
+        return;
+      }
+      if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
       setMessage(payload?.scheduled ? t("billing.downgradeScheduled") : t("billing.planChangeProcessing"));
-      await refreshBilling();
+      if (!payload?.scheduled) {
+        const changed = await pollForPlanChange(lookupKey);
+        if (changed) setMessage(t("billing.planChanged"));
+        else await refreshBilling();
+      } else {
+        await refreshBilling();
+      }
     } catch (error) {
+      if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
       setMessage(error?.message || t("billing.planChangeError"));
     } finally {
       setBusyLookup("");
@@ -177,7 +228,7 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
   }, [billing, currentPlan, t]);
 
   return (
-    <section className="stripe-billing-v14377 stripe-billing-v14378">
+    <section id="spreelo-plans" className="stripe-billing-v14377 stripe-billing-v14378">
       <header className="stripe-billing-heading">
         <div>
           <p className="eyebrow">{t("billing.eyebrow")}</p>
@@ -225,6 +276,13 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
         <button type="button" className={interval === "year" ? "active" : ""} onClick={() => setInterval("year")}>{t("billing.yearly")} <span>{t("billing.twoMonthsFree")}</span></button>
       </div>
 
+      {canChangePlan && (
+        <div className="stripe-plan-proration-note">
+          <ShieldCheck size={17} />
+          <div><strong>{t("billing.prorationTitle")}</strong><span>{t("billing.prorationText")}</span></div>
+        </div>
+      )}
+
       <div className="stripe-billing-main-grid">
         <div className="stripe-billing-plan-area">
       <div className="stripe-plan-grid">
@@ -250,13 +308,16 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
               <div className="stripe-plan-price"><strong>{price.toLocaleString("sv-SE")} kr</strong><span>/{interval === "month" ? t("billing.monthShort") : t("billing.yearShort")}</span></div>
               <p className="stripe-plan-credit-line">{t("billing.creditsPerMonth", { count: plan.credits })}</p>
               <ul>
-                {plan.featureKeys.map((featureKey) => <li key={featureKey}><Check size={15} />{t(featureKey)}</li>)}
+                <li><Check size={15} />{t("billing.brandLimit", { count: plan.brands })}</li>
+                <li><Check size={15} />{plan.socialAccounts === 1 ? t("billing.socialAccountLimitOne") : t("billing.socialAccountLimit", { count: plan.socialAccounts })}</li>
+                <li><Check size={15} />{plan.recurringPlans === 1 ? t("billing.recurringPlanLimitOne") : t("billing.recurringPlanLimit", { count: plan.recurringPlans })}</li>
+                {COMMON_FEATURE_KEYS.map((featureKey) => <li key={featureKey}><Check size={15} />{t(featureKey)}</li>)}
               </ul>
               <button
                 type="button"
                 className="stripe-plan-action"
                 disabled={disabled}
-                onClick={() => hasStripeSubscription ? changeSubscription(lookup) : startCheckout(lookup, Boolean(trialInfo?.eligible))}
+                onClick={() => hasStripeSubscription ? changeSubscription(lookup, Boolean(isUpgrade)) : startCheckout(lookup, Boolean(trialInfo?.eligible))}
               >
                 {busyLookup === lookup ? <LoaderCircle className="billing-spin" size={16} /> : <CreditCard size={15} />}
                 {buttonLabel}
@@ -297,7 +358,16 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
         <div><strong>{t("billing.howCreditsWorkTitle")}</strong><p>{t("billing.howCreditsWorkText")}</p></div>
       </div>
       <p className="stripe-billing-footnote">{t("billing.managedPaymentsNote")}</p>
-      {message && <p className="stripe-billing-message">{message}</p>}
+      {message && (
+        <div className="stripe-billing-message-row">
+          <p className="stripe-billing-message">{message}</p>
+          {paymentLink ? (
+            <a className="stripe-billing-payment-link" href={paymentLink} target="_blank" rel="noreferrer">
+              {t("billing.openPayment")} <ExternalLink size={14} />
+            </a>
+          ) : null}
+        </div>
+      )}
     </section>
   );
 }

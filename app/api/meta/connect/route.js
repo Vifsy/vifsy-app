@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { isConfiguredAdminEmail } from "../../../../lib/adminAuth";
+import { checkSocialConnectionCapacity } from "../../../../lib/planEntitlements";
 
 function base64UrlEncode(value) {
   return Buffer.from(value).toString("base64url");
@@ -78,7 +80,7 @@ async function getAuthenticatedBrand({ request, brandProfileId }) {
     return { error: "Invalid brand", status: 403 };
   }
 
-  return { user, brand };
+  return { user, brand, supabase };
 }
 
 function buildFacebookLoginUrl({ request, userId, brandProfileId }) {
@@ -139,6 +141,16 @@ export async function POST(request) {
 
     if (authResult.error) {
       return NextResponse.json({ ok: false, error: authResult.error }, { status: authResult.status });
+    }
+
+    const capacity = isConfiguredAdminEmail(authResult.user.email)
+      ? { allowed: true }
+      : await checkSocialConnectionCapacity(authResult.supabase, authResult.user.id, {
+          brandProfileId,
+          platform: "facebook",
+        });
+    if (!capacity.allowed) {
+      return NextResponse.json({ ok: false, error: "PLAN_LIMIT", planLimit: capacity.limitDetails }, { status: 409 });
     }
 
     const { state, url } = buildFacebookLoginUrl({

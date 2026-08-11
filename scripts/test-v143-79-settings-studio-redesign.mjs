@@ -20,14 +20,14 @@ assert.ok(settings.includes("settings-v14379-quick-grid"), "settings should use 
 assert.ok(settings.includes("settings.planSubscriptionTitle"), "settings should combine plan/subscription summary");
 assert.ok(settings.includes("settings.notificationsTitle"), "settings should keep email notifications as a dedicated card");
 assert.ok(billing.includes("stripe-billing-main-grid"), "billing should use premium plan + side rail layout");
-assert.ok(billing.includes("billing.featureGrowthFormats"), "plan cards should have richer differentiated content");
+assert.ok(billing.includes("billing.featureGrowthFormats") || billing.includes("billing.aiVideoReels"), "plan cards should keep rich package content");
 assert.ok(billing.includes("stripe-credit-explainer"), "billing should explain credits clearly");
 assert.ok(automation.includes("spreelo-ai-studio-hero-desktop-v14379.png"), "desktop AI studio should use the new hero art");
 assert.ok(automation.includes("spreelo-ai-studio-hero-mobile-v14379.png"), "mobile AI studio should use the new hero art");
 assert.ok(css.includes("grid-template-columns: minmax(0,.92fr) minmax(580px,1.08fr)"), "desktop settings hero must not become a full-width long hero");
 assert.ok(css.includes("width:calc(100% - 12px)"), "AI studio mobile should use more of the available width");
 assert.ok(css.includes("font-size:10.6px"), "oversized platform-adapter copy should be controlled on mobile");
-assert.ok(globals.includes('40-v143-79-settings-studio.css'), "v143.79 CSS must load last");
+assert.ok(globals.includes('40-v143-79-settings-studio.css'), "v143.79 CSS must remain in the cascade");
 assert.ok(defaults.includes('"billing.howCreditsWorkTitle"'), "English source labels should contain new design copy");
 assert.ok(sv.includes('"billing.howCreditsWorkTitle"'), "Swedish built-in labels should contain the new design copy");
 assert.ok(cache.includes('TRANSLATION_CACHE_VERSION = "v19"'), "translation cache must be refreshed");

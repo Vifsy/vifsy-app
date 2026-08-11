@@ -416,7 +416,7 @@ export default function VideoBackgroundsPage() {
             <div>
               <strong>Administrator access is not configured</strong>
               <p>
-                Set <code>SPREELO_PRIMARY_ADMIN_EMAIL</code> in Vercel only if the primary admin should be different from johan@foldern.com,
+                Use <code>SPREELO_PRIMARY_ADMIN_EMAIL</code> for the primary admin and <code>SPREELO_ADMIN_EMAILS</code> for additional admin login emails in Vercel,
                 then redeploy.
               </p>
             </div>

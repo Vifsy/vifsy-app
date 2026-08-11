@@ -1,0 +1,144 @@
+/* v143.81 — package entitlements, upgrade transparency and friendly plan-limit UX */
+
+#spreelo-plans { scroll-margin-top: 24px; }
+
+html body .settings-v14380-page .stripe-plan-card {
+  min-height: 500px !important;
+}
+html body .settings-v14380-page .stripe-plan-card ul {
+  margin-bottom: 16px !important;
+}
+
+.stripe-plan-proration-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid rgba(34, 197, 94, .18);
+  border-radius: 14px;
+  background: rgba(240, 253, 244, .72);
+  color: #485465;
+}
+.stripe-plan-proration-note svg { flex: 0 0 auto; margin-top: 1px; color: #16a34a; }
+.stripe-plan-proration-note div { display: grid; gap: 3px; }
+.stripe-plan-proration-note strong { color: #172033; font-size: 12.5px; }
+.stripe-plan-proration-note span { font-size: 11.5px; line-height: 1.45; }
+
+.stripe-billing-message-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+.stripe-billing-message-row .stripe-billing-message { margin: 0; }
+.stripe-billing-payment-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #151515;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.plan-limit-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, .46);
+  backdrop-filter: blur(5px);
+}
+.plan-limit-modal {
+  position: relative;
+  width: min(460px, 100%);
+  padding: 28px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, .22);
+}
+.plan-limit-modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: #f7f7f8;
+  color: #667085;
+  cursor: pointer;
+}
+.plan-limit-modal-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 16px;
+  border-radius: 14px;
+  background: #fff3ee;
+  color: #ef6f51;
+}
+.plan-limit-modal .eyebrow {
+  margin: 0 0 5px;
+  color: #ef6f51;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+.plan-limit-modal h2 { margin: 0 40px 8px 0; color: #151923; font-size: 24px; line-height: 1.12; }
+.plan-limit-modal > p:not(.eyebrow) { margin: 0; color: #667085; font-size: 13.5px; line-height: 1.55; }
+.plan-limit-modal-upgrade {
+  display: grid;
+  gap: 3px;
+  margin-top: 18px;
+  padding: 13px 14px;
+  border: 1px solid #f1e9e5;
+  border-radius: 14px;
+  background: #fffaf8;
+}
+.plan-limit-modal-upgrade strong { color: #2a2e37; font-size: 13px; }
+.plan-limit-modal-upgrade span { color: #6b7280; font-size: 12px; line-height: 1.45; }
+.plan-limit-modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 20px; }
+.plan-limit-modal-actions button,
+.plan-limit-modal-actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 9px 14px;
+  border: 1px solid #e4e7ec;
+  border-radius: 11px;
+  background: #fff;
+  color: #344054;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+.plan-limit-modal-actions .primary { border-color: #151515; background: #151515; color: #fff; }
+
+@media (max-width: 760px) {
+  html body .settings-v14380-page .stripe-plan-card { min-height: auto !important; }
+  .stripe-billing-message-row { align-items: stretch; flex-direction: column; }
+  .stripe-billing-payment-link { align-self: flex-start; }
+  .plan-limit-modal { padding: 24px 20px 20px; border-radius: 18px; }
+  .plan-limit-modal h2 { font-size: 21px; }
+  .plan-limit-modal-actions { flex-direction: column-reverse; }
+  .plan-limit-modal-actions button,
+  .plan-limit-modal-actions a { width: 100%; }
+}

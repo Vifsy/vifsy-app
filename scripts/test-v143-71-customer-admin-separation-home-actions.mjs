@@ -28,9 +28,9 @@ expect(review.includes('href={`/posts/${post.id}`}'), 'Customer review rows must
 expect(review.includes('dashboard.customerReview.historyTitle'), 'Customer review must expose separate history.');
 
 expect(adminLayout.includes('fetch("/api/admin/me"') && adminLayout.includes('window.location.replace("/")'), 'Admin route tree must verify access before rendering and redirect non-admins.');
-expect(adminAuth.includes('SPREELO_PRIMARY_ADMIN_EMAIL') && adminAuth.includes('johan@foldern.com'), 'Admin API auth must default to the single primary admin email.');
+expect(adminAuth.includes('SPREELO_PRIMARY_ADMIN_EMAIL') && adminAuth.includes('johan@foldern.com'), 'Admin API auth must retain the primary admin default.');
 expect(!adminAuth.includes('SPREELO_ADMIN_USER_IDS'), 'Admin API must not grant access through the old multi-admin user-id list.');
-expect(videoRoute.includes('SPREELO_PRIMARY_ADMIN_EMAIL') && videoRoute.includes('johan@foldern.com'), 'Shared video background admin endpoint must use the same primary-admin restriction.');
+expect(videoRoute.includes('getAdminContext') && videoRoute.includes('adminAuth'), 'Shared video background admin endpoint must use the shared admin authorization.');
 
 expect(postPage.includes('waitingForInternalReview') && postPage.includes('posts.preparingTitle'), 'Direct customer post URLs must hide posts still in internal review.');
 expect(postPage.includes('admin_review_status'), 'Customer post detail must load internal review state before exposing the post.');
