@@ -1,0 +1,263 @@
+/* v143.88 — overlay-led typography, equal home rows and responsive settings polish. */
+
+@media (min-width: 801px) {
+  html body .settings-reference-page .settings-ref-labelled-section > div:first-child p,
+  html body .settings-reference-page .settings-ref-action-rows span small,
+  html body .settings-reference-page .settings-ref-card small,
+  html body .settings-reference-page .settings-ref-card span,
+  html body .settings-reference-page .settings-ref-delivery p,
+  html body .settings-reference-page .settings-ref-delivery label,
+  html body .settings-reference-page .settings-ref-language-section p,
+  html body .settings-reference-page .settings-ref-benefits small { font-size:14px !important; }
+
+  html body .settings-reference-page .settings-ref-rows strong,
+  html body .settings-reference-page .settings-ref-rows span,
+  html body .settings-reference-page .settings-ref-rows input,
+  html body .settings-reference-page .settings-ref-rows button,
+  html body .settings-reference-page .settings-ref-rows em,
+  html body .settings-reference-page .settings-ref-notification-table section > div,
+  html body .settings-reference-page .settings-ref-language-list span { font-size:15px !important; }
+
+  html body .settings-reference-page .settings-ref-action-rows span strong,
+  html body .settings-reference-page .settings-ref-card strong { font-size:15px !important; }
+
+  html body .home-reference-page .home-reference-plans article p,
+  html body .home-reference-page .home-reference-plans article > span,
+  html body .home-reference-page .home-reference-plans article > a,
+  html body .home-reference-page .home-reference-coach li a,
+  html body .home-reference-page .home-reference-suggestion span { font-size:13px !important; }
+}
+
+html body .settings-reference-page .stripe-reference-labels > div {
+  flex-direction:column !important;
+  align-items:flex-start !important;
+  justify-content:center !important;
+}
+
+html body .home-reference-page .home-reference-plans {
+  align-self:start !important;
+  display:grid !important;
+  grid-template-rows:59px repeat(3,107px) !important;
+}
+html body .home-reference-page .home-reference-plans article {
+  height:107px !important;
+  min-height:107px !important;
+}
+
+@media (min-width: 801px) and (max-width: 1180px) {
+  html body .settings-reference-page .settings-reference-workspace { margin-top:26px !important; }
+  html body .settings-reference-page .settings-ref-account-aside,
+  html body .settings-reference-page .settings-ref-security-aside,
+  html body .settings-reference-page .settings-ref-delivery,
+  html body .settings-reference-page .settings-ref-language-aside {
+    padding:24px !important;
+    border:1px solid #dfe2e7 !important;
+    border-radius:12px !important;
+    background:#fff !important;
+  }
+}
+
+@media (max-width: 800px) {
+  html body .content.spreelo-content:has(.settings-reference-page),
+  html body .content.spreelo-content:has(.home-reference-page) {
+    padding:calc(var(--spreelo-mobile-header-total, 107px) + 18px) 16px 34px !important;
+    background:linear-gradient(180deg,#f7f8fb 0,#fbfbfa 220px) !important;
+  }
+
+  html body .settings-reference-page .settings-reference-header {
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) auto !important;
+    align-items:center !important;
+    gap:12px !important;
+    min-height:auto !important;
+    padding:2px 0 14px !important;
+  }
+  html body .settings-reference-page .settings-reference-header h1 {
+    display:block !important;
+    font-size:32px !important;
+    line-height:1.05 !important;
+  }
+  html body .settings-reference-page .settings-reference-credits {
+    min-width:0 !important;
+    padding:9px 11px !important;
+    border-radius:10px !important;
+  }
+  html body .settings-reference-page .settings-reference-credits small,
+  html body .settings-reference-page .settings-reference-credits em { display:none !important; }
+  html body .settings-reference-page .settings-reference-credits strong { margin:0 !important; font-size:13px !important; white-space:nowrap !important; }
+
+  html body .settings-reference-page .settings-reference-tabs {
+    gap:8px !important;
+    margin:0 -16px !important;
+    padding:3px 16px 10px !important;
+    border:0 !important;
+    overflow-x:auto !important;
+    scroll-padding-inline:16px !important;
+  }
+  html body .settings-reference-page .settings-reference-tabs button {
+    flex:0 0 auto !important;
+    min-height:42px !important;
+    padding:0 13px !important;
+    border:1px solid #dfe3e9 !important;
+    border-radius:11px !important;
+    background:#fff !important;
+    box-shadow:0 3px 10px rgba(12,25,43,.04) !important;
+    font-size:13px !important;
+  }
+  html body .settings-reference-page .settings-reference-tabs button::after { display:none !important; }
+  html body .settings-reference-page .settings-reference-tabs button.active {
+    color:#fff !important;
+    border-color:#0b1d31 !important;
+    background:#0b1d31 !important;
+  }
+
+  html body .settings-reference-page .settings-reference-workspace { margin-top:16px !important; }
+  html body .settings-reference-page .settings-ref-account-main { border:0 !important; }
+  html body .settings-reference-page .settings-ref-section-intro { padding:3px 2px 0 !important; }
+  html body .settings-reference-page .settings-ref-section-intro h2,
+  html body .settings-reference-page .settings-ref-labelled-section > div:first-child h3 { font-size:17px !important; }
+  html body .settings-reference-page .settings-ref-profile {
+    margin:12px 0 14px !important;
+    padding:17px !important;
+    border:1px solid #e0e4ea !important;
+    border-radius:14px !important;
+    background:#fff !important;
+    box-shadow:0 8px 24px rgba(14,28,47,.06) !important;
+  }
+  html body .settings-reference-page .settings-ref-labelled-section {
+    grid-template-columns:1fr !important;
+    gap:14px !important;
+    margin-bottom:14px !important;
+    padding:18px !important;
+    border:1px solid #e0e4ea !important;
+    border-radius:14px !important;
+    background:#fff !important;
+    box-shadow:0 8px 24px rgba(14,28,47,.05) !important;
+  }
+  html body .settings-reference-page .settings-ref-labelled-section > div:first-child p {
+    max-width:none !important;
+    font-size:14px !important;
+  }
+  html body .settings-reference-page .settings-ref-rows { border-bottom:0 !important; }
+  html body .settings-reference-page .settings-ref-rows > div,
+  html body .settings-reference-page .settings-ref-rows > label {
+    grid-template-columns:minmax(0,1fr) auto !important;
+    gap:8px 14px !important;
+    min-height:74px !important;
+    padding:12px 0 !important;
+  }
+  html body .settings-reference-page .settings-ref-rows > div > strong,
+  html body .settings-reference-page .settings-ref-rows > label > strong { grid-column:1 / -1 !important; font-size:14px !important; }
+  html body .settings-reference-page .settings-ref-rows span,
+  html body .settings-reference-page .settings-ref-rows em { font-size:14px !important; }
+  html body .settings-reference-page .settings-ref-rows > label input {
+    grid-column:1 / -1 !important;
+    width:100% !important;
+    min-height:45px !important;
+    border:1px solid #d9dee6 !important;
+    background:#fbfbfa !important;
+  }
+  html body .settings-reference-page .settings-ref-rows > label button {
+    grid-column:1 / -1 !important;
+    justify-self:stretch !important;
+    min-height:42px !important;
+    padding:0 16px !important;
+    border-radius:8px !important;
+    color:#fff !important;
+    background:#0b1d31 !important;
+    font-weight:800 !important;
+  }
+  html body .settings-reference-page .settings-ref-rows em,
+  html body .settings-reference-page .settings-ref-rows button { padding-bottom:0 !important; }
+
+  html body .settings-reference-page .settings-ref-action-rows button { min-height:82px !important; }
+  html body .settings-reference-page .settings-ref-action-rows span strong { font-size:15px !important; }
+  html body .settings-reference-page .settings-ref-action-rows span small { font-size:13px !important; line-height:1.45 !important; }
+
+  html body .settings-reference-page .settings-ref-account-aside,
+  html body .settings-reference-page .settings-ref-security-aside,
+  html body .settings-reference-page .settings-ref-delivery,
+  html body .settings-reference-page .settings-ref-language-aside {
+    margin-top:0 !important;
+    padding:19px !important;
+    border:1px solid #e0e4ea !important;
+    border-radius:14px !important;
+    background:#fff !important;
+    box-shadow:0 8px 24px rgba(14,28,47,.05) !important;
+  }
+  html body .settings-reference-page .settings-ref-account-aside dl {
+    display:grid !important;
+    grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+    gap:12px !important;
+    margin:16px 0 22px !important;
+  }
+  html body .settings-reference-page .settings-ref-account-aside dt { margin-top:0 !important; }
+  html body .settings-reference-page .settings-ref-account-aside dd { margin:4px 0 0 !important; }
+  html body .settings-reference-page .settings-ref-account-aside dt:nth-of-type(1) { grid-column:1; grid-row:1; }
+  html body .settings-reference-page .settings-ref-account-aside dd:nth-of-type(1) { grid-column:1; grid-row:2; }
+  html body .settings-reference-page .settings-ref-account-aside dt:nth-of-type(2) { grid-column:2; grid-row:1; }
+  html body .settings-reference-page .settings-ref-account-aside dd:nth-of-type(2) { grid-column:2; grid-row:2; }
+  html body .settings-reference-page .settings-ref-account-aside dt:nth-of-type(3) { grid-column:3; grid-row:1; }
+  html body .settings-reference-page .settings-ref-account-aside dd:nth-of-type(3) { grid-column:3; grid-row:2; }
+  html body .settings-reference-page .settings-ref-account-aside a { width:100% !important; }
+
+  html body .settings-reference-page .settings-ref-benefits {
+    margin-top:14px !important;
+    padding:8px 20px !important;
+    border-radius:14px !important;
+  }
+  html body .settings-reference-page .settings-ref-benefits > div { min-height:82px !important; }
+  html body .settings-reference-page .settings-ref-benefits strong { font-size:15px !important; }
+  html body .settings-reference-page .settings-ref-benefits small { font-size:13px !important; }
+
+  html body .settings-reference-page .settings-ref-security-main .settings-ref-labelled-section { padding:18px !important; }
+  html body .settings-reference-page .settings-ref-card header,
+  html body .settings-reference-page .settings-ref-card > div { padding:14px !important; }
+  html body .settings-reference-page .settings-ref-card header { min-height:96px !important; }
+  html body .settings-reference-page .settings-ref-card strong { font-size:14px !important; }
+  html body .settings-reference-page .settings-ref-card small,
+  html body .settings-reference-page .settings-ref-card span { font-size:13px !important; }
+
+  html body .settings-reference-page .settings-ref-notifications { gap:14px !important; }
+  html body .settings-reference-page .settings-ref-notification-table {
+    padding:16px !important;
+    border:1px solid #e0e4ea !important;
+    border-radius:14px !important;
+    background:#fff !important;
+  }
+  html body .settings-reference-page .settings-ref-notification-table > header,
+  html body .settings-reference-page .settings-ref-notification-table section > div {
+    grid-template-columns:minmax(0,1fr) 58px 58px !important;
+  }
+  html body .settings-reference-page .settings-ref-notification-table section > div { font-size:13px !important; }
+
+  html body .settings-reference-page .settings-ref-language-card {
+    border-radius:14px !important;
+    overflow:hidden !important;
+    box-shadow:0 8px 24px rgba(14,28,47,.05) !important;
+  }
+  html body .settings-reference-page .settings-ref-language-section { padding:18px !important; }
+
+  html body .settings-reference-page .stripe-reference-plan {
+    margin:12px !important;
+    padding:20px !important;
+    border:1px solid #dfe2e7 !important;
+    border-radius:13px !important;
+    background:#fff !important;
+  }
+  html body .settings-reference-page .stripe-reference-plan.current { background:linear-gradient(180deg,#fff1eb,#fffaf8) !important; }
+
+  html body .home-reference-page .home-reference-plans { display:block !important; }
+  html body .home-reference-page .home-reference-plans article {
+    height:auto !important;
+    min-height:142px !important;
+  }
+}
+
+@media (max-width: 520px) {
+  html body .settings-reference-page .settings-reference-header { grid-template-columns:1fr !important; }
+  html body .settings-reference-page .settings-reference-credits { width:100% !important; justify-content:flex-start !important; }
+  html body .settings-reference-page .settings-ref-notification-table { padding:14px 10px !important; }
+  html body .settings-reference-page .settings-ref-notification-table > header,
+  html body .settings-reference-page .settings-ref-notification-table section > div { grid-template-columns:minmax(0,1fr) 52px 52px !important; }
+}
