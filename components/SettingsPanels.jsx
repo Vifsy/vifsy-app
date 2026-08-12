@@ -39,6 +39,7 @@ export default function SettingsPanels({
   publishingTimeZoneOptions = [],
   currentBrandName,
   currentBrandWebsite,
+  requestProfileImageChange,
 }) {
   const { t } = useUiText(["settings"]);
   const name = profileName || currentUserEmail?.split("@")[0] || t("settings.userFallback");
@@ -55,8 +56,8 @@ export default function SettingsPanels({
               <p>{t("settings.profileText")}</p>
             </div>
             <div className="settings-ref-profile">
-              <span>{initials}</span>
-              <button type="button">{t("settings.changeProfilePicture")}</button>
+              <span className={currentUser?.user_metadata?.spreelo_avatar_url ? "has-image" : ""}>{currentUser?.user_metadata?.spreelo_avatar_url ? <img src={currentUser.user_metadata.spreelo_avatar_url} alt="" /> : initials}</span>
+              <button type="button" onClick={requestProfileImageChange}>{t("settings.changeProfilePicture")}</button>
             </div>
           </section>
 

@@ -486,6 +486,14 @@ export default function Settings() {
     }
   }, []);
 
+  useEffect(() => {
+    function syncAvatar(event) {
+      if (event?.detail?.user) setCurrentUser(event.detail.user);
+    }
+    window.addEventListener("spreelo-avatar-updated", syncAvatar);
+    return () => window.removeEventListener("spreelo-avatar-updated", syncAvatar);
+  }, []);
+
   const planName = useMemo(() => {
     const raw = String(creditBalance?.plan_name || creditBalance?.subscription_plan || "Free").trim();
     return raw.replace(/^plan\s*:\s*/i, "") || "Free";
@@ -807,6 +815,7 @@ export default function Settings() {
           planName={planName}
           currentBrandName={currentBrandProfile?.business_name || ""}
           currentBrandWebsite={currentBrandProfile?.website_url || ""}
+          requestProfileImageChange={() => window.dispatchEvent(new Event("spreelo-avatar-picker-requested"))}
           creditRemaining={creditRemaining}
           creditLimit={creditLimit}
           renewalLabel={renewalLabel}

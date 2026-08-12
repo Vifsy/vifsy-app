@@ -1,0 +1,106 @@
+/* v143.92 — working profile/logo uploads and a shared, quieter visual finish. */
+
+html body .settings-reference-page .settings-ref-profile > span.has-image { overflow:hidden; padding:0; background:#edf1f5; }
+html body .settings-reference-page .settings-ref-profile > span.has-image img { width:100%; height:100%; object-fit:cover; }
+
+/* Account deletion: larger type, grouped form and the same rounded finish as settings. */
+html body .settings-modal-backdrop { background:rgba(5,16,27,.54) !important; backdrop-filter:blur(10px) !important; }
+html body .settings-delete-modal {
+  width:min(690px,100%) !important;
+  padding:34px !important;
+  overflow:auto !important;
+  border:1px solid rgba(255,255,255,.8) !important;
+  border-radius:24px !important;
+  background:
+    radial-gradient(circle at 100% 0%,rgba(241,226,255,.58),transparent 32%),
+    radial-gradient(circle at 0% 0%,rgba(255,229,219,.58),transparent 34%),
+    #f9fbfd !important;
+  box-shadow:0 34px 100px rgba(5,16,27,.34) !important;
+}
+html body .settings-delete-modal .danger-eyebrow { margin-bottom:12px !important; color:#a53b28 !important; font-size:12px !important; letter-spacing:.1em !important; }
+html body .settings-delete-modal h3 { margin:0 54px 12px 0 !important; color:#101d30 !important; font-size:30px !important; line-height:1.15 !important; letter-spacing:-.025em !important; }
+html body .settings-delete-modal > p { max-width:580px; margin-bottom:10px !important; color:#56667d !important; font-size:15px !important; line-height:1.6 !important; }
+html body .settings-delete-modal .danger-warning { display:inline-flex; margin:3px 0 8px !important; padding:8px 11px; border-radius:9px; color:#9e3524 !important; background:#fff0eb; font-size:14px !important; font-weight:700; }
+html body .settings-modal-close { top:22px !important; right:22px !important; width:40px !important; height:40px !important; border-radius:12px !important; background:rgba(255,255,255,.8) !important; }
+html body .settings-delete-form {
+  gap:12px !important;
+  margin-top:18px !important;
+  padding:22px !important;
+  border:1px solid #dde4eb;
+  border-radius:18px;
+  background:rgba(255,255,255,.9);
+  box-shadow:0 12px 30px rgba(17,31,49,.055);
+}
+html body .settings-delete-form label { margin-top:5px !important; color:#142238; font-size:14px !important; font-weight:700; }
+html body .settings-delete-form .input { min-height:50px !important; padding:0 14px !important; border-color:#d6dee7 !important; border-radius:11px !important; background:#fff !important; color:#142238 !important; font-size:15px !important; }
+html body .settings-delete-form textarea.input { min-height:112px !important; padding:14px !important; line-height:1.5 !important; }
+html body .settings-delete-form p { margin:0 0 8px !important; color:#63728a !important; font-size:13px !important; line-height:1.55 !important; }
+html body .settings-modal-actions { align-items:center !important; margin-top:22px !important; }
+html body .settings-modal-actions button { min-height:48px !important; padding:0 20px !important; border-radius:11px !important; font-size:14px !important; font-weight:650 !important; }
+
+/* Brand profile: shared radii and typography without repeating navy title bars. */
+html body .brand-profile-layout { border-radius:26px !important; }
+html body .brand-profile-form-card {
+  overflow:hidden !important;
+  border:1px solid rgba(211,220,232,.95) !important;
+  border-radius:26px !important;
+  background:linear-gradient(145deg,#fff 0%,#fbfcfe 100%) !important;
+  box-shadow:0 18px 44px rgba(20,36,57,.075) !important;
+}
+html body .brand-profile-form-header {
+  margin:-26px -26px 18px !important;
+  padding:25px 26px 22px !important;
+  border-bottom:1px solid #e1e7ed !important;
+  background:linear-gradient(105deg,rgba(255,239,233,.72),rgba(245,241,255,.65) 58%,rgba(240,247,255,.72)) !important;
+}
+html body .brand-profile-form-header h3 { font-size:28px !important; letter-spacing:-.025em !important; }
+html body .brand-profile-form-header .brand-profile-form-intro { font-size:14px !important; line-height:1.55 !important; }
+html body .brand-profile-summary-grid { padding:16px !important; border-radius:22px !important; background:linear-gradient(145deg,#f8fafc,#f3f6fa) !important; }
+html body .brand-profile-summary-card { border:1px solid rgba(217,225,234,.96) !important; border-radius:18px !important; }
+html body .brand-profile-summary-card small { color:#68768a !important; font-size:12px !important; font-weight:750 !important; letter-spacing:.06em !important; }
+html body .brand-profile-summary-card strong { color:#142238 !important; font-size:16px !important; line-height:1.4 !important; }
+html body .brand-profile-summary-card p,
+html body .brand-profile-summary-card a { color:#53647b !important; font-size:14px !important; line-height:1.55 !important; }
+html body .brand-profile-summary-card.narrative { min-height:144px !important; }
+
+html body .brand-profile-summary-card.logo { padding:0 !important; overflow:hidden !important; }
+html body .brand-logo-summary-trigger {
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;
+  gap:16px;
+  width:100%;
+  min-height:92px;
+  padding:16px 18px;
+  border:0;
+  color:#142238;
+  background:linear-gradient(105deg,#fff,#fff9e8);
+  text-align:left;
+  cursor:pointer;
+}
+html body .brand-logo-summary-trigger:hover { background:linear-gradient(105deg,#fff,#fff3d2); }
+html body .brand-logo-summary-copy { display:grid; gap:5px; min-width:0; }
+html body .brand-logo-summary-cta { padding:9px 12px; border:1px solid #cad4df; border-radius:10px; background:#fff; font-size:13px; font-weight:650; white-space:nowrap; }
+
+html body .brand-logo-modal { border-radius:24px !important; background:#fbfcfe !important; }
+html body .brand-logo-modal-header h3 { font-size:28px !important; }
+html body .brand-logo-modal-header p { font-size:14px !important; line-height:1.55 !important; }
+html body .brand-logo-upload-panel-modal { border-radius:18px !important; }
+html body .brand-logo-controls strong { font-size:16px !important; }
+html body .brand-logo-controls p,
+html body .brand-logo-default-toggle { font-size:14px !important; }
+html body .brand-logo-upload-button,
+html body .brand-logo-remove-button { min-height:46px !important; border-radius:11px !important; font-size:14px !important; font-weight:650 !important; }
+
+@media (max-width:760px) {
+  html body .settings-delete-modal { padding:25px 18px 20px !important; border-radius:20px !important; }
+  html body .settings-delete-modal h3 { font-size:25px !important; }
+  html body .settings-delete-form { padding:17px !important; }
+  html body .brand-profile-form-header { margin:-15px -15px 16px !important; padding:20px 16px !important; }
+  html body .brand-profile-summary-card small { font-size:11px !important; }
+  html body .brand-profile-summary-card strong { font-size:15px !important; }
+  html body .brand-profile-summary-card p,
+  html body .brand-profile-summary-card a { font-size:13px !important; }
+  html body .brand-logo-summary-trigger { grid-template-columns:auto minmax(0,1fr); }
+  html body .brand-logo-summary-cta { grid-column:1/-1; width:100%; text-align:center; }
+}

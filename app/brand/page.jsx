@@ -1483,13 +1483,24 @@ export default function BrandProfile() {
                   </div>
                 </article>
                 <article className="brand-profile-summary-card logo">
-                  <div className={`brand-logo-compact-thumb ${logoUrl ? "has-logo" : "empty"}`}>
-                    {logoUrl ? <img src={logoUrl} alt={t("brand.logoPreviewAlt")} /> : <span>PNG</span>}
-                  </div>
-                  <div>
-                    <small>{t("brand.logoCompactTitle")}</small>
-                    <strong>{logoUrl ? t("brand.logoCompactTextReady") : t("brand.logoCompactTextEmpty")}</strong>
-                  </div>
+                  <button
+                    type="button"
+                    className="brand-logo-summary-trigger"
+                    onClick={() => {
+                      setLogoMessage("");
+                      setShowLogoModal(true);
+                    }}
+                    disabled={analyzing || saving || deletingBrand}
+                  >
+                    <span className={`brand-logo-compact-thumb ${logoUrl ? "has-logo" : "empty"}`}>
+                      {logoUrl ? <img src={logoUrl} alt={t("brand.logoPreviewAlt")} /> : <span>PNG</span>}
+                    </span>
+                    <span className="brand-logo-summary-copy">
+                      <small>{t("brand.logoCompactTitle")}</small>
+                      <strong>{logoUrl ? t("brand.logoCompactTextReady") : t("brand.logoCompactTextEmpty")}</strong>
+                    </span>
+                    <span className="brand-logo-summary-cta">{logoUrl ? t("brand.logoManageButton") : t("brand.logoAddButton")}</span>
+                  </button>
                 </article>
               </div>
             ) : (

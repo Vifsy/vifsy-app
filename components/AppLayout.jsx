@@ -157,6 +157,24 @@ export default function AppLayout({ active, children }) {
     checkUser();
   }, []);
 
+  useEffect(() => {
+    function requestAvatarPicker() {
+      avatarInputRef.current?.click();
+    }
+
+    function syncAvatar(event) {
+      const updatedUser = event?.detail?.user;
+      if (updatedUser) setUser(updatedUser);
+    }
+
+    window.addEventListener("spreelo-avatar-picker-requested", requestAvatarPicker);
+    window.addEventListener("spreelo-avatar-updated", syncAvatar);
+    return () => {
+      window.removeEventListener("spreelo-avatar-picker-requested", requestAvatarPicker);
+      window.removeEventListener("spreelo-avatar-updated", syncAvatar);
+    };
+  }, []);
+
   async function getSessionWithRetry() {
     let lastError = null;
 
@@ -549,7 +567,9 @@ export default function AppLayout({ active, children }) {
       });
       if (updateError) throw updateError;
 
-      setUser(data?.user || user);
+      const updatedUser = data?.user || user;
+      setUser(updatedUser);
+      window.dispatchEvent(new CustomEvent("spreelo-avatar-updated", { detail: { user: updatedUser } }));
 
       if (oldPath && oldPath !== storagePath) {
         void supabase.storage.from("user-avatars").remove([oldPath]);
@@ -574,7 +594,9 @@ export default function AppLayout({ active, children }) {
         },
       });
       if (error) throw error;
-      setUser(data?.user || user);
+      const updatedUser = data?.user || user;
+      setUser(updatedUser);
+      window.dispatchEvent(new CustomEvent("spreelo-avatar-updated", { detail: { user: updatedUser } }));
       if (oldPath) void supabase.storage.from("user-avatars").remove([oldPath]);
     } catch (error) {
       console.error("Could not remove avatar:", error);
