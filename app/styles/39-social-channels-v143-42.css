@@ -796,3 +796,8 @@ html body .pinterest-select-page .pinterest-sandbox-create-button:disabled {
   cursor: wait !important;
   opacity: 0.72 !important;
 }
+
+/* v143.93 — Threads channel accent */
+html body .social-v14339-grid .social-v74-card[data-platform='threads']::before {
+  background: linear-gradient(180deg,#111827,#000000);
+}

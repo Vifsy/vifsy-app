@@ -37,6 +37,10 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/cron/refresh-threads-tokens",
+      "schedule": "10 3 * * *"
+    },
+    {
       "path": "/api/cron/refresh-pinterest-tokens",
       "schedule": "15 3 * * *"
     },

@@ -65,6 +65,22 @@ const SOCIAL_PLATFORMS = [
     noIdKey: "social.noPinterestBoardId",
     iconSrc: "/social-icons/pinterest.png",
   },
+  {
+    key: "threads",
+    eyebrowKey: "social.threadsEyebrow",
+    titleKey: "social.threadsTitle",
+    descriptionKey: "social.threadsDescriptionV2",
+    connectHelpKey: "social.threadsConnectHelpV2",
+    connectKey: "social.connectThreads",
+    connectingKey: "social.connectingThreads",
+    disconnectKey: "social.disconnectThreads",
+    disconnectConfirmKey: "social.disconnectThreadsConfirm",
+    connectedAccountKey: "social.connectedThreadsAccount",
+    accountFallbackKey: "social.threadsAccountFallback",
+    idLabelKey: "social.threadsAccountId",
+    noIdKey: "social.noThreadsAccountId",
+    iconSrc: "/social-icons/threads.svg",
+  },
 ];
 
 function getConnectionStatusKey(status) {
@@ -89,6 +105,7 @@ function getBrandStorageKey(userId) {
 function getConnectEndpoint(platformKey) {
   if (platformKey === "instagram") return "/api/auth/instagram/start";
   if (platformKey === "pinterest") return "/api/auth/pinterest/start";
+  if (platformKey === "threads") return "/api/auth/threads/start";
   return "/api/meta/connect";
 }
 
@@ -103,6 +120,7 @@ function getSocialUrlMessage({ t }) {
   if (connected === "instagram") return t("social.instagramConnectedMessageV2");
   if (connected === "facebook") return t("social.facebookConnectedMessageV2");
   if (connected === "pinterest") return t("social.pinterestConnectedMessageV2");
+  if (connected === "threads") return t("social.threadsConnectedMessageV2");
   if (!error) return "";
 
   const knownErrors = {
@@ -132,6 +150,12 @@ function getSocialUrlMessage({ t }) {
     pinterest_account_failed: "social.errorPinterestAccount",
     pinterest_save_failed: "social.errorPinterestSave",
     pinterest_schema_missing: "social.errorPinterestSchemaMissing",
+    missing_threads_env: "social.errorMissingThreadsEnv",
+    threads_cancelled: "social.errorThreadsCancelled",
+    missing_threads_code: "social.errorThreadsCode",
+    invalid_threads_state: "social.errorThreadsState",
+    invalid_threads_state_payload: "social.errorThreadsState",
+    threads_callback_failed: "social.errorThreadsCallback",
   };
 
   return t(knownErrors[error] || "social.errorGenericConnect");

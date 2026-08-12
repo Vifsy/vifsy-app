@@ -19,6 +19,7 @@ import {
   getPinterestApiBaseUrl,
   isPinterestAuthError,
 } from "../../../../lib/pinterestOAuth.js";
+import { THREADS_GRAPH_API_BASE } from "../../../../lib/threadsOAuth.js";
 import {
   buildProductPushEdit,
   queueShotstackRender,
@@ -10082,6 +10083,10 @@ function createEmptySummary() {
     pinterest_publish_failed: 0,
     pinterest_publish_skipped_no_config: 0,
     pinterest_publish_skipped_no_image: 0,
+    threads_publish_checked: 0,
+    threads_published: 0,
+    threads_publish_failed: 0,
+    threads_publish_skipped_no_config: 0,
     brand_profile_found: 0,
     brand_profile_missing: 0,
     website_content_rules: 0,
@@ -32791,7 +32796,171 @@ function getPublishTargets(platformValue) {
     targets.push("pinterest");
   }
 
+  if (normalized.includes("threads")) {
+    targets.push("threads");
+  }
+
   return targets;
+}
+
+function buildThreadsTextFromPostContent(content) {
+  const value = String(content || "").trim();
+  if (!value) return "";
+  const characters = Array.from(value);
+  if (characters.length <= 500) return value;
+  return `${characters.slice(0, 497).join("").trimEnd()}...`;
+}
+
+function createThreadsApiError(response, data, fallbackMessage) {
+  const message = data?.error?.message || data?.error_message || fallbackMessage;
+  const error = new Error(message);
+  error.threadsCode = data?.error?.code ?? data?.code ?? response?.status ?? null;
+  error.threadsSubcode = data?.error?.error_subcode ?? null;
+  if ([102, 190].includes(Number(error.threadsCode))) error.requiresReconnect = true;
+  return error;
+}
+
+async function threadsGraphPost(path, payload) {
+  const body = new URLSearchParams();
+  for (const [key, value] of Object.entries(payload || {})) {
+    if (value === undefined || value === null || value === "") continue;
+    body.set(key, String(value));
+  }
+
+  const response = await fetch(`${THREADS_GRAPH_API_BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.error) {
+    throw createThreadsApiError(response, data, "Threads API request failed");
+  }
+  return data;
+}
+
+async function createThreadsContainer({
+  threadsUserId,
+  accessToken,
+  mediaType,
+  text = "",
+  imageUrl = "",
+  videoUrl = "",
+  children = "",
+  isCarouselItem = false,
+}) {
+  const data = await threadsGraphPost(`/${threadsUserId}/threads`, {
+    media_type: mediaType,
+    text,
+    image_url: imageUrl,
+    video_url: videoUrl,
+    children,
+    is_carousel_item: isCarouselItem ? "true" : undefined,
+    access_token: accessToken,
+  });
+  if (!data?.id) throw new Error("Threads did not return a media container id");
+  return String(data.id);
+}
+
+async function waitForThreadsContainerReady({
+  creationId,
+  accessToken,
+  maxAttempts = 10,
+  delayMs = 2000,
+}) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    if (attempt > 1) await sleep(delayMs);
+    const url = new URL(`${THREADS_GRAPH_API_BASE}/${creationId}`);
+    url.searchParams.set("fields", "status");
+    url.searchParams.set("access_token", accessToken);
+    const response = await fetch(url.toString());
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data?.error) {
+      throw createThreadsApiError(response, data, "Threads media status check failed");
+    }
+
+    const status = String(data?.status || "").toUpperCase();
+    if (!status || ["FINISHED", "READY", "PUBLISHED"].includes(status)) return data;
+    if (["ERROR", "FAILED", "EXPIRED"].includes(status)) {
+      throw new Error(`Threads media container is not publishable | status: ${status}`);
+    }
+  }
+  throw new Error("Threads media container did not become ready in time");
+}
+
+async function publishThreadsContainer({ threadsUserId, accessToken, creationId }) {
+  const data = await threadsGraphPost(`/${threadsUserId}/threads_publish`, {
+    creation_id: creationId,
+    access_token: accessToken,
+  });
+  if (!data?.id) throw new Error("Threads did not return a published post id");
+  return data;
+}
+
+async function publishPostToThreads({
+  threadsUserId,
+  accessToken,
+  content,
+  imageUrl = "",
+  videoUrl = "",
+  carouselImageUrls = [],
+  format,
+}) {
+  const text = buildThreadsTextFromPostContent(content);
+
+  if (format === "carousel") {
+    const urls = (carouselImageUrls || []).filter(Boolean).slice(0, 20);
+    if (urls.length < 2) throw new Error("Threads carousel requires at least two images");
+
+    const childIds = [];
+    for (const childImageUrl of urls) {
+      const childId = await createThreadsContainer({
+        threadsUserId,
+        accessToken,
+        mediaType: "IMAGE",
+        imageUrl: childImageUrl,
+        isCarouselItem: true,
+      });
+      await waitForThreadsContainerReady({ creationId: childId, accessToken });
+      childIds.push(childId);
+    }
+
+    const parentId = await createThreadsContainer({
+      threadsUserId,
+      accessToken,
+      mediaType: "CAROUSEL",
+      text,
+      children: childIds.join(","),
+    });
+    await waitForThreadsContainerReady({ creationId: parentId, accessToken });
+    return publishThreadsContainer({ threadsUserId, accessToken, creationId: parentId });
+  }
+
+  if (format === "animated_video") {
+    if (!videoUrl) throw new Error("Threads video publishing requires a public video URL");
+    const creationId = await createThreadsContainer({
+      threadsUserId,
+      accessToken,
+      mediaType: "VIDEO",
+      text,
+      videoUrl,
+    });
+    await waitForThreadsContainerReady({ creationId, accessToken, maxAttempts: 15, delayMs: 2500 });
+    return publishThreadsContainer({ threadsUserId, accessToken, creationId });
+  }
+
+  const mediaType = imageUrl ? "IMAGE" : "TEXT";
+  const creationId = await createThreadsContainer({
+    threadsUserId,
+    accessToken,
+    mediaType,
+    text,
+    imageUrl: mediaType === "IMAGE" ? imageUrl : "",
+  });
+  if (mediaType !== "TEXT") {
+    await waitForThreadsContainerReady({ creationId, accessToken });
+  }
+  return publishThreadsContainer({ threadsUserId, accessToken, creationId });
 }
 
 function extractUrlsFromText(value) {
@@ -33867,6 +34036,35 @@ async function getInstagramConnectionForBrand({
 
   return data || null;
 }
+async function getThreadsConnectionForBrand({
+  supabase,
+  userId,
+  brandProfileId,
+}) {
+  if (!userId || !brandProfileId) return null;
+
+  const { data, error } = await supabase
+    .from("social_connections")
+    .select("id, page_id, page_name, page_access_token, status, token_expires_at")
+    .eq("user_id", userId)
+    .eq("brand_profile_id", brandProfileId)
+    .eq("platform", "threads")
+    .eq("status", "connected")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Could not load Threads connection for brand", {
+      userId,
+      brandProfileId,
+      message: error.message,
+    });
+    return null;
+  }
+  return data || null;
+}
+
 async function publishApprovedSocialPosts({
   supabase,
   nowIso,
@@ -33980,6 +34178,7 @@ async function publishApprovedSocialPosts({
     let facebookConnectionForPost = null;
     let instagramConnectionForPost = null;
     let pinterestConnectionForPost = null;
+    let threadsConnectionForPost = null;
     let activePublishTarget = null;
 
     try {
@@ -34242,6 +34441,60 @@ async function publishApprovedSocialPosts({
           nowIso,
         });
         summary.instagram_published += 1;
+        activePublishTarget = null;
+      }
+
+      if (targets.includes("threads")) {
+        activePublishTarget = "threads";
+        summary.threads_publish_checked += 1;
+
+        threadsConnectionForPost = await getThreadsConnectionForBrand({
+          supabase,
+          userId: post.user_id,
+          brandProfileId: post.brand_profile_id,
+        });
+
+        if (!threadsConnectionForPost?.page_id || !threadsConnectionForPost?.page_access_token) {
+          summary.threads_publish_skipped_no_config += 1;
+          throw new Error("No connected Threads account found for this brand");
+        }
+
+        let threadsCarouselImageUrls = [];
+        if (normalizedFormat === "carousel") {
+          const threadsCarouselSlides = await loadCarouselSlidesForPublish({
+            supabase,
+            postId: post.id,
+          });
+          threadsCarouselImageUrls = threadsCarouselSlides
+            .map((slide) => slide.image_url)
+            .filter(Boolean);
+          if (threadsCarouselImageUrls.length < 2) {
+            throw new Error("Carousel post is missing render-ready slide images for Threads publishing.");
+          }
+        }
+
+        const threadsResult = await publishPostToThreads({
+          threadsUserId: threadsConnectionForPost.page_id,
+          accessToken: threadsConnectionForPost.page_access_token,
+          content: post.content,
+          imageUrl: post.image_url,
+          videoUrl: post.video_url,
+          carouselImageUrls: threadsCarouselImageUrls,
+          format: normalizedFormat,
+        });
+
+        await persistPublishedTarget({
+          supabase,
+          postId: post.id,
+          publishedTargetSet,
+          publishReceipts,
+          target: "threads",
+          receipt: threadsResult?.id
+            ? { thread_id: String(threadsResult.id), recorded_at: nowIso }
+            : { recorded_at: nowIso },
+          nowIso,
+        });
+        summary.threads_published += 1;
         activePublishTarget = null;
       }
 
@@ -34563,6 +34816,17 @@ async function publishApprovedSocialPosts({
             nowIso,
           });
         }
+
+        if (activePublishTarget === "threads" && threadsConnectionForPost?.id) {
+          await markConnectionExpiredAndAlert({
+            supabase,
+            connectionId: threadsConnectionForPost.id,
+            platform: "threads",
+            reason: error.message || "Threads publishing failed because the connection is no longer valid.",
+            resendApiKey,
+            nowIso,
+          });
+        }
       }
 
       const transientPinterestFailure =
@@ -34631,6 +34895,10 @@ async function publishApprovedSocialPosts({
 
       if (targets.includes("pinterest")) {
         summary.pinterest_publish_failed += 1;
+      }
+
+      if (targets.includes("threads")) {
+        summary.threads_publish_failed += 1;
       }
     }
   }
