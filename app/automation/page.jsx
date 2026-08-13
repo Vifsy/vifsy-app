@@ -11083,6 +11083,35 @@ function blockFormatCardClickAfterDrag(event) {
                 <section className="campaign-v14335-plan" id="campaign-v14335-preview">
                   <div className="campaign-v14335-plan-heading">
                     <div><h2>{t("automation.campaignExperience.planTitle")}</h2><p>{t("automation.campaignExperience.planText", { count: slots.length })}</p></div>
+                    <div className="campaign-v14395-plan-controls">
+                      <div className="campaign-v14395-control">
+                        <span>{t("automation.platform")}</span>
+                        {connectedPlatformOptions.length ? (
+                          <div className={`platform-multiselect campaign-v14395-platforms ${platformDropdownOpen ? "open" : ""}`}>
+                            <button type="button" className="platform-multiselect-button" onClick={(event) => { event.stopPropagation(); setPlatformDropdownOpen((current) => !current); }}>
+                              <span className="platform-selected-icons">
+                                {selectedPlatformOptions.length ? selectedPlatformOptions.map((item) => <span key={item.value} className="campaign-v14395-selected-channel"><img src={item.icon} alt="" /><b>{item.label}</b></span>) : <span className="platform-placeholder">{t("automation.choosePlatform")}</span>}
+                              </span>
+                              <ChevronDown size={15} />
+                            </button>
+                            {platformDropdownOpen ? (
+                              <div className="platform-multiselect-menu" onClick={(event) => event.stopPropagation()}>
+                                {connectedPlatformOptions.map((item) => {
+                                  const checked = selectedPlatformKeys.includes(item.value);
+                                  return <label key={`campaign-platform-${item.value}`} className="platform-multiselect-option"><input type="checkbox" checked={checked} onChange={() => applyPlatformSelection(checked ? selectedPlatformKeys.filter((key) => key !== item.value) : [...selectedPlatformKeys, item.value])} /><img src={item.icon} alt="" className="platform-icon-img" /><span>{item.label}</span></label>;
+                                })}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : <a href="/social-channels">{t("automation.connectSocialChannelFirst")}</a>}
+                      </div>
+                      <label className="campaign-v14395-control campaign-v14395-language">
+                        <span>{t("automation.redesign.postLanguage")}</span>
+                        <select value={language} onChange={(event) => setLanguage(event.target.value)}>
+                          {languageOptions.map((option) => <option value={option.value} key={`campaign-language-${option.value}`}>{option.label}</option>)}
+                        </select>
+                      </label>
+                    </div>
                     <div className="campaign-v14348-types-block">
                       <div className="campaign-v14348-types-title">
                         <small>{t("automation.campaignExperience.typesUsed")}</small>
@@ -11199,7 +11228,7 @@ function blockFormatCardClickAfterDrag(event) {
                                 }}
                               >
                                 <FileSearch size={15} aria-hidden="true" />
-                                {t("automation.viewPostDetails")}
+                                {expandedInstructionSlotIds.includes(slot.id) ? t("automation.hidePostDetails") : t("automation.viewPostDetails")}
                               </button>
                               <button
                                 type="button"
@@ -11216,7 +11245,7 @@ function blockFormatCardClickAfterDrag(event) {
                             </div>
                           ) : null}
                         </div>
-                        {expandedInstructionSlotIds.includes(slot.id) ? <div className="campaign-v14335-slot-detail"><strong>{t("automation.whatPostWillBeAbout")}</strong><p>{getSlotContentExplanation(slot)}</p><small>{getCurrentSlotCreditLabel(slot)}</small></div> : null}
+                        {expandedInstructionSlotIds.includes(slot.id) ? <div className="campaign-v14335-slot-detail"><button type="button" className="campaign-v14395-detail-close" onClick={() => toggleSlotInstructions(slot.id)} aria-label={t("automation.hidePostDetails")}><X size={16} /></button><strong>{t("automation.whatPostWillBeAbout")}</strong><p>{getSlotContentExplanation(slot)}</p><small>{getCurrentSlotCreditLabel(slot)}</small></div> : null}
                       </article>
                       );
                     })}

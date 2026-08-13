@@ -18,7 +18,6 @@ import {
   Sparkles,
   CreditCard,
   Globe2,
-  Trash2,
   UserRound,
   WandSparkles,
   X,
@@ -582,30 +581,6 @@ export default function AppLayout({ active, children }) {
     }
   }
 
-  async function handleAvatarRemove() {
-    if (!user?.id || avatarUploading) return;
-    const oldPath = String(user?.user_metadata?.spreelo_avatar_path || "").trim();
-    setAvatarUploading(true);
-    try {
-      const { data, error } = await supabase.auth.updateUser({
-        data: {
-          spreelo_avatar_url: null,
-          spreelo_avatar_path: null,
-        },
-      });
-      if (error) throw error;
-      const updatedUser = data?.user || user;
-      setUser(updatedUser);
-      window.dispatchEvent(new CustomEvent("spreelo-avatar-updated", { detail: { user: updatedUser } }));
-      if (oldPath) void supabase.storage.from("user-avatars").remove([oldPath]);
-    } catch (error) {
-      console.error("Could not remove avatar:", error);
-      alert(error.message || t("layout.avatarUploadError"));
-    } finally {
-      setAvatarUploading(false);
-    }
-  }
-
   async function handleLogout() {
     await supabase.auth.signOut();
     window.location.href = "/login";
@@ -840,19 +815,7 @@ export default function AppLayout({ active, children }) {
               <span>{user?.email || ""}</span>
             </div>
 
-            {user?.user_metadata?.spreelo_avatar_url ? (
-              <button
-                type="button"
-                className="spreelo-user-avatar-remove"
-                onClick={handleAvatarRemove}
-                disabled={avatarUploading}
-                aria-label={t("layout.removeProfileImage")}
-              >
-                <Trash2 size={14} aria-hidden="true" />
-              </button>
-            ) : (
-              <ChevronDown className="spreelo-user-profile-chevron" size={16} aria-hidden="true" />
-            )}
+            <ChevronDown className="spreelo-user-profile-chevron" size={16} aria-hidden="true" />
 
             <input
               ref={avatarInputRef}

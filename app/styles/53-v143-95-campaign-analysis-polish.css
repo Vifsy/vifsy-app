@@ -1,0 +1,177 @@
+/* v143.95 — campaign controls, analysis experience and compact settings hierarchy. */
+
+/* Brand analysis: dark Spreelo signature with restrained coral/lavender accents. */
+html body .brand-result-modal:has(.brand-result-analysis) {
+  width:min(1040px,calc(100vw - 40px)) !important;
+  padding:0 42px 40px !important;
+  overflow:hidden !important;
+  border:1px solid rgba(255,255,255,.88) !important;
+  border-radius:30px !important;
+  background:
+    radial-gradient(circle at 91% 6%,rgba(126,103,255,.15),transparent 31%),
+    radial-gradient(circle at 3% 94%,rgba(244,81,45,.12),transparent 28%),
+    linear-gradient(145deg,#fff 0%,#fbfcff 100%) !important;
+  box-shadow:0 36px 110px rgba(5,16,27,.38) !important;
+}
+html body .brand-result-analysis { display:block !important; color:#09172a !important; text-align:left !important; }
+html body .brand-analysis-brandline {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  width:300px;
+  min-height:84px;
+  margin:0 0 24px -42px;
+  padding:0 42px;
+  border-radius:0 0 76px 0;
+  color:#fff;
+  background:linear-gradient(115deg,#05101b,#153752);
+  box-shadow:0 14px 32px rgba(5,16,27,.15);
+}
+html body .brand-analysis-logo-mark {
+  display:grid;
+  place-items:center;
+  width:35px;
+  height:35px;
+  border-radius:10px;
+  color:#fff;
+  background:linear-gradient(145deg,#ff7255,#c84429);
+  font-size:20px;
+  font-weight:850;
+  box-shadow:0 7px 18px rgba(244,81,45,.28);
+}
+html body .brand-analysis-brandline > strong { color:#fff !important; font-size:26px !important; letter-spacing:-.03em; }
+html body .brand-analysis-spark { display:grid; place-items:center; width:31px; height:31px; margin-left:3px; border-radius:50%; color:#b7a7ff; background:rgba(255,255,255,.08); }
+html body .brand-analysis-heading { display:grid; grid-template-columns:minmax(0,1fr) 148px; align-items:center; gap:34px; }
+html body .brand-analysis-heading .dashboard-eyebrow { display:flex; align-items:center; gap:8px; margin:0 0 12px !important; color:#f4512d !important; font-size:12px !important; letter-spacing:.12em !important; }
+html body .brand-analysis-heading h2 { margin:0 !important; color:#08162a !important; font-size:clamp(36px,5vw,56px) !important; line-height:1.02 !important; letter-spacing:-.045em !important; }
+html body .brand-analysis-heading .brand-result-lead { max-width:720px !important; margin:15px 0 0 !important; color:#52637b !important; font-size:16px !important; line-height:1.55 !important; }
+html body .brand-analysis-percent {
+  display:grid;
+  place-items:center;
+  aspect-ratio:1;
+  border:1px solid #cec7ff;
+  border-radius:29px;
+  background:linear-gradient(145deg,rgba(255,255,255,.95),rgba(238,235,255,.82));
+  box-shadow:0 16px 35px rgba(90,75,180,.12),inset 0 1px 0 #fff;
+}
+html body .brand-analysis-percent strong { color:#07182d !important; font-size:48px !important; line-height:1 !important; letter-spacing:-.06em; }
+html body .brand-analysis-percent strong span { color:#315f89 !important; font-size:.48em !important; margin-left:2px; }
+html body .brand-result-analysis-progress {
+  display:grid !important;
+  grid-template-columns:58px minmax(0,1fr) !important;
+  align-items:center !important;
+  gap:18px !important;
+  margin:30px 0 26px !important;
+  padding:24px 26px !important;
+  overflow:hidden !important;
+  border:1px solid #d9dfea !important;
+  border-left:5px solid #f4512d !important;
+  border-radius:18px !important;
+  background:linear-gradient(110deg,rgba(255,245,241,.96),rgba(246,247,255,.96)) !important;
+  box-shadow:0 14px 34px rgba(18,31,49,.075) !important;
+  text-align:left !important;
+}
+html body .brand-analysis-current-icon { display:grid; place-items:center; width:52px; height:52px; border-radius:15px; color:#f4512d; background:#fff; box-shadow:0 9px 22px rgba(244,81,45,.12); }
+html body .brand-analysis-current-copy { display:grid; gap:7px; }
+html body .brand-analysis-current-copy > strong { color:#101e32 !important; font-size:18px !important; }
+html body .brand-analysis-current-copy > p { margin:0 !important; color:#5b6a80 !important; font-size:14px !important; line-height:1.45 !important; }
+html body .brand-result-analysis-progress .brand-profile-progress-track { height:8px !important; margin-top:7px !important; overflow:hidden; border-radius:999px; background:#dddaf4 !important; }
+html body .brand-result-analysis-progress .brand-profile-progress-fill { height:100%; border-radius:inherit; background:linear-gradient(90deg,#f4512d 0%,#7b61ff 100%) !important; box-shadow:0 0 16px rgba(123,97,255,.22) !important; }
+html body .brand-result-analysis-steps { display:grid !important; grid-template-columns:repeat(5,minmax(0,1fr)) !important; gap:14px !important; }
+html body .brand-result-analysis-steps span {
+  display:grid !important;
+  grid-template-columns:34px minmax(0,1fr) !important;
+  align-items:center !important;
+  gap:10px !important;
+  min-width:0 !important;
+  padding:0 !important;
+  border:0 !important;
+  background:transparent !important;
+  color:#596980 !important;
+  font-size:12px !important;
+  font-weight:650 !important;
+  line-height:1.3 !important;
+  text-align:left !important;
+}
+html body .brand-result-analysis-steps span b { display:grid !important; place-items:center !important; width:34px !important; height:34px !important; border:1px solid #bcb5fb !important; border-radius:50% !important; color:#5e51bd !important; background:#fff !important; font-size:13px; }
+html body .brand-result-analysis-steps span.done b { border-color:#f4512d !important; color:#f4512d !important; background:#fff5f1 !important; }
+html body .brand-result-analysis-steps span.current { color:#17243a !important; }
+html body .brand-result-analysis-steps span.current b { color:#fff !important; background:#f4512d !important; box-shadow:0 0 0 5px rgba(244,81,45,.11); }
+
+/* Campaign plan controls are visible where users review and activate a calendar campaign. */
+html body .campaign-v14335-plan-heading { display:grid !important; grid-template-columns:minmax(230px,1fr) minmax(300px,390px) auto !important; align-items:end !important; gap:20px !important; }
+html body .campaign-v14395-plan-controls { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(140px,.75fr); gap:12px; }
+html body .campaign-v14395-control { display:grid; align-content:start; gap:7px; min-width:0; }
+html body .campaign-v14395-control > span { color:#627087; font-size:12px; font-weight:700; }
+html body .campaign-v14395-control > a { display:flex; align-items:center; min-height:42px; padding:0 12px; border:1px solid #d9e0e8; border-radius:10px; color:#17243a; background:#fff; font-size:13px; font-weight:650; text-decoration:none; }
+html body .campaign-v14395-platforms { position:relative; min-width:0; }
+html body .campaign-v14395-platforms .platform-multiselect-button { width:100% !important; min-height:42px !important; padding:6px 10px !important; border:1px solid #d7dee7 !important; border-radius:10px !important; background:#fff !important; }
+html body .campaign-v14395-platforms .platform-selected-icons { display:flex; align-items:center; gap:6px; min-width:0; overflow:hidden; }
+html body .campaign-v14395-selected-channel { display:flex; align-items:center; gap:5px; min-width:0; color:#17243a; }
+html body .campaign-v14395-selected-channel img { width:20px; height:20px; border-radius:50%; }
+html body .campaign-v14395-selected-channel b { overflow:hidden; font-size:12px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+html body .campaign-v14395-platforms .platform-multiselect-menu { z-index:20 !important; top:calc(100% + 7px) !important; right:0 !important; left:0 !important; min-width:230px !important; }
+html body .campaign-v14395-language select { min-height:42px; padding:0 34px 0 12px; border:1px solid #d7dee7; border-radius:10px; color:#17243a; background:#fff; font:inherit; font-size:13px; }
+html body .campaign-v14335-primary,
+html body .campaign-v14335-activate button { color:#fff !important; }
+
+/* Campaign list readability and obvious detail dismissal. */
+html body .campaign-v14335-slot-date strong { font-size:13px !important; line-height:1.35 !important; }
+html body .campaign-v14335-slot-date span,
+html body .campaign-v14346-unlock-schedule { font-size:11.5px !important; line-height:1.3 !important; }
+html body .campaign-v14350-time-line time { font-size:12px !important; }
+html body .campaign-v14349-channel-chip b { font-size:12px !important; font-weight:650 !important; }
+html body .campaign-v14335-slot-format { font-size:12px !important; }
+html body .campaign-v14335-slot-detail { position:relative !important; padding-right:48px !important; }
+html body .campaign-v14395-detail-close { position:absolute; top:12px; right:12px; display:grid; place-items:center; width:32px; height:32px; border:1px solid #d7dee7; border-radius:9px; color:#526178; background:#fff; cursor:pointer; }
+html body .campaign-v14395-detail-close:hover { color:#f4512d; border-color:#f3b6a7; background:#fff5f1; }
+
+/* Profile action belongs in settings; the sidebar remains visually quiet. */
+html body .settings-reference-page .settings-ref-profile-actions { display:flex; flex-wrap:wrap; gap:10px; }
+html body .settings-reference-page .settings-ref-profile-actions .remove { color:#b53d29 !important; border-color:#efc5bb !important; background:#fff7f4 !important; }
+
+/* Keep the navy hierarchy, but reduce its visual weight. */
+html body .settings-reference-page .settings-ref-labelled-section > div:first-child,
+html body .settings-reference-page .settings-ref-language-section > div:first-child { padding:14px 20px !important; }
+html body .settings-reference-page .settings-ref-labelled-section > div:first-child h3,
+html body .settings-reference-page .settings-ref-language-section > div:first-child h2 { margin:0 !important; font-size:16px !important; }
+html body .settings-reference-page .settings-ref-labelled-section > div:first-child p,
+html body .settings-reference-page .settings-ref-language-section > div:first-child p,
+html body .settings-reference-page .settings-ref-notification-summary > header p { display:none !important; }
+html body .settings-reference-page .settings-ref-account-aside > h2,
+html body .settings-reference-page .settings-ref-security-aside > h2,
+html body .settings-reference-page .settings-ref-delivery > h2,
+html body .settings-reference-page .settings-ref-language-aside > h2 { margin-bottom:18px !important; padding:15px 20px !important; font-size:16px !important; }
+html body .settings-reference-page .settings-ref-notification-summary > header { min-height:0 !important; padding:15px 20px !important; }
+html body .settings-reference-page .settings-ref-notification-summary > header h2 { margin:0 !important; font-size:16px !important; }
+
+@media (max-width:1100px) {
+  html body .campaign-v14335-plan-heading { grid-template-columns:1fr auto !important; align-items:start !important; }
+  html body .campaign-v14395-plan-controls { grid-column:1/-1; grid-row:2; }
+}
+
+@media (max-width:760px) {
+  html body .brand-result-modal:has(.brand-result-analysis) { width:calc(100vw - 24px) !important; padding:0 20px 25px !important; border-radius:23px !important; }
+  html body .brand-analysis-brandline { width:240px; min-height:70px; margin-left:-20px; margin-bottom:21px; padding:0 22px; border-radius:0 0 58px 0; }
+  html body .brand-analysis-heading { grid-template-columns:minmax(0,1fr) 90px; gap:14px; }
+  html body .brand-analysis-heading h2 { font-size:34px !important; }
+  html body .brand-analysis-heading .brand-result-lead { font-size:14px !important; }
+  html body .brand-analysis-percent { border-radius:20px; }
+  html body .brand-analysis-percent strong { font-size:32px !important; }
+  html body .brand-result-analysis-progress { grid-template-columns:43px minmax(0,1fr) !important; gap:13px !important; margin:22px 0 !important; padding:18px !important; }
+  html body .brand-analysis-current-icon { width:42px; height:42px; border-radius:12px; }
+  html body .brand-result-analysis-steps { grid-template-columns:1fr !important; gap:10px !important; }
+  html body .brand-result-analysis-steps span { grid-template-columns:31px minmax(0,1fr) !important; }
+  html body .brand-result-analysis-steps span b { width:31px !important; height:31px !important; }
+  html body .campaign-v14335-plan-heading { grid-template-columns:1fr !important; }
+  html body .campaign-v14395-plan-controls { grid-column:1 !important; grid-row:auto; grid-template-columns:1fr !important; }
+  html body .campaign-v14348-types-block { justify-self:stretch !important; }
+}
+
+@media (max-width:480px) {
+  html body .brand-analysis-heading { grid-template-columns:1fr; }
+  html body .brand-analysis-percent { width:92px; aspect-ratio:auto; min-height:64px; justify-self:start; border-radius:16px; }
+  html body .brand-analysis-heading h2 { font-size:30px !important; }
+  html body .settings-reference-page .settings-ref-profile-actions { width:100%; }
+  html body .settings-reference-page .settings-ref-profile-actions button { flex:1 1 150px; }
+}

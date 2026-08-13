@@ -1744,20 +1744,34 @@ export default function BrandProfile() {
               {!analyzing ? <button type="button" className="brand-result-close" onClick={() => setShowAnalysisResult(false)}>×</button> : null}
               {analysisResultStep === "analyzing" ? (
                 <div className="brand-result-analysis">
-                  <div className="brand-analysis-mark"><Sparkles size={30} /></div>
-                  <p className="dashboard-eyebrow">{t("brand.analysisTitle")}</p>
-                  <h2>{t("brand.analysisTitle")}</h2>
-                  <p className="brand-result-lead">{t("brand.analysisText")}</p>
+                  <div className="brand-analysis-brandline" aria-label="Spreelo">
+                    <span className="brand-analysis-logo-mark">S</span>
+                    <strong>spreelo</strong>
+                    <span className="brand-analysis-spark"><Sparkles size={18} /></span>
+                  </div>
+                  <div className="brand-analysis-heading">
+                    <div>
+                      <p className="dashboard-eyebrow"><Sparkles size={15} /> {t("brand.analysisTitle")}</p>
+                      <h2>{t("brand.analysisTitle")}</h2>
+                      <p className="brand-result-lead">{t("brand.analysisText")}</p>
+                    </div>
+                    <div className="brand-analysis-percent" aria-live="polite">
+                      <strong>{Math.min(99, Math.floor(analysisProgress))}<span>%</span></strong>
+                    </div>
+                  </div>
                   <div className="brand-result-analysis-progress">
-                    <div><strong>{t(getCurrentAnalysisStage(analysisProgress).titleKey)}</strong><span>{Math.min(99, Math.floor(analysisProgress))}%</span></div>
-                    <div className="brand-profile-progress-track"><div className="brand-profile-progress-fill" style={{ width: `${Math.min(analysisProgress, 99)}%` }} /></div>
-                    <p>{t(getCurrentAnalysisStage(analysisProgress).descriptionKey)}</p>
+                    <div className="brand-analysis-current-icon"><Sparkles size={22} /></div>
+                    <div className="brand-analysis-current-copy">
+                      <strong>{t(getCurrentAnalysisStage(analysisProgress).titleKey)}</strong>
+                      <p>{t(getCurrentAnalysisStage(analysisProgress).descriptionKey)}</p>
+                      <div className="brand-profile-progress-track"><div className="brand-profile-progress-fill" style={{ width: `${Math.min(analysisProgress, 99)}%` }} /></div>
+                    </div>
                   </div>
                   <div className="brand-result-analysis-steps">
-                    {analysisProgressStages.map((stage) => {
+                    {analysisProgressStages.map((stage, index) => {
                       const done = analysisProgress >= stage.progress;
                       const current = getCurrentAnalysisStage(analysisProgress).titleKey === stage.titleKey;
-                      return <span key={stage.titleKey} className={`${done ? "done" : ""}${current ? " current" : ""}`}><b>{done ? <Check size={14} /> : null}</b>{t(stage.titleKey)}</span>;
+                      return <span key={stage.titleKey} className={`${done ? "done" : ""}${current ? " current" : ""}`}><b>{done ? <Check size={15} /> : index + 1}</b>{t(stage.titleKey)}</span>;
                     })}
                   </div>
                 </div>

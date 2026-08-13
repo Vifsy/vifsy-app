@@ -593,6 +593,22 @@ export default function Settings() {
     setSavingProfile(false);
   }
 
+  async function removeProfileImage() {
+    const oldPath = String(currentUser?.user_metadata?.spreelo_avatar_path || "").trim();
+    const { data, error } = await supabase.auth.updateUser({
+      data: { spreelo_avatar_url: null, spreelo_avatar_path: null },
+    });
+    if (error) {
+      setProfileMessage(error.message || t("settings.profileImageRemoveError"));
+      return;
+    }
+    const updatedUser = data?.user || currentUser;
+    setCurrentUser(updatedUser);
+    window.dispatchEvent(new CustomEvent("spreelo-avatar-updated", { detail: { user: updatedUser } }));
+    if (oldPath) void supabase.storage.from("user-avatars").remove([oldPath]);
+    setProfileMessage(t("settings.profileImageRemoved"));
+  }
+
   async function saveNotifications() {
     if (savingNotifications) return;
     setSavingNotifications(true);
@@ -816,6 +832,7 @@ export default function Settings() {
           currentBrandName={currentBrandProfile?.business_name || ""}
           currentBrandWebsite={currentBrandProfile?.website_url || ""}
           requestProfileImageChange={() => window.dispatchEvent(new Event("spreelo-avatar-picker-requested"))}
+          requestProfileImageRemove={removeProfileImage}
           creditRemaining={creditRemaining}
           creditLimit={creditLimit}
           renewalLabel={renewalLabel}

@@ -936,11 +936,11 @@ export default function Home() {
     [operationalPlans]
   );
   const calendarCampaignPlans = useMemo(
-    () => operationalPlans.filter((plan) => plan.queue_source === "campaign" && plan.plan_state !== "ended" && plan.hasFutureRun),
+    () => operationalPlans.filter((plan) => plan.queue_source === "campaign" && plan.plan_state !== "ended" && (plan.anyActive || plan.hasFutureRun)),
     [operationalPlans]
   );
   const scheduledPlanGroups = useMemo(
-    () => operationalPlans.filter((plan) => plan.schedule_type !== "weekly" && plan.queue_source !== "campaign" && plan.plan_state !== "ended" && plan.hasFutureRun),
+    () => operationalPlans.filter((plan) => plan.schedule_type !== "weekly" && plan.queue_source !== "campaign" && plan.plan_state !== "ended" && (plan.anyActive || plan.hasFutureRun)),
     [operationalPlans]
   );
   const planHistory = useMemo(

@@ -40,6 +40,7 @@ export default function SettingsPanels({
   currentBrandName,
   currentBrandWebsite,
   requestProfileImageChange,
+  requestProfileImageRemove,
 }) {
   const { t } = useUiText(["settings"]);
   const name = profileName || currentUserEmail?.split("@")[0] || t("settings.userFallback");
@@ -57,7 +58,10 @@ export default function SettingsPanels({
             </div>
             <div className="settings-ref-profile">
               <span className={currentUser?.user_metadata?.spreelo_avatar_url ? "has-image" : ""}>{currentUser?.user_metadata?.spreelo_avatar_url ? <img src={currentUser.user_metadata.spreelo_avatar_url} alt="" /> : initials}</span>
-              <button type="button" onClick={requestProfileImageChange}>{t("settings.changeProfilePicture")}</button>
+              <div className="settings-ref-profile-actions">
+                <button type="button" onClick={requestProfileImageChange}>{t("settings.changeProfilePicture")}</button>
+                {currentUser?.user_metadata?.spreelo_avatar_url ? <button type="button" className="remove" onClick={requestProfileImageRemove}>{t("settings.removeProfilePicture")}</button> : null}
+              </div>
             </div>
           </section>
 
