@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { buildSocialOAuthResultUrl } from "../../../../../lib/socialOAuthResult";
 import {
   createSupabaseAdminClient,
   exchangePinterestCode,
@@ -18,15 +19,15 @@ export async function GET(request) {
   const oauthError = searchParams.get("error") || searchParams.get("error_description");
   const { appId, appSecret, redirectUri } = getPinterestEnv();
 
-  if (oauthError) return NextResponse.redirect(`${baseUrl}/social-channels?error=pinterest_cancelled`);
-  if (!appId || !appSecret || !redirectUri) return NextResponse.redirect(`${baseUrl}/social-channels?error=missing_pinterest_env`);
-  if (!code || !state) return NextResponse.redirect(`${baseUrl}/social-channels?error=missing_pinterest_code`);
+  if (oauthError) return NextResponse.redirect(buildSocialOAuthResultUrl(baseUrl, { error: "pinterest_cancelled" }));
+  if (!appId || !appSecret || !redirectUri) return NextResponse.redirect(buildSocialOAuthResultUrl(baseUrl, { error: "missing_pinterest_env" }));
+  if (!code || !state) return NextResponse.redirect(buildSocialOAuthResultUrl(baseUrl, { error: "missing_pinterest_code" }));
 
   const cookieState = request.cookies.get("spreelo_pinterest_oauth_state")?.value;
-  if (!cookieState || cookieState !== state) return NextResponse.redirect(`${baseUrl}/social-channels?error=invalid_pinterest_state`);
+  if (!cookieState || cookieState !== state) return NextResponse.redirect(buildSocialOAuthResultUrl(baseUrl, { error: "invalid_pinterest_state" }));
 
   const decoded = verifyAndDecodePinterestState(state, appSecret);
-  if (!decoded?.userId || !decoded?.brandProfileId) return NextResponse.redirect(`${baseUrl}/social-channels?error=invalid_pinterest_state_payload`);
+  if (!decoded?.userId || !decoded?.brandProfileId) return NextResponse.redirect(buildSocialOAuthResultUrl(baseUrl, { error: "invalid_pinterest_state_payload" }));
 
   let callbackStage = "initializing";
   try {
@@ -37,7 +38,7 @@ export async function GET(request) {
       userId: decoded.userId,
       brandProfileId: decoded.brandProfileId,
     });
-    if (!validBrand) return NextResponse.redirect(`${baseUrl}/social-channels?error=invalid_brand`);
+    if (!validBrand) return NextResponse.redirect(buildSocialOAuthResultUrl(baseUrl, { error: "invalid_brand" }));
 
     callbackStage = "token";
     const token = await exchangePinterestCode({
@@ -80,7 +81,7 @@ export async function GET(request) {
           : callbackStage === "save"
             ? "pinterest_save_failed"
             : "pinterest_callback_failed";
-    const response = NextResponse.redirect(`${baseUrl}/social-channels?error=${errorCode}`);
+    const response = NextResponse.redirect(buildSocialOAuthResultUrl(baseUrl, { error: errorCode }));
     response.cookies.delete("spreelo_pinterest_oauth_state");
     return response;
   }

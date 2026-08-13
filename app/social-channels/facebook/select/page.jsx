@@ -106,7 +106,7 @@ export default function SelectFacebookPage() {
       return;
     }
 
-    window.location.href = "/social-channels?connected=facebook";
+    window.location.href = "/social-channels/oauth-complete?connected=facebook";
   }
 
   return (
@@ -174,7 +174,7 @@ export default function SelectFacebookPage() {
                   <p>{t("social.noPagesFoundText")}</p>
                 </div>
 
-                <a className="facebook-cancel-button" href="/social-channels">
+                <a className="facebook-cancel-button" href="/social-channels/oauth-complete?error=no_pages_found">
                   {t("social.backToSocialChannels")}
                 </a>
               </>
@@ -230,7 +230,7 @@ export default function SelectFacebookPage() {
                   })}
                 </div>
 
-                <a className="facebook-cancel-button" href="/social-channels">
+                <a className="facebook-cancel-button" href="/social-channels/oauth-complete?error=meta_cancelled">
                   {t("social.cancel")}
                 </a>
               </>

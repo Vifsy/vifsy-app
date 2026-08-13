@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
+import { buildSocialOAuthResultUrl } from "../../../../lib/socialOAuthResult";
 import { createClient } from "@supabase/supabase-js";
 
 function signState(payload, secret) {
@@ -139,19 +140,19 @@ export async function GET(request) {
 
   if (error) {
     return NextResponse.redirect(
-      `${baseUrl}/social-channels?error=meta_cancelled`
+      buildSocialOAuthResultUrl(baseUrl, { error: "meta_cancelled" })
     );
   }
 
   if (!appId || !appSecret) {
     return NextResponse.redirect(
-      `${baseUrl}/social-channels?error=missing_meta_env`
+      buildSocialOAuthResultUrl(baseUrl, { error: "missing_meta_env" })
     );
   }
 
   if (!code || !state) {
     return NextResponse.redirect(
-      `${baseUrl}/social-channels?error=missing_meta_code`
+      buildSocialOAuthResultUrl(baseUrl, { error: "missing_meta_code" })
     );
   }
 
@@ -159,7 +160,7 @@ export async function GET(request) {
 
   if (!cookieState || cookieState !== state) {
     return NextResponse.redirect(
-      `${baseUrl}/social-channels?error=invalid_state`
+      buildSocialOAuthResultUrl(baseUrl, { error: "invalid_state" })
     );
   }
 
@@ -167,13 +168,13 @@ export async function GET(request) {
 
   if (!decodedState?.userId) {
     return NextResponse.redirect(
-      `${baseUrl}/social-channels?error=invalid_state_payload`
+      buildSocialOAuthResultUrl(baseUrl, { error: "invalid_state_payload" })
     );
   }
 
   if (!decodedState?.brandProfileId) {
     return NextResponse.redirect(
-      `${baseUrl}/social-channels?error=missing_brand`
+      buildSocialOAuthResultUrl(baseUrl, { error: "missing_brand" })
     );
   }
 
@@ -188,7 +189,7 @@ export async function GET(request) {
 
     if (!brandIsValid) {
       return NextResponse.redirect(
-        `${baseUrl}/social-channels?error=invalid_brand`
+        buildSocialOAuthResultUrl(baseUrl, { error: "invalid_brand" })
       );
     }
 
@@ -204,7 +205,7 @@ export async function GET(request) {
 
     if (!validPages.length) {
       return NextResponse.redirect(
-        `${baseUrl}/social-channels?error=no_pages_found`
+        buildSocialOAuthResultUrl(baseUrl, { error: "no_pages_found" })
       );
     }
 
@@ -236,7 +237,7 @@ export async function GET(request) {
     console.error("Meta callback error:", callbackError);
 
     return NextResponse.redirect(
-      `${baseUrl}/social-channels?error=meta_callback_failed`
+      buildSocialOAuthResultUrl(baseUrl, { error: "meta_callback_failed" })
     );
   }
 }

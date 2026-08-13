@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { buildSocialOAuthResultUrl } from "../../../../../lib/socialOAuthResult";
 import {
   createSupabaseAdminClient,
   exchangeInstagramCodeForShortToken,
@@ -32,19 +33,19 @@ export async function GET(request) {
 
   if (error || errorReason) {
     return NextResponse.redirect(
-      `${baseUrl}/social-channels?error=instagram_cancelled`
+      buildSocialOAuthResultUrl(baseUrl, { error: "instagram_cancelled" })
     );
   }
 
   if (!appId || !appSecret) {
     return NextResponse.redirect(
-      `${baseUrl}/social-channels?error=missing_instagram_env`
+      buildSocialOAuthResultUrl(baseUrl, { error: "missing_instagram_env" })
     );
   }
 
   if (!code || !state) {
     return NextResponse.redirect(
-      `${baseUrl}/social-channels?error=missing_instagram_code`
+      buildSocialOAuthResultUrl(baseUrl, { error: "missing_instagram_code" })
     );
   }
 
@@ -52,7 +53,7 @@ export async function GET(request) {
 
   if (!cookieState || cookieState !== state) {
     return NextResponse.redirect(
-      `${baseUrl}/social-channels?error=invalid_instagram_state`
+      buildSocialOAuthResultUrl(baseUrl, { error: "invalid_instagram_state" })
     );
   }
 
@@ -60,13 +61,13 @@ export async function GET(request) {
 
   if (!decodedState?.userId) {
     return NextResponse.redirect(
-      `${baseUrl}/social-channels?error=invalid_instagram_state_payload`
+      buildSocialOAuthResultUrl(baseUrl, { error: "invalid_instagram_state_payload" })
     );
   }
 
   if (!decodedState?.brandProfileId) {
     return NextResponse.redirect(
-      `${baseUrl}/social-channels?error=missing_brand`
+      buildSocialOAuthResultUrl(baseUrl, { error: "missing_brand" })
     );
   }
 
@@ -81,7 +82,7 @@ export async function GET(request) {
 
     if (!brandIsValid) {
       return NextResponse.redirect(
-        `${baseUrl}/social-channels?error=invalid_brand`
+        buildSocialOAuthResultUrl(baseUrl, { error: "invalid_brand" })
       );
     }
 
@@ -135,7 +136,7 @@ export async function GET(request) {
     });
 
     const response = NextResponse.redirect(
-      `${baseUrl}/social-channels?connected=instagram`
+      buildSocialOAuthResultUrl(baseUrl, { connected: "instagram" })
     );
 
     response.cookies.delete("spreelo_instagram_oauth_state");
@@ -151,7 +152,7 @@ export async function GET(request) {
     });
 
     return NextResponse.redirect(
-      `${baseUrl}/social-channels?error=instagram_callback_failed`
+      buildSocialOAuthResultUrl(baseUrl, { error: "instagram_callback_failed" })
     );
   }
 }

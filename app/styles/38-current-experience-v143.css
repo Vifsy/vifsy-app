@@ -12534,3 +12534,99 @@ html body .campaign-v14335-slot-list article:has(.custom-time-popover) {
 .stripe-trial-banner{display:flex;align-items:flex-start;gap:10px;margin-top:14px;padding:12px 13px;border:1px solid #e2d8fb;border-radius:15px;background:linear-gradient(145deg,#fbf8ff,#fff);color:#5f4db1}.stripe-trial-banner.active{border-color:#cfeadb;background:linear-gradient(145deg,#f5fcf8,#fff);color:#2a7a55}.stripe-trial-banner.muted{border-color:#e2e6ec;background:#fafbfc;color:#667389}.stripe-trial-banner>svg{flex:0 0 auto;margin-top:1px}.stripe-trial-banner strong,.stripe-trial-banner span{display:block}.stripe-trial-banner strong{color:#26344a;font-size:10px}.stripe-trial-banner span{margin-top:2px;color:#6e798c;font-size:9px;line-height:1.45}
 .stripe-plan-change-note{display:block;margin-top:7px;color:#7a8596;font-size:8px;line-height:1.35}.stripe-credit-packs-copy small{display:block;margin-top:6px;color:#5f4db1;font-size:8.5px;font-weight:800}
 @media(max-width:640px){.stripe-billing-status-wrap{justify-content:stretch}.stripe-billing-manage-action{width:100%}.stripe-trial-banner{padding:11px}.stripe-trial-banner span{font-size:8.5px}}
+
+/* v143.94 — keep Spreelo visible during external social OAuth */
+.social-oauth-helper-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1490;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(9,18,32,.52);
+  backdrop-filter: blur(8px);
+}
+.social-oauth-helper {
+  width: min(560px,100%);
+  padding: 30px;
+  border: 1px solid rgba(255,255,255,.92);
+  border-radius: 24px;
+  background: linear-gradient(145deg,#fff,#fbfcff);
+  box-shadow: 0 28px 80px rgba(8,18,31,.28);
+  text-align: center;
+}
+.social-oauth-helper-icon {
+  display: grid;
+  place-items: center;
+  width: 66px;
+  height: 66px;
+  margin: 0 auto 14px;
+  border: 1px solid #edf0f4;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(24,39,66,.1);
+}
+.social-oauth-helper-icon img {
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+}
+.social-oauth-helper h2 {
+  margin: 5px 0 10px;
+  color: #172033;
+  font-size: 30px;
+  line-height: 1.1;
+}
+.social-oauth-helper > p:not(.social-v74-eyebrow) {
+  margin: 0 auto;
+  max-width: 480px;
+  color: #667085;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.social-oauth-helper-tip {
+  display: grid;
+  gap: 5px;
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid #f1dfd7;
+  border-radius: 14px;
+  background: #fff8f5;
+  text-align: left;
+}
+.social-oauth-helper-tip strong {
+  color: #4f2b22;
+  font-size: 13px;
+}
+.social-oauth-helper-tip span {
+  color: #78594f;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.social-oauth-helper-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 10px;
+  margin-top: 22px;
+}
+.social-oauth-helper-actions button {
+  min-height: 48px;
+  padding: 0 16px;
+  border: 1px solid #d7dde7;
+  border-radius: 12px;
+  background: #fff;
+  color: #303747;
+  font-weight: 800;
+  cursor: pointer;
+}
+.social-oauth-helper-actions .primary {
+  border-color: #e65338;
+  background: linear-gradient(180deg,#fb684b,#d9472d);
+  color: #fff;
+}
+@media (max-width: 640px) {
+  .social-oauth-helper-backdrop { padding: 12px; align-items: end; }
+  .social-oauth-helper { padding: 24px 18px 20px; border-radius: 22px; }
+  .social-oauth-helper h2 { font-size: 26px; }
+  .social-oauth-helper-actions { grid-template-columns: 1fr; }
+}

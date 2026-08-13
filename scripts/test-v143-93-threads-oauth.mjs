@@ -26,7 +26,7 @@ check('Threads long-lived exchange configured', files.lib.includes('th_exchange_
 check('Threads refresh configured', files.lib.includes('th_refresh_token'));
 check('Required scopes configured', files.lib.includes('threads_basic') && files.lib.includes('threads_content_publish'));
 check('OAuth start has plan-limit protection', files.start.includes('checkSocialConnectionCapacity') && files.start.includes('platform: "threads"'));
-check('OAuth callback stores Threads connection', files.callback.includes('saveThreadsConnection') && files.callback.includes('connected=threads'));
+check('OAuth callback stores Threads connection', files.callback.includes('saveThreadsConnection') && (files.callback.includes('connected: "threads"') || files.callback.includes('connected=threads')));
 check('Uninstall callback verifies signed request', files.uninstall.includes('decodeAndVerifyMetaSignedRequest'));
 check('Deletion callback returns confirmation', files.deletion.includes('confirmation_code') && files.deletion.includes('/delete-data/status'));
 check('Deletion status endpoint exists', files.status.includes('status: "completed"'));

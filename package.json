@@ -100,7 +100,8 @@
     "test:v143.81": "node scripts/test-v143-81-plan-entitlements.mjs",
     "test:v143.82": "node scripts/test-v143-82-admin-plan-limit-bypass.mjs",
     "test:v143.83": "node scripts/test-v143-83-giveaway-billing-interval.mjs",
-    "test:v143.93": "node scripts/test-v143-93-threads-oauth.mjs"
+    "test:v143.93": "node scripts/test-v143-93-threads-oauth.mjs",
+    "test:v143.94": "node scripts/test-v143-94-social-oauth-popup.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

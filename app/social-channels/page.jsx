@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircle2,
   Clock3,
@@ -109,13 +109,25 @@ function getConnectEndpoint(platformKey) {
   return "/api/meta/connect";
 }
 
-function getSocialUrlMessage({ t }) {
-  if (typeof window === "undefined") return "";
-  const searchParams = new URLSearchParams(window.location.search);
-  const connected = searchParams.get("connected");
-  const error = searchParams.get("error");
-  const pinterestTestPin = searchParams.get("pinterest_test_pin");
+const SOCIAL_OAUTH_MESSAGE_TYPE = "spreelo-social-oauth-result";
 
+function getOAuthPopupFeatures() {
+  const width = 620;
+  const height = 760;
+  const left = Math.max(0, Math.round((window.screen.width - width) / 2));
+  const top = Math.max(0, Math.round((window.screen.height - height) / 2));
+  return [
+    "popup=yes",
+    `width=${width}`,
+    `height=${height}`,
+    `left=${left}`,
+    `top=${top}`,
+    "resizable=yes",
+    "scrollbars=yes",
+  ].join(",");
+}
+
+function getSocialUrlMessageFromValues({ t, connected, error, pinterestTestPin }) {
   if (connected === "pinterest" && pinterestTestPin === "1") return t("social.pinterestSandboxVerifiedMessage");
   if (connected === "instagram") return t("social.instagramConnectedMessageV2");
   if (connected === "facebook") return t("social.facebookConnectedMessageV2");
@@ -159,6 +171,17 @@ function getSocialUrlMessage({ t }) {
   };
 
   return t(knownErrors[error] || "social.errorGenericConnect");
+}
+
+function getSocialUrlMessage({ t }) {
+  if (typeof window === "undefined") return "";
+  const searchParams = new URLSearchParams(window.location.search);
+  return getSocialUrlMessageFromValues({
+    t,
+    connected: searchParams.get("connected"),
+    error: searchParams.get("error"),
+    pinterestTestPin: searchParams.get("pinterest_test_pin"),
+  });
 }
 
 function formatTokenExpiry(value, t, platformKey) {
@@ -289,10 +312,70 @@ export default function SocialChannelsPage() {
   const [connectingPlatform, setConnectingPlatform] = useState("");
   const [connectionSuccess, setConnectionSuccess] = useState(null);
   const [planLimitDetails, setPlanLimitDetails] = useState(null);
+  const [oauthFlow, setOauthFlow] = useState(null);
+  const oauthPopupRef = useRef(null);
+  const oauthPollRef = useRef(null);
+  const oauthResultReceivedRef = useRef(false);
+  const loadConnectionsRef = useRef(null);
+  const tRef = useRef(t);
+  const currentBrandRef = useRef(currentBrand);
   const selectedPlatforms = useMemo(() => SOCIAL_PLATFORMS, []);
+  tRef.current = t;
+  currentBrandRef.current = currentBrand;
 
   useEffect(() => {
     loadConnections();
+  }, []);
+
+  useEffect(() => {
+    function clearPopupPoll() {
+      if (oauthPollRef.current) {
+        window.clearInterval(oauthPollRef.current);
+        oauthPollRef.current = null;
+      }
+    }
+
+    async function handleOAuthMessage(event) {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type !== SOCIAL_OAUTH_MESSAGE_TYPE) return;
+
+      const platformKey = String(event.data?.platform || "").trim();
+      if (!platformKey) return;
+
+      oauthResultReceivedRef.current = true;
+      clearPopupPoll();
+      try { oauthPopupRef.current?.close(); } catch {}
+      oauthPopupRef.current = null;
+      setConnectingPlatform("");
+      setOauthFlow(null);
+
+      if (event.data?.success) {
+        await loadConnectionsRef.current?.();
+        const platform = SOCIAL_PLATFORMS.find((item) => item.key === platformKey);
+        if (platform) {
+          setMessage(getSocialUrlMessageFromValues({
+            t: tRef.current,
+            connected: platformKey,
+            pinterestTestPin: String(event.data?.pinterestTestPin || ""),
+          }));
+          setMessageKind("success");
+          setConnectionSuccess({ platform, brandName: currentBrandRef.current?.business_name || "" });
+        }
+        return;
+      }
+
+      const errorCode = String(event.data?.error || "").trim();
+      const errorMessage = getSocialUrlMessageFromValues({ t: tRef.current, error: errorCode });
+      setMessage(errorMessage || tRef.current("social.errorGenericConnect"));
+      setMessageKind("error");
+    }
+
+    window.addEventListener("message", handleOAuthMessage);
+    return () => {
+      window.removeEventListener("message", handleOAuthMessage);
+      clearPopupPoll();
+      try { oauthPopupRef.current?.close(); } catch {}
+    };
   }, []);
 
   async function getCurrentBrandForUser(user) {
@@ -406,14 +489,41 @@ export default function SocialChannelsPage() {
     setLoading(false);
   }
 
-  async function handleConnect(platform) {
+  loadConnectionsRef.current = loadConnections;
+
+  function closeOAuthPopup() {
+    if (oauthPollRef.current) {
+      window.clearInterval(oauthPollRef.current);
+      oauthPollRef.current = null;
+    }
+    try { oauthPopupRef.current?.close(); } catch {}
+    oauthPopupRef.current = null;
+  }
+
+  async function startOAuthInPopup(platform, { reusePopup = false } = {}) {
     if (!platform?.key || !currentBrand?.id) return;
+
     setMessage("");
     setConnectingPlatform(platform.key);
+    oauthResultReceivedRef.current = false;
+
+    let popup = reusePopup ? oauthPopupRef.current : null;
+    if (!popup || popup.closed) {
+      popup = window.open("about:blank", `spreelo_oauth_${platform.key}`, getOAuthPopupFeatures());
+      oauthPopupRef.current = popup;
+    }
+
+    if (popup && !reusePopup) {
+      try {
+        popup.document.title = "Spreelo";
+        popup.document.body.innerHTML = `<div style="font-family:Arial,sans-serif;display:grid;place-items:center;min-height:80vh;color:#222"><div style="text-align:center"><strong>Spreelo</strong><p style="color:#666">Preparing secure sign-in…</p></div></div>`;
+      } catch {}
+    }
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
+        closeOAuthPopup();
         window.location.href = "/login";
         return;
       }
@@ -428,19 +538,68 @@ export default function SocialChannelsPage() {
       });
       const payload = await response.json().catch(() => ({}));
       if (payload?.planLimit) {
+        closeOAuthPopup();
         setPlanLimitDetails(payload.planLimit);
         setConnectingPlatform("");
+        setOauthFlow(null);
         return;
       }
       if (!response.ok || !payload?.url) {
         throw new Error(payload?.error || t("social.errorGenericConnect"));
       }
-      window.location.href = payload.url;
+
+      if (!popup || popup.closed) {
+        // Popup blockers are rare, but never leave the customer stuck.
+        window.location.href = payload.url;
+        return;
+      }
+
+      setOauthFlow({
+        platformKey: platform.key,
+        popupClosed: false,
+      });
+
+      popup.location.href = payload.url;
+      try { popup.focus(); } catch {}
+
+      if (oauthPollRef.current) window.clearInterval(oauthPollRef.current);
+      oauthPollRef.current = window.setInterval(() => {
+        const currentPopup = oauthPopupRef.current;
+        if (!currentPopup || currentPopup.closed) {
+          window.clearInterval(oauthPollRef.current);
+          oauthPollRef.current = null;
+          oauthPopupRef.current = null;
+          if (!oauthResultReceivedRef.current) {
+            setConnectingPlatform("");
+            setOauthFlow((current) => current?.platformKey === platform.key
+              ? { ...current, popupClosed: true }
+              : current);
+          }
+        }
+      }, 500);
     } catch (error) {
+      closeOAuthPopup();
       setMessage(error.message || t("social.errorGenericConnect"));
       setMessageKind("error");
       setConnectingPlatform("");
+      setOauthFlow(null);
     }
+  }
+
+  async function handleConnect(platform) {
+    await startOAuthInPopup(platform);
+  }
+
+  async function continueOAuthFlow() {
+    const platform = selectedPlatforms.find((item) => item.key === oauthFlow?.platformKey);
+    if (!platform) return;
+    await startOAuthInPopup(platform, { reusePopup: true });
+  }
+
+  function cancelOAuthFlow() {
+    closeOAuthPopup();
+    setConnectingPlatform("");
+    setOauthFlow(null);
   }
 
   async function handleDisconnect(platform, connection) {
@@ -534,6 +693,37 @@ export default function SocialChannelsPage() {
             <span>{t("social.securityNoteV2")}</span>
           </div>
         </section>
+        {oauthFlow ? (
+          <div className="social-oauth-helper-backdrop" role="presentation">
+            <section className="social-oauth-helper" role="dialog" aria-modal="true" aria-label={t("social.oauthPopupTitle")}>
+              <span className="social-oauth-helper-icon">
+                <img
+                  src={selectedPlatforms.find((item) => item.key === oauthFlow.platformKey)?.iconSrc || "/social-icons/instagram.png"}
+                  alt=""
+                  aria-hidden="true"
+                />
+              </span>
+              <p className="social-v74-eyebrow">{t("social.oauthPopupEyebrow")}</p>
+              <h2>{t("social.oauthPopupTitle")}</h2>
+              <p>{t(
+                oauthFlow.popupClosed ? "social.oauthPopupClosedText" : "social.oauthPopupText",
+                { platform: t(selectedPlatforms.find((item) => item.key === oauthFlow.platformKey)?.eyebrowKey || "social.instagramEyebrow") }
+              )}</p>
+              {oauthFlow.platformKey === "instagram" ? (
+                <div className="social-oauth-helper-tip">
+                  <strong>{t("social.oauthInstagramFirstLoginTitle")}</strong>
+                  <span>{t("social.oauthInstagramFirstLoginText")}</span>
+                </div>
+              ) : null}
+              <div className="social-oauth-helper-actions">
+                <button type="button" onClick={cancelOAuthFlow}>{t("social.oauthCancel")}</button>
+                <button type="button" className="primary" onClick={continueOAuthFlow}>
+                  {t("social.oauthContinue")}
+                </button>
+              </div>
+            </section>
+          </div>
+        ) : null}
         <PlanLimitModal details={planLimitDetails} onClose={() => setPlanLimitDetails(null)} />
         {connectionSuccess ? (
           <div className="social-success-backdrop" role="presentation">

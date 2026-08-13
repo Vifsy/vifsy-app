@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { buildSocialOAuthResultUrl } from "../../../../../lib/socialOAuthResult";
 import {
   createSupabaseAdminClient,
   exchangeThreadsCodeForShortToken,
@@ -19,18 +20,18 @@ export async function GET(request) {
   const oauthError = searchParams.get("error") || searchParams.get("error_description");
   const { appId, appSecret, redirectUri } = getThreadsEnv();
 
-  if (oauthError) return NextResponse.redirect(`${baseUrl}/social-channels?error=threads_cancelled`);
-  if (!appId || !appSecret || !redirectUri) return NextResponse.redirect(`${baseUrl}/social-channels?error=missing_threads_env`);
-  if (!code || !state) return NextResponse.redirect(`${baseUrl}/social-channels?error=missing_threads_code`);
+  if (oauthError) return NextResponse.redirect(buildSocialOAuthResultUrl(baseUrl, { error: "threads_cancelled" }));
+  if (!appId || !appSecret || !redirectUri) return NextResponse.redirect(buildSocialOAuthResultUrl(baseUrl, { error: "missing_threads_env" }));
+  if (!code || !state) return NextResponse.redirect(buildSocialOAuthResultUrl(baseUrl, { error: "missing_threads_code" }));
 
   const cookieState = request.cookies.get("spreelo_threads_oauth_state")?.value;
   if (!cookieState || cookieState !== state) {
-    return NextResponse.redirect(`${baseUrl}/social-channels?error=invalid_threads_state`);
+    return NextResponse.redirect(buildSocialOAuthResultUrl(baseUrl, { error: "invalid_threads_state" }));
   }
 
   const decoded = verifyAndDecodeThreadsState(state, appSecret);
   if (!decoded?.userId || !decoded?.brandProfileId) {
-    return NextResponse.redirect(`${baseUrl}/social-channels?error=invalid_threads_state_payload`);
+    return NextResponse.redirect(buildSocialOAuthResultUrl(baseUrl, { error: "invalid_threads_state_payload" }));
   }
 
   let callbackStage = "initializing";
@@ -42,7 +43,7 @@ export async function GET(request) {
       userId: decoded.userId,
       brandProfileId: decoded.brandProfileId,
     });
-    if (!validBrand) return NextResponse.redirect(`${baseUrl}/social-channels?error=invalid_brand`);
+    if (!validBrand) return NextResponse.redirect(buildSocialOAuthResultUrl(baseUrl, { error: "invalid_brand" }));
 
     callbackStage = "token";
     const shortToken = await exchangeThreadsCodeForShortToken({
@@ -74,7 +75,7 @@ export async function GET(request) {
       tokenExpiresAt: getThreadsTokenExpiresAt(longToken.expiresIn),
     });
 
-    const response = NextResponse.redirect(`${baseUrl}/social-channels?connected=threads`);
+    const response = NextResponse.redirect(buildSocialOAuthResultUrl(baseUrl, { connected: "threads" }));
     response.cookies.delete("spreelo_threads_oauth_state");
     return response;
   } catch (error) {
@@ -82,7 +83,7 @@ export async function GET(request) {
       message: error?.message,
       stack: error?.stack,
     });
-    const response = NextResponse.redirect(`${baseUrl}/social-channels?error=threads_callback_failed`);
+    const response = NextResponse.redirect(buildSocialOAuthResultUrl(baseUrl, { error: "threads_callback_failed" }));
     response.cookies.delete("spreelo_threads_oauth_state");
     return response;
   }

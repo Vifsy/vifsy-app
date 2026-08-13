@@ -72,7 +72,7 @@ export default function SelectPinterestBoard() {
       return;
     }
 
-    window.location.href = "/social-channels?connected=pinterest&pinterest_test_pin=1";
+    window.location.href = "/social-channels/oauth-complete?connected=pinterest&pinterest_test_pin=1";
   }
 
   async function selectBoard(boardId) {
@@ -92,7 +92,7 @@ export default function SelectPinterestBoard() {
       setSavingId("");
       return;
     }
-    window.location.href = "/social-channels?connected=pinterest";
+    window.location.href = "/social-channels/oauth-complete?connected=pinterest";
   }
 
   return (
@@ -192,7 +192,7 @@ export default function SelectPinterestBoard() {
                     );
                   })}
                 </div>
-                <a className="facebook-cancel-button" href="/social-channels">{t("social.cancel")}</a>
+                <a className="facebook-cancel-button" href="/social-channels/oauth-complete?error=pinterest_cancelled">{t("social.cancel")}</a>
               </>
             )}
           </div>
