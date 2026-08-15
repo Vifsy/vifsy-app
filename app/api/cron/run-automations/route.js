@@ -22,6 +22,12 @@ import {
 } from "../../../../lib/pinterestOAuth.js";
 import { THREADS_GRAPH_API_BASE } from "../../../../lib/threadsOAuth.js";
 import {
+  buildYouTubeVideoDescription,
+  buildYouTubeVideoTitle,
+  getHealthyYouTubeAccessToken,
+  uploadVideoToYouTube,
+} from "../../../../lib/youtubeOAuth.js";
+import {
   buildProductPushEdit,
   queueShotstackRender,
   waitForShotstackRender,
@@ -10088,6 +10094,11 @@ function createEmptySummary() {
     threads_published: 0,
     threads_publish_failed: 0,
     threads_publish_skipped_no_config: 0,
+    youtube_publish_checked: 0,
+    youtube_published: 0,
+    youtube_publish_failed: 0,
+    youtube_publish_skipped_no_config: 0,
+    youtube_publish_skipped_no_video: 0,
     brand_profile_found: 0,
     brand_profile_missing: 0,
     website_content_rules: 0,
@@ -32821,6 +32832,10 @@ function getPublishTargets(platformValue) {
     targets.push("threads");
   }
 
+  if (normalized.includes("youtube")) {
+    targets.push("youtube");
+  }
+
   return targets;
 }
 
@@ -34085,6 +34100,34 @@ async function getThreadsConnectionForBrand({
   }
   return data || null;
 }
+async function getYouTubeConnectionForBrand({
+  supabase,
+  userId,
+  brandProfileId,
+}) {
+  if (!userId || !brandProfileId) return null;
+
+  const { data, error } = await supabase
+    .from("social_connections")
+    .select("id, page_id, page_name, page_access_token, refresh_token, status, token_expires_at, last_connection_error, reauth_required_at")
+    .eq("user_id", userId)
+    .eq("brand_profile_id", brandProfileId)
+    .eq("platform", "youtube")
+    .eq("status", "connected")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Could not load YouTube connection for brand", {
+      userId,
+      brandProfileId,
+      message: error.message,
+    });
+    return null;
+  }
+  return data || null;
+}
 
 async function publishApprovedSocialPosts({
   supabase,
@@ -34200,6 +34243,7 @@ async function publishApprovedSocialPosts({
     let instagramConnectionForPost = null;
     let pinterestConnectionForPost = null;
     let threadsConnectionForPost = null;
+    let youtubeConnectionForPost = null;
     let activePublishTarget = null;
 
     try {
@@ -34516,6 +34560,79 @@ async function publishApprovedSocialPosts({
           nowIso,
         });
         summary.threads_published += 1;
+        activePublishTarget = null;
+      }
+
+      if (targets.includes("youtube")) {
+        activePublishTarget = "youtube";
+        summary.youtube_publish_checked += 1;
+
+        if (normalizedFormat !== "animated_video" || !post.video_url) {
+          summary.youtube_publish_skipped_no_video += 1;
+          throw new Error("YouTube publishing currently requires a rendered vertical video.");
+        }
+
+        youtubeConnectionForPost = await getYouTubeConnectionForBrand({
+          supabase,
+          userId: post.user_id,
+          brandProfileId: post.brand_profile_id,
+        });
+
+        if (
+          !youtubeConnectionForPost?.id ||
+          !youtubeConnectionForPost?.page_access_token ||
+          !youtubeConnectionForPost?.refresh_token
+        ) {
+          summary.youtube_publish_skipped_no_config += 1;
+          throw new Error("No connected YouTube channel found for this brand");
+        }
+
+        let healthyYouTube = await getHealthyYouTubeAccessToken({
+          supabase,
+          connection: youtubeConnectionForPost,
+        });
+        youtubeConnectionForPost = healthyYouTube.connection || youtubeConnectionForPost;
+
+        const youtubePayload = {
+          accessToken: healthyYouTube.accessToken,
+          videoUrl: post.video_url,
+          title: buildYouTubeVideoTitle(post.content),
+          description: buildYouTubeVideoDescription(post.content),
+        };
+
+        let youtubeResult;
+        try {
+          youtubeResult = await uploadVideoToYouTube(youtubePayload);
+        } catch (youtubeError) {
+          if (!youtubeError?.requiresReconnect) throw youtubeError;
+
+          healthyYouTube = await getHealthyYouTubeAccessToken({
+            supabase,
+            connection: youtubeConnectionForPost,
+            forceRefresh: true,
+          });
+          youtubeConnectionForPost = healthyYouTube.connection || youtubeConnectionForPost;
+          youtubeResult = await uploadVideoToYouTube({
+            ...youtubePayload,
+            accessToken: healthyYouTube.accessToken,
+          });
+        }
+
+        await persistPublishedTarget({
+          supabase,
+          postId: post.id,
+          publishedTargetSet,
+          publishReceipts,
+          target: "youtube",
+          receipt: {
+            video_id: youtubeResult?.id || null,
+            video_url: youtubeResult?.url || null,
+            privacy_status: youtubeResult?.privacyStatus || null,
+            recorded_at: nowIso,
+          },
+          nowIso,
+        });
+        summary.youtube_published += 1;
         activePublishTarget = null;
       }
 
@@ -34848,6 +34965,16 @@ async function publishApprovedSocialPosts({
             nowIso,
           });
         }
+        if (activePublishTarget === "youtube" && youtubeConnectionForPost?.id) {
+          await markConnectionExpiredAndAlert({
+            supabase,
+            connectionId: youtubeConnectionForPost.id,
+            platform: "youtube",
+            reason: error.message || "YouTube publishing failed because the connection is no longer valid.",
+            resendApiKey,
+            nowIso,
+          });
+        }
       }
 
       const transientPinterestFailure =
@@ -34920,6 +35047,9 @@ async function publishApprovedSocialPosts({
 
       if (targets.includes("threads")) {
         summary.threads_publish_failed += 1;
+      }
+      if (targets.includes("youtube")) {
+        summary.youtube_publish_failed += 1;
       }
     }
   }

@@ -56,6 +56,7 @@ function inferPlatformFromError(error) {
   if (error.startsWith("instagram_")) return "instagram";
   if (error.startsWith("pinterest_")) return "pinterest";
   if (error.startsWith("threads_")) return "threads";
+  if (error.startsWith("youtube_") || error === "missing_youtube_env" || error === "missing_youtube_code" || error === "invalid_youtube_state" || error === "invalid_youtube_state_payload" || error === "no_youtube_channel") return "youtube";
   if (error.startsWith("meta_") || error === "invalid_state" || error === "invalid_state_payload" || error === "no_pages_found") return "facebook";
   return "";
 }

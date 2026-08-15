@@ -81,6 +81,22 @@ const SOCIAL_PLATFORMS = [
     noIdKey: "social.noThreadsAccountId",
     iconSrc: "/social-icons/threads.svg",
   },
+  {
+    key: "youtube",
+    eyebrowKey: "social.youtubeEyebrow",
+    titleKey: "social.youtubeTitle",
+    descriptionKey: "social.youtubeDescriptionV2",
+    connectHelpKey: "social.youtubeConnectHelpV2",
+    connectKey: "social.connectYouTube",
+    connectingKey: "social.connectingYouTube",
+    disconnectKey: "social.disconnectYouTube",
+    disconnectConfirmKey: "social.disconnectYouTubeConfirm",
+    connectedAccountKey: "social.connectedYouTubeChannel",
+    accountFallbackKey: "social.youtubeChannelFallback",
+    idLabelKey: "social.youtubeChannelId",
+    noIdKey: "social.noYouTubeChannelId",
+    iconSrc: "/social-icons/youtube.png",
+  },
 ];
 
 function getConnectionStatusKey(status) {
@@ -106,6 +122,7 @@ function getConnectEndpoint(platformKey) {
   if (platformKey === "instagram") return "/api/auth/instagram/start";
   if (platformKey === "pinterest") return "/api/auth/pinterest/start";
   if (platformKey === "threads") return "/api/auth/threads/start";
+  if (platformKey === "youtube") return "/api/auth/youtube/start";
   return "/api/meta/connect";
 }
 
@@ -133,6 +150,7 @@ function getSocialUrlMessageFromValues({ t, connected, error, pinterestTestPin }
   if (connected === "facebook") return t("social.facebookConnectedMessageV2");
   if (connected === "pinterest") return t("social.pinterestConnectedMessageV2");
   if (connected === "threads") return t("social.threadsConnectedMessageV2");
+  if (connected === "youtube") return t("social.youtubeConnectedMessageV2");
   if (!error) return "";
 
   const knownErrors = {
@@ -168,6 +186,13 @@ function getSocialUrlMessageFromValues({ t, connected, error, pinterestTestPin }
     invalid_threads_state: "social.errorThreadsState",
     invalid_threads_state_payload: "social.errorThreadsState",
     threads_callback_failed: "social.errorThreadsCallback",
+    missing_youtube_env: "social.errorMissingYouTubeEnv",
+    youtube_cancelled: "social.errorYouTubeCancelled",
+    missing_youtube_code: "social.errorYouTubeCode",
+    invalid_youtube_state: "social.errorYouTubeState",
+    invalid_youtube_state_payload: "social.errorYouTubeState",
+    no_youtube_channel: "social.errorNoYouTubeChannel",
+    youtube_callback_failed: "social.errorYouTubeCallback",
   };
 
   return t(knownErrors[error] || "social.errorGenericConnect");
@@ -197,6 +222,10 @@ function formatTokenExpiry(value, t, platformKey) {
 
   if (platformKey === "pinterest") {
     return t("social.pinterestAutoRefreshActive");
+  }
+
+  if (platformKey === "youtube") {
+    return t("social.youtubeAutoRefreshActive");
   }
 
   return t("social.tokenExpiresAtV2", { date: formattedDate });

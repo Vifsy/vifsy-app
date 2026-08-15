@@ -65,15 +65,19 @@ const allTipsDestinations = getContentTypeDestinationPlatforms({
   contentTypeId: "tips",
   selectedPlatforms: allPlatforms,
 });
-assert.deepEqual(allTipsDestinations, allPlatforms, "Editorial formats with a YouTube adapter can cover all nine selected channels");
+assert.deepEqual(
+  allTipsDestinations,
+  allPlatforms.filter((platform) => platform !== "youtube"),
+  "Editorial formats must not promise YouTube until the image-to-Short adapter is implemented"
+);
 
 assert.deepEqual(
   getContentTypeDestinationPlatforms({
     contentTypeId: "website_item",
     selectedPlatforms: ["youtube"],
   }),
-  ["youtube"],
-  "YouTube-only plans should adapt a static master instead of rejecting the post"
+  [],
+  "YouTube-only static masters must wait until the Short adapter is implemented"
 );
 assert.deepEqual(
   getContentTypeDestinationPlatforms({
@@ -81,8 +85,8 @@ assert.deepEqual(
     contentFormat: "carousel",
     selectedPlatforms: ["youtube"],
   }),
-  ["youtube"],
-  "YouTube-only plans should adapt a carousel master into a slideshow/Short"
+  [],
+  "YouTube-only carousels must wait until the slideshow Short adapter is implemented"
 );
 assert.deepEqual(
   getContentTypeDestinationPlatforms({
@@ -98,7 +102,7 @@ const tipsAdaptations = getContentTypePlatformAdaptations({
   contentTypeId: "tips",
   selectedPlatforms: allPlatforms,
 });
-assert.equal(tipsAdaptations.youtube?.adapter, "short_video_from_master", "YouTube editorial content should use a master-to-Short adapter");
+assert.equal(tipsAdaptations.youtube, undefined, "YouTube editorial adapter must stay disabled until it can render a real Short");
 
 const carouselAdaptations = getContentTypePlatformAdaptations({
   contentTypeId: "carousel_website_item",
@@ -116,7 +120,7 @@ assert(page.includes('slot?.contentTypeId !== "manual_prompt"'), "Coverage rebal
 assert(page.includes("getSlotPlatformOptions(slot)"), "Each post needs its own actual destination list");
 assert(page.includes("campaign-v14349-slot-channels"), "Campaign preview must display per-post destination channels");
 assert(page.includes("plan-v74-channel-stack"), "AI Content Studio rows must display per-post destination channels");
-assert(page.includes("plan-v14349-platform-adapter-note"), "UI should explain that Spreelo adapts each post to matching channels");
+assert(page.includes("plan-v14380-platform-note"), "UI should explain that Spreelo adapts each post to matching channels");
 assert(page.includes("const slotDestinationKeys = getSlotDestinationPlatformKeys("), "Save flow must calculate per-post destinations");
 assert(page.includes("platform: slotPlatform || platform"), "Each automation rule must persist its own channel subset");
 assert(page.includes("actualPlanPlatformKeys"), "Activation summary must report actual destinations rather than every selected channel blindly");
