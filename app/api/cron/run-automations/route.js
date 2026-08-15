@@ -11955,7 +11955,12 @@ function getAttributeValueFromTag(tag, attributeName) {
 
 function splitSrcsetUrls(value) {
   return String(value || "")
-    .split(",")
+    // A CDN URL may legitimately contain commas inside its query string, for
+    // example `?w=1600,h=1600,quality=85`. Splitting on every comma turned the
+    // latter parameters into fake relative URLs such as `/h=1600` and could
+    // push the already verified product image out of the animated-Reel pool.
+    // Real srcset candidates are separated by a comma followed by whitespace.
+    .split(/,\s+(?=\S)/)
     .map((part) => part.trim().split(/\s+/)[0])
     .filter(Boolean);
 }
@@ -29232,7 +29237,21 @@ async function collectAnimatedProductImageCandidates(websiteItem) {
   }
 
   return candidates
-    .sort((left, right) => Number(right.identityScore || 0) - Number(left.identityScore || 0))
+    .sort((left, right) => {
+      // The image that already passed the product identity resolver is always
+      // attempted first. Gallery discovery is only a quality/cutout fallback
+      // and must never displace that authoritative asset through a noisy score.
+      const sourcePriority = (candidate) => {
+        if (candidate.source === "selected_product_image") return 1000;
+        if (candidate.source === "product_json_ld") return 700;
+        if (candidate.source === "product_meta_image") return 500;
+        return 0;
+      };
+      return (
+        sourcePriority(right) - sourcePriority(left) ||
+        Number(right.identityScore || 0) - Number(left.identityScore || 0)
+      );
+    })
     .slice(0, 12);
 }
 

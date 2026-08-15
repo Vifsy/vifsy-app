@@ -64,11 +64,13 @@ export async function POST(request) {
 
   const body = await request.json().catch(() => ({}));
   const postId = String(body?.post_id || "").trim();
+  const requestedOccurrenceId = String(body?.occurrence_id || "").trim();
+  const reviewCaseId = String(body?.review_case_id || "").trim();
   const suppliedProduct = normalizeProduct(body?.product_item || {}, String(body?.product_url || "").trim());
   const productUrl = String(body?.product_url || suppliedProduct.url || "").trim();
   const useManualOverride = suppliedProduct.manual_override === true;
-  if (!postId) {
-    return Response.json({ ok: false, error: "A post ID is required." }, { status: 400 });
+  if (!postId && !requestedOccurrenceId && !reviewCaseId) {
+    return Response.json({ ok: false, error: "A post, occurrence or review-case ID is required." }, { status: 400 });
   }
   if (
     useManualOverride
@@ -86,19 +88,41 @@ export async function POST(request) {
     );
   }
 
-  const { data: post, error: postError } = await context.admin
-    .from("posts")
-    .select("*")
-    .eq("id", postId)
-    .maybeSingle();
-  if (postError || !post) {
-    return Response.json({ ok: false, error: postError?.message || "Post not found." }, { status: 404 });
+  let post = null;
+  let occurrence = null;
+  let reviewCase = null;
+  if (postId) {
+    const result = await context.admin.from("posts").select("*").eq("id", postId).maybeSingle();
+    if (result.error || !result.data) {
+      return Response.json({ ok: false, error: result.error?.message || "Post not found." }, { status: 404 });
+    }
+    post = result.data;
+  }
+  if (reviewCaseId) {
+    const result = await context.admin.from("admin_review_cases").select("*").eq("id", reviewCaseId).maybeSingle();
+    if (result.error || !result.data) {
+      return Response.json({ ok: false, error: result.error?.message || "Review case not found." }, { status: 404 });
+    }
+    reviewCase = result.data;
+  }
+  const occurrenceId = requestedOccurrenceId || String(reviewCase?.occurrence_id || "").trim();
+  if (occurrenceId) {
+    const result = await context.admin.from("automation_occurrences").select("*").eq("id", occurrenceId).maybeSingle();
+    if (result.error || !result.data) {
+      return Response.json({ ok: false, error: result.error?.message || "Generation occurrence not found." }, { status: 404 });
+    }
+    occurrence = result.data;
+  }
+  const repairSource = post || occurrence || reviewCase;
+  if (!repairSource) {
+    return Response.json({ ok: false, error: "The failed generation could not be loaded." }, { status: 404 });
   }
 
-  const { data: rule } = post.automation_rule_id
-    ? await context.admin.from("automation_rules").select("*").eq("id", post.automation_rule_id).maybeSingle()
+  const ruleId = post?.automation_rule_id || occurrence?.automation_rule_id || reviewCase?.automation_rule_id || null;
+  const { data: rule } = ruleId
+    ? await context.admin.from("automation_rules").select("*").eq("id", ruleId).maybeSingle()
     : { data: null };
-  const brandProfileId = post.brand_profile_id || rule?.brand_profile_id || null;
+  const brandProfileId = post?.brand_profile_id || occurrence?.brand_profile_id || reviewCase?.brand_profile_id || rule?.brand_profile_id || null;
   const { data: brandProfile } = brandProfileId
     ? await context.admin.from("brand_profiles").select("*").eq("id", brandProfileId).maybeSingle()
     : { data: null };
@@ -109,6 +133,10 @@ export async function POST(request) {
       suppliedProduct.url ||
       ""
   ).trim();
+  const repairUserId = post?.user_id || occurrence?.user_id || reviewCase?.user_id || rule?.user_id || null;
+  if (!repairUserId) {
+    return Response.json({ ok: false, error: "The customer account for this failed generation is missing." }, { status: 400 });
+  }
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   try {
@@ -142,21 +170,21 @@ export async function POST(request) {
           productUrl,
           websiteUrl,
           titleHint: "",
-          rule: rule || { id: post.automation_rule_id || "admin-product-regeneration", brand_profile_id: brandProfileId },
-          ruleId: post.automation_rule_id || "admin-product-regeneration",
+          rule: rule || { id: ruleId || "admin-product-regeneration", brand_profile_id: brandProfileId },
+          ruleId: ruleId || "admin-product-regeneration",
         });
     const product = normalizeProduct(lockedProduct, productUrl);
     const enhancedRule = {
       ...(rule || {}),
-      id: rule?.id || post.automation_rule_id || `admin-${post.id}`,
-      user_id: post.user_id,
+      id: rule?.id || ruleId || `admin-${occurrenceId || reviewCaseId || post?.id || "repair"}`,
+      user_id: repairUserId,
       brand_profile_id: brandProfileId,
       brand_profile: brandProfile || null,
-      content_type_id: rule?.content_type_id || post.post_type || "website_item",
-      content_format: post.content_format || rule?.content_format || "single_image",
-      language: post.language || rule?.language || brandProfile?.content_language || "English",
-      tone: post.tone || rule?.tone || "Professional",
-      platform: post.platform || rule?.platform || "Instagram",
+      content_type_id: rule?.content_type_id || post?.post_type || occurrence?.content_type_id || reviewCase?.content_type_label || "website_item",
+      content_format: post?.content_format || occurrence?.content_format || reviewCase?.content_format || rule?.content_format || "single_image",
+      language: post?.language || rule?.language || brandProfile?.content_language || "English",
+      tone: post?.tone || rule?.tone || "Professional",
+      platform: post?.platform || rule?.platform || "Instagram",
       uses_website_content: true,
       generate_image: true,
       website_item: lockedProduct,
@@ -172,6 +200,58 @@ export async function POST(request) {
     const isAiProductAd = String(enhancedRule.content_type_id || "") === "website_item_text_ad";
     const includeLogo = shouldUseLogoForRule(enhancedRule, brandProfile);
     const now = new Date().toISOString();
+
+    // A terminal generation failure may not have produced a posts row at all.
+    // Create a fresh repair draft owned by the original customer before media
+    // generation so every later asset is attached to a real post ID.
+    if (!post) {
+      const insert = await context.admin.from("posts").insert({
+        user_id: repairUserId,
+        brand_profile_id: brandProfileId,
+        automation_rule_id: ruleId,
+        content: generatedContent,
+        platform: enhancedRule.platform || "instagram",
+        tone: enhancedRule.tone || null,
+        language: enhancedRule.language || "English",
+        post_type: rule?.post_type || reviewCase?.content_type_label || occurrence?.content_type_label || "Product post",
+        content_format: enhancedRule.content_format || "single_image",
+        source: "automation_admin_repair",
+        source_label: "Regenerated from admin-supplied product materials",
+        status: "generating",
+        approval_required: true,
+        approval_token: crypto.randomBytes(32).toString("hex"),
+        admin_review_status: "pending",
+        admin_product_items: [product],
+        scheduled_for: occurrence?.scheduled_for || reviewCase?.scheduled_for || new Date().toISOString(),
+        image_status: "generating",
+        video_status: isAnimated ? "rendering" : "none",
+        created_at: now,
+        updated_at: now,
+      }).select("*").single();
+      if (insert.error || !insert.data) {
+        throw new Error(insert.error?.message || "Could not create a repaired product post.");
+      }
+      post = insert.data;
+      if (occurrenceId) {
+        await context.admin.from("automation_occurrences").update({
+          post_id: post.id,
+          metadata: {
+            ...(occurrence?.metadata || {}),
+            admin_product_items: [product],
+            admin_regeneration_started_at: now,
+          },
+        }).eq("id", occurrenceId);
+      }
+      if (reviewCaseId) {
+        await context.admin.from("admin_review_cases").update({
+          post_id: post.id,
+          product_items: [product],
+          status: "creating",
+          updated_at: now,
+        }).eq("id", reviewCaseId);
+      }
+    }
+
     let imageUrl = null;
     let imageStoragePath = null;
     let imagePrompt = null;
@@ -194,7 +274,7 @@ export async function POST(request) {
         supabase: context.admin,
         rule: enhancedRule,
         postContent: generatedContent,
-        userId: post.user_id,
+        userId: repairUserId,
         postId: post.id,
       });
       imageUrl = rendered.posterUrl;
@@ -206,7 +286,7 @@ export async function POST(request) {
     } else if (isAiProductAd) {
       const generated = await generateWebsiteItemAdImage(openai, enhancedRule, generatedContent);
       const uploaded = await uploadPng(context.admin, {
-        userId: post.user_id,
+        userId: repairUserId,
         postId: post.id,
         suffix: "admin-product-ad",
         imageBase64: generated.imageBase64,
@@ -216,7 +296,7 @@ export async function POST(request) {
       imagePrompt = generated.imagePrompt;
       const logoResult = await applyLogoOverlayIfNeeded({
         supabase: context.admin,
-        userId: post.user_id,
+        userId: repairUserId,
         postId: post.id,
         imageUrl,
         imageStoragePath,
@@ -296,12 +376,12 @@ export async function POST(request) {
       await context.admin.from("post_slides").delete().eq("post_id", post.id);
     }
 
-    try {
-      await context.admin.from("admin_review_cases").upsert({
+    const reviewPayload = {
+        occurrence_id: occurrenceId || null,
         post_id: post.id,
-        user_id: post.user_id,
+        user_id: repairUserId,
         brand_profile_id: brandProfileId,
-        automation_rule_id: post.automation_rule_id || null,
+        automation_rule_id: ruleId,
         status: "awaiting_spreelo",
         draft_content: generatedContent,
         product_items: [product],
@@ -310,10 +390,29 @@ export async function POST(request) {
         failure_stage: null,
         failure_message: null,
         updated_at: new Date().toISOString(),
-      }, { onConflict: "post_id" });
+      };
+    try {
+      if (reviewCaseId) {
+        await context.admin.from("admin_review_cases").update(reviewPayload).eq("id", reviewCaseId);
+      } else {
+        await context.admin.from("admin_review_cases").upsert(
+          reviewPayload,
+          { onConflict: occurrenceId ? "occurrence_id" : "post_id" }
+        );
+      }
     } catch {
       // Older databases may not have the optional review-case table yet. The
       // post itself remains the authoritative admin review record.
+    }
+    if (occurrenceId) {
+      await context.admin.from("automation_occurrences").update({
+        post_id: post.id,
+        metadata: {
+          ...(occurrence?.metadata || {}),
+          admin_product_items: [product],
+          admin_regenerated_at: new Date().toISOString(),
+        },
+      }).eq("id", occurrenceId);
     }
 
     return Response.json({
@@ -326,6 +425,26 @@ export async function POST(request) {
       format: isAnimated ? "animated_product_reel" : isAiProductAd ? "ai_product_ad" : "product_post",
     });
   } catch (error) {
+    if (post?.id) {
+      const failedAt = new Date().toISOString();
+      await context.admin.from("posts").update({
+        status: "failed",
+        admin_review_status: "needs_repair",
+        image_status: "failed",
+        video_status: "failed",
+        video_error: String(error?.message || "Admin regeneration failed").slice(0, 1200),
+        updated_at: failedAt,
+      }).eq("id", post.id);
+      if (reviewCaseId) {
+        await context.admin.from("admin_review_cases").update({
+          status: "needs_repair",
+          needs_review: true,
+          failure_stage: "admin_product_regeneration",
+          failure_message: String(error?.message || "Admin regeneration failed").slice(0, 4000),
+          updated_at: failedAt,
+        }).eq("id", reviewCaseId);
+      }
+    }
     return Response.json(
       { ok: false, error: error?.message || "Spreelo could not regenerate this product post." },
       { status: 422 }

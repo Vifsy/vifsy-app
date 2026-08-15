@@ -12,7 +12,8 @@ export async function POST(request) {
   if (context.error) return adminContextError(context);
   const body = await request.json().catch(() => ({}));
   const requestedPostId = String(body?.post_id || "").trim();
-  const occurrenceId = String(body?.occurrence_id || "").trim();
+  const requestedOccurrenceId = String(body?.occurrence_id || "").trim();
+  const reviewCaseId = String(body?.review_case_id || "").trim();
   let products = (Array.isArray(body?.product_items) ? body.product_items : [])
     .map((item) => ({
       title: String(item?.title || "").trim(),
@@ -51,22 +52,35 @@ export async function POST(request) {
 
   let post = null;
   let occurrence = null;
+  let reviewCase = null;
   if (requestedPostId) {
     const result = await context.admin.from("posts").select("*").eq("id", requestedPostId).single();
     if (result.error) return Response.json({ ok: false, error: result.error.message }, { status: 404 });
     post = result.data;
   }
+  if (reviewCaseId) {
+    const result = await context.admin.from("admin_review_cases").select("*").eq("id", reviewCaseId).maybeSingle();
+    if (result.error || !result.data) return Response.json({ ok: false, error: result.error?.message || "Review case not found." }, { status: 404 });
+    reviewCase = result.data;
+  }
+  const occurrenceId = requestedOccurrenceId || String(reviewCase?.occurrence_id || "").trim();
   if (occurrenceId) {
     const result = await context.admin.from("automation_occurrences").select("*").eq("id", occurrenceId).single();
     if (result.error) return Response.json({ ok: false, error: result.error.message }, { status: 404 });
     occurrence = result.data;
   }
-  const ruleId = post?.automation_rule_id || occurrence?.automation_rule_id;
+  const repairSource = post || occurrence || reviewCase;
+  if (!repairSource) return Response.json({ ok: false, error: "The failed generation could not be loaded." }, { status: 404 });
+  const ruleId = post?.automation_rule_id || occurrence?.automation_rule_id || reviewCase?.automation_rule_id;
   const { data: rule } = ruleId ? await context.admin.from("automation_rules").select("*").eq("id", ruleId).maybeSingle() : { data: null };
-  const brandProfileId = post?.brand_profile_id || occurrence?.brand_profile_id || rule?.brand_profile_id;
+  const brandProfileId = post?.brand_profile_id || occurrence?.brand_profile_id || reviewCase?.brand_profile_id || rule?.brand_profile_id;
   const { data: brandProfile } = brandProfileId ? await context.admin.from("brand_profiles").select("business_name, content_language, website_url, website_product_source_url").eq("id", brandProfileId).maybeSingle() : { data: null };
-  const language = post?.language || rule?.language || "English";
-  const campaign = occurrence?.campaign_title || rule?.name || "campaign";
+  const repairUserId = post?.user_id || occurrence?.user_id || reviewCase?.user_id || rule?.user_id || null;
+  if (!repairUserId) {
+    return Response.json({ ok: false, error: "The customer account for this failed generation is missing." }, { status: 400 });
+  }
+  const language = post?.language || rule?.language || brandProfile?.content_language || "English";
+  const campaign = occurrence?.campaign_title || reviewCase?.campaign_title || rule?.name || "campaign";
   const enhancedRule = { ...(rule || {}), brand_profile: brandProfile || null, language, campaign_theme: campaign };
   let content = String(body?.content || "").trim();
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -139,12 +153,12 @@ export async function POST(request) {
   const now = new Date().toISOString();
   if (!post) {
     const insert = await context.admin.from("posts").insert({
-      user_id: occurrence.user_id,
-      brand_profile_id: occurrence.brand_profile_id,
-      automation_rule_id: occurrence.automation_rule_id,
+      user_id: repairUserId,
+      brand_profile_id: brandProfileId,
+      automation_rule_id: ruleId || null,
       content,
       platform: rule?.platform || "instagram",
-      post_type: rule?.post_type || occurrence.content_type_label || "Carousel",
+      post_type: rule?.post_type || occurrence?.content_type_label || reviewCase?.content_type_label || "Carousel",
       content_format: "carousel",
       language,
       source: "automation_admin_repair",
@@ -154,13 +168,31 @@ export async function POST(request) {
       approval_token: crypto.randomBytes(32).toString("hex"),
       admin_review_status: "pending",
       admin_product_items: products,
-      scheduled_for: occurrence.scheduled_for,
+      scheduled_for: occurrence?.scheduled_for || reviewCase?.scheduled_for || new Date().toISOString(),
       image_status: "ready",
       created_at: now,
       updated_at: now,
     }).select("*").single();
     if (insert.error) return Response.json({ ok: false, error: insert.error.message }, { status: 500 });
     post = insert.data;
+    if (occurrenceId) {
+      await context.admin.from("automation_occurrences").update({
+        post_id: post.id,
+        metadata: {
+          ...(occurrence?.metadata || {}),
+          admin_product_items: products,
+          admin_regeneration_started_at: now,
+        },
+      }).eq("id", occurrenceId);
+    }
+    if (reviewCaseId) {
+      await context.admin.from("admin_review_cases").update({
+        post_id: post.id,
+        product_items: products,
+        status: "creating",
+        updated_at: now,
+      }).eq("id", reviewCaseId);
+    }
   } else {
     const update = await context.admin.from("posts").update({ content, content_format: "carousel", status: "pending_approval", admin_review_status: "pending", admin_product_items: products, image_status: "ready", updated_at: now }).eq("id", post.id);
     if (update.error) return Response.json({ ok: false, error: update.error.message }, { status: 500 });
@@ -297,6 +329,11 @@ export async function POST(request) {
   }).eq("id", post.id);
   if (postReadyUpdate.error) return Response.json({ ok: false, error: postReadyUpdate.error.message }, { status: 500 });
   if (occurrenceId) await context.admin.from("automation_occurrences").update({ post_id: post.id, metadata: { ...(occurrence?.metadata || {}), admin_product_items: products, admin_regenerated_at: now } }).eq("id", occurrenceId);
-  await context.admin.from("admin_review_cases").upsert({ occurrence_id: occurrenceId || null, post_id: post.id, user_id: post.user_id, brand_profile_id: post.brand_profile_id, automation_rule_id: post.automation_rule_id, status: "awaiting_spreelo", draft_content: content, product_items: products, needs_review: true, failure_code: null, failure_stage: null, failure_message: null, updated_at: now }, { onConflict: occurrenceId ? "occurrence_id" : "post_id" });
+  const reviewPayload = { occurrence_id: occurrenceId || null, post_id: post.id, user_id: post.user_id, brand_profile_id: post.brand_profile_id, automation_rule_id: post.automation_rule_id, status: "awaiting_spreelo", draft_content: content, product_items: products, needs_review: true, failure_code: null, failure_stage: null, failure_message: null, updated_at: now };
+  if (reviewCaseId) {
+    await context.admin.from("admin_review_cases").update(reviewPayload).eq("id", reviewCaseId);
+  } else {
+    await context.admin.from("admin_review_cases").upsert(reviewPayload, { onConflict: occurrenceId ? "occurrence_id" : "post_id" });
+  }
   return Response.json({ ok: true, post_id: post.id, slide_count: slides.length });
 }

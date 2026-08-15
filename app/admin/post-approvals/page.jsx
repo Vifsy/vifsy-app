@@ -262,12 +262,17 @@ export default function AdminPostApprovalsPage() {
     }
     // Do not let the 15-second admin polling overwrite an open edit session.
     if (editorPostId === selectedPost.id && (editorDirty || productDirty)) return;
+    const isEmptyFailedSingle = selectedPost.status === "failed" &&
+      !isCarouselPost(selectedPost) &&
+      !selectedPost?.admin_product_items?.length;
     setMaterials(
       isCarouselPost(selectedPost)
         ? getFiveCarouselProducts(selectedPost?.admin_product_items)
         : selectedPost?.admin_product_items?.length
           ? [{ ...emptyCarouselProduct(), ...(selectedPost.admin_product_items[0] || {}) }]
-          : []
+          : selectedPost.status === "failed"
+            ? [emptyCarouselProduct()]
+            : []
     );
     setPostCopy(selectedPost?.content || "");
     setOutroSlide(selectedPost?.outro_slide || null);
@@ -278,7 +283,10 @@ export default function AdminPostApprovalsPage() {
     setEditorPostId(selectedPost.id);
     setEditorDirty(false);
     setProductDirty(false);
-    setManualEditingIndices([]);
+    // Failed single-product generations often contain no scraped material at
+    // all. Open the manual repair form immediately so an admin can paste the
+    // product name/text and upload the source image without an extra click.
+    setManualEditingIndices(isEmptyFailedSingle ? [0] : []);
   }, [selectedPost, editorPostId, editorDirty, productDirty]);
 
   function markEditorDirty({ product = false } = {}) {
@@ -480,7 +488,7 @@ export default function AdminPostApprovalsPage() {
     setRegenerationSuccess("");
     try {
       const headers = await getHeaders();
-      const response = await fetch("/api/admin/post-approvals/regenerate", { method: "POST", headers, body: JSON.stringify({ post_id: selectedPost.status === "failed" ? null : selectedPost.id, occurrence_id: selectedPost.occurrence_id || null, content: postCopy, product_items: materials, preserve_outro: !outroRemoved && Boolean(outroSlide?.image_url), outro_slide: !outroRemoved ? outroSlide : null }) });
+      const response = await fetch("/api/admin/post-approvals/regenerate", { method: "POST", headers, body: JSON.stringify({ post_id: selectedPost.status === "failed" ? null : selectedPost.id, occurrence_id: selectedPost.occurrence_id || null, review_case_id: selectedPost.failure?.review_case_id || null, content: postCopy, product_items: materials, preserve_outro: !outroRemoved && Boolean(outroSlide?.image_url), outro_slide: !outroRemoved ? outroSlide : null }) });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result?.error || "Regeneration failed.");
       setEditorDirty(false);
@@ -507,7 +515,9 @@ export default function AdminPostApprovalsPage() {
         method: "POST",
         headers,
         body: JSON.stringify({
-          post_id: selectedPost.id,
+          post_id: selectedPost.status === "failed" ? null : selectedPost.id,
+          occurrence_id: selectedPost.occurrence_id || null,
+          review_case_id: selectedPost.failure?.review_case_id || null,
           product_url: materials[0].url,
           product_item: materials[0],
         }),
