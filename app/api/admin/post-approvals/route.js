@@ -489,10 +489,9 @@ export async function PATCH(request) {
 async function setBrandReviewPolicy({ context, body }) {
   const brandProfileId = String(body?.brand_profile_id || "").trim();
   if (!brandProfileId) return Response.json({ ok: false, error: "Brand profile ID is required." }, { status: 400 });
-  const value = body?.admin_review_required === null ? null : Boolean(body?.admin_review_required);
   const { data, error } = await context.admin
     .from("brand_profiles")
-    .update({ admin_review_required: value, updated_at: new Date().toISOString() })
+    .update({ admin_review_required: true, updated_at: new Date().toISOString() })
     .eq("id", brandProfileId)
     .select("id, admin_review_required")
     .single();

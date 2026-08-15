@@ -3439,6 +3439,14 @@ html body .brand-profile-page > .danger-zone-card {
   font-size: 12px;
   font-weight: 750;
 }
+.admin-brand-review-policy-required > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #18794e;
+  font-size: 12px;
+  font-weight: 750;
+}
 .admin-archive-button {
   width: 100%;
   justify-content: center;
@@ -11295,14 +11303,21 @@ html body .campaign-v14335-slot-list article:has(.custom-time-popover) {
 .admin-product-original-link {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   width: max-content;
-  color: #d84d32;
-  font-size: 11px;
-  font-weight: 850;
+  min-height: 38px;
+  padding: 9px 13px;
+  border: 1px solid #18324b;
+  border-radius: 10px;
+  background: #0b1e30;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
   text-decoration: none;
+  box-shadow: 0 7px 18px rgba(5, 23, 39, .12);
 }
-.admin-product-original-link:hover { text-decoration: underline; }
+.admin-product-original-link:hover { background: #183b59; text-decoration: none; }
 .admin-review-single-product { display: grid; gap: 12px; }
 .admin-review-actionbar {
   position: sticky;

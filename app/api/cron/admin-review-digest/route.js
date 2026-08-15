@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { getConfiguredAdminEmails } from "../../../../lib/adminAuth.js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -7,8 +8,9 @@ export async function GET(request) {
   if (request.headers.get("authorization") !== `Bearer ${process.env.CRON_SECRET}`) {
     return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
-  const recipients = String(process.env.SPREELO_ADMIN_EMAILS || process.env.ADMIN_ALERT_EMAIL || "")
-    .split(/[;,]/).map((value) => value.trim()).filter(Boolean);
+  const legacyRecipients = String(process.env.ADMIN_ALERT_EMAIL || "")
+    .split(/[;,\n\r]+/).map((value) => value.trim().toLowerCase()).filter(Boolean);
+  const recipients = [...new Set([...getConfiguredAdminEmails(), ...legacyRecipients])];
   if (!recipients.length) return Response.json({ ok: true, sent: false, reason: "no_admin_recipient" });
   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
   const hourKey = new Date();

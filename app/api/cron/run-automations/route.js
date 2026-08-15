@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import OpenAI, { toFile } from "openai";
 import crypto from "crypto";
 import { createRequire } from "node:module";
+import { getConfiguredAdminEmails } from "../../../../lib/adminAuth.js";
 import {
   detectLikelyUiLocaleFromText,
   getServerTranslations,
@@ -11172,14 +11173,15 @@ async function markAutomationFailureNotification({
 }
 
 function getImmediateAdminAlertRecipients() {
-  return String(
-    process.env.SPREELO_ADMIN_EMAILS ||
-      process.env.ADMIN_ALERT_EMAIL ||
-      ""
-  )
-    .split(/[;,]/)
-    .map((value) => value.trim())
+  const legacyRecipients = String(process.env.ADMIN_ALERT_EMAIL || "")
+    .split(/[;,\n\r]+/)
+    .map((value) => value.trim().toLowerCase())
     .filter(Boolean);
+
+  // Keep alert delivery aligned with admin authentication. Previously the
+  // primary admin only received these alerts if the same address was also
+  // duplicated in SPREELO_ADMIN_EMAILS or ADMIN_ALERT_EMAIL.
+  return [...new Set([...getConfiguredAdminEmails(), ...legacyRecipients])];
 }
 
 async function sendImmediateAdminFailureAlertEmail({
@@ -11226,9 +11228,9 @@ async function sendImmediateAdminFailureAlertEmail({
     .filter((item) => item?.title || item?.image_url || item?.url)
     .slice(0, 5);
   const productSummary = suppliedProducts.length
-    ? `<p><strong>Usable products already recovered:</strong> ${suppliedProducts.length}/5</p><ul>${suppliedProducts
-        .map((item) => `<li>${escapeHtml(item?.title || "Unnamed product")}${item?.url ? ` · ${escapeHtml(item.url)}` : ""}</li>`)
-        .join("")}</ul>`
+    ? `<p><strong>Products available for internal review:</strong> ${suppliedProducts.length}</p><div>${suppliedProducts
+        .map((item) => `<div style="border:1px solid #e2e7ed;border-radius:12px;padding:12px 14px;margin:8px 0"><strong>${escapeHtml(item?.title || "Unnamed product")}</strong>${item?.url ? `<br/><a href="${escapeHtml(item.url)}" style="display:inline-block;margin-top:9px;background:#0b1724;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-weight:700">Open product source</a>` : ""}</div>`)
+        .join("")}</div>`
     : "";
 
   try {
@@ -35001,8 +35003,10 @@ async function getAdminPostReviewGate(supabase, brandProfileId = null) {
       .select("admin_review_required")
       .eq("id", brandProfileId)
       .maybeSingle();
-    if (!brandError && typeof brand?.admin_review_required === "boolean") {
-      return brand.admin_review_required;
+    if (!brandError && brand?.admin_review_required === false) {
+      console.warn("Per-brand admin review bypass ignored; every generated post now requires Spreelo review", {
+        brandProfileId,
+      });
     }
   }
 
@@ -35019,7 +35023,10 @@ async function getAdminPostReviewGate(supabase, brandProfileId = null) {
     return true;
   }
 
-  return Boolean(data?.require_admin_post_approval);
+  if (data?.require_admin_post_approval === false) {
+    console.warn("Global admin review bypass ignored; every generated post now requires Spreelo review");
+  }
+  return true;
 }
 
 async function upsertAdminReviewCase(supabase, values) {

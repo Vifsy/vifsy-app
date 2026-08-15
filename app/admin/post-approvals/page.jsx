@@ -941,10 +941,10 @@ export default function AdminPostApprovalsPage() {
                     <div><dt>{t("admin.approvals.scheduled")}</dt><dd>{formatDate(selectedPost.scheduled_for)}</dd></div>
                     <div><dt>{t("admin.approvals.platform")}</dt><dd>{selectedPost.platform || "—"}</dd></div>
                   </dl>
-                  <div className="admin-brand-review-policy">
+                  <div className="admin-brand-review-policy admin-brand-review-policy-required">
                     <strong>{t("admin.approvals.brandReviewPolicy")}</strong>
                     <p>{t("admin.approvals.brandReviewPolicyText")}</p>
-                    <label><input type="checkbox" checked={selectedPost.brand_admin_review_required !== false} onChange={(event) => setBrandPolicy(event.target.checked)} /> {t("admin.approvals.requireBrandReview", { brandName: selectedPost.brand_name || t("admin.approvals.thisBrand") })}</label>
+                    <span><CheckCircle2 size={15} /> {t("admin.approvals.requireBrandReview", { brandName: selectedPost.brand_name || t("admin.approvals.thisBrand") })}</span>
                   </div>
 
                   {selectedPost.status === "failed" ? (
