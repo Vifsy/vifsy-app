@@ -109,7 +109,8 @@
     "test:v143.98": "node scripts/test-v143-98-youtube-shorts.mjs",
     "test:v143.100": "node scripts/test-v143-100-approval-video-preview.mjs",
     "test:v143.101": "node scripts/test-v143-101-inline-social-connect.mjs",
-    "test:v143.102": "node scripts/test-v143-102-youtube-brand-handoff.mjs"
+    "test:v143.102": "node scripts/test-v143-102-youtube-brand-handoff.mjs",
+    "test:v143.103": "node scripts/test-v143-103-shotstack-content-sized-html5.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
