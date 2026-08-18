@@ -240,6 +240,8 @@ function ChannelCard({
   connectingPlatform,
   onConnectStart,
   onDisconnect,
+  onYoutubeAudienceChange,
+  savingYoutubeAudience,
   t,
 }) {
   const isConnected = connection?.status === "connected";
@@ -297,6 +299,24 @@ function ChannelCard({
             <p className="social-v74-token-note"><ShieldCheck size={15} />{expiresText}</p>
           ) : null}
 
+          {platform.key === "youtube" ? (
+            <div className="social-v143104-youtube-audience">
+              <div>
+                <strong>{t("social.youtubeAudienceTitle")}</strong>
+                <span>{t("social.youtubeAudienceHelp")}</span>
+              </div>
+              <select
+                value={connection?.youtube_made_for_kids ? "made_for_kids" : "not_made_for_kids"}
+                disabled={savingYoutubeAudience}
+                onChange={(event) => onYoutubeAudienceChange(connection, event.target.value === "made_for_kids")}
+                aria-label={t("social.youtubeAudienceTitle")}
+              >
+                <option value="not_made_for_kids">{t("social.youtubeAudienceNotForKids")}</option>
+                <option value="made_for_kids">{t("social.youtubeAudienceForKids")}</option>
+              </select>
+            </div>
+          ) : null}
+
           <button
             type="button"
             className="social-v74-secondary-action"
@@ -338,6 +358,7 @@ export default function SocialChannelsPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [messageKind, setMessageKind] = useState("info");
+  const [savingYoutubeAudience, setSavingYoutubeAudience] = useState(false);
   const [connectingPlatform, setConnectingPlatform] = useState("");
   const [connectionSuccess, setConnectionSuccess] = useState(null);
   const [planLimitDetails, setPlanLimitDetails] = useState(null);
@@ -488,7 +509,7 @@ export default function SocialChannelsPage() {
 
     const { data: connections, error: connectionsError } = await supabase
       .from("social_connections")
-      .select("id, platform, page_id, page_name, status, created_at, updated_at, token_expires_at, brand_profile_id")
+      .select("id, platform, page_id, page_name, status, created_at, updated_at, token_expires_at, brand_profile_id, youtube_made_for_kids")
       .eq("user_id", user.id)
       .eq("brand_profile_id", selectedBrand.id)
       .in("platform", selectedPlatforms.map((platform) => platform.key))
@@ -631,6 +652,29 @@ export default function SocialChannelsPage() {
     setOauthFlow(null);
   }
 
+  async function handleYoutubeAudienceChange(connection, madeForKids) {
+    if (!connection?.id || !currentUser?.id || !currentBrand?.id) return;
+    setSavingYoutubeAudience(true);
+    setMessage("");
+    const { error } = await supabase
+      .from("social_connections")
+      .update({ youtube_made_for_kids: Boolean(madeForKids), updated_at: new Date().toISOString() })
+      .eq("id", connection.id)
+      .eq("user_id", currentUser.id)
+      .eq("brand_profile_id", currentBrand.id)
+      .eq("platform", "youtube");
+
+    if (error) {
+      setMessage(error.message || t("social.youtubeAudienceSaveError"));
+      setMessageKind("error");
+    } else {
+      setMessage(t("social.youtubeAudienceSaved"));
+      setMessageKind("success");
+      await loadConnections();
+    }
+    setSavingYoutubeAudience(false);
+  }
+
   async function handleDisconnect(platform, connection) {
     if (!connection?.id || !platform?.key) return;
     if (!window.confirm(t(platform.disconnectConfirmKey))) return;
@@ -713,6 +757,8 @@ export default function SocialChannelsPage() {
                 connectingPlatform={connectingPlatform}
                 onConnectStart={handleConnect}
                 onDisconnect={handleDisconnect}
+                onYoutubeAudienceChange={handleYoutubeAudienceChange}
+                savingYoutubeAudience={savingYoutubeAudience}
                 t={t}
               />
             ))}

@@ -34141,7 +34141,7 @@ async function getYouTubeConnectionForBrand({
 
   const { data, error } = await supabase
     .from("social_connections")
-    .select("id, page_id, page_name, page_access_token, refresh_token, status, token_expires_at, last_connection_error, reauth_required_at")
+    .select("id, page_id, page_name, page_access_token, refresh_token, status, token_expires_at, last_connection_error, reauth_required_at, youtube_made_for_kids")
     .eq("user_id", userId)
     .eq("brand_profile_id", brandProfileId)
     .eq("platform", "youtube")
@@ -34630,6 +34630,7 @@ async function publishApprovedSocialPosts({
           videoUrl: post.video_url,
           title: buildYouTubeVideoTitle(post.content),
           description: buildYouTubeVideoDescription(post.content),
+          madeForKids: Boolean(youtubeConnectionForPost.youtube_made_for_kids),
         };
 
         let youtubeResult;
