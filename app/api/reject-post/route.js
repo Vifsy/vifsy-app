@@ -131,6 +131,14 @@ export async function GET(request) {
   const context = await getContext(request);
   const translator = context.translator || fallbackTranslator();
   const { t } = translator;
+  const requestUrl = new URL(request.url);
+  const decisionMode = requestUrl.searchParams.get("mode") === "reject" ? "reject" : "changes";
+  const isSv = String(translator.locale || "").toLowerCase().startsWith("sv");
+  const decisionCopy = decisionMode === "reject"
+    ? (isSv
+        ? { title: "Avvisa inlägget", intro: "Inlägget kommer inte att publiceras. Berätta kort varför du vill avvisa det.", notice: "Spreelo sparar din feedback så att teamet kan förstå beslutet.", submit: "Avvisa inlägg" }
+        : { title: "Reject this post", intro: "The post will not be published. Tell us briefly why you want to reject it.", notice: "Spreelo saves your feedback so the team can understand the decision.", submit: "Reject post" })
+    : { title: t("rejectPages.form.title"), intro: t("rejectPages.form.intro"), notice: t("rejectPages.form.notice"), submit: t("rejectPages.form.submit") };
 
   if (context.error) {
     return htmlResponse(pageShell({
@@ -156,13 +164,15 @@ export async function GET(request) {
     }), 409);
   }
 
+  const previewUrl = `/api/preview-post?token=${encodeURIComponent(context.token)}&lang=${encodeURIComponent(translator.locale)}`;
   const body = `
-    <h1>${escapeHtml(t("rejectPages.form.title"))}</h1>
-    <p>${escapeHtml(t("rejectPages.form.intro"))}</p>
-    <div class="notice">${escapeHtml(t("rejectPages.form.notice"))}</div>
+    <h1>${escapeHtml(decisionCopy.title)}</h1>
+    <p>${escapeHtml(decisionCopy.intro)}</p>
+    <div class="notice">${escapeHtml(decisionCopy.notice)}</div>
     <form method="post" action="/api/reject-post">
       <input type="hidden" name="token" value="${escapeHtml(context.token)}" />
       <input type="hidden" name="lang" value="${escapeHtml(translator.locale)}" />
+      <input type="hidden" name="decision_type" value="${escapeHtml(decisionMode)}" />
       <label>${escapeHtml(t("rejectPages.form.reasonLabel"))}
         <select name="reason_category" required>
           <option value="">${escapeHtml(t("rejectPages.form.reasonPlaceholder"))}</option>
@@ -178,12 +188,12 @@ export async function GET(request) {
         <textarea name="reason_text" required minlength="10" maxlength="3000" placeholder="${escapeHtml(t("rejectPages.form.detailsPlaceholder"))}"></textarea>
       </label>
       <div class="actions">
-        <a class="button secondary" href="${APP_URL}">${escapeHtml(t("rejectPages.form.cancel"))}</a>
-        <button class="primary" type="submit">${escapeHtml(t("rejectPages.form.submit"))}</button>
+        <a class="button secondary" href="${previewUrl}">${escapeHtml(t("rejectPages.form.cancel"))}</a>
+        <button class="primary" type="submit">${escapeHtml(decisionCopy.submit)}</button>
       </div>
     </form>`;
 
-  return htmlResponse(pageShell({ locale: translator.locale, title: t("rejectPages.form.title"), body }));
+  return htmlResponse(pageShell({ locale: translator.locale, title: decisionCopy.title, body }));
 }
 
 export async function POST(request) {
@@ -192,6 +202,8 @@ export async function POST(request) {
   const lang = String(form.get("lang") || "").trim();
   const reasonCategory = String(form.get("reason_category") || "").trim();
   const reasonText = String(form.get("reason_text") || "").trim();
+  const decisionType = String(form.get("decision_type") || "changes").trim() === "reject" ? "reject" : "changes";
+  const storedReasonText = decisionType === "reject" ? `[Reject post] ${reasonText}` : reasonText;
   const url = new URL(request.url);
   if (lang) url.searchParams.set("lang", lang);
   if (token) url.searchParams.set("token", token);
@@ -230,7 +242,7 @@ export async function POST(request) {
       user_id: context.post.user_id,
       brand_profile_id: context.post.brand_profile_id,
       reason_category: reasonCategory,
-      reason_text: reasonText,
+      reason_text: storedReasonText,
       contact_email: customerEmail || null,
       review_status: "new",
       refund_status: "pending_review",
@@ -272,13 +284,13 @@ export async function POST(request) {
   }).eq("post_id", context.post.id);
 
   const brandName = context.brand?.business_name || "Spreelo customer";
-  const adminHtml = `<h2>Rejected Spreelo post</h2><p><strong>Customer:</strong> ${escapeHtml(customerEmail || "Unknown")}</p><p><strong>Brand:</strong> ${escapeHtml(brandName)}</p><p><strong>Post:</strong> ${escapeHtml(context.post.post_type || "Post")}</p><p><strong>Category:</strong> ${escapeHtml(reasonCategory)}</p><p><strong>Feedback:</strong></p><p>${escapeHtml(reasonText).replace(/\n/g, "<br>")}</p><p>Review this item in the Spreelo admin approval inbox.</p>`;
+  const adminHtml = `<h2>Rejected Spreelo post</h2><p><strong>Customer:</strong> ${escapeHtml(customerEmail || "Unknown")}</p><p><strong>Brand:</strong> ${escapeHtml(brandName)}</p><p><strong>Post:</strong> ${escapeHtml(context.post.post_type || "Post")}</p><p><strong>Category:</strong> ${escapeHtml(reasonCategory)}</p><p><strong>Decision:</strong> ${escapeHtml(decisionType)}</p><p><strong>Feedback:</strong></p><p>${escapeHtml(storedReasonText).replace(/\n/g, "<br>")}</p><p>Review this item in the Spreelo admin approval inbox.</p>`;
   try {
     await sendResendEmail({
       to: CONTACT_EMAIL,
       subject: `Rejected Spreelo post · ${brandName}`,
       html: adminHtml,
-      text: `Rejected Spreelo post\nCustomer: ${customerEmail}\nBrand: ${brandName}\nCategory: ${reasonCategory}\n\n${reasonText}`,
+      text: `Rejected Spreelo post\nCustomer: ${customerEmail}\nBrand: ${brandName}\nCategory: ${reasonCategory}\nDecision: ${decisionType}\n\n${storedReasonText}`,
     });
     if (customerEmail) {
       await sendResendEmail({

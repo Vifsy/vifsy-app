@@ -106,7 +106,8 @@
     "test:v143.96": "node scripts/test-v143-96-admin-review-delivery-product-links.mjs",
     "test:v143.97": "node scripts/test-v143-97-complete-admin-repair-flow.mjs",
     "test:v143.97b": "node scripts/test-v143-97b-global-srcset-parser.mjs",
-    "test:v143.98": "node scripts/test-v143-98-youtube-shorts.mjs"
+    "test:v143.98": "node scripts/test-v143-98-youtube-shorts.mjs",
+    "test:v143.100": "node scripts/test-v143-100-approval-video-preview.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

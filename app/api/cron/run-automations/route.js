@@ -10385,9 +10385,12 @@ function buildApprovalEmailHtml({
   postContent,
   approveUrl,
   rejectUrl,
+  previewUrl = "",
+  previewPosterUrl = "",
   imageUrl,
   carouselSlides = [],
   isCarouselDraft = false,
+  isAnimatedPreview = false,
   nextRule = null,
   upcomingPlanUrl = "",
 }) {
@@ -10399,6 +10402,13 @@ function buildApprovalEmailHtml({
   const buttonKey = isCarouselDraft ? "emails.approval.button" : "emails.approval.button";
   const afterKey = isCarouselDraft ? "emails.approval.carouselAfterApprovalV2" : "emails.approval.afterApproval";
   const carouselPreviewHtml = isCarouselDraft ? buildCarouselEmailPreviewHtml(carouselSlides) : "";
+  const previewCopy = String(locale || "").toLowerCase().startsWith("sv")
+    ? { cta: "Förhandsgranska & godkänn", hint: "Se animationen innan du godkänner" }
+    : { cta: "Preview & approve", hint: "Watch the animation before you approve" };
+  const safePreviewUrl = previewUrl ? escapeHtml(previewUrl) : "";
+  const safePreviewPosterUrl = previewPosterUrl ? escapeHtml(previewPosterUrl) : safeImageUrl;
+  const primaryActionUrl = isAnimatedPreview && safePreviewUrl ? safePreviewUrl : approveUrl;
+  const primaryActionLabel = isAnimatedPreview ? previewCopy.cta : t(buttonKey);
   const planContextHtml = buildApprovalPlanContextHtml({
     locale,
     t,
@@ -10457,11 +10467,13 @@ function buildApprovalEmailHtml({
                 ? `
             <tr>
               <td style="padding:0 28px 20px;">
+                ${isAnimatedPreview && safePreviewUrl ? `<a href="${safePreviewUrl}" style="display:block;text-decoration:none;">` : ""}
                 <img
-                  src="${safeImageUrl}"
+                  src="${isAnimatedPreview && safePreviewPosterUrl ? safePreviewPosterUrl : safeImageUrl}"
                   alt="${escapeHtml(t("emails.approval.imageAlt"))}"
                   style="display:block;width:100%;max-width:584px;border-radius:14px;border:1px solid #e5e7eb;"
                 />
+                ${isAnimatedPreview && safePreviewUrl ? `</a><p style="margin:10px 0 0;text-align:center;color:#4b5563;font-size:13px;font-weight:700;">▶ ${escapeHtml(previewCopy.hint)}</p>` : ""}
               </td>
             </tr>
             `
@@ -10491,8 +10503,8 @@ function buildApprovalEmailHtml({
                 <table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 auto;">
                   <tr>
                     <td style="padding:4px;">
-                      <a href="${approveUrl}" style="display:inline-block;background:#0b1724;color:#ffffff;text-decoration:none;font-weight:700;padding:14px 22px;border-radius:11px;">
-                        ${escapeHtml(t(buttonKey))}
+                      <a href="${primaryActionUrl}" style="display:inline-block;background:#0b1724;color:#ffffff;text-decoration:none;font-weight:700;padding:14px 22px;border-radius:11px;">
+                        ${escapeHtml(primaryActionLabel)}
                       </a>
                     </td>
                   </tr>
@@ -10529,8 +10541,10 @@ function buildApprovalEmailText({
   postContent,
   approveUrl,
   rejectUrl,
+  previewUrl = "",
   imageUrl,
   isCarouselDraft = false,
+  isAnimatedPreview = false,
   nextRule = null,
   upcomingPlanUrl = "",
 }) {
@@ -10540,6 +10554,10 @@ function buildApprovalEmailText({
   const textActionKey = isCarouselDraft ? "emails.approval.textApprovePost" : "emails.approval.textApprovePost";
   const afterKey = isCarouselDraft ? "emails.approval.carouselAfterApprovalV2" : "emails.approval.afterApproval";
   const context = buildApprovalPlanContext({ locale, t, rule, nextRule });
+  const previewText = String(locale || "").toLowerCase().startsWith("sv")
+    ? "Förhandsgranska animationen och godkänn:"
+    : "Preview the animation and approve:";
+  const primaryTextUrl = isAnimatedPreview && previewUrl ? previewUrl : approveUrl;
 
   return `
 ${t(textTitleKey)}
@@ -10556,8 +10574,8 @@ ${imageUrl ? `${t("emails.approval.textImage", { imageUrl })}
 ` : ""}${t("emails.approval.textGeneratedPost")}
 ${postContent}
 
-${t(textActionKey)}
-${approveUrl}
+${isAnimatedPreview ? previewText : t(textActionKey)}
+${primaryTextUrl}
 
 ${t("emails.approval.textRejectPost")}
 ${rejectUrl}
@@ -32580,8 +32598,17 @@ export async function sendApprovalEmail({
   });
   const normalizedContentFormat = normalizeContentFormat(contentFormat || rule?.content_format);
   const isCarouselDraft = normalizedContentFormat === "carousel";
-  const approveUrl = `${APP_URL}/api/approve-post?token=${approvalToken}&lang=${locale}`;
-  const rejectUrl = `${APP_URL}/api/reject-post?token=${approvalToken}&lang=${locale}`;
+  const isAnimatedPreview = normalizedContentFormat === "animated_video";
+  const encodedApprovalToken = encodeURIComponent(approvalToken);
+  const encodedLocale = encodeURIComponent(locale);
+  const approveUrl = `${APP_URL}/api/approve-post?token=${encodedApprovalToken}&lang=${encodedLocale}`;
+  const rejectUrl = `${APP_URL}/api/reject-post?token=${encodedApprovalToken}&lang=${encodedLocale}`;
+  const previewUrl = isAnimatedPreview
+    ? `${APP_URL}/api/preview-post?token=${encodedApprovalToken}&lang=${encodedLocale}`
+    : "";
+  const previewPosterUrl = isAnimatedPreview
+    ? `${APP_URL}/api/preview-poster?token=${encodedApprovalToken}`
+    : "";
 
   const nextRule = await getNextRuleInPlan({ supabase, rule });
   const upcomingPlanUrl = await getUpcomingPlanUrlForFinalWeeklyRule({
@@ -32624,9 +32651,12 @@ export async function sendApprovalEmail({
         postContent,
         approveUrl,
         rejectUrl,
+        previewUrl,
+        previewPosterUrl,
         imageUrl,
         carouselSlides,
         isCarouselDraft,
+        isAnimatedPreview,
         nextRule,
         upcomingPlanUrl,
       }),
@@ -32637,9 +32667,11 @@ export async function sendApprovalEmail({
         postContent,
         approveUrl,
         rejectUrl,
+        previewUrl,
         imageUrl,
         carouselSlides,
         isCarouselDraft,
+        isAnimatedPreview,
         nextRule,
         upcomingPlanUrl,
       }),
