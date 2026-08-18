@@ -10385,12 +10385,9 @@ function buildApprovalEmailHtml({
   postContent,
   approveUrl,
   rejectUrl,
-  previewUrl = "",
-  previewPosterUrl = "",
   imageUrl,
   carouselSlides = [],
   isCarouselDraft = false,
-  isAnimatedPreview = false,
   nextRule = null,
   upcomingPlanUrl = "",
 }) {
@@ -10402,13 +10399,6 @@ function buildApprovalEmailHtml({
   const buttonKey = isCarouselDraft ? "emails.approval.button" : "emails.approval.button";
   const afterKey = isCarouselDraft ? "emails.approval.carouselAfterApprovalV2" : "emails.approval.afterApproval";
   const carouselPreviewHtml = isCarouselDraft ? buildCarouselEmailPreviewHtml(carouselSlides) : "";
-  const previewCopy = String(locale || "").toLowerCase().startsWith("sv")
-    ? { cta: "Förhandsgranska & godkänn", hint: "Se animationen innan du godkänner" }
-    : { cta: "Preview & approve", hint: "Watch the animation before you approve" };
-  const safePreviewUrl = previewUrl ? escapeHtml(previewUrl) : "";
-  const safePreviewPosterUrl = previewPosterUrl ? escapeHtml(previewPosterUrl) : safeImageUrl;
-  const primaryActionUrl = isAnimatedPreview && safePreviewUrl ? safePreviewUrl : approveUrl;
-  const primaryActionLabel = isAnimatedPreview ? previewCopy.cta : t(buttonKey);
   const planContextHtml = buildApprovalPlanContextHtml({
     locale,
     t,
@@ -10467,13 +10457,11 @@ function buildApprovalEmailHtml({
                 ? `
             <tr>
               <td style="padding:0 28px 20px;">
-                ${isAnimatedPreview && safePreviewUrl ? `<a href="${safePreviewUrl}" style="display:block;text-decoration:none;">` : ""}
                 <img
-                  src="${isAnimatedPreview && safePreviewPosterUrl ? safePreviewPosterUrl : safeImageUrl}"
+                  src="${safeImageUrl}"
                   alt="${escapeHtml(t("emails.approval.imageAlt"))}"
                   style="display:block;width:100%;max-width:584px;border-radius:14px;border:1px solid #e5e7eb;"
                 />
-                ${isAnimatedPreview && safePreviewUrl ? `</a><p style="margin:10px 0 0;text-align:center;color:#4b5563;font-size:13px;font-weight:700;">▶ ${escapeHtml(previewCopy.hint)}</p>` : ""}
               </td>
             </tr>
             `
@@ -10503,8 +10491,8 @@ function buildApprovalEmailHtml({
                 <table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 auto;">
                   <tr>
                     <td style="padding:4px;">
-                      <a href="${primaryActionUrl}" style="display:inline-block;background:#0b1724;color:#ffffff;text-decoration:none;font-weight:700;padding:14px 22px;border-radius:11px;">
-                        ${escapeHtml(primaryActionLabel)}
+                      <a href="${approveUrl}" style="display:inline-block;background:#0b1724;color:#ffffff;text-decoration:none;font-weight:700;padding:14px 22px;border-radius:11px;">
+                        ${escapeHtml(t(buttonKey))}
                       </a>
                     </td>
                   </tr>
@@ -10541,10 +10529,8 @@ function buildApprovalEmailText({
   postContent,
   approveUrl,
   rejectUrl,
-  previewUrl = "",
   imageUrl,
   isCarouselDraft = false,
-  isAnimatedPreview = false,
   nextRule = null,
   upcomingPlanUrl = "",
 }) {
@@ -10554,10 +10540,6 @@ function buildApprovalEmailText({
   const textActionKey = isCarouselDraft ? "emails.approval.textApprovePost" : "emails.approval.textApprovePost";
   const afterKey = isCarouselDraft ? "emails.approval.carouselAfterApprovalV2" : "emails.approval.afterApproval";
   const context = buildApprovalPlanContext({ locale, t, rule, nextRule });
-  const previewText = String(locale || "").toLowerCase().startsWith("sv")
-    ? "Förhandsgranska animationen och godkänn:"
-    : "Preview the animation and approve:";
-  const primaryTextUrl = isAnimatedPreview && previewUrl ? previewUrl : approveUrl;
 
   return `
 ${t(textTitleKey)}
@@ -10574,8 +10556,8 @@ ${imageUrl ? `${t("emails.approval.textImage", { imageUrl })}
 ` : ""}${t("emails.approval.textGeneratedPost")}
 ${postContent}
 
-${isAnimatedPreview ? previewText : t(textActionKey)}
-${primaryTextUrl}
+${t(textActionKey)}
+${approveUrl}
 
 ${t("emails.approval.textRejectPost")}
 ${rejectUrl}
@@ -29284,61 +29266,405 @@ async function collectAnimatedProductImageCandidates(websiteItem) {
     .slice(0, 12);
 }
 
-async function selectAnimatedProductImage(websiteItem) {
-  const candidates = await collectAnimatedProductImageCandidates(websiteItem);
-  const accepted = [];
-  const rejected = [];
+async function prepareAnimatedProductSafePanel(sourceImageBuffer) {
+  // Final reliability fallback: preserve the exact verified source image inside
+  // a clean floating product card. This intentionally gives up cutout motion
+  // before it ever gives up the post.
+  const cardSize = 900;
+  const inset = 58;
+  const innerSize = cardSize - inset * 2;
+  const normalizedProductImage = await sharp(sourceImageBuffer)
+    .rotate()
+    .resize({
+      width: innerSize,
+      height: innerSize,
+      fit: "contain",
+      withoutEnlargement: true,
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
+    })
+    .extend({
+      top: 0,
+      bottom: 0,
+      left: 0,
+      right: 0,
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
+    })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  const metadata = await sharp(normalizedProductImage).metadata();
+  const imageWidth = Number(metadata.width || innerSize);
+  const imageHeight = Number(metadata.height || innerSize);
+  const imageLeft = Math.round((cardSize - imageWidth) / 2);
+  const imageTop = Math.round((cardSize - imageHeight) / 2);
+  const cardSvg = Buffer.from(`
+    <svg xmlns="http://www.w3.org/2000/svg" width="${cardSize}" height="${cardSize}">
+      <rect x="8" y="8" width="${cardSize - 16}" height="${cardSize - 16}" rx="54"
+        fill="#ffffff" stroke="#dfe3e8" stroke-width="8"/>
+    </svg>
+  `);
 
-  for (const candidate of candidates.slice(0, 9)) {
-    try {
-      const sourceImageBuffer = await fetchImageBufferForOverlay(candidate.url);
-      const prepared = await prepareAnimatedProductCutout(sourceImageBuffer);
-      const metadata = await sharp(prepared.cutoutBuffer).metadata();
-      const resolutionScore = Math.min(
-        24,
-        (Number(metadata.width || 0) * Number(metadata.height || 0)) / 70000
+  const panelBuffer = await sharp({
+    create: {
+      width: cardSize,
+      height: cardSize,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
+    .composite([
+      { input: cardSvg, left: 0, top: 0 },
+      { input: normalizedProductImage, left: imageLeft, top: imageTop },
+    ])
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+
+  return {
+    cutoutBuffer: panelBuffer,
+    score: 40,
+    analysis: {
+      mode: "safe_original_panel",
+      sourcePreserved: true,
+      generatedProductPixels: false,
+    },
+  };
+}
+
+async function reviewAnimatedProductChromaIdentity({
+  openai,
+  websiteItem,
+  sourceImageBuffer,
+  generatedImageBuffer,
+}) {
+  if (!openai || !sourceImageBuffer?.length || !generatedImageBuffer?.length) {
+    return { accepted: false, reason: "identity_reviewer_unavailable" };
+  }
+
+  const productTitle = String(
+    websiteItem?.title || websiteItem?.item_title || "the verified product"
+  ).trim();
+  const sourceDataUrl = `data:image/png;base64,${sourceImageBuffer.toString("base64")}`;
+  const generatedDataUrl = `data:image/png;base64,${generatedImageBuffer.toString("base64")}`;
+
+  try {
+    const response = await openai.responses.create(
+      {
+        model: PRODUCT_RESEARCH_FAST_MODEL,
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text:
+                  `Compare two images of the exact ecommerce product named \"${productTitle}\". ` +
+                  "Image 1 is the authoritative verified retailer image. Image 2 is an AI edit whose ONLY allowed change is replacing the background with a flat technical chroma color. Ignore the background entirely. Reject Image 2 if the marketed product itself changed in product type, silhouette, number of included items, visible color/variant, logo, printed text/design, distinctive hardware, proportions or other identity-defining detail. Minor resizing, centering and lighting normalization are allowed. If uncertain, reject. Return only the requested JSON.",
+              },
+              { type: "input_text", text: "IMAGE 1 — authoritative verified source" },
+              { type: "input_image", image_url: sourceDataUrl, detail: "high" },
+              { type: "input_text", text: "IMAGE 2 — AI chroma-background edit" },
+              { type: "input_image", image_url: generatedDataUrl, detail: "high" },
+            ],
+          },
+        ],
+        max_output_tokens: 500,
+        text: {
+          format: {
+            type: "json_schema",
+            name: "animated_product_chroma_identity",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                same_product: { type: "boolean" },
+                product_type_match: { type: "boolean" },
+                visible_variant_match: { type: "boolean" },
+                logo_or_text_conflict: { type: "boolean" },
+                major_visual_change: { type: "boolean" },
+                confidence: { type: "number", minimum: 0, maximum: 1 },
+                reason: { type: "string" },
+              },
+              required: [
+                "same_product",
+                "product_type_match",
+                "visible_variant_match",
+                "logo_or_text_conflict",
+                "major_visual_change",
+                "confidence",
+                "reason",
+              ],
+            },
+          },
+        },
+      },
+      { timeout: 20_000, maxRetries: 0 }
+    );
+    const parsed = safeJsonParse(getOpenAiResponseOutputText(response));
+    const accepted = Boolean(
+      parsed?.same_product === true &&
+        parsed?.product_type_match === true &&
+        parsed?.visible_variant_match === true &&
+        parsed?.logo_or_text_conflict !== true &&
+        parsed?.major_visual_change !== true &&
+        Number(parsed?.confidence || 0) >= 0.88
+    );
+    return {
+      accepted,
+      confidence: Number(parsed?.confidence || 0),
+      reason: String(parsed?.reason || "").trim() || (accepted ? "exact_product_match" : "identity_uncertain"),
+    };
+  } catch (error) {
+    return {
+      accepted: false,
+      confidence: 0,
+      reason: `identity_review_failed: ${error?.message || String(error)}`,
+    };
+  }
+}
+
+async function chooseAnimatedProductChromaKey(sourceImageBuffer) {
+  const dominantColor = await getProductAccentColor(sourceImageBuffer);
+  const candidates = getAnimatedOverlayChromaCandidates(dominantColor);
+  const { data, info } = await sharp(sourceImageBuffer)
+    .rotate()
+    .ensureAlpha()
+    .resize({ width: 128, height: 128, fit: "inside", withoutEnlargement: false })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const ranked = candidates.map((candidate) => {
+    let nearPixels = 0;
+    let veryNearPixels = 0;
+    let visiblePixels = 0;
+    for (let index = 0; index < data.length; index += info.channels) {
+      const alpha = info.channels > 3 ? data[index + 3] : 255;
+      if (alpha < 80) continue;
+      visiblePixels += 1;
+      const distance = Math.sqrt(
+        (data[index] - candidate.rgb.r) ** 2 +
+          (data[index + 1] - candidate.rgb.g) ** 2 +
+          (data[index + 2] - candidate.rgb.b) ** 2
       );
-      accepted.push({
-        ...candidate,
+      if (distance < 78) nearPixels += 1;
+      if (distance < 42) veryNearPixels += 1;
+    }
+    const nearRatio = visiblePixels ? nearPixels / visiblePixels : 0;
+    const veryNearRatio = visiblePixels ? veryNearPixels / visiblePixels : 0;
+    return {
+      ...candidate,
+      nearRatio,
+      veryNearRatio,
+      safetyScore:
+        Number(candidate.distance || 0) - nearRatio * 900 - veryNearRatio * 2400,
+    };
+  });
+
+  ranked.sort((left, right) => right.safetyScore - left.safetyScore);
+  return ranked[0] || candidates[0];
+}
+
+async function createAnimatedProductChromaCutoutFallback({
+  openai,
+  websiteItem,
+  sourceImageBuffer,
+  ruleId = null,
+}) {
+  if (!openai) {
+    throw new Error("OpenAI is unavailable for animated product chroma fallback");
+  }
+
+  const chromaKey = await chooseAnimatedProductChromaKey(sourceImageBuffer);
+  const normalizedReference = await sharp(sourceImageBuffer)
+    .rotate()
+    .resize({
+      width: 1024,
+      height: 1024,
+      fit: "inside",
+      withoutEnlargement: true,
+    })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  const referenceFile = await toFile(
+    normalizedReference,
+    "verified-product-cutout-reference.png",
+    { type: "image/png" }
+  );
+  const productTitle = String(
+    websiteItem?.title || websiteItem?.item_title || "the supplied product"
+  ).trim();
+  const prompt = `
+Edit the supplied verified ecommerce product image for technical background removal only.
+
+Product identity:
+- Exact product: "${productTitle}".
+- Preserve the product itself exactly as shown in the source image.
+- Do not redesign, redraw, restyle, recolor, retouch, beautify or reinterpret the product.
+- Preserve its exact visible silhouette, proportions, number of pieces/items, color/variant, logos, printed words, graphics, stitching, hardware and other identifying details.
+- Do not invent any hidden side, underside or product detail that is not visible in the source.
+- Do not add a person, hand, prop, packaging, shadow, reflection, pedestal or second product.
+
+Technical output:
+- Remove only the original photographic/background environment around the product.
+- Center the unchanged visible product with comfortable space on all sides. Do not crop it.
+- Fill every background pixel edge-to-edge with the exact flat technical chroma color ${chromaKey.name} ${chromaKey.hex}.
+- The chroma background must be perfectly uniform: no gradient, texture, vignette, noise, light falloff or shadow.
+- Do not use ${chromaKey.forbidden} on or around the product unless that color already exists on the real source product and is essential to its exact identity.
+- Output a clean square product reference only. No text outside the real product, no border and no watermark.
+`.trim();
+
+  const response = await openai.images.edit(
+    {
+      model: IMAGE_MODEL,
+      image: referenceFile,
+      prompt,
+      size: "1024x1024",
+      quality: "medium",
+      background: "opaque",
+      output_format: "png",
+    },
+    { timeout: 55_000, maxRetries: 0 }
+  );
+  const imageBase64 = response?.data?.[0]?.b64_json;
+  if (!imageBase64) {
+    throw new Error("OpenAI animated product chroma fallback returned empty image data");
+  }
+
+  const generatedImageBuffer = Buffer.from(imageBase64, "base64");
+  const prepared = await prepareAnimatedProductCutout(generatedImageBuffer);
+  const identity = await reviewAnimatedProductChromaIdentity({
+    openai,
+    websiteItem,
+    sourceImageBuffer: normalizedReference,
+    generatedImageBuffer,
+  });
+  if (!identity.accepted) {
+    throw new Error(
+      `AI chroma product identity was not trusted (${identity.reason || "identity mismatch"})`
+    );
+  }
+
+  console.info("Animated product AI chroma fallback accepted", {
+    ruleId,
+    productUrl: websiteItem?.url || null,
+    productTitle: websiteItem?.title || null,
+    chromaKey: chromaKey.hex,
+    identityConfidence: identity.confidence,
+    identityReason: identity.reason,
+    cutoutAnalysis: prepared.analysis,
+  });
+
+  return {
+    cutoutBuffer: prepared.cutoutBuffer,
+    score: 190 + Number(prepared.score || 0) * 0.05,
+    analysis: {
+      mode: "ai_chroma_cutout",
+      chromaKey: chromaKey.hex,
+      identityConfidence: identity.confidence,
+      identityReason: identity.reason,
+      cutout: prepared.analysis,
+    },
+  };
+}
+
+async function selectAnimatedProductImage(
+  websiteItem,
+  { openai = null, ruleId = null } = {}
+) {
+  const normalizedImageUrl = normalizeShopifyImageWidthUrl(
+    websiteItem?.image_url,
+    1600
+  );
+  const authoritativeImageUrl = resolveUrl(
+    normalizedImageUrl,
+    websiteItem?.url || normalizedImageUrl
+  );
+
+  if (
+    !authoritativeImageUrl ||
+    !isHttpUrl(authoritativeImageUrl) ||
+    isBadProductImageUrl(authoritativeImageUrl)
+  ) {
+    throw new Error("The verified product image URL was unavailable for the animated Reel");
+  }
+
+  const sourceImageBuffer = await fetchImageBufferForOverlay(authoritativeImageUrl);
+  let prepared = null;
+  let localCutoutError = null;
+  let aiCutoutError = null;
+
+  try {
+    prepared = await prepareAnimatedProductCutout(sourceImageBuffer);
+  } catch (error) {
+    localCutoutError = error;
+    console.info("Animated product local cutout unavailable; trying one bounded AI fallback", {
+      ruleId,
+      productUrl: websiteItem?.url || null,
+      productTitle: websiteItem?.title || null,
+      imageUrl: authoritativeImageUrl,
+      message: error?.message || String(error),
+    });
+  }
+
+  if (!prepared && openai) {
+    try {
+      prepared = await createAnimatedProductChromaCutoutFallback({
+        openai,
+        websiteItem,
         sourceImageBuffer,
-        cutoutBuffer: prepared.cutoutBuffer,
-        analysis: prepared.analysis,
-        score: Number(candidate.identityScore || 0) + Number(prepared.score || 0) + resolutionScore,
+        ruleId,
       });
     } catch (error) {
-      rejected.push({
-        url: candidate.url,
-        source: candidate.source,
-        message: error?.message,
+      aiCutoutError = error;
+      console.info("Animated product AI cutout fallback unavailable; preserving original in safe panel", {
+        ruleId,
+        productUrl: websiteItem?.url || null,
+        productTitle: websiteItem?.title || null,
+        imageUrl: authoritativeImageUrl,
+        message: error?.message || String(error),
       });
     }
   }
 
-  accepted.sort((left, right) => right.score - left.score);
-  const selected = accepted[0];
-  if (!selected) {
-    console.warn("Animated product image candidates rejected", {
-      productUrl: websiteItem?.url || null,
-      rejected: rejected.slice(0, 8),
-    });
-    throw new Error(
-      "No clean product image with a removable or transparent background was available for this animated Reel"
-    );
+  if (!prepared) {
+    prepared = await prepareAnimatedProductSafePanel(sourceImageBuffer);
+    prepared.analysis = {
+      ...prepared.analysis,
+      localCutoutFailure: localCutoutError?.message || null,
+      aiCutoutFailure: aiCutoutError?.message || (openai ? null : "openai_unavailable"),
+    };
   }
 
+  const metadata = await sharp(prepared.cutoutBuffer).metadata();
+  const resolutionScore = Math.min(
+    24,
+    (Number(metadata.width || 0) * Number(metadata.height || 0)) / 70000
+  );
+  const selected = {
+    url: authoritativeImageUrl,
+    source: "selected_product_image",
+    identityScore: 120,
+    sourceImageBuffer,
+    cutoutBuffer: prepared.cutoutBuffer,
+    analysis: prepared.analysis,
+    score: 120 + Number(prepared.score || 0) + resolutionScore,
+  };
+
   console.log("Animated product image selected", {
+    ruleId,
     productUrl: websiteItem?.url || null,
     imageUrl: selected.url,
     source: selected.source,
     score: Number(selected.score.toFixed(2)),
     analysis: selected.analysis,
-    rejectedCount: rejected.length,
+    deliverySafeFallback: selected.analysis?.mode === "safe_original_panel",
   });
 
   return selected;
 }
 
 async function prepareAnimatedReelProductCandidates({
+  openai = null,
+  ruleId = null,
   primaryItem,
   reserveItems = [],
   sourceUrl = "",
@@ -29371,11 +29697,15 @@ async function prepareAnimatedReelProductCandidates({
     if (familyKey) seenFamilies.add(familyKey);
 
     try {
-      const imageSelection = await selectAnimatedProductImage(item);
+      const imageSelection = await selectAnimatedProductImage(item, { openai, ruleId });
       candidates.push({
         item: { ...rawItem, ...item, product_family_key: familyKey || null },
         imageSelection,
       });
+      // The image selector now has its own local -> AI -> exact-source-panel
+      // delivery chain. Once one verified product is prepared, do not spend
+      // time or money preparing reserve products that will never be rendered.
+      break;
     } catch (error) {
       rejected.push({
         item: { ...rawItem, ...item, product_family_key: familyKey || null },
@@ -30971,7 +31301,10 @@ async function createAnimatedProductVideoAssets({
 
   const selectedProductImage =
     rule?.animated_product_image_selection ||
-    (await selectAnimatedProductImage(websiteItem));
+    (await selectAnimatedProductImage(websiteItem, {
+      openai,
+      ruleId: rule?.id || null,
+    }));
   const sourceImageBuffer = selectedProductImage.sourceImageBuffer;
   const dominantColor = await getProductAccentColor(selectedProductImage.cutoutBuffer);
   const selection = await selectAnimatedVideoBackground({
@@ -31083,6 +31416,7 @@ async function createAnimatedProductVideoAssets({
       used_fallback: selection.usedFallback,
       reasons: selection.reasons,
       top_candidates: selection.topCandidates,
+      product_image_presentation: selectedProductImage.analysis || null,
     },
   };
 }
@@ -32598,17 +32932,8 @@ export async function sendApprovalEmail({
   });
   const normalizedContentFormat = normalizeContentFormat(contentFormat || rule?.content_format);
   const isCarouselDraft = normalizedContentFormat === "carousel";
-  const isAnimatedPreview = normalizedContentFormat === "animated_video";
-  const encodedApprovalToken = encodeURIComponent(approvalToken);
-  const encodedLocale = encodeURIComponent(locale);
-  const approveUrl = `${APP_URL}/api/approve-post?token=${encodedApprovalToken}&lang=${encodedLocale}`;
-  const rejectUrl = `${APP_URL}/api/reject-post?token=${encodedApprovalToken}&lang=${encodedLocale}`;
-  const previewUrl = isAnimatedPreview
-    ? `${APP_URL}/api/preview-post?token=${encodedApprovalToken}&lang=${encodedLocale}`
-    : "";
-  const previewPosterUrl = isAnimatedPreview
-    ? `${APP_URL}/api/preview-poster?token=${encodedApprovalToken}`
-    : "";
+  const approveUrl = `${APP_URL}/api/approve-post?token=${approvalToken}&lang=${locale}`;
+  const rejectUrl = `${APP_URL}/api/reject-post?token=${approvalToken}&lang=${locale}`;
 
   const nextRule = await getNextRuleInPlan({ supabase, rule });
   const upcomingPlanUrl = await getUpcomingPlanUrlForFinalWeeklyRule({
@@ -32651,12 +32976,9 @@ export async function sendApprovalEmail({
         postContent,
         approveUrl,
         rejectUrl,
-        previewUrl,
-        previewPosterUrl,
         imageUrl,
         carouselSlides,
         isCarouselDraft,
-        isAnimatedPreview,
         nextRule,
         upcomingPlanUrl,
       }),
@@ -32667,11 +32989,9 @@ export async function sendApprovalEmail({
         postContent,
         approveUrl,
         rejectUrl,
-        previewUrl,
         imageUrl,
         carouselSlides,
         isCarouselDraft,
-        isAnimatedPreview,
         nextRule,
         upcomingPlanUrl,
       }),
@@ -34141,7 +34461,7 @@ async function getYouTubeConnectionForBrand({
 
   const { data, error } = await supabase
     .from("social_connections")
-    .select("id, page_id, page_name, page_access_token, refresh_token, status, token_expires_at, last_connection_error, reauth_required_at, youtube_made_for_kids")
+    .select("id, page_id, page_name, page_access_token, refresh_token, status, token_expires_at, last_connection_error, reauth_required_at")
     .eq("user_id", userId)
     .eq("brand_profile_id", brandProfileId)
     .eq("platform", "youtube")
@@ -34630,7 +34950,6 @@ async function publishApprovedSocialPosts({
           videoUrl: post.video_url,
           title: buildYouTubeVideoTitle(post.content),
           description: buildYouTubeVideoDescription(post.content),
-          madeForKids: Boolean(youtubeConnectionForPost.youtube_made_for_kids),
         };
 
         let youtubeResult;
@@ -36263,6 +36582,8 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
 
         if (isAnimatedVideoRule(websitePreparedRule || rule)) {
           const preparedAnimatedCandidates = await prepareAnimatedReelProductCandidates({
+            openai,
+            ruleId: rule.id,
             primaryItem: websiteItem,
             reserveItems: websiteReserveItems,
             sourceUrl: websiteSourceUrl || brandProfile?.website_url || rule.website_url || "",

@@ -567,17 +567,3 @@ export async function GET(request) {
     });
   }
 }
-
-export async function POST(request) {
-  const form = await request.formData();
-  const token = String(form.get("token") || "").trim();
-  const lang = String(form.get("lang") || "").trim();
-  const url = new URL(request.url);
-  if (token) url.searchParams.set("token", token);
-  if (lang) url.searchParams.set("lang", lang);
-  const syntheticRequest = new Request(url, {
-    method: "GET",
-    headers: request.headers,
-  });
-  return GET(syntheticRequest);
-}

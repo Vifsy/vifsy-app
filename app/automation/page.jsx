@@ -56,7 +56,6 @@ import {
 } from "lucide-react";
 import AppLayout from "../../components/AppLayout";
 import PlanLimitModal from "../../components/PlanLimitModal";
-import InlineSocialConnectModal from "../../components/InlineSocialConnectModal";
 import { supabase } from "../../lib/supabaseClient";
 import { useUiText } from "../../lib/i18n/useUiText";
 import { normalizeSingleContentLanguage } from "../../lib/contentLanguage";
@@ -6141,7 +6140,6 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
   const [showVariationInfoModal, setShowVariationInfoModal] = useState(false);
   const [showRecommendationInfoModal, setShowRecommendationInfoModal] = useState(false);
   const [showSocialChannelRequiredModal, setShowSocialChannelRequiredModal] = useState(false);
-  const [showInlineSocialConnectModal, setShowInlineSocialConnectModal] = useState(false);
   const formatStripRef = useRef(null);
   const autoPlanRequestIdRef = useRef(0);
   const formatDragRef = useRef({
@@ -7735,7 +7733,7 @@ async function loadConnectedPlatformsForBrand(userId, brandProfileId) {
   if (!userId || !brandProfileId) {
     setConnectedPlatforms([]);
     setPlatform("");
-    return [];
+    return;
   }
 
   setLoadingConnectedPlatforms(true);
@@ -7752,7 +7750,7 @@ async function loadConnectedPlatformsForBrand(userId, brandProfileId) {
     setConnectedPlatforms([]);
     setPlatform("");
     setLoadingConnectedPlatforms(false);
-    return [];
+    return;
   }
 
   const uniquePlatforms = Array.from(
@@ -7786,27 +7784,6 @@ async function loadConnectedPlatformsForBrand(userId, brandProfileId) {
   });
 
   setLoadingConnectedPlatforms(false);
-  return platformOptions;
-}
-
-async function handleInlineSocialChannelConnected(platformKey) {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user?.id || !currentBrandId) {
-    throw new Error(t("automation.inlineChannel.refreshError"));
-  }
-
-  const refreshedOptions = await loadConnectedPlatformsForBrand(user.id, currentBrandId);
-  const normalizedPlatformKey = normalizePlatformKey(platformKey);
-  const connectedOption = refreshedOptions.find((item) => item.value === normalizedPlatformKey);
-
-  if (!connectedOption) {
-    throw new Error(t("automation.inlineChannel.refreshError"));
-  }
-
-  setPlatform(formatPlatformSelectionFromKeys([normalizedPlatformKey], refreshedOptions));
-  setPlatformDropdownOpen(false);
-  setShowInlineSocialConnectModal(false);
-  setShowSocialChannelRequiredModal(false);
 }
 
 async function loadRules() {
@@ -10443,13 +10420,9 @@ function blockFormatCardClickAfterDrag(event) {
                         ) : null}
                       </div>
                     ) : (
-                      <button
-                        type="button"
-                        className="plan-v73-connect-platform"
-                        onClick={() => setShowInlineSocialConnectModal(true)}
-                      >
+                      <a className="plan-v73-connect-platform" href="/social-channels">
                         {t("automation.connectSocialChannelFirst")}
-                      </button>
+                      </a>
                     )}
                   </div>
                 </div>
@@ -11130,15 +11103,7 @@ function blockFormatCardClickAfterDrag(event) {
                               </div>
                             ) : null}
                           </div>
-                        ) : (
-                          <button
-                            type="button"
-                            className="inline-connect-channel-trigger"
-                            onClick={() => setShowInlineSocialConnectModal(true)}
-                          >
-                            {t("automation.connectSocialChannelFirst")}
-                          </button>
-                        )}
+                        ) : <a href="/social-channels">{t("automation.connectSocialChannelFirst")}</a>}
                       </div>
                       <label className="campaign-v14395-control campaign-v14395-language">
                         <span>{t("automation.redesign.postLanguage")}</span>
@@ -12368,13 +12333,9 @@ function blockFormatCardClickAfterDrag(event) {
         <strong>{t("automation.connectSocialChannelFirst")}</strong>
         <p>{t("automation.connectSocialChannelFirstText")}</p>
 
-        <button
-          type="button"
-          className="planner-connect-first-link"
-          onClick={() => setShowInlineSocialConnectModal(true)}
-        >
-          {t("automation.inlineChannel.openButton")}
-        </button>
+        <a href="/social-channels" className="planner-connect-first-link">
+          {t("automation.goToSocialChannels")}
+        </a>
       </div>
     </div>
   )}
@@ -12815,15 +12776,6 @@ function blockFormatCardClickAfterDrag(event) {
           </div>
         )}
 
-        <InlineSocialConnectModal
-          open={showInlineSocialConnectModal}
-          brandProfileId={currentBrandId}
-          brandName={currentBrandProfile?.business_name || ""}
-          connectedPlatforms={connectedPlatforms}
-          onClose={() => setShowInlineSocialConnectModal(false)}
-          onConnected={handleInlineSocialChannelConnected}
-        />
-
         {showSocialChannelRequiredModal ? (
           <div className="plan-v83-modal-backdrop" onClick={() => setShowSocialChannelRequiredModal(false)}>
             <section
@@ -12855,16 +12807,9 @@ function blockFormatCardClickAfterDrag(event) {
                 <button type="button" onClick={() => setShowSocialChannelRequiredModal(false)}>
                   {t("automation.channelRequired.cancel")}
                 </button>
-                <button
-                  type="button"
-                  className="primary"
-                  onClick={() => {
-                    setShowSocialChannelRequiredModal(false);
-                    setShowInlineSocialConnectModal(true);
-                  }}
-                >
-                  {t("automation.inlineChannel.openButton")}
-                </button>
+                <a href="/social-channels">
+                  {t("automation.channelRequired.setup")}
+                </a>
               </div>
             </section>
           </div>
