@@ -28,6 +28,15 @@ import {
   uploadVideoToYouTube,
 } from "../../../../lib/youtubeOAuth.js";
 import {
+  createTikTokMediaProxyUrl,
+  fetchTikTokCreatorInfo,
+  fetchTikTokPostStatus,
+  getHealthyTikTokAccessToken,
+  getTikTokEnv,
+  initTikTokPhotoPost,
+  initTikTokVideoPost,
+} from "../../../../lib/tiktokOAuth.js";
+import {
   buildProductPushEdit,
   queueShotstackRender,
   waitForShotstackRender,
@@ -10099,6 +10108,12 @@ function createEmptySummary() {
     threads_published: 0,
     threads_publish_failed: 0,
     threads_publish_skipped_no_config: 0,
+    tiktok_publish_checked: 0,
+    tiktok_published: 0,
+    tiktok_publish_pending: 0,
+    tiktok_publish_failed: 0,
+    tiktok_publish_skipped_no_config: 0,
+    tiktok_publish_skipped_no_media: 0,
     youtube_publish_checked: 0,
     youtube_published: 0,
     youtube_publish_failed: 0,
@@ -33443,6 +33458,10 @@ function getPublishTargets(platformValue) {
     targets.push("threads");
   }
 
+  if (normalized.includes("tiktok") || normalized.includes("tik tok")) {
+    targets.push("tiktok");
+  }
+
   if (normalized.includes("youtube")) {
     targets.push("youtube");
   }
@@ -34740,6 +34759,339 @@ async function getYouTubeConnectionForBrand({
   return data || null;
 }
 
+
+async function getTikTokConnectionForBrand({ supabase, userId, brandProfileId }) {
+  if (!userId || !brandProfileId) return null;
+  const { data, error } = await supabase
+    .from("social_connections")
+    .select("id, page_id, page_name, page_access_token, refresh_token, refresh_token_expires_at, status, token_expires_at, last_connection_error, reauth_required_at")
+    .eq("user_id", userId)
+    .eq("brand_profile_id", brandProfileId)
+    .eq("platform", "tiktok")
+    .eq("status", "connected")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.error("Could not load TikTok connection for brand", { userId, brandProfileId, message: error.message });
+    return null;
+  }
+  return data || null;
+}
+
+function getTikTokPublishSettings(post) {
+  const settings = post?.platform_publish_settings?.tiktok;
+  return settings && typeof settings === "object" ? settings : null;
+}
+
+function normalizeTikTokPostInfo(settings, creatorInfo, { isVideo }) {
+  if (!settings?.explicit_consent) {
+    throw new Error("TikTok publishing choices are missing. The customer must approve the TikTok post before publishing.");
+  }
+  const privacyLevel = String(settings.privacy_level || "").trim();
+  const allowedPrivacy = Array.isArray(creatorInfo?.privacy_level_options)
+    ? creatorInfo.privacy_level_options
+    : [];
+  if (!privacyLevel || !allowedPrivacy.includes(privacyLevel)) {
+    throw new Error("The approved TikTok privacy choice is no longer available. Ask the customer to approve the TikTok post again.");
+  }
+  const { publicPostingReady, allowPrivateTesting } = getTikTokEnv();
+  if (!publicPostingReady) {
+    if (!allowPrivateTesting) {
+      const error = new Error("TikTok public Direct Post publishing is not enabled. Complete TikTok audit before customer publishing.");
+      error.tiktokAuditRequired = true;
+      throw error;
+    }
+    if (privacyLevel !== "SELF_ONLY") {
+      const error = new Error("TikTok test mode can only publish SELF_ONLY until the TikTok API client passes audit.");
+      error.tiktokAuditRequired = true;
+      throw error;
+    }
+  }
+
+  const common = {
+    privacy_level: privacyLevel,
+    disable_comment: creatorInfo?.comment_disabled ? true : Boolean(settings.disable_comment),
+    brand_content_toggle: Boolean(settings.brand_content_toggle),
+    brand_organic_toggle: Boolean(settings.brand_organic_toggle),
+  };
+
+  if (common.brand_content_toggle && privacyLevel === "SELF_ONLY") {
+    throw new Error("TikTok Branded Content cannot be published with private visibility.");
+  }
+
+  if (!isVideo) return common;
+  return {
+    ...common,
+    title: Array.from(String(settings.title || "")).slice(0, 2200).join(""),
+    disable_duet: creatorInfo?.duet_disabled ? true : Boolean(settings.disable_duet),
+    disable_stitch: creatorInfo?.stitch_disabled ? true : Boolean(settings.disable_stitch),
+    is_aigc: settings.is_aigc !== false,
+  };
+}
+
+async function persistTikTokProcessingReceipt({ supabase, postId, publishReceipts, receipt, nowIso }) {
+  publishReceipts.tiktok = receipt;
+  const { error } = await supabase
+    .from("posts")
+    .update({ publish_receipts: publishReceipts, updated_at: nowIso })
+    .eq("id", postId);
+  if (error) throw error;
+}
+
+function createTikTokStatusError(statusData) {
+  const error = new Error(
+    statusData?.fail_reason
+      ? `TikTok publishing failed: ${statusData.fail_reason}`
+      : `TikTok publishing is still processing (${statusData?.status || "unknown"})`
+  );
+  if (statusData?.status === "FAILED") {
+    const retryablePullFailure = ["internal", "video_pull_failed", "photo_pull_failed"].includes(
+      String(statusData?.fail_reason || "")
+    );
+    if (retryablePullFailure) {
+      error.tiktokRetryableFailure = true;
+      error.transient = true;
+    } else {
+      error.tiktokFinalFailure = true;
+    }
+    if (statusData?.fail_reason === "auth_removed") error.requiresReconnect = true;
+  } else {
+    error.tiktokProcessing = true;
+    error.transient = true;
+  }
+  return error;
+}
+
+function ensureTikTokPublicModerationComplete(statusData, privacyLevel) {
+  if (privacyLevel !== "PUBLIC_TO_EVERYONE") return;
+  const publicIds = Array.isArray(statusData?.publicaly_available_post_id)
+    ? statusData.publicaly_available_post_id.filter(Boolean)
+    : [];
+  if (publicIds.length > 0) return;
+  const error = new Error("TikTok accepted the public post, but it is still waiting for public moderation availability");
+  error.tiktokProcessing = true;
+  error.transient = true;
+  error.tiktokAwaitingPublic = true;
+  throw error;
+}
+
+async function reconcileTikTokPublish({ accessToken, publishId, privacyLevel }) {
+  const statusData = await fetchTikTokPostStatus(accessToken, publishId);
+  if (statusData?.status === "PUBLISH_COMPLETE") {
+    try {
+      ensureTikTokPublicModerationComplete(statusData, privacyLevel);
+      return { statusData, pending: false, awaitingPublic: false };
+    } catch (error) {
+      if (!error?.tiktokAwaitingPublic) throw error;
+      return { statusData, pending: true, awaitingPublic: true };
+    }
+  }
+  if (statusData?.status === "FAILED") throw createTikTokStatusError(statusData);
+  return { statusData, pending: true, awaitingPublic: false };
+}
+
+async function startOrReconcileTikTokPublish({
+  supabase,
+  post,
+  connection,
+  publishReceipts,
+  nowIso,
+}) {
+  const healthy = await getHealthyTikTokAccessToken({ supabase, connection });
+  const accessToken = healthy.accessToken;
+  const creatorInfo = await fetchTikTokCreatorInfo(accessToken);
+  const settings = getTikTokPublishSettings(post);
+  const normalizedFormat = normalizeContentFormat(post.content_format);
+  const isVideo = normalizedFormat === "animated_video";
+  const postInfo = normalizeTikTokPostInfo(settings, creatorInfo, { isVideo });
+
+  const existingReceipt = publishReceipts?.tiktok;
+  if (existingReceipt?.publish_id && ["processing", "awaiting_public"].includes(existingReceipt?.state)) {
+    try {
+      const reconciled = await reconcileTikTokPublish({
+        accessToken,
+        publishId: existingReceipt.publish_id,
+        privacyLevel: postInfo.privacy_level,
+      });
+      if (reconciled.pending) {
+        await persistTikTokProcessingReceipt({
+          supabase,
+          postId: post.id,
+          publishReceipts,
+          nowIso,
+          receipt: {
+            ...existingReceipt,
+            state: reconciled.awaitingPublic ? "awaiting_public" : "processing",
+            last_status: reconciled.statusData?.status || null,
+            last_checked_at: nowIso,
+          },
+        });
+      }
+      return {
+        publishId: existingReceipt.publish_id,
+        statusData: reconciled.statusData,
+        pending: reconciled.pending,
+      };
+    } catch (statusError) {
+      if (!statusError?.tiktokRetryableFailure) throw statusError;
+      await persistTikTokProcessingReceipt({
+        supabase,
+        postId: post.id,
+        publishReceipts,
+        nowIso,
+        receipt: {
+          ...existingReceipt,
+          state: "failed_retryable",
+          fail_reason: String(statusError?.message || "TikTok media pull failed").slice(0, 500),
+          failed_at: nowIso,
+        },
+      });
+      return { publishId: existingReceipt.publish_id, statusData: null, pending: true, retryableFailure: true };
+    }
+  }
+
+  const { mediaSigningSecret } = getTikTokEnv();
+  if (!mediaSigningSecret) throw new Error("TIKTOK_MEDIA_SIGNING_SECRET is missing");
+  const expiresAtMs = Date.now() + 24 * 60 * 60 * 1000;
+
+  let initResult;
+  if (isVideo) {
+    if (!post.video_url) throw new Error("TikTok video post is missing a rendered video URL");
+    const maxDuration = Number(creatorInfo?.max_video_post_duration_sec || 0);
+    if (maxDuration && ANIMATED_VIDEO_DURATION_SECONDS > maxDuration) {
+      throw new Error(`This TikTok account allows videos up to ${maxDuration} seconds, but the rendered post is longer.`);
+    }
+    const videoUrl = createTikTokMediaProxyUrl({
+      postId: post.id,
+      mediaUrl: post.video_url,
+      expiresAtMs,
+      secret: mediaSigningSecret,
+      baseUrl: APP_URL,
+    });
+    initResult = await initTikTokVideoPost(accessToken, {
+      post_info: postInfo,
+      source_info: { source: "PULL_FROM_URL", video_url: videoUrl },
+    });
+  } else {
+    let imageUrls = [];
+    if (normalizedFormat === "carousel") {
+      const slides = await loadCarouselSlidesForPublish({ supabase, postId: post.id });
+      imageUrls = (slides || []).map((slide) => slide?.image_url).filter(Boolean).slice(0, 35);
+    } else if (post.image_url) {
+      imageUrls = [post.image_url];
+    }
+    if (!imageUrls.length) throw new Error("TikTok photo post is missing image media");
+    const proxiedImages = imageUrls.map((imageUrl) =>
+      createTikTokMediaProxyUrl({
+        postId: post.id,
+        mediaUrl: imageUrl,
+        expiresAtMs,
+        secret: mediaSigningSecret,
+        baseUrl: APP_URL,
+      })
+    );
+    initResult = await initTikTokPhotoPost(accessToken, {
+      media_type: "PHOTO",
+      post_mode: "DIRECT_POST",
+      post_info: {
+        ...postInfo,
+        title: Array.from(String(settings?.title || post.content || "")).slice(0, 90).join(""),
+        description: Array.from(String(settings?.title || post.content || "")).slice(0, 4000).join(""),
+        auto_add_music: false,
+      },
+      source_info: {
+        source: "PULL_FROM_URL",
+        photo_images: proxiedImages,
+        photo_cover_index: 0,
+      },
+    });
+  }
+
+  const publishId = String(initResult?.publish_id || "");
+  if (!publishId) throw new Error("TikTok did not return a publish id");
+  await persistTikTokProcessingReceipt({
+    supabase,
+    postId: post.id,
+    publishReceipts,
+    nowIso,
+    receipt: {
+      state: "processing",
+      publish_id: publishId,
+      privacy_level: postInfo.privacy_level,
+      submitted_at: nowIso,
+      media_kind: isVideo ? "video" : "photo",
+    },
+  });
+
+  let lastStatusData = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (attempt > 0) await sleep(2000);
+    try {
+      const reconciled = await reconcileTikTokPublish({
+        accessToken,
+        publishId,
+        privacyLevel: postInfo.privacy_level,
+      });
+      lastStatusData = reconciled.statusData;
+      if (!reconciled.pending) return { publishId, statusData: reconciled.statusData, pending: false };
+      if (reconciled.awaitingPublic) {
+        await persistTikTokProcessingReceipt({
+          supabase,
+          postId: post.id,
+          publishReceipts,
+          nowIso,
+          receipt: {
+            state: "awaiting_public",
+            publish_id: publishId,
+            privacy_level: postInfo.privacy_level,
+            submitted_at: nowIso,
+            last_status: reconciled.statusData?.status || null,
+            last_checked_at: nowIso,
+            media_kind: isVideo ? "video" : "photo",
+          },
+        });
+        return { publishId, statusData: reconciled.statusData, pending: true };
+      }
+    } catch (statusError) {
+      if (!statusError?.tiktokRetryableFailure) throw statusError;
+      await persistTikTokProcessingReceipt({
+        supabase,
+        postId: post.id,
+        publishReceipts,
+        nowIso,
+        receipt: {
+          state: "failed_retryable",
+          publish_id: publishId,
+          privacy_level: postInfo.privacy_level,
+          submitted_at: nowIso,
+          fail_reason: String(statusError?.message || "TikTok media pull failed").slice(0, 500),
+          failed_at: nowIso,
+          media_kind: isVideo ? "video" : "photo",
+        },
+      });
+      return { publishId, statusData: null, pending: true, retryableFailure: true };
+    }
+  }
+
+  await persistTikTokProcessingReceipt({
+    supabase,
+    postId: post.id,
+    publishReceipts,
+    nowIso,
+    receipt: {
+      state: "processing",
+      publish_id: publishId,
+      privacy_level: postInfo.privacy_level,
+      submitted_at: nowIso,
+      last_status: lastStatusData?.status || null,
+      last_checked_at: nowIso,
+      media_kind: isVideo ? "video" : "photo",
+    },
+  });
+  return { publishId, statusData: lastStatusData, pending: true };
+}
+
 async function publishApprovedSocialPosts({
   supabase,
   nowIso,
@@ -34749,7 +35101,7 @@ async function publishApprovedSocialPosts({
   const { data: posts, error } = await supabase
     .from("posts")
     .select(
-      "id, user_id, brand_profile_id, automation_rule_id, website_url, content, platform, status, published_at, approved_at, scheduled_for, image_url, video_url, video_status, content_format, publish_locked_until, publish_attempts, next_publish_attempt_at, last_publish_error, published_targets, publish_receipts"
+      "id, user_id, brand_profile_id, automation_rule_id, website_url, content, platform, status, published_at, approved_at, scheduled_for, image_url, video_url, video_status, content_format, publish_locked_until, publish_attempts, next_publish_attempt_at, last_publish_error, published_targets, publish_receipts, platform_publish_settings"
     )
     .eq("status", "approved")
     .is("published_at", null)
@@ -34854,6 +35206,7 @@ async function publishApprovedSocialPosts({
     let instagramConnectionForPost = null;
     let pinterestConnectionForPost = null;
     let threadsConnectionForPost = null;
+    let tiktokConnectionForPost = null;
     let youtubeConnectionForPost = null;
     let activePublishTarget = null;
 
@@ -34897,7 +35250,7 @@ async function publishApprovedSocialPosts({
       if (
         normalizedFormat === "single_image" &&
         !post.image_url &&
-        (targets.includes("instagram") || targets.includes("pinterest"))
+        (targets.includes("instagram") || targets.includes("pinterest") || targets.includes("tiktok"))
       ) {
         console.error("Image publish skipped because post has no image URL", {
           postId: post.id,
@@ -34922,6 +35275,9 @@ async function publishApprovedSocialPosts({
         }
         if (targets.includes("pinterest")) {
           summary.pinterest_publish_skipped_no_image += 1;
+        }
+        if (targets.includes("tiktok")) {
+          summary.tiktok_publish_skipped_no_media += 1;
         }
         summary.social_publish_failed += 1;
         continue;
@@ -35172,6 +35528,70 @@ async function publishApprovedSocialPosts({
         });
         summary.threads_published += 1;
         activePublishTarget = null;
+      }
+
+      if (targets.includes("tiktok")) {
+        activePublishTarget = "tiktok";
+        summary.tiktok_publish_checked += 1;
+
+        tiktokConnectionForPost = await getTikTokConnectionForBrand({
+          supabase,
+          userId: post.user_id,
+          brandProfileId: post.brand_profile_id,
+        });
+
+        console.log("TikTok publish: connection lookup", {
+          postId: post.id,
+          found: Boolean(tiktokConnectionForPost),
+          creatorOpenId: tiktokConnectionForPost?.page_id || null,
+          tokenExpiresAt: tiktokConnectionForPost?.token_expires_at || null,
+        });
+
+        if (!tiktokConnectionForPost?.id || !tiktokConnectionForPost?.page_access_token) {
+          summary.tiktok_publish_skipped_no_config += 1;
+          throw new Error("No connected TikTok account found for this brand");
+        }
+
+        if (!["single_image", "carousel", "animated_video"].includes(normalizedFormat)) {
+          summary.tiktok_publish_skipped_no_media += 1;
+          throw new Error("This Spreelo post format cannot be published to TikTok");
+        }
+
+        const tiktokResult = await startOrReconcileTikTokPublish({
+          supabase,
+          post,
+          connection: tiktokConnectionForPost,
+          publishReceipts,
+          nowIso,
+        });
+
+        if (tiktokResult?.pending) {
+          summary.tiktok_publish_pending += 1;
+          activePublishTarget = null;
+        } else {
+          const publicPostIds = Array.isArray(tiktokResult?.statusData?.publicaly_available_post_id)
+            ? tiktokResult.statusData.publicaly_available_post_id.map((id) => String(id))
+            : [];
+          const approvedTikTokSettings = getTikTokPublishSettings(post);
+
+          await persistPublishedTarget({
+            supabase,
+            postId: post.id,
+            publishedTargetSet,
+            publishReceipts,
+            target: "tiktok",
+            receipt: {
+              state: "published",
+              publish_id: String(tiktokResult?.publishId || ""),
+              post_ids: publicPostIds,
+              privacy_level: approvedTikTokSettings?.privacy_level || null,
+              recorded_at: nowIso,
+            },
+            nowIso,
+          });
+          summary.tiktok_published += 1;
+          activePublishTarget = null;
+        }
       }
 
       if (targets.includes("youtube")) {
@@ -35576,7 +35996,17 @@ async function publishApprovedSocialPosts({
             nowIso,
           });
         }
-        if (activePublishTarget === "youtube" && youtubeConnectionForPost?.id) {
+        if (activePublishTarget === "tiktok" && tiktokConnectionForPost?.id) {
+          await markConnectionExpiredAndAlert({
+            supabase,
+            connectionId: tiktokConnectionForPost.id,
+            platform: "tiktok",
+            reason: error.message || "TikTok publishing failed because the connection is no longer valid.",
+            resendApiKey,
+            nowIso,
+          });
+        }
+                if (activePublishTarget === "youtube" && youtubeConnectionForPost?.id) {
           await markConnectionExpiredAndAlert({
             supabase,
             connectionId: youtubeConnectionForPost.id,
@@ -35591,14 +36021,22 @@ async function publishApprovedSocialPosts({
       const transientPinterestFailure =
         activePublishTarget === "pinterest" &&
         (Boolean(error?.pinterestTransient) || isPinterestTransientPublishError(error));
+      const transientTikTokFailure =
+        activePublishTarget === "tiktok" &&
+        (Boolean(error?.tiktokProcessing) || Boolean(error?.tiktokRetryableFailure) || Boolean(error?.transient));
       const shouldRetry =
-        !authFailure && (transientPinterestFailure || publishAttempt < MAX_PUBLISH_ATTEMPTS);
+        !authFailure &&
+        !error?.tiktokAuditRequired &&
+        !error?.tiktokFinalFailure &&
+        (transientPinterestFailure || transientTikTokFailure || publishAttempt < MAX_PUBLISH_ATTEMPTS);
       const retryDelayMinutes = transientPinterestFailure
         ? Math.min(
             PINTEREST_TRANSIENT_RETRY_MAX_MINUTES,
             Math.max(1, 2 ** Math.max(0, publishAttempt - 1))
           )
-        : Math.min(60, 5 * 2 ** Math.max(0, publishAttempt - 1));
+        : transientTikTokFailure
+          ? Math.min(15, Math.max(1, 2 ** Math.max(0, publishAttempt - 1)))
+          : Math.min(60, 5 * 2 ** Math.max(0, publishAttempt - 1));
 
       await supabase
         .from("posts")
@@ -35658,6 +36096,9 @@ async function publishApprovedSocialPosts({
 
       if (targets.includes("threads")) {
         summary.threads_publish_failed += 1;
+      }
+      if (targets.includes("tiktok")) {
+        summary.tiktok_publish_failed += 1;
       }
       if (targets.includes("youtube")) {
         summary.youtube_publish_failed += 1;

@@ -82,6 +82,22 @@ const SOCIAL_PLATFORMS = [
     iconSrc: "/social-icons/threads.svg",
   },
   {
+    key: "tiktok",
+    eyebrowKey: "social.tiktokEyebrow",
+    titleKey: "social.tiktokTitle",
+    descriptionKey: "social.tiktokDescriptionV2",
+    connectHelpKey: "social.tiktokConnectHelpV2",
+    connectKey: "social.connectTikTok",
+    connectingKey: "social.connectingTikTok",
+    disconnectKey: "social.disconnectTikTok",
+    disconnectConfirmKey: "social.disconnectTikTokConfirm",
+    connectedAccountKey: "social.connectedTikTokAccount",
+    accountFallbackKey: "social.tiktokAccountFallback",
+    idLabelKey: "social.tiktokAccountId",
+    noIdKey: "social.noTikTokAccountId",
+    iconSrc: "/social-icons/tiktok.png",
+  },
+  {
     key: "youtube",
     eyebrowKey: "social.youtubeEyebrow",
     titleKey: "social.youtubeTitle",
@@ -123,6 +139,7 @@ function getConnectEndpoint(platformKey) {
   if (platformKey === "pinterest") return "/api/auth/pinterest/start";
   if (platformKey === "threads") return "/api/auth/threads/start";
   if (platformKey === "youtube") return "/api/auth/youtube/start";
+  if (platformKey === "tiktok") return "/api/auth/tiktok/start";
   return "/api/meta/connect";
 }
 
@@ -151,6 +168,7 @@ function getSocialUrlMessageFromValues({ t, connected, error, pinterestTestPin }
   if (connected === "pinterest") return t("social.pinterestConnectedMessageV2");
   if (connected === "threads") return t("social.threadsConnectedMessageV2");
   if (connected === "youtube") return t("social.youtubeConnectedMessageV2");
+  if (connected === "tiktok") return t("social.tiktokConnectedMessageV2");
   if (!error) return "";
 
   const knownErrors = {
@@ -193,6 +211,14 @@ function getSocialUrlMessageFromValues({ t, connected, error, pinterestTestPin }
     invalid_youtube_state_payload: "social.errorYouTubeState",
     no_youtube_channel: "social.errorNoYouTubeChannel",
     youtube_callback_failed: "social.errorYouTubeCallback",
+    missing_tiktok_env: "social.errorMissingTikTokEnv",
+    tiktok_cancelled: "social.errorTikTokCancelled",
+    missing_tiktok_code: "social.errorTikTokCode",
+    invalid_tiktok_state: "social.errorTikTokState",
+    invalid_tiktok_state_payload: "social.errorTikTokState",
+    tiktok_publish_scope_denied: "social.errorTikTokScope",
+    tiktok_token_failed: "social.errorTikTokToken",
+    tiktok_callback_failed: "social.errorTikTokCallback",
   };
 
   return t(knownErrors[error] || "social.errorGenericConnect");
@@ -226,6 +252,10 @@ function formatTokenExpiry(value, t, platformKey) {
 
   if (platformKey === "youtube") {
     return t("social.youtubeAutoRefreshActive");
+  }
+
+  if (platformKey === "tiktok") {
+    return t("social.tiktokAutoRefreshActive");
   }
 
   return t("social.tokenExpiresAtV2", { date: formattedDate });

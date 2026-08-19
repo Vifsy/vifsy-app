@@ -9,6 +9,12 @@ import {
   resolveUiLocaleFromLanguageName,
 } from "../../../lib/i18n/serverUiText.js";
 
+import {
+  fetchTikTokCreatorInfo,
+  getHealthyTikTokAccessToken,
+  getTikTokEnv,
+} from "../../../lib/tiktokOAuth.js";
+
 export const dynamic = "force-dynamic";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.spreelo.com";
@@ -394,6 +400,86 @@ function createHtmlPage({ title, message, status = "success", t, locale = "en" }
 `;
 }
 
+
+function escapeTikTokHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function isTikTokTarget(platform) {
+  return String(platform || "").toLowerCase().replaceAll(" ", "").includes("tiktok");
+}
+
+async function getTikTokApprovalContext({ supabase, post }) {
+  const { data: connection, error } = await supabase
+    .from("social_connections")
+    .select("id, user_id, brand_profile_id, page_id, page_name, page_access_token, token_expires_at, refresh_token, refresh_token_expires_at, permissions, status")
+    .eq("user_id", post.user_id)
+    .eq("brand_profile_id", post.brand_profile_id)
+    .eq("platform", "tiktok")
+    .eq("status", "connected")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!connection?.id) {
+    const reconnectError = new Error("TikTok is no longer connected for this brand. Reconnect TikTok in Spreelo before approving this post.");
+    reconnectError.requiresReconnect = true;
+    throw reconnectError;
+  }
+  const healthy = await getHealthyTikTokAccessToken({ supabase, connection });
+  const creatorInfo = await fetchTikTokCreatorInfo(healthy.accessToken);
+  return { connection: healthy.connection || connection, accessToken: healthy.accessToken, creatorInfo };
+}
+
+function createTikTokApprovalHtml({ post, token, creatorInfo, locale = "en", publicPostingReady, allowPrivateTesting }) {
+  const isVideo = Boolean(post.video_url) || String(post.content_format || "") === "animated_video";
+  const previewUrl = isVideo ? post.video_url : post.image_url;
+  const privacyOptions = Array.isArray(creatorInfo?.privacy_level_options) ? creatorInfo.privacy_level_options : [];
+  const labels = {
+    PUBLIC_TO_EVERYONE: "Everyone",
+    MUTUAL_FOLLOW_FRIENDS: "Friends",
+    FOLLOWER_OF_CREATOR: "Followers",
+    SELF_ONLY: "Only me",
+  };
+  const options = privacyOptions.map((value) => `<option value="${escapeTikTokHtml(value)}">${escapeTikTokHtml(labels[value] || value)}</option>`).join("");
+  const modeNotice = publicPostingReady
+    ? `<div class="notice ok"><strong>Public TikTok publishing is enabled.</strong><span>Choose the audience you want for this post. Spreelo will never silently change it to private.</span></div>`
+    : allowPrivateTesting
+      ? `<div class="notice warn"><strong>TikTok test mode</strong><span>Spreelo's TikTok API client has not yet been marked production-ready after TikTok audit. TikTok restricts Direct Post testing to private visibility. Do not use this as a customer reach test.</span></div>`
+      : `<div class="notice warn"><strong>TikTok public publishing is not enabled yet.</strong><span>Spreelo must complete TikTok's Content Posting API audit before customer posts can be published with public reach.</span></div>`;
+  const canSubmit = publicPostingReady || allowPrivateTesting;
+  const media = previewUrl
+    ? (isVideo
+      ? `<video class="preview" src="${escapeTikTokHtml(previewUrl)}" controls playsinline></video>`
+      : `<img class="preview" src="${escapeTikTokHtml(previewUrl)}" alt="TikTok post preview" />`)
+    : `<div class="preview empty">Preview unavailable</div>`;
+  const titleMax = isVideo ? 2200 : 4000;
+
+  return `<!doctype html>
+<html lang="${escapeTikTokHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Approve TikTok post · Spreelo</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f6f3ee;color:#101828;font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;padding:28px}.shell{width:min(780px,100%);margin:0 auto}.brand{text-align:center;margin:0 0 18px}.brand img{width:148px;max-width:45vw}.card{background:#fff;border:1px solid #e6e1da;border-radius:24px;box-shadow:0 22px 60px rgba(16,24,40,.09);overflow:hidden}.top{padding:30px 32px 22px;border-bottom:1px solid #eee9e3}.eyebrow{font-size:11px;font-weight:900;letter-spacing:.15em;text-transform:uppercase;color:#e9573f;margin:0 0 8px}.top h1{font-size:28px;letter-spacing:-.03em;margin:0 0 8px}.top p{color:#667085;margin:0;line-height:1.55}.creator{display:flex;align-items:center;gap:12px;margin-top:18px;padding:12px 14px;background:#f8fafc;border:1px solid #e7ebef;border-radius:14px}.creator img{width:44px;height:44px;border-radius:50%;object-fit:cover}.creator strong,.creator span{display:block}.creator span{font-size:13px;color:#667085;margin-top:2px}.content{padding:26px 32px 32px}.preview{display:block;width:100%;max-height:460px;object-fit:contain;background:#111;border-radius:18px;margin-bottom:22px}.preview.empty{height:180px;display:grid;place-items:center;color:#98a2b3;background:#f2f4f7}.notice{display:flex;flex-direction:column;gap:4px;padding:14px 16px;border-radius:13px;margin-bottom:20px;font-size:14px;line-height:1.45}.notice.ok{background:#effaf4;border:1px solid #ccefd9}.notice.warn{background:#fff7e8;border:1px solid #f6dca7}.field{margin-top:18px}.field label{display:block;font-weight:800;margin-bottom:7px}.field small{display:block;color:#667085;margin-top:6px;line-height:1.45}textarea,select{width:100%;border:1px solid #d0d5dd;border-radius:12px;padding:12px 13px;font:inherit;background:#fff}textarea{min-height:150px;resize:vertical}.checks{display:grid;gap:10px;margin-top:12px}.check{display:flex;align-items:flex-start;gap:10px;padding:11px 12px;border:1px solid #e4e7ec;border-radius:12px}.check input{margin-top:2px}.check.disabled{opacity:.5;background:#f7f7f8}.commercial{margin-top:20px;padding:16px;border:1px solid #e4e7ec;border-radius:14px}.commercial-options{display:none;margin-top:10px;gap:9px}.commercial.is-on .commercial-options{display:grid}.consent{margin-top:22px;padding:15px;border-radius:13px;background:#f8fafc;border:1px solid #e4e7ec}.submit{width:100%;margin-top:20px;min-height:50px;border:0;border-radius:13px;background:#101828;color:white;font:inherit;font-weight:850;cursor:pointer}.submit:disabled{opacity:.45;cursor:not-allowed}.foot{text-align:center;color:#98a2b3;font-size:12px;margin-top:14px}@media(max-width:640px){body{padding:14px}.top,.content{padding-left:20px;padding-right:20px}}
+</style></head><body><main class="shell"><div class="brand"><img src="${APP_URL.replace(/\/$/, "")}/brand/spreelologo.png" alt="Spreelo"></div><section class="card"><header class="top"><p class="eyebrow">TikTok · Customer approval</p><h1>Review your TikTok post</h1><p>TikTok requires these publishing choices to be made by you before Spreelo can send the approved post.</p><div class="creator">${creatorInfo?.creator_avatar_url ? `<img src="${escapeTikTokHtml(creatorInfo.creator_avatar_url)}" alt="">` : ""}<div><strong>${escapeTikTokHtml(creatorInfo?.creator_nickname || post?.tiktok_account_name || "TikTok account")}</strong><span>${escapeTikTokHtml(creatorInfo?.creator_username || "Connected TikTok creator")}</span></div></div></header><div class="content">${modeNotice}${media}
+<form method="post" action="/api/approve-post">
+<input type="hidden" name="token" value="${escapeTikTokHtml(token)}"><input type="hidden" name="tiktok" value="1">
+<div class="field"><label for="title">Caption</label><textarea id="title" name="title" maxlength="${titleMax}">${escapeTikTokHtml(post.content || "")}</textarea><small>You can edit Spreelo's generated caption before publishing.</small></div>
+<div class="field"><label for="privacy">Who can see this post?</label><select id="privacy" name="privacy_level" required><option value="">Choose visibility…</option>${options}</select><small>TikTok requires you to choose this manually. Spreelo does not preselect a privacy level.</small></div>
+<div class="field"><label>Interactions</label><div class="checks">
+<label class="check ${creatorInfo?.comment_disabled ? "disabled" : ""}"><input type="checkbox" name="allow_comment" value="1" ${creatorInfo?.comment_disabled ? "disabled" : ""}> <span><strong>Allow comments</strong><small>${creatorInfo?.comment_disabled ? "Disabled by your TikTok account settings." : "Off until you choose it."}</small></span></label>
+${isVideo ? `<label class="check ${creatorInfo?.duet_disabled ? "disabled" : ""}"><input type="checkbox" name="allow_duet" value="1" ${creatorInfo?.duet_disabled ? "disabled" : ""}> <span><strong>Allow Duet</strong><small>${creatorInfo?.duet_disabled ? "Disabled by your TikTok account settings." : "Off until you choose it."}</small></span></label><label class="check ${creatorInfo?.stitch_disabled ? "disabled" : ""}"><input type="checkbox" name="allow_stitch" value="1" ${creatorInfo?.stitch_disabled ? "disabled" : ""}> <span><strong>Allow Stitch</strong><small>${creatorInfo?.stitch_disabled ? "Disabled by your TikTok account settings." : "Off until you choose it."}</small></span></label>` : ""}
+</div></div>
+<div id="commercialBox" class="commercial"><label class="check"><input id="commercialToggle" type="checkbox" name="commercial_content" value="1"> <span><strong>This post promotes a brand, product or service</strong><small>Turn this on when TikTok's commercial-content disclosure applies.</small></span></label><div class="commercial-options"><label class="check"><input type="checkbox" name="brand_organic" value="1"> <span><strong>Your brand</strong><small>The post will be labelled Promotional content.</small></span></label><label class="check"><input type="checkbox" name="brand_content" value="1"> <span><strong>Branded content</strong><small>The post will be labelled Paid partnership.</small></span></label></div></div>
+<div class="consent"><label class="check"><input type="checkbox" name="tiktok_consent" value="1" required> <span><strong>I approve this TikTok upload.</strong><small>By posting, you agree to TikTok's Music Usage Confirmation. If Branded content is selected, TikTok's Branded Content Policy also applies.</small></span></label></div>
+<button class="submit" type="submit" ${canSubmit ? "" : "disabled"}>Approve & schedule TikTok post</button>
+</form><p class="foot">Nothing is sent to TikTok until you submit this approval.</p></div></section></main>
+<script>const toggle=document.getElementById('commercialToggle');const box=document.getElementById('commercialBox');toggle?.addEventListener('change',()=>box.classList.toggle('is-on',toggle.checked));</script></body></html>`;
+}
+
 function htmlResponse({ title, message, status = "success", httpStatus = 200, t, locale }) {
   return new Response(
     createHtmlPage({
@@ -453,7 +539,7 @@ export async function GET(request) {
 
     const { data: post, error: postError } = await supabase
       .from("posts")
-      .select("id, user_id, status, approval_token, language, brand_profile_id, content_format")
+      .select("id, user_id, status, approval_token, language, brand_profile_id, content_format, platform, content, image_url, video_url, platform_publish_settings")
       .eq("approval_token", token)
       .single();
 
@@ -519,6 +605,34 @@ export async function GET(request) {
     }
 
 
+
+    if (isTikTokTarget(post.platform)) {
+      try {
+        const { creatorInfo } = await getTikTokApprovalContext({ supabase, post });
+        const { publicPostingReady, allowPrivateTesting } = getTikTokEnv();
+        return new Response(
+          createTikTokApprovalHtml({
+            post,
+            token,
+            creatorInfo,
+            locale: translator.locale,
+            publicPostingReady,
+            allowPrivateTesting,
+          }),
+          { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } }
+        );
+      } catch (tiktokError) {
+        return htmlResponse({
+          title: "TikTok connection needs attention",
+          message: tiktokError.message || "Spreelo could not load the current TikTok publishing settings.",
+          status: "error",
+          httpStatus: tiktokError?.requiresReconnect ? 409 : 502,
+          t: translator.t,
+          locale: translator.locale,
+        });
+      }
+    }
+
     const isCarouselPost = post.content_format === "carousel";
     const approvedAt = new Date().toISOString();
 
@@ -562,6 +676,108 @@ export async function GET(request) {
       message: error.message || translator.t("approvePages.unexpected.message"),
       status: "error",
       httpStatus: 500,
+      t: translator.t,
+      locale: translator.locale,
+    });
+  }
+}
+
+
+export async function POST(request) {
+  let translator = createFallbackTranslator();
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !serviceRoleKey) throw new Error("Spreelo approval configuration is incomplete");
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const form = await request.formData();
+    const token = String(form.get("token") || "").trim();
+    if (!token) throw new Error("Approval token is missing");
+
+    const { data: post, error: postError } = await supabase
+      .from("posts")
+      .select("id, user_id, brand_profile_id, status, approval_token, language, content_format, platform, content, image_url, video_url, platform_publish_settings")
+      .eq("approval_token", token)
+      .single();
+    if (postError || !post) throw new Error("This approval link is no longer valid");
+    translator = await getApproveTranslations({ supabase, locale: post.language || "en" });
+    if (!isTikTokTarget(post.platform)) throw new Error("This approval form is only for TikTok posts");
+    if (post.status === "approved") {
+      return htmlResponse({ title: translator.t("approvePages.alreadyApproved.title"), message: translator.t("approvePages.alreadyApproved.message"), status: "success", t: translator.t, locale: translator.locale });
+    }
+    if (post.status !== "pending_approval") throw new Error(`This post cannot be approved while its status is ${post.status}`);
+
+    const { creatorInfo } = await getTikTokApprovalContext({ supabase, post });
+    const privacyLevel = String(form.get("privacy_level") || "").trim();
+    const availablePrivacy = Array.isArray(creatorInfo?.privacy_level_options) ? creatorInfo.privacy_level_options : [];
+    if (!privacyLevel || !availablePrivacy.includes(privacyLevel)) throw new Error("Choose one of the visibility options currently allowed by your TikTok account");
+
+    const { publicPostingReady, allowPrivateTesting } = getTikTokEnv();
+    if (!publicPostingReady) {
+      if (!allowPrivateTesting) throw new Error("TikTok public publishing is not enabled yet. Spreelo must complete TikTok's Content Posting API audit first.");
+      if (privacyLevel !== "SELF_ONLY") throw new Error("TikTok test mode can only publish privately until Spreelo's TikTok API client has passed audit.");
+    }
+
+    const isVideo = Boolean(post.video_url) || String(post.content_format || "") === "animated_video";
+    const allowComment = form.get("allow_comment") === "1" && !creatorInfo?.comment_disabled;
+    const allowDuet = isVideo && form.get("allow_duet") === "1" && !creatorInfo?.duet_disabled;
+    const allowStitch = isVideo && form.get("allow_stitch") === "1" && !creatorInfo?.stitch_disabled;
+    const commercialContent = form.get("commercial_content") === "1";
+    const brandOrganic = commercialContent && form.get("brand_organic") === "1";
+    const brandContent = commercialContent && form.get("brand_content") === "1";
+    if (commercialContent && !brandOrganic && !brandContent) throw new Error("Choose Your brand, Branded content, or both for TikTok's commercial-content disclosure");
+    if (brandContent && privacyLevel === "SELF_ONLY") throw new Error("TikTok does not allow Branded content to use private visibility");
+    if (form.get("tiktok_consent") !== "1") throw new Error("TikTok publishing requires your explicit upload consent");
+
+    const titleLimit = isVideo ? 2200 : 4000;
+    const title = Array.from(String(form.get("title") || post.content || "")).slice(0, titleLimit).join("");
+    const currentSettings = post.platform_publish_settings && typeof post.platform_publish_settings === "object"
+      ? post.platform_publish_settings
+      : {};
+    const approvedAt = new Date().toISOString();
+    const platformPublishSettings = {
+      ...currentSettings,
+      tiktok: {
+        title,
+        privacy_level: privacyLevel,
+        disable_comment: !allowComment,
+        disable_duet: isVideo ? !allowDuet : undefined,
+        disable_stitch: isVideo ? !allowStitch : undefined,
+        brand_content_toggle: Boolean(brandContent),
+        brand_organic_toggle: Boolean(brandOrganic),
+        is_aigc: isVideo ? true : undefined,
+        creator_nickname: creatorInfo?.creator_nickname || null,
+        creator_username: creatorInfo?.creator_username || null,
+        approved_at: approvedAt,
+        explicit_consent: true,
+      },
+    };
+
+    const { error: updateError } = await supabase
+      .from("posts")
+      .update({
+        status: "approved",
+        approved_at: approvedAt,
+        platform_publish_settings: platformPublishSettings,
+        updated_at: approvedAt,
+      })
+      .eq("id", post.id);
+    if (updateError) throw updateError;
+
+    await supabase.from("admin_review_cases").update({ status: "customer_approved", needs_review: false, updated_at: approvedAt }).eq("post_id", post.id);
+    return htmlResponse({
+      title: "TikTok post approved",
+      message: "Your TikTok publishing choices were saved. Spreelo will publish the approved post at its scheduled time.",
+      status: "success",
+      t: translator.t,
+      locale: translator.locale,
+    });
+  } catch (error) {
+    return htmlResponse({
+      title: "Could not approve TikTok post",
+      message: error.message || "The TikTok approval could not be completed.",
+      status: "error",
+      httpStatus: 400,
       t: translator.t,
       locale: translator.locale,
     });

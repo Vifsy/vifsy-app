@@ -109,7 +109,8 @@
     "test:v143.98": "node scripts/test-v143-98-youtube-shorts.mjs",
     "test:v143.99": "node scripts/test-v143-99-animated-product-delivery-fallback.mjs",
     "test:v144.00": "node scripts/test-v144-00-delivery-first-resilience.mjs",
-    "test:v144.01": "node scripts/test-v144-01-admin-review-workbench.mjs"
+    "test:v144.01": "node scripts/test-v144-01-admin-review-workbench.mjs",
+    "test:v144.02": "node scripts/test-v144-02-tiktok-integration.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
