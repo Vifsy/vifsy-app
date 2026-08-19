@@ -17,7 +17,7 @@ export async function GET(request) {
   let query = context.admin
     .from("posts")
     .select(
-      "id, user_id, brand_profile_id, automation_rule_id, status, content, platform, post_type, content_format, image_url, video_url, image_status, video_status, video_error, scheduled_for, created_at, updated_at, approved_at, approval_token, approval_email_sent_at, admin_review_status, admin_reviewed_at, admin_review_note, admin_product_items, admin_archived_at"
+      "id, user_id, brand_profile_id, automation_rule_id, status, content, platform, post_type, content_format, image_url, video_url, image_status, video_status, video_error, scheduled_for, created_at, updated_at, approved_at, approval_token, approval_email_sent_at, admin_review_status, admin_reviewed_at, admin_review_note, admin_product_items, admin_archived_at, website_url"
     )
     .in("status", Array.from(VISIBLE_STATUSES))
     .is("admin_archived_at", null)
@@ -34,11 +34,17 @@ export async function GET(request) {
   let postRows = posts || [];
   const completedAdminReviewStates = new Set(["approved_by_spreelo", "released", "archived", "not_required"]);
   if (status === "queue") {
-    postRows = postRows.filter((post) =>
-      post.status === "pending_approval" &&
-      !completedAdminReviewStates.has(String(post.admin_review_status || "").toLowerCase()) &&
-      String(post.admin_review_status || "").toLowerCase() !== "not_required"
-    );
+    postRows = postRows.filter((post) => {
+      const reviewStatus = String(post.admin_review_status || "").toLowerCase();
+      const pendingReview =
+        post.status === "pending_approval" &&
+        !completedAdminReviewStates.has(reviewStatus) &&
+        reviewStatus !== "not_required";
+      const needsRepair =
+        post.status === "failed" ||
+        reviewStatus === "needs_repair";
+      return pendingReview || needsRepair;
+    });
   } else if (status === "history") {
     postRows = postRows.filter((post) =>
       ["approved", "rejected"].includes(post.status) ||
@@ -53,7 +59,7 @@ export async function GET(request) {
   const occurrenceSelect =
     "id, post_id, user_id, brand_profile_id, automation_rule_id, status, scheduled_for, content_type_label, content_format, campaign_title, started_at, finished_at, failure_code, failure_stage, failure_message_internal, failure_message_customer, refunded_credits, metadata";
   const [failedOccurrenceResult, activeOccurrenceResult] = await Promise.all([
-    ["all", "failed"].includes(status)
+    ["all", "failed", "queue"].includes(status)
       ? context.admin
           .from("automation_occurrences")
           .select(occurrenceSelect)
@@ -83,7 +89,7 @@ export async function GET(request) {
     error: null,
   };
 
-  const reviewCaseResult = ["all", "failed"].includes(status)
+  const reviewCaseResult = ["all", "failed", "queue"].includes(status)
     ? await context.admin
         .from("admin_review_cases")
         .select("id, occurrence_id, post_id, user_id, brand_profile_id, automation_rule_id, status, scheduled_for, campaign_title, content_type_label, content_format, product_items, failure_code, failure_stage, failure_message, needs_review, created_at, updated_at")
@@ -130,9 +136,13 @@ export async function GET(request) {
   const userIds = Array.from(new Set(adminQueueRows.map((item) => item.user_id).filter(Boolean)));
   const postIds = postRows.map((item) => item.id);
 
-  const [{ data: brands }, { data: feedbackRows }, { data: slideRows }] = await Promise.all([
+  const ruleIds = Array.from(new Set(adminQueueRows.map((item) => item.automation_rule_id).filter(Boolean)));
+  const [{ data: brands }, { data: rules }, { data: feedbackRows }, { data: slideRows }] = await Promise.all([
     brandIds.length
-      ? context.admin.from("brand_profiles").select("id, business_name, admin_review_required").in("id", brandIds)
+      ? context.admin.from("brand_profiles").select("id, business_name, website_url, website_product_source_url, admin_review_required").in("id", brandIds)
+      : Promise.resolve({ data: [] }),
+    ruleIds.length
+      ? context.admin.from("automation_rules").select("id, website_url, content_source_url, content_source_scope, content_type_id, content_type_label, content_format, platform").in("id", ruleIds)
       : Promise.resolve({ data: [] }),
     postIds.length
       ? context.admin
@@ -150,6 +160,20 @@ export async function GET(request) {
           .order("slide_order", { ascending: true })
       : Promise.resolve({ data: [] }),
   ]);
+
+  let versionRows = [];
+  if (postIds.length) {
+    const versionsResult = await context.admin
+      .from("admin_post_versions")
+      .select("id, post_id, version_number, reason, content, image_url, video_url, content_format, website_url, product_items, slides, created_at")
+      .in("post_id", postIds)
+      .order("version_number", { ascending: false });
+    if (!versionsResult.error) {
+      versionRows = versionsResult.data || [];
+    } else if (!/admin_post_versions|schema cache|does not exist/i.test(String(versionsResult.error.message || ""))) {
+      console.warn("Admin post versions could not be loaded", { message: versionsResult.error.message });
+    }
+  }
 
   let productReviewRows = [];
   if (postIds.length) {
@@ -179,6 +203,8 @@ export async function GET(request) {
   );
 
   const brandMap = Object.fromEntries((brands || []).map((item) => [item.id, item.business_name]));
+  const brandDetailsMap = Object.fromEntries((brands || []).map((item) => [item.id, item]));
+  const ruleMap = Object.fromEntries((rules || []).map((item) => [item.id, item]));
   const userMap = Object.fromEntries(userEntries);
   const feedbackMap = Object.fromEntries((feedbackRows || []).map((item) => [item.post_id, item]));
   const reviewProductsMap = new Map();
@@ -191,6 +217,11 @@ export async function GET(request) {
   const slidesMap = (slideRows || []).reduce((map, slide) => {
     if (!map[slide.post_id]) map[slide.post_id] = [];
     map[slide.post_id].push(slide);
+    return map;
+  }, {});
+  const versionsMap = (versionRows || []).reduce((map, version) => {
+    if (!map[version.post_id]) map[version.post_id] = [];
+    map[version.post_id].push(version);
     return map;
   }, {});
 
@@ -251,6 +282,19 @@ export async function GET(request) {
     });
   };
 
+  const getAdminSourceUrl = (item) => {
+    const rule = ruleMap[item?.automation_rule_id] || {};
+    const brand = brandDetailsMap[item?.brand_profile_id] || {};
+    return String(
+      item?.website_url ||
+      rule?.content_source_url ||
+      rule?.website_url ||
+      brand?.website_product_source_url ||
+      brand?.website_url ||
+      ""
+    ).trim();
+  };
+
   const getOutroSlide = (postId) => (slidesMap[postId] || []).find((slide) => {
     const role = String(slide?.metadata?.carousel_slide_role || "").toLowerCase();
     return role.includes("outro") || role.includes("cta") || String(slide?.metadata?.slide_type || "").toLowerCase() === "product_outro";
@@ -260,13 +304,18 @@ export async function GET(request) {
     ok: true,
     posts: [...postRows.map((item) => ({
       ...item,
+      content_type_id: ruleMap[item.automation_rule_id]?.content_type_id || null,
+      content_type_label: ruleMap[item.automation_rule_id]?.content_type_label || item.post_type || null,
       admin_product_items: getEditableProductItems(item),
       brand_name: brandMap[item.brand_profile_id] || "",
       brand_admin_review_required: brands?.find((brand) => brand.id === item.brand_profile_id)?.admin_review_required ?? null,
       customer_email: userMap[item.user_id] || "",
+      source_url: getAdminSourceUrl(item),
+      brand_website_url: brandDetailsMap[item.brand_profile_id]?.website_url || "",
       rejection: feedbackMap[item.id] || null,
       slides: slidesMap[item.id] || [],
       outro_slide: getOutroSlide(item.id),
+      versions: versionsMap[item.id] || [],
     })), ...orphanFailures.map((occurrence) => ({
       id: `occurrence-${occurrence.id}`,
       occurrence_id: occurrence.id,
@@ -275,7 +324,9 @@ export async function GET(request) {
       automation_rule_id: occurrence.automation_rule_id,
       status: occurrence.status === "failed_terminal" ? "failed" : "creating",
       content: occurrence.campaign_title || occurrence.content_type_label || "",
-      platform: null,
+      platform: ruleMap[occurrence.automation_rule_id]?.platform || null,
+      content_type_id: ruleMap[occurrence.automation_rule_id]?.content_type_id || null,
+      content_type_label: ruleMap[occurrence.automation_rule_id]?.content_type_label || occurrence.content_type_label || null,
       post_type: occurrence.content_type_label || "Generation",
       content_format: occurrence.content_format || null,
       image_url: null,
@@ -295,6 +346,8 @@ export async function GET(request) {
       brand_admin_review_required: brands?.find((brand) => brand.id === occurrence.brand_profile_id)?.admin_review_required ?? null,
       brand_name: brandMap[occurrence.brand_profile_id] || "",
       customer_email: userMap[occurrence.user_id] || "",
+      source_url: getAdminSourceUrl(occurrence),
+      brand_website_url: brandDetailsMap[occurrence.brand_profile_id]?.website_url || "",
       rejection: null,
       slides: [],
       failure: {
@@ -322,7 +375,9 @@ export async function GET(request) {
       automation_rule_id: reviewCase.automation_rule_id,
       status: "failed",
       content: reviewCase.campaign_title || reviewCase.content_type_label || "",
-      platform: null,
+      platform: ruleMap[reviewCase.automation_rule_id]?.platform || null,
+      content_type_id: ruleMap[reviewCase.automation_rule_id]?.content_type_id || null,
+      content_type_label: ruleMap[reviewCase.automation_rule_id]?.content_type_label || reviewCase.content_type_label || null,
       post_type: reviewCase.content_type_label || "Generation",
       content_format: reviewCase.content_format || null,
       image_url: null,
@@ -338,6 +393,8 @@ export async function GET(request) {
       brand_admin_review_required: brands?.find((brand) => brand.id === reviewCase.brand_profile_id)?.admin_review_required ?? null,
       brand_name: brandMap[reviewCase.brand_profile_id] || "",
       customer_email: userMap[reviewCase.user_id] || "",
+      source_url: getAdminSourceUrl(reviewCase),
+      brand_website_url: brandDetailsMap[reviewCase.brand_profile_id]?.website_url || "",
       rejection: null,
       slides: [],
       failure: {
@@ -491,7 +548,11 @@ async function setBrandReviewPolicy({ context, body }) {
   if (!brandProfileId) return Response.json({ ok: false, error: "Brand profile ID is required." }, { status: 400 });
   const { data, error } = await context.admin
     .from("brand_profiles")
-    .update({ admin_review_required: true, updated_at: new Date().toISOString() })
+    .update({
+      admin_review_required:
+        body?.admin_review_required === null ? null : Boolean(body?.admin_review_required),
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", brandProfileId)
     .select("id, admin_review_required")
     .single();

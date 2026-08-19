@@ -18,6 +18,7 @@ import {
   RefreshCw,
   RotateCcw,
   Save,
+  Search,
   ScanSearch,
   ShieldCheck,
   Sparkles,
@@ -83,8 +84,20 @@ function isMaterialReady(item) {
   if (item.manual_override === true) return Boolean(item.title?.trim() && item.image_url?.trim());
   return Boolean(item.url?.trim());
 }
+const PRODUCT_CONTENT_TYPE_IDS = new Set([
+  "website_item",
+  "website_item_text_ad",
+  "animated_website_item",
+  "carousel_website_item",
+]);
+function isProductDrivenPost(post) {
+  const contentTypeId = String(post?.content_type_id || "").trim();
+  if (PRODUCT_CONTENT_TYPE_IDS.has(contentTypeId)) return true;
+  return Array.isArray(post?.admin_product_items) && post.admin_product_items.length > 0;
+}
 function isCarouselPost(post) {
-  return /carousel/i.test(String(post?.content_format || post?.post_type || ""));
+  return String(post?.content_type_id || "").trim() === "carousel_website_item" ||
+    /carousel/i.test(String(post?.content_format || post?.post_type || ""));
 }
 function isSyntheticAdminCaseId(id) {
   const value = String(id || "");
@@ -134,7 +147,10 @@ function MediaPreview({ post, t, onOpen }) {
                   </button>
                 ) : <span><ImageIcon size={22} /></span>}
                 <div>
-                  <strong>{slide.headline || slide.metadata?.product_title || `Slide ${slide.slide_order}`}</strong>
+                  <div className="admin-v14401-product-title-row">
+                    <strong>{slide.headline || slide.metadata?.product_title || `Slide ${slide.slide_order}`}</strong>
+                    {slide.product_url ? <a href={slide.product_url} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}><ExternalLink size={13} /> Produkt</a> : null}
+                  </div>
                   {slide.body ? <p>{slide.body}</p> : null}
                   {slide.cta_text ? <small>{slide.cta_text}</small> : null}
                 </div>
@@ -196,12 +212,29 @@ export default function AdminPostApprovalsPage() {
   const [productDirty, setProductDirty] = useState(false);
   const [editorPostId, setEditorPostId] = useState("");
   const [manualEditingIndices, setManualEditingIndices] = useState([]);
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [formatFilter, setFormatFilter] = useState("all");
+  const [restoringVersionId, setRestoringVersionId] = useState("");
 
   const selectedPost = useMemo(
     () => posts.find((post) => post.id === selectedPostId) || null,
     [posts, selectedPostId]
   );
   const lightboxItems = useMemo(() => getPostMediaItems(selectedPost), [selectedPost]);
+  const availableFormats = useMemo(() => Array.from(new Set(
+    posts.map((post) => String(post.content_format || post.post_type || "").trim()).filter(Boolean)
+  )).sort((a, b) => a.localeCompare(b)), [posts]);
+  const filteredPosts = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return posts.filter((post) => {
+      const format = String(post.content_format || post.post_type || "").trim();
+      if (formatFilter !== "all" && format !== formatFilter) return false;
+      if (!query) return true;
+      return [post.brand_name, post.customer_email, post.content, post.platform, post.post_type, post.content_format]
+        .some((value) => String(value || "").toLowerCase().includes(query));
+    });
+  }, [posts, searchQuery, formatFilter]);
   const carouselReady =
     isCarouselPost(selectedPost) &&
     materials.length === CAROUSEL_PRODUCT_COUNT &&
@@ -258,11 +291,13 @@ export default function AdminPostApprovalsPage() {
       setEditorDirty(false);
       setProductDirty(false);
       setManualEditingIndices([]);
+      setSourceUrl("");
       return;
     }
     // Do not let the 15-second admin polling overwrite an open edit session.
     if (editorPostId === selectedPost.id && (editorDirty || productDirty)) return;
     const isEmptyFailedSingle = selectedPost.status === "failed" &&
+      isProductDrivenPost(selectedPost) &&
       !isCarouselPost(selectedPost) &&
       !selectedPost?.admin_product_items?.length;
     setMaterials(
@@ -270,11 +305,12 @@ export default function AdminPostApprovalsPage() {
         ? getFiveCarouselProducts(selectedPost?.admin_product_items)
         : selectedPost?.admin_product_items?.length
           ? [{ ...emptyCarouselProduct(), ...(selectedPost.admin_product_items[0] || {}) }]
-          : selectedPost.status === "failed"
+          : isEmptyFailedSingle
             ? [emptyCarouselProduct()]
             : []
     );
     setPostCopy(selectedPost?.content || "");
+    setSourceUrl(selectedPost?.source_url || selectedPost?.website_url || "");
     setOutroSlide(selectedPost?.outro_slide || null);
     setOutroRemoved(false);
     setRegenerationError("");
@@ -334,15 +370,20 @@ export default function AdminPostApprovalsPage() {
           </div>
           <span className="admin-product-manual-warning">{t("admin.approvals.notSourceVerified")}</span>
         </div>
-        <div className="admin-product-manual-fields">
-          <label><span>{t("admin.approvals.brand")}</span><input value={item.product_brand || ""} onChange={(event) => setField("product_brand", event.target.value)} /></label>
+        <div className="admin-product-manual-fields admin-v14401-manual-primary">
           <label><span>{t("admin.approvals.productName")}</span><input value={item.title || ""} onChange={(event) => setField("title", event.target.value)} /></label>
-          <label><span>{t("admin.approvals.productType")}</span><input value={item.product_display_type || ""} onChange={(event) => setField("product_display_type", event.target.value)} /></label>
-          <label><span>{t("admin.approvals.variant")}</span><input value={item.product_color || ""} onChange={(event) => setField("product_color", event.target.value)} /></label>
-          <label><span>{t("admin.approvals.sku")}</span><input value={item.product_identifier || ""} onChange={(event) => setField("product_identifier", event.target.value)} /></label>
           <label><span>{t("admin.approvals.priceOptional")}</span><input value={item.product_price || ""} onChange={(event) => setField("product_price", event.target.value)} /></label>
           <label className="admin-product-manual-description"><span>{t("admin.approvals.productDescription")}</span><textarea value={item.description || ""} onChange={(event) => setField("description", event.target.value)} /></label>
         </div>
+        <details className="admin-v14401-advanced-product-fields">
+          <summary>Fler produktuppgifter</summary>
+          <div className="admin-product-manual-fields">
+            <label><span>{t("admin.approvals.brand")}</span><input value={item.product_brand || ""} onChange={(event) => setField("product_brand", event.target.value)} /></label>
+            <label><span>{t("admin.approvals.productType")}</span><input value={item.product_display_type || ""} onChange={(event) => setField("product_display_type", event.target.value)} /></label>
+            <label><span>{t("admin.approvals.variant")}</span><input value={item.product_color || ""} onChange={(event) => setField("product_color", event.target.value)} /></label>
+            <label><span>{t("admin.approvals.sku")}</span><input value={item.product_identifier || ""} onChange={(event) => setField("product_identifier", event.target.value)} /></label>
+          </div>
+        </details>
         <div className="admin-product-manual-actions">
           <label className="admin-product-upload-button">
             <Upload size={15} /> {t("admin.approvals.uploadProductImage")}
@@ -544,6 +585,77 @@ export default function AdminPostApprovalsPage() {
     }
   }
 
+  async function regenerateGeneric(mode = "all") {
+    if (!selectedPost) return;
+    setRegenerating(true);
+    setError("");
+    setRegenerationError("");
+    setRegenerationSuccess("");
+    try {
+      const headers = await getHeaders();
+      const response = await fetch("/api/admin/post-approvals/regenerate-any", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          post_id: selectedPost.status === "failed" ? null : selectedPost.id,
+          occurrence_id: selectedPost.occurrence_id || null,
+          review_case_id: selectedPost.failure?.review_case_id || null,
+          source_url: sourceUrl,
+          content: postCopy,
+          mode,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || "Regeneration failed.");
+      setEditorDirty(false);
+      setProductDirty(false);
+      await loadPosts(result.post_id);
+      setSelectedPostId(result.post_id);
+      setRegenerationSuccess(
+        mode === "text" ? "Texten har regenererats." : mode === "media" ? "Mediet har regenererats." : "Inlägget har regenererats från originalreceptet."
+      );
+    } catch (actionError) {
+      const message = actionError.message || "Regeneration failed.";
+      setRegenerationError(message);
+      setError(message);
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
+  async function regenerateCurrent(mode = "all") {
+    if (!selectedPost) return;
+    if (isCarouselPost(selectedPost)) return regenerateFromMaterials();
+    if (materials.length) return regenerateSingleProduct();
+    return regenerateGeneric(mode);
+  }
+
+  async function restoreVersion(versionId) {
+    if (!selectedPost || isSyntheticAdminCaseId(selectedPost.id) || !versionId) return;
+    setRestoringVersionId(versionId);
+    setError("");
+    setRegenerationError("");
+    setRegenerationSuccess("");
+    try {
+      const headers = await getHeaders();
+      const response = await fetch("/api/admin/post-approvals/restore-version", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ post_id: selectedPost.id, version_id: versionId }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || "Kunde inte återställa versionen.");
+      setEditorDirty(false);
+      setProductDirty(false);
+      await loadPosts(selectedPost.id);
+      setRegenerationSuccess(`Version ${result.restored_version} har återställts och väntar på ny granskning.`);
+    } catch (restoreError) {
+      setError(restoreError.message || "Kunde inte återställa versionen.");
+    } finally {
+      setRestoringVersionId("");
+    }
+  }
+
   async function resolveMaterialProduct(index) {
     const productUrl = String(materials?.[index]?.url || "").trim();
     if (!selectedPost || !productUrl) return;
@@ -650,7 +762,7 @@ export default function AdminPostApprovalsPage() {
 
   return (
     <AppLayout active="admin">
-      <div className="admin-page admin-approvals-page admin-v74-approvals-page">
+      <div className="admin-page admin-approvals-page admin-v74-approvals-page admin-v14401-workbench">
         <header className="admin-hero compact">
           <div>
             <span className="admin-eyebrow">{t("admin.approvals.kicker")}</span>
@@ -698,7 +810,12 @@ export default function AdminPostApprovalsPage() {
             <strong>{filter === "history" ? t("admin.approvals.historyTitle") : filter === "failed" ? t("admin.approvals.repairTitle") : t("admin.approvals.queueTitle")}</strong>
             <p>{filter === "history" ? t("admin.approvals.historyText") : filter === "failed" ? t("admin.approvals.repairText") : t("admin.approvals.queueText")}</p>
           </div>
-          <b>{posts.length}</b>
+          <b>{filteredPosts.length}</b>
+        </section>
+        <section className="admin-v14401-toolbar">
+          <label className="admin-v14401-search"><Search size={16} /><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Sök företag, text eller plattform…" /></label>
+          <label className="admin-v14401-format-filter"><span>Format</span><select value={formatFilter} onChange={(event) => setFormatFilter(event.target.value)}><option value="all">Alla format</option>{availableFormats.map((format) => <option key={format} value={format}>{format}</option>)}</select></label>
+          <div className="admin-v14401-safety-note"><ShieldCheck size={16} /><span>Fel och avbrutna genereringar stannar alltid i admin.</span></div>
         </section>
         {selectedIds.length ? (
           <div className="admin-workbench-bulkbar">
@@ -711,11 +828,11 @@ export default function AdminPostApprovalsPage() {
 
         {loading ? (
           <section className="admin-loading-card"><LoaderCircle className="admin-spin" size={22} /> {t("admin.approvals.loading")}</section>
-        ) : posts.length === 0 ? (
+        ) : filteredPosts.length === 0 ? (
           <div className="admin-empty-state"><FileCheck2 size={28} /><strong>{t("admin.approvals.empty")}</strong></div>
         ) : (
           <section className="admin-v74-approval-table admin-v14370-review-list">
-            {posts.map((post) => {
+            {filteredPosts.map((post) => {
               const displayStatus = post.admin_review_status === "approved_by_spreelo"
                 ? "approved_by_spreelo"
                 : post.admin_review_status === "not_required" && post.approval_email_sent_at
@@ -857,7 +974,7 @@ export default function AdminPostApprovalsPage() {
                                 {item.title ? (
                                   <div className="admin-product-facts">
                                     <div><span>{t("admin.approvals.brand")}</span><strong>{item.product_brand || "—"}</strong></div>
-                                    <div><span>{t("admin.approvals.productName")}</span><strong>{item.title}</strong></div>
+                                    <div><span>{t("admin.approvals.productName")}</span><strong>{item.title}{item.url ? <a className="admin-v14401-inline-product-link" href={item.url} target="_blank" rel="noreferrer"><ExternalLink size={12} /> Länk</a> : null}</strong></div>
                                     <div><span>{t("admin.approvals.productType")}</span><strong>{item.product_display_type || "—"}</strong></div>
                                     <div><span>{t("admin.approvals.variant")}</span><strong>{item.product_color || "—"}</strong></div>
                                     <div><span>{t("admin.approvals.sku")}</span><strong>{item.product_identifier || "—"}</strong></div>
@@ -922,7 +1039,7 @@ export default function AdminPostApprovalsPage() {
                             {item.title ? (
                               <div className="admin-product-facts admin-product-facts-single">
                                 <div><span>{t("admin.approvals.brand")}</span><strong>{item.product_brand || "—"}</strong></div>
-                                <div><span>{t("admin.approvals.productName")}</span><strong>{item.title || "—"}</strong></div>
+                                <div><span>{t("admin.approvals.productName")}</span><strong>{item.title || "—"}{item.url ? <a className="admin-v14401-inline-product-link" href={item.url} target="_blank" rel="noreferrer"><ExternalLink size={12} /> Länk</a> : null}</strong></div>
                                 <div><span>{t("admin.approvals.productType")}</span><strong>{item.product_display_type || "—"}</strong></div>
                                 <div><span>{t("admin.approvals.variant")}</span><strong>{item.product_color || "—"}</strong></div>
                                 <div><span>{t("admin.approvals.sku")}</span><strong>{item.product_identifier || "—"}</strong></div>
@@ -951,11 +1068,34 @@ export default function AdminPostApprovalsPage() {
                     <div><dt>{t("admin.approvals.scheduled")}</dt><dd>{formatDate(selectedPost.scheduled_for)}</dd></div>
                     <div><dt>{t("admin.approvals.platform")}</dt><dd>{selectedPost.platform || "—"}</dd></div>
                   </dl>
-                  <div className="admin-brand-review-policy admin-brand-review-policy-required">
-                    <strong>{t("admin.approvals.brandReviewPolicy")}</strong>
-                    <p>{t("admin.approvals.brandReviewPolicyText")}</p>
-                    <span><CheckCircle2 size={15} /> {t("admin.approvals.requireBrandReview", { brandName: selectedPost.brand_name || t("admin.approvals.thisBrand") })}</span>
+                  <div className={`admin-brand-review-policy admin-v14401-brand-policy ${selectedPost.brand_admin_review_required === false ? "direct" : "review"}`}>
+                    <div className="admin-v14401-policy-head"><strong>{t("admin.approvals.brandReviewPolicy")}</strong><span>{selectedPost.brand_admin_review_required === false ? "Direktleverans" : selectedPost.brand_admin_review_required === true ? "Admin först" : "Ärver globalt"}</span></div>
+                    <p>{selectedPost.brand_admin_review_required === false ? "Lyckade inlägg skickas direkt till kunden. Fel och osäkra genereringar stannar alltid här." : "Lyckade inlägg hålls för Spreelo-granskning innan kunden får dem."}</p>
+                    <div className="admin-v14401-policy-actions">
+                      <button type="button" className={selectedPost.brand_admin_review_required !== false ? "active" : ""} onClick={() => setBrandPolicy(true)}><ShieldCheck size={14} /> Granska</button>
+                      <button type="button" className={selectedPost.brand_admin_review_required === false ? "active" : ""} onClick={() => setBrandPolicy(false)}><CheckCircle2 size={14} /> Skicka lyckade direkt</button>
+                    </div>
                   </div>
+
+                  <div className="admin-v14401-source-card">
+                    <div className="admin-v14401-source-head"><strong>Källa</strong>{sourceUrl ? <a href={sourceUrl} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Öppna</a> : null}</div>
+                    <label><span>URL som inlägget ska baseras på</span><div><Link2 size={15} /><input value={sourceUrl} onChange={(event) => { setSourceUrl(event.target.value); setEditorDirty(true); }} placeholder="https://…" /></div></label>
+                    {selectedPost.brand_website_url ? <a className="admin-v14401-brand-link" href={selectedPost.brand_website_url} target="_blank" rel="noreferrer"><ExternalLink size={13} /> Företagets webbplats</a> : null}
+                  </div>
+
+                  {Array.isArray(selectedPost.versions) && selectedPost.versions.length ? (
+                    <div className="admin-v14401-versions-card">
+                      <div className="admin-v14401-source-head"><strong>Versionshistorik</strong><span>{selectedPost.versions.length}</span></div>
+                      <div className="admin-v14401-version-list">
+                        {selectedPost.versions.slice(0, 6).map((version) => (
+                          <div key={version.id}>
+                            <span><strong>Version {version.version_number}</strong><small>{formatDate(version.created_at)} · {String(version.reason || "admin").replaceAll("_", " ")}</small></span>
+                            <button type="button" disabled={restoringVersionId === version.id} onClick={() => restoreVersion(version.id)}>{restoringVersionId === version.id ? <LoaderCircle className="admin-spin" size={13} /> : <RotateCcw size={13} />} Återställ</button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
 
                   {selectedPost.status === "failed" ? (
                     <div className="admin-generation-error-card">
@@ -1003,16 +1143,15 @@ export default function AdminPostApprovalsPage() {
                       {t("admin.approvals.saveChanges")}
                     </button>
                   ) : null}
-                  {isCarouselPost(selectedPost) ? (
-                    <button type="button" className="admin-review-secondary-action admin-review-regenerate-action" disabled={regenerating || !carouselReady} onClick={regenerateFromMaterials}>
-                      {regenerating ? <LoaderCircle className="admin-spin" size={16} /> : <RefreshCw size={16} />}
-                      {t("admin.approvals.regenerateCarousel")}
-                    </button>
-                  ) : selectedPost.admin_product_items?.length || materials.length ? (
-                    <button type="button" className="admin-review-secondary-action admin-review-regenerate-action" disabled={regenerating || !singleProductReady} onClick={regenerateSingleProduct}>
-                      {regenerating ? <LoaderCircle className="admin-spin" size={16} /> : <RefreshCw size={16} />}
-                      {t("admin.approvals.regenerateProduct")}
-                    </button>
+                  <button type="button" className="admin-review-secondary-action admin-review-regenerate-action admin-v14401-regenerate-main" disabled={regenerating || (isCarouselPost(selectedPost) ? !carouselReady : materials.length ? !singleProductReady : false)} onClick={() => regenerateCurrent("all")}>
+                    {regenerating ? <LoaderCircle className="admin-spin" size={16} /> : <RefreshCw size={16} />}
+                    Regenerera inlägg
+                  </button>
+                  {!isCarouselPost(selectedPost) && !materials.length ? (
+                    <div className="admin-v14401-partial-actions">
+                      <button type="button" disabled={regenerating} onClick={() => regenerateCurrent("text")}>Bara text</button>
+                      <button type="button" disabled={regenerating} onClick={() => regenerateCurrent("media")}>Bara bild</button>
+                    </div>
                   ) : null}
                   {productDirty ? <span className="admin-review-regeneration-required"><AlertTriangle size={14} /> {t("admin.approvals.regenerationRequired")}</span> : editorDirty ? <span className="admin-review-regeneration-required"><AlertTriangle size={14} /> {t("admin.approvals.saveBeforeApproval")}</span> : null}
                   {selectedPost.status === "pending_approval" && !["approved_by_spreelo", "released", "not_required", "archived"].includes(String(selectedPost.admin_review_status || "").toLowerCase()) ? (

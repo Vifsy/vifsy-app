@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import OpenAI from "openai";
 import { adminContextError, getAdminContext } from "../../../../../lib/adminAuth";
+import { snapshotAdminPostVersion } from "../../../../../lib/adminPostVersions";
 import { generateCarouselOutroSlideImage, getCarouselProductLabelPresentation, renderCarouselProductSlideImage, resolveLockedProductUrlForUse } from "../../../cron/run-automations/route.js";
 
 export const dynamic = "force-dynamic";
@@ -89,6 +90,13 @@ export async function POST(request) {
   // override is a safety valve for sites that cannot be fetched. Manual data is
   // never mislabeled as verified source data and is preserved until the admin
   // explicitly refreshes from the original URL.
+  if (post?.id) {
+    await snapshotAdminPostVersion(context.admin, post.id, {
+      reason: "before_admin_carousel_regeneration",
+      createdBy: context.user.id,
+    });
+  }
+
   const resolvedProducts = [];
   for (const product of products) {
     if (product.manual_override === true) {
@@ -335,5 +343,6 @@ export async function POST(request) {
   } else {
     await context.admin.from("admin_review_cases").upsert(reviewPayload, { onConflict: occurrenceId ? "occurrence_id" : "post_id" });
   }
+  await snapshotAdminPostVersion(context.admin, post.id, { reason: "after_admin_carousel_regeneration", createdBy: context.user.id });
   return Response.json({ ok: true, post_id: post.id, slide_count: slides.length });
 }

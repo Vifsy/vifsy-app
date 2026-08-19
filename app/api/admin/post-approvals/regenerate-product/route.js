@@ -2,6 +2,7 @@ import crypto from "crypto";
 import OpenAI from "openai";
 import { adminContextError, getAdminContext } from "../../../../../lib/adminAuth";
 import { buildProductContentContract } from "../../../../../lib/productEngineV2";
+import { snapshotAdminPostVersion } from "../../../../../lib/adminPostVersions";
 import {
   applyLogoOverlayIfNeeded,
   generateAnimatedProductVideo,
@@ -140,6 +141,12 @@ export async function POST(request) {
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   try {
+    if (post?.id) {
+      await snapshotAdminPostVersion(context.admin, post.id, {
+        reason: "before_admin_product_regeneration",
+        createdBy: context.user.id,
+      });
+    }
     const lockedProduct = useManualOverride
       ? {
           ...suppliedProduct,
@@ -414,6 +421,11 @@ export async function POST(request) {
         },
       }).eq("id", occurrenceId);
     }
+
+    await snapshotAdminPostVersion(context.admin, post.id, {
+      reason: "after_admin_product_regeneration",
+      createdBy: context.user.id,
+    });
 
     return Response.json({
       ok: true,

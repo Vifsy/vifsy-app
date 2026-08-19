@@ -85,6 +85,7 @@ export default function AdminCustomerCardPage({ params }) {
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [savingReviewPolicyId, setSavingReviewPolicyId] = useState("");
   const tabs = [["overview", t("admin.customer.tab.overview")], ["brands", t("admin.customer.tab.brands")], ["posts", t("admin.customer.tab.posts")], ["credits", t("admin.customer.tab.credits")], ["failures", t("admin.customer.tab.failures")], ["technical", t("admin.customer.tab.technical")]];
 
   useEffect(() => {
@@ -111,6 +112,29 @@ export default function AdminCustomerCardPage({ params }) {
       setError(loadError.message || t("admin.customer.loadError"));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function setBrandReviewPolicy(brandId, required) {
+    setSavingReviewPolicyId(brandId);
+    setError("");
+    try {
+      const headers = { ...(await getAdminHeaders()), "Content-Type": "application/json" };
+      const response = await fetch("/api/admin/post-approvals", {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ action: "set_brand_review_policy", brand_profile_id: brandId, admin_review_required: required }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || "Kunde inte ändra granskningspolicyn.");
+      setPayload((current) => current ? {
+        ...current,
+        brands: (current.brands || []).map((brand) => brand.id === brandId ? { ...brand, admin_review_required: result.brand?.admin_review_required } : brand),
+      } : current);
+    } catch (policyError) {
+      setError(policyError.message || "Kunde inte ändra granskningspolicyn.");
+    } finally {
+      setSavingReviewPolicyId("");
     }
   }
 
@@ -207,7 +231,17 @@ export default function AdminCustomerCardPage({ params }) {
             {tab === "brands" ? (
               <section className="admin-panel">
                 <div className="admin-panel-heading"><div><span className="admin-card-kicker">{t("admin.customer.brandsCount", { count: payload.brands.length })}</span><h2>{t("admin.customer.customerBrands")}</h2></div></div>
-                {payload.brands.length ? <div className="admin-v140-brand-grid">{payload.brands.map((brand) => <article key={brand.id}><header><span className="admin-v140-brand-icon"><Building2 size={19} /></span><div><h3>{brand.business_name || t("admin.customer.unnamedBrand")}</h3><p>{brand.website_url || t("admin.customer.noWebsite")}</p></div><Status value={brand.website_access_status || t("admin.customer.unknown")} /></header><dl><div><dt>{t("admin.customer.industry")}</dt><dd>{brand.industry || "—"}</dd></div><div><dt>{t("admin.customer.market")}</dt><dd>{brand.content_market || brand.country_code || "—"}</dd></div><div><dt>{t("admin.customer.language")}</dt><dd>{brand.content_language || "—"}</dd></div><div><dt>{t("admin.customer.productSource")}</dt><dd>{brand.website_product_source_url || "—"}</dd></div><div><dt>{t("admin.customer.securitySystem")}</dt><dd>{brand.website_security_provider || "—"}</dd></div><div><dt>{t("admin.customer.lastChecked")}</dt><dd>{formatDate(brand.website_access_checked_at)}</dd></div></dl>{brand.website_access_message ? <p className="admin-v140-brand-message">{brand.website_access_message}</p> : null}</article>)}</div> : <Empty>{t("admin.customer.noBrands")}</Empty>}
+                {payload.brands.length ? <div className="admin-v140-brand-grid">{payload.brands.map((brand) => (
+                  <article key={brand.id} className="admin-v14401-customer-brand-card">
+                    <header><span className="admin-v140-brand-icon"><Building2 size={19} /></span><div><h3>{brand.business_name || t("admin.customer.unnamedBrand")}</h3><p>{brand.website_url || t("admin.customer.noWebsite")}</p></div><Status value={brand.website_access_status || t("admin.customer.unknown")} /></header>
+                    <div className={`admin-v14401-customer-policy ${brand.admin_review_required === false ? "direct" : "review"}`}>
+                      <div><ShieldCheck size={16} /><span><strong>Granskning av nya inlägg</strong><small>{brand.admin_review_required === false ? "Lyckade inlägg går direkt till kunden. Fel stannar alltid i admin." : "Lyckade inlägg går via Spreelo-admin innan kunden får dem."}</small></span></div>
+                      <button type="button" disabled={savingReviewPolicyId === brand.id} className={brand.admin_review_required !== false ? "on" : ""} onClick={() => setBrandReviewPolicy(brand.id, brand.admin_review_required === false)} aria-pressed={brand.admin_review_required !== false}><span /></button>
+                    </div>
+                    <dl><div><dt>{t("admin.customer.industry")}</dt><dd>{brand.industry || "—"}</dd></div><div><dt>{t("admin.customer.market")}</dt><dd>{brand.content_market || brand.country_code || "—"}</dd></div><div><dt>{t("admin.customer.language")}</dt><dd>{brand.content_language || "—"}</dd></div><div><dt>{t("admin.customer.productSource")}</dt><dd>{brand.website_product_source_url || "—"}</dd></div><div><dt>{t("admin.customer.securitySystem")}</dt><dd>{brand.website_security_provider || "—"}</dd></div><div><dt>{t("admin.customer.lastChecked")}</dt><dd>{formatDate(brand.website_access_checked_at)}</dd></div></dl>
+                    {brand.website_access_message ? <p className="admin-v140-brand-message">{brand.website_access_message}</p> : null}
+                  </article>
+                ))}</div> : <Empty>{t("admin.customer.noBrands")}</Empty>}
               </section>
             ) : null}
 

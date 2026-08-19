@@ -12621,7 +12621,7 @@ async function fetchHtml(url) {
   }
 }
 
-async function prepareFocusedPageContextForRule(rule) {
+export async function prepareFocusedPageContextForRule(rule) {
   const sourceUrl = getRuleContentSourceUrl(rule);
   if (!sourceUrl) return null;
 
@@ -28856,7 +28856,7 @@ export async function generateWebsiteItemAdImage(openai, rule, postContent) {
   };
 }
 
-async function generateAutomationImage(openai, rule, postContent) {
+export async function generateAutomationImage(openai, rule, postContent) {
   const prompt = buildImagePrompt(rule, postContent);
 
 const response = await openai.images.generate({
@@ -28910,7 +28910,7 @@ async function renderEmergencySocialCard({ rule, brandProfile, content }) {
   return sharp(Buffer.from(svg)).png().toBuffer();
 }
 
-async function createEmergencySocialCardUpload({
+export async function createEmergencySocialCardUpload({
   supabase,
   rule,
   brandProfile,
@@ -35757,16 +35757,23 @@ function isAuthorizedCronRequest(request, cronSecret) {
 }
 
 async function getAdminPostReviewGate(supabase, brandProfileId = null) {
+  // Per-brand policy is authoritative when explicitly set. NULL inherits the
+  // global default. Terminal/incomplete generations are handled separately and
+  // always create an admin repair case regardless of this delivery gate.
   if (brandProfileId) {
     const { data: brand, error: brandError } = await supabase
       .from("brand_profiles")
       .select("admin_review_required")
       .eq("id", brandProfileId)
       .maybeSingle();
-    if (!brandError && brand?.admin_review_required === false) {
-      console.warn("Per-brand admin review bypass ignored; every generated post now requires Spreelo review", {
+
+    if (brandError) {
+      console.warn("Brand admin review policy unavailable; falling back to global setting", {
         brandProfileId,
+        message: brandError.message,
       });
+    } else if (typeof brand?.admin_review_required === "boolean") {
+      return brand.admin_review_required;
     }
   }
 
@@ -35783,10 +35790,8 @@ async function getAdminPostReviewGate(supabase, brandProfileId = null) {
     return true;
   }
 
-  if (data?.require_admin_post_approval === false) {
-    console.warn("Global admin review bypass ignored; every generated post now requires Spreelo review");
-  }
-  return true;
+  // Safe default for a missing global row is review enabled.
+  return data?.require_admin_post_approval !== false;
 }
 
 async function upsertAdminReviewCase(supabase, values) {

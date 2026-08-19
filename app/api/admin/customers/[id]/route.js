@@ -121,7 +121,7 @@ export async function GET(request, { params }) {
         "brands",
         context.admin
           .from("brand_profiles")
-          .select("id, user_id, business_name, website_url, industry, target_audience, content_market, country_code, content_language, website_product_mode_available, website_product_source_url, website_access_status, website_security_provider, website_security_confidence, website_access_status_code, website_access_message, website_access_checked_at, created_at, updated_at")
+          .select("id, user_id, business_name, website_url, industry, target_audience, content_market, country_code, content_language, website_product_mode_available, website_product_source_url, website_access_status, website_security_provider, website_security_confidence, website_access_status_code, website_access_message, website_access_checked_at, admin_review_required, created_at, updated_at")
           .eq("user_id", userId)
           .order("updated_at", { ascending: false }),
         warnings

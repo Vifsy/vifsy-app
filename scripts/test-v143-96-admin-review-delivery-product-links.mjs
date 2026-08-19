@@ -22,15 +22,16 @@ for (const file of [
 
 assert.match(cron, /getConfiguredAdminEmails/);
 assert.match(digest, /getConfiguredAdminEmails/);
-assert.match(cron, /return true;\s*\n\}/);
+assert.match(cron, /typeof brand\?\.admin_review_required === "boolean"/);
+assert.match(cron, /return data\?\.require_admin_post_approval !== false/);
 assert.match(migration, /require_admin_post_approval\)\s*\nvalues \('global', true\)/);
 assert.match(migration, /set admin_review_required = true/);
-assert.match(read("app/api/admin/post-approvals/route.js"), /update\(\{ admin_review_required: true/);
-assert.doesNotMatch(adminPage, /setBrandPolicy\(event\.target\.checked\)/);
+assert.match(read("app/api/admin/post-approvals/route.js"), /Boolean\(body\?\.admin_review_required\)/);
+assert.match(adminPage, /setBrandPolicy\(false\)/);
 assert.match(cron, /Products available for internal review/);
 assert.match(cron, /Open product source/);
 assert.match(adminPage, /admin-product-original-link/);
 assert.match(adminPage, /target="_blank" rel="noreferrer"/);
 assert.match(adminCss, /\.admin-product-original-link[\s\S]*background: #0b1e30/);
 
-console.log("v143.96 mandatory admin review, alerts and internal product links passed.");
+console.log("v143.96 review alerts/product links remain compatible with v144.01 policy override.");
