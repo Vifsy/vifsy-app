@@ -214,6 +214,11 @@ const WEBSITE_FETCH_ACQUIRE_ATTEMPTS = Math.max(
 // This is deliberately not environment-configurable, so an old Vercel value
 // cannot reopen an unbounded automation cost.
 const WEBSITE_RATE_LIMIT_MAX_RETRIES = 2;
+// v144.00: transient infrastructure/API failures get up to two bounded automatic
+// resumes before they are treated as terminal. In-step deterministic fallbacks
+// should normally prevent this path from being needed at all.
+const TRANSIENT_AUTOMATION_MAX_RETRIES = 2;
+const TRANSIENT_AUTOMATION_RETRY_DELAY_MS = 90_000;
 const WEBSITE_VERIFICATION_SOFT_DEADLINE_MS = 225_000;
 const CAROUSEL_PREPARATION_SOFT_DEADLINE_MS = Math.max(
   180_000,
@@ -11039,6 +11044,14 @@ function classifyAutomationCreationFailure(errorOrMessage, stage = "unhandled") 
     };
   }
 
+  if (isTransientAutomationError(errorOrMessage)) {
+    return {
+      code: "transient_runtime_failure",
+      customerMessage:
+        "A temporary technical dependency did not respond after bounded automatic retries. Spreelo has held the occurrence for internal review.",
+    };
+  }
+
   if (/stale|incomplete .*draft|still rendering/.test(normalized)) {
     return {
       code: "incomplete_generation",
@@ -11052,6 +11065,83 @@ function classifyAutomationCreationFailure(errorOrMessage, stage = "unhandled") 
     customerMessage:
       "An unexpected technical error prevented this planned post from being created. This occurrence will not be retried automatically.",
   };
+}
+
+
+function isTransientAutomationError(errorOrMessage) {
+  const message = String(errorOrMessage?.message || errorOrMessage || "").toLowerCase();
+  const code = String(errorOrMessage?.code || "").toLowerCase();
+  const status = Number(
+    errorOrMessage?.status ||
+      errorOrMessage?.statusCode ||
+      errorOrMessage?.response?.status ||
+      0
+  );
+
+  if (status === 408 || status === 425 || status === 429 || status >= 500) {
+    return true;
+  }
+
+  return /request timed out|timed?\s*out|timeout|deadline|aborted|aborterror|econnreset|econnrefused|enotfound|etimedout|socket hang up|network error|fetch failed|temporar(?:y|ily) unavailable|service unavailable|overloaded|bad gateway|gateway timeout|connection reset|connection closed|rate limit|too many requests/.test(
+    `${code} ${message}`
+  );
+}
+
+function buildDeterministicDeliveryCopy(rule) {
+  const contract =
+    rule?.product_content_contract ||
+    buildProductContentContract(
+      isCarouselRule(rule)
+        ? getCarouselProducts(rule).filter(isValidCarouselProduct)
+        : rule?.website_item
+          ? [rule.website_item]
+          : [],
+      []
+    );
+  const selectedProducts = Array.isArray(contract?.selected_products)
+    ? contract.selected_products.filter((item) => item?.title)
+    : [];
+  const destinationUrl = getPostDestinationUrl(rule);
+  const brandName = String(
+    rule?.brand_profile?.business_name ||
+      rule?.brand_profile?.name ||
+      rule?.brand_name ||
+      ""
+  ).trim();
+  const campaignName = String(
+    rule?.name || rule?.campaign_theme || rule?.content_type_label || ""
+  ).trim();
+
+  const lines = [];
+  if (campaignName) lines.push(campaignName);
+  else if (brandName) lines.push(brandName);
+
+  if (selectedProducts.length === 1) {
+    const product = selectedProducts[0];
+    if (!lines.includes(product.title)) lines.push(product.title);
+    const description = truncateText(
+      product?.description || rule?.website_item?.description || "",
+      260
+    ).trim();
+    if (description) lines.push(description);
+  } else if (selectedProducts.length > 1) {
+    lines.push(
+      selectedProducts
+        .slice(0, CAROUSEL_PRODUCT_SLIDE_TARGET)
+        .map((product) => `• ${String(product.title || "").trim()}`)
+        .filter(Boolean)
+        .join("\n")
+    );
+  } else {
+    const brandDescription = truncateText(
+      rule?.brand_profile?.brand_description || "",
+      280
+    ).trim();
+    if (brandDescription) lines.push(brandDescription);
+  }
+
+  if (destinationUrl) lines.push(destinationUrl);
+  return lines.filter(Boolean).join("\n\n").trim();
 }
 
 function escapeAutomationEmailHtml(value) {
@@ -11362,6 +11452,45 @@ async function deferAutomationOccurrenceForWebsiteRateLimit({
     retryCount: Number(data?.retry_count || 0),
     status: data?.status || "retry_pending",
     domain: data?.domain || domain || null,
+  };
+}
+
+
+async function deferAutomationOccurrenceForTransientFailure({
+  supabase,
+  occurrenceId,
+  errorOrMessage,
+  stage,
+  metadata = {},
+}) {
+  const message = String(
+    errorOrMessage?.message || errorOrMessage || "Temporary automation failure"
+  );
+  const { data, error } = await supabase.rpc(
+    "defer_automation_occurrence_for_transient_failure",
+    {
+      p_occurrence_id: occurrenceId,
+      p_retry_after_ms: TRANSIENT_AUTOMATION_RETRY_DELAY_MS,
+      p_internal_message: message,
+      p_failure_stage: stage || null,
+      p_metadata: metadata || {},
+      p_max_retries: TRANSIENT_AUTOMATION_MAX_RETRIES,
+    }
+  );
+
+  if (error) {
+    throw new Error(
+      `The v144.00 database migration is required before transient automation failures can resume automatically: ${error.message}`
+    );
+  }
+
+  return {
+    handled: Boolean(data?.handled),
+    exhausted: Boolean(data?.exhausted),
+    status: data?.status || "retry_pending",
+    retryAt: data?.retry_at || null,
+    retryAfterMs: Number(data?.retry_after_ms || TRANSIENT_AUTOMATION_RETRY_DELAY_MS),
+    retryCount: Number(data?.retry_count || 0),
   };
 }
 
@@ -14787,7 +14916,9 @@ async function generateCampaignCarouselMarketingStrategy({
     brandProfile,
     rule,
   });
-  const response = await openai.responses.create(
+  let response;
+  try {
+    response = await openai.responses.create(
     {
       model: PRODUCT_RESEARCH_MODEL,
       ...getReasoningOptionsForModel(PRODUCT_RESEARCH_MODEL),
@@ -14861,6 +14992,16 @@ Return:
     },
     { timeout: CAMPAIGN_STRATEGY_TIMEOUT_MS, maxRetries: 0 }
   );
+
+  } catch (error) {
+    console.warn("Campaign carousel senior marketing strategy unavailable; using deterministic campaign strategy fallback", {
+      ruleId: rule?.id,
+      brandProfileId: rule?.brand_profile_id,
+      websiteUrl,
+      message: error?.message || String(error),
+    });
+    return null;
+  }
 
   const strategy = normalizeCampaignMarketingStrategy(
     safeJsonParse(response.output_text || "")
@@ -17325,7 +17466,9 @@ async function evaluateCampaignFitCandidates({
 
   for (let start = 0; start < candidates.length; start += batchSize) {
     const batch = candidates.slice(start, start + batchSize);
-    const response = await openai.responses.create(
+    let response;
+    try {
+      response = await openai.responses.create(
       {
         model,
         ...getReasoningOptionsForModel(model),
@@ -17389,6 +17532,19 @@ Return strict JSON only:
       },
       { timeout: CAMPAIGN_FAST_REVIEW_TIMEOUT_MS, maxRetries: 0 }
     );
+
+    } catch (error) {
+      console.warn("Campaign fit scoring unavailable; preserving deterministic product ranking", {
+        ruleId: rule?.id,
+        brandProfileId: rule?.brand_profile_id,
+        model,
+        batchStart: start,
+        batchSize: batch.length,
+        transient: isTransientAutomationError(error),
+        message: error?.message || String(error),
+      });
+      continue;
+    }
 
     const parsed = safeJsonParse(response.output_text || "");
     const scores = Array.isArray(parsed?.scores) ? parsed.scores : [];
@@ -17659,6 +17815,16 @@ async function applyAiCampaignFitScores({
     candidates,
     model,
   });
+
+  if (evaluationByIndex.size === 0) {
+    console.warn("Campaign fit AI returned no usable scores; skipping senior escalation and preserving deterministic ranking", {
+      ruleId: rule?.id,
+      brandProfileId: rule?.brand_profile_id,
+      model,
+      candidateCount: candidates.length,
+    });
+    return applyCampaignFitEvaluations(items, evaluationByIndex);
+  }
 
   if (
     escalateWhenUncertain &&
@@ -27382,7 +27548,7 @@ async function generateAutomationPost(openai, rule) {
       },
     ],
     temperature: 0.75,
-  });
+  }, { timeout: 30_000, maxRetries: 0 });
 
   return completion.choices?.[0]?.message?.content?.trim() || "";
 }
@@ -27555,13 +27721,27 @@ Rewrite the post now.
       },
     ],
     temperature: 0.25,
-  });
+  }, { timeout: 25_000, maxRetries: 0 });
 
   return completion.choices?.[0]?.message?.content?.trim() || "";
 }
 
 export async function generateAutomationPostWithProductContractValidation(openai, rule) {
-  let content = await generateAutomationPost(openai, rule);
+  const deterministicFallback = () => buildDeterministicDeliveryCopy(rule);
+  let content = "";
+
+  try {
+    content = await generateAutomationPost(openai, rule);
+  } catch (error) {
+    const fallback = deterministicFallback();
+    if (!fallback) throw error;
+    console.warn("Post copy generation unavailable; using deterministic delivery copy", {
+      ruleId: rule?.id || null,
+      transient: isTransientAutomationError(error),
+      message: error?.message || String(error),
+    });
+    return fallback;
+  }
 
   const selectedProducts =
     rule?.product_content_contract?.selected_products ||
@@ -27572,7 +27752,7 @@ export async function generateAutomationPostWithProductContractValidation(openai
         : []);
 
   if (!PRODUCT_ENGINE_V2_ENABLED || !selectedProducts.length) {
-    return content;
+    return content || deterministicFallback();
   }
 
   if (!isCarouselRule(rule) && rule?.website_item) {
@@ -27583,41 +27763,46 @@ export async function generateAutomationPostWithProductContractValidation(openai
     });
 
     if (!deterministicValidation.valid) {
-      console.warn(
-        "Product Engine V2 rejected single-product copy that mentioned reserve products",
-        {
-          ruleId: rule?.id,
-          selectedProduct: rule?.website_item?.title || null,
-          disallowedMentions: deterministicValidation.disallowedMentions,
-        }
-      );
-
-      content = await rewriteProductCopyToExactContract({
-        openai,
-        rule,
-        content,
-        validation: {
-          valid: false,
-          reason: "The draft mentioned a reserve/non-selected product.",
-          invalidMentions: deterministicValidation.disallowedMentions,
-        },
+      console.warn("Product Engine V2 rejected single-product copy that mentioned reserve products", {
+        ruleId: rule?.id,
+        selectedProduct: rule?.website_item?.title || null,
+        disallowedMentions: deterministicValidation.disallowedMentions,
       });
+      try {
+        content = await rewriteProductCopyToExactContract({
+          openai,
+          rule,
+          content,
+          validation: {
+            valid: false,
+            reason: "The draft mentioned a reserve/non-selected product.",
+            invalidMentions: deterministicValidation.disallowedMentions,
+          },
+        });
+      } catch (error) {
+        const fallback = deterministicFallback();
+        if (!fallback) throw error;
+        console.warn("Product copy rewrite unavailable; using deterministic delivery copy", {
+          ruleId: rule?.id || null,
+          message: error?.message || String(error),
+        });
+        return fallback;
+      }
     }
   }
 
   let identityValidation;
   try {
-    identityValidation = await validateProductCopyIdentityWithModel({
-      openai,
-      rule,
-      content,
-    });
+    identityValidation = await validateProductCopyIdentityWithModel({ openai, rule, content });
   } catch (error) {
-    throw new Error(
-      `Product copy identity validation could not be completed safely: ${
-        error?.message || String(error)
-      }`
-    );
+    const fallback = deterministicFallback();
+    if (!fallback) throw error;
+    console.warn("Product copy identity AI unavailable; using deterministic contract-safe copy", {
+      ruleId: rule?.id || null,
+      transient: isTransientAutomationError(error),
+      message: error?.message || String(error),
+    });
+    return fallback;
   }
 
   if (identityValidation.valid) {
@@ -27626,7 +27811,7 @@ export async function generateAutomationPostWithProductContractValidation(openai
       contentFormat: normalizeContentFormat(rule?.content_format),
       mentionedProducts: identityValidation.mentionedProducts,
     });
-    return content;
+    return content || deterministicFallback();
   }
 
   console.warn("Product copy rejected by identity gate", {
@@ -27636,31 +27821,55 @@ export async function generateAutomationPostWithProductContractValidation(openai
     reason: identityValidation.reason,
   });
 
-  const rewritten = await rewriteProductCopyToExactContract({
-    openai,
-    rule,
-    content,
-    validation: identityValidation,
-  });
-
-  if (!rewritten) {
-    throw new Error(
-      "Product copy identity gate rejected the draft and the safe rewrite was empty."
-    );
+  let rewritten = "";
+  try {
+    rewritten = await rewriteProductCopyToExactContract({
+      openai,
+      rule,
+      content,
+      validation: identityValidation,
+    });
+  } catch (error) {
+    const fallback = deterministicFallback();
+    if (!fallback) throw error;
+    console.warn("Product identity rewrite failed; using deterministic contract-safe copy", {
+      ruleId: rule?.id || null,
+      message: error?.message || String(error),
+    });
+    return fallback;
   }
 
-  const secondValidation = await validateProductCopyIdentityWithModel({
-    openai,
-    rule,
-    content: rewritten,
-  });
+  if (!rewritten) {
+    const fallback = deterministicFallback();
+    if (fallback) return fallback;
+    throw new Error("Product copy identity gate rejected the draft and the safe rewrite was empty.");
+  }
+
+  let secondValidation;
+  try {
+    secondValidation = await validateProductCopyIdentityWithModel({
+      openai,
+      rule,
+      content: rewritten,
+    });
+  } catch (error) {
+    const fallback = deterministicFallback();
+    if (!fallback) throw error;
+    console.warn("Second product identity validation unavailable; using deterministic contract-safe copy", {
+      ruleId: rule?.id || null,
+      message: error?.message || String(error),
+    });
+    return fallback;
+  }
 
   if (!secondValidation.valid) {
-    console.error("Product copy identity gate failed closed after rewrite", {
+    console.error("Product copy identity gate failed closed after rewrite; switching to deterministic contract-safe copy", {
       ruleId: rule?.id || null,
       invalidMentions: secondValidation.invalidMentions,
       reason: secondValidation.reason,
     });
+    const fallback = deterministicFallback();
+    if (fallback) return fallback;
     throw new Error(
       `Product copy could not be made identity-safe. Invalid mentions: ${
         secondValidation.invalidMentions.join(", ") || "unknown"
@@ -27672,7 +27881,6 @@ export async function generateAutomationPostWithProductContractValidation(openai
     ruleId: rule?.id || null,
     mentionedProducts: secondValidation.mentionedProducts,
   });
-
   return rewritten;
 }
 
@@ -28667,6 +28875,57 @@ const response = await openai.images.generate({
     imageBase64,
     imagePrompt: prompt,
   };
+}
+
+
+async function renderEmergencySocialCard({ rule, brandProfile, content }) {
+  const productTitle = String(rule?.website_item?.title || "").trim();
+  const headline = truncateText(
+    productTitle || rule?.name || brandProfile?.business_name || "Spreelo",
+    92
+  );
+  const brandName = truncateText(
+    brandProfile?.business_name || brandProfile?.name || "",
+    52
+  );
+  const contentWithoutUrls = String(content || "")
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const body = truncateText(contentWithoutUrls, 300);
+  const headlineLines = splitTextIntoLines(headline, 28, 3);
+  const bodyLines = splitTextIntoLines(body, 46, 6);
+  const brandMarkup = brandName
+    ? `<text x="86" y="112" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="800" fill="#475569">${escapeSvg(brandName)}</text>`
+    : "";
+  const svg = `
+    <svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg">
+      <rect width="1080" height="1080" fill="#f8fafc"/>
+      <rect x="54" y="54" width="972" height="972" rx="48" fill="#ffffff" stroke="#e2e8f0" stroke-width="2"/>
+      <rect x="86" y="154" width="92" height="8" rx="4" fill="#ea580c"/>
+      ${brandMarkup}
+      ${buildSvgTextBlock(headlineLines, { x: 86, y: 276, fontSize: 66, lineHeight: 78, fontWeight: 900, fill: "#0f172a" })}
+      ${buildSvgTextBlock(bodyLines, { x: 86, y: 560, fontSize: 34, lineHeight: 49, fontWeight: 500, fill: "#334155" })}
+    </svg>`;
+  return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+async function createEmergencySocialCardUpload({
+  supabase,
+  rule,
+  brandProfile,
+  content,
+  postId,
+  fileSuffix = "delivery-fallback",
+}) {
+  const buffer = await renderEmergencySocialCard({ rule, brandProfile, content });
+  return uploadGeneratedImageToStorage({
+    supabase,
+    imageBase64: buffer.toString("base64"),
+    userId: rule.user_id,
+    postId,
+    fileSuffix,
+  });
 }
 
 async function uploadGeneratedImageToStorage({
@@ -35695,6 +35954,7 @@ async function runAutomationCron(request, options = {}) {
       let automationOccurrenceClaimed = false;
       let automationBrandProfile = null;
       let websiteDomainJobLock = null;
+      let automationCurrentStage = "queue_claim";
 
       const finishRunLog = async (status, errorMessage = null, extraSummary = {}) => {
         if (automationRunFinished || !automationRunLogId) {
@@ -35806,6 +36066,40 @@ async function runAutomationCron(request, options = {}) {
         return { ...result, terminal: false };
       };
 
+      const deferCurrentOccurrenceForTransientFailure = async (
+        errorOrMessage,
+        stage,
+        extraSummary = {}
+      ) => {
+        const result = await deferAutomationOccurrenceForTransientFailure({
+          supabase,
+          occurrenceId: automationOccurrenceId,
+          errorOrMessage,
+          stage,
+          metadata: extraSummary,
+        });
+        if (result.exhausted) {
+          return { ...result, terminal: true };
+        }
+        await finishRunLog(
+          "skipped",
+          String(errorOrMessage?.message || errorOrMessage || "Temporary automation failure"),
+          {
+            stage,
+            failure_code: "transient_runtime_failure",
+            automatic_retry_scheduled: true,
+            retry_at: result.retryAt,
+            retry_after_ms: result.retryAfterMs,
+            retry_count: result.retryCount,
+            terminal_failure: false,
+            refunded_credits: 0,
+            ...extraSummary,
+          }
+        );
+        summary.transient_failures_deferred = Number(summary.transient_failures_deferred || 0) + 1;
+        return { ...result, terminal: false };
+      };
+
       const deferCurrentOccurrenceForCampaignResearch = async (
         errorOrMessage,
         extraSummary = {}
@@ -35881,6 +36175,7 @@ async function runAutomationCron(request, options = {}) {
           summary.automation_run_logs_started += 1;
         }
 
+        automationCurrentStage = "brand_profile_load";
         automationBrandProfile = await getBrandProfileForRule(supabase, rule);
         if (automationBrandProfile) {
           summary.brand_profile_found += 1;
@@ -35947,6 +36242,7 @@ async function runAutomationCron(request, options = {}) {
           }
         }
 
+        automationCurrentStage = "occurrence_claim";
         const occurrenceClaim = await claimAutomationOccurrenceOnce({
           supabase,
           rule,
@@ -35956,8 +36252,10 @@ async function runAutomationCron(request, options = {}) {
         });
         automationOccurrenceId = occurrenceClaim?.occurrence_id || null;
         automationOccurrenceClaimed = Boolean(occurrenceClaim?.claimed);
-        const automationOccurrenceResumedAfterWebsiteRateLimit =
+        const automationOccurrenceResumedAfterRetry =
           Boolean(occurrenceClaim?.resumed);
+        const automationOccurrenceResumedAfterWebsiteRateLimit =
+          automationOccurrenceResumedAfterRetry;
 
         if (!automationOccurrenceClaimed) {
           await finishRunLog(
@@ -36007,17 +36305,27 @@ async function runAutomationCron(request, options = {}) {
             supabase,
             posts: staleIncompleteAnimatedVideoDrafts,
           });
-          const message =
-            "An earlier animated video draft did not finish. Spreelo stopped the occurrence instead of starting another automatic generation attempt.";
-          await failCurrentOccurrence(message, "stale_incomplete_animated_video_draft", {
-            deleted_incomplete_drafts: cleanedAnimatedDraftCount,
-            stale_draft_ids: staleIncompleteAnimatedVideoDrafts.map((post) => post.id),
-          });
           summary.cleaned_incomplete_animated_video_drafts =
             Number(summary.cleaned_incomplete_animated_video_drafts || 0) +
             cleanedAnimatedDraftCount;
-          summary.errors += 1;
-          continue;
+          if (automationOccurrenceResumedAfterRetry) {
+            const removedIds = new Set(staleIncompleteAnimatedVideoDrafts.map((post) => post.id));
+            automationDrafts = automationDrafts.filter((post) => !removedIds.has(post.id));
+            console.warn("Resumed occurrence removed stale animated draft and will regenerate safely", {
+              ruleId: rule.id,
+              occurrenceId: automationOccurrenceId,
+              deletedDraftCount: cleanedAnimatedDraftCount,
+            });
+          } else {
+            const message =
+              "An earlier animated video draft did not finish. Spreelo stopped the occurrence instead of starting another automatic generation attempt.";
+            await failCurrentOccurrence(message, "stale_incomplete_animated_video_draft", {
+              deleted_incomplete_drafts: cleanedAnimatedDraftCount,
+              stale_draft_ids: staleIncompleteAnimatedVideoDrafts.map((post) => post.id),
+            });
+            summary.errors += 1;
+            continue;
+          }
         }
 
         const activeIncompleteAnimatedVideoDrafts = automationDrafts.filter(
@@ -36025,15 +36333,31 @@ async function runAutomationCron(request, options = {}) {
         );
 
         if (activeIncompleteAnimatedVideoDrafts.length > 0) {
-          const message =
-            "An animated video draft already exists for this occurrence and has not completed. Spreelo stopped further automatic attempts.";
-          await failCurrentOccurrence(message, "active_incomplete_animated_video_draft", {
-            incomplete_animated_video_drafts: activeIncompleteAnimatedVideoDrafts.length,
-            draft_ids: activeIncompleteAnimatedVideoDrafts.map((post) => post.id),
-          });
-          summary.errors += 1;
-          summary.skipped_existing_draft += 1;
-          continue;
+          if (automationOccurrenceResumedAfterRetry) {
+            const cleanedAnimatedDraftCount = await deleteIncompleteAnimatedVideoDrafts({
+              supabase,
+              posts: activeIncompleteAnimatedVideoDrafts,
+            });
+            const removedIds = new Set(activeIncompleteAnimatedVideoDrafts.map((post) => post.id));
+            automationDrafts = automationDrafts.filter((post) => !removedIds.has(post.id));
+            summary.cleaned_incomplete_animated_video_drafts =
+              Number(summary.cleaned_incomplete_animated_video_drafts || 0) + cleanedAnimatedDraftCount;
+            console.warn("Resumed occurrence removed incomplete animated draft and will regenerate safely", {
+              ruleId: rule.id,
+              occurrenceId: automationOccurrenceId,
+              deletedDraftCount: cleanedAnimatedDraftCount,
+            });
+          } else {
+            const message =
+              "An animated video draft already exists for this occurrence and has not completed. Spreelo stopped further automatic attempts.";
+            await failCurrentOccurrence(message, "active_incomplete_animated_video_draft", {
+              incomplete_animated_video_drafts: activeIncompleteAnimatedVideoDrafts.length,
+              draft_ids: activeIncompleteAnimatedVideoDrafts.map((post) => post.id),
+            });
+            summary.errors += 1;
+            summary.skipped_existing_draft += 1;
+            continue;
+          }
         }
 
         const staleIncompleteDrafts = automationDrafts.filter((post) =>
@@ -36045,15 +36369,25 @@ async function runAutomationCron(request, options = {}) {
             supabase,
             posts: staleIncompleteDrafts,
           });
-          const message =
-            "An earlier carousel draft did not finish. Spreelo stopped the occurrence instead of starting another automatic generation attempt.";
-          await failCurrentOccurrence(message, "stale_incomplete_carousel_draft", {
-            deleted_incomplete_drafts: cleanedDraftCount,
-            stale_draft_ids: staleIncompleteDrafts.map((post) => post.id),
-          });
           summary.cleaned_incomplete_carousel_drafts += cleanedDraftCount;
-          summary.errors += 1;
-          continue;
+          if (automationOccurrenceResumedAfterRetry) {
+            const removedIds = new Set(staleIncompleteDrafts.map((post) => post.id));
+            automationDrafts = automationDrafts.filter((post) => !removedIds.has(post.id));
+            console.warn("Resumed occurrence removed stale carousel draft and will regenerate safely", {
+              ruleId: rule.id,
+              occurrenceId: automationOccurrenceId,
+              deletedDraftCount: cleanedDraftCount,
+            });
+          } else {
+            const message =
+              "An earlier carousel draft did not finish. Spreelo stopped the occurrence instead of starting another automatic generation attempt.";
+            await failCurrentOccurrence(message, "stale_incomplete_carousel_draft", {
+              deleted_incomplete_drafts: cleanedDraftCount,
+              stale_draft_ids: staleIncompleteDrafts.map((post) => post.id),
+            });
+            summary.errors += 1;
+            continue;
+          }
         }
 
         const activeIncompleteDrafts = automationDrafts.filter((post) =>
@@ -36062,15 +36396,30 @@ async function runAutomationCron(request, options = {}) {
         const incompleteCarouselDrafts = countIncompleteCarouselDrafts(activeIncompleteDrafts);
 
         if (incompleteCarouselDrafts > 0) {
-          const message =
-            "An incomplete carousel draft already exists for this occurrence. Spreelo stopped further automatic attempts.";
-          await failCurrentOccurrence(message, "active_incomplete_carousel_draft", {
-            incomplete_carousel_drafts: incompleteCarouselDrafts,
-            draft_ids: activeIncompleteDrafts.map((post) => post.id),
-          });
-          summary.errors += 1;
-          summary.skipped_existing_draft += 1;
-          continue;
+          if (automationOccurrenceResumedAfterRetry) {
+            const cleanedDraftCount = await deleteIncompleteCarouselDrafts({
+              supabase,
+              posts: activeIncompleteDrafts,
+            });
+            const removedIds = new Set(activeIncompleteDrafts.map((post) => post.id));
+            automationDrafts = automationDrafts.filter((post) => !removedIds.has(post.id));
+            summary.cleaned_incomplete_carousel_drafts += cleanedDraftCount;
+            console.warn("Resumed occurrence removed incomplete carousel draft and will regenerate safely", {
+              ruleId: rule.id,
+              occurrenceId: automationOccurrenceId,
+              deletedDraftCount: cleanedDraftCount,
+            });
+          } else {
+            const message =
+              "An incomplete carousel draft already exists for this occurrence. Spreelo stopped further automatic attempts.";
+            await failCurrentOccurrence(message, "active_incomplete_carousel_draft", {
+              incomplete_carousel_drafts: incompleteCarouselDrafts,
+              draft_ids: activeIncompleteDrafts.map((post) => post.id),
+            });
+            summary.errors += 1;
+            summary.skipped_existing_draft += 1;
+            continue;
+          }
         }
 
         const existingCompleteDraft = automationDrafts.find((post) =>
@@ -36120,7 +36469,8 @@ async function runAutomationCron(request, options = {}) {
             }
           }
 
-          await completeAutomationOccurrence({
+          automationCurrentStage = "occurrence_complete";
+        await completeAutomationOccurrence({
             supabase,
             occurrenceId: automationOccurrenceId,
             postId: existingCompleteDraft.id,
@@ -36188,9 +36538,11 @@ let useWebsiteImage = false;
 let websitePreparedRule = rule;
 let animatedReelCandidates = [];
 let animatedReelRejectedCandidates = [];
+automationCurrentStage = "focused_page_context";
 const focusedPageContext = await prepareFocusedPageContextForRule(rule);
 
         if (isCarouselRule(rule)) {
+          automationCurrentStage = "carousel_product_prepare";
           try {
             const preparedCarouselProducts = await prepareCarouselProductsForRule({
               supabase,
@@ -36394,6 +36746,7 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
             }
           }
         } else if (rule.uses_website_content) {
+          automationCurrentStage = "single_product_prepare";
           try {
            const preparedWebsiteContent = await prepareWebsiteContentForRule({
   supabase,
@@ -36447,6 +36800,7 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
             Array.isArray(websiteItems) &&
             websiteItems.length > 0)
         ) {
+          automationCurrentStage = "product_image_verification";
           const primaryItems = isCarouselRule(websitePreparedRule)
             ? websiteItems
             : [websiteItem];
@@ -36639,6 +36993,7 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
           );
         }
 
+        automationCurrentStage = "content_generation";
         let generatedContent = await generateLockedProductPostContentForUse(
           openai,
           ruleWithBrandProfile
@@ -36661,6 +37016,7 @@ const postStatus =
 let effectivePostStatus = postStatus;
 const wantsImage = Boolean(websitePreparedRule.generate_image);
 
+automationCurrentStage = "post_insert";
 const { data: post, error: postError } = await supabase
   .from("posts")
   .insert({
@@ -36772,6 +37128,7 @@ product_research_model_used: websitePreparedRule.uses_website_content
         let videoUrl = null;
         let videoStoragePath = null;
         let videoRenderId = null;
+        let animatedVideoFinalError = null;
 
         const isWebsiteBasedPost = Boolean(websitePreparedRule.uses_website_content || websiteItem || websiteSourceUrl);
         const ruleImageSource = String(websitePreparedRule.image_source || "").trim().toLowerCase();
@@ -36850,7 +37207,7 @@ product_research_model_used: websitePreparedRule.uses_website_content
           finalImagePrompt =
             "9:16 animated product Reel using an automatically selected uploaded MP4 background, the unchanged original website product, a separate OpenAI text overlay and Shotstack HTML5 zoom motion.";
 
-          let finalVideoError = null;
+          animatedVideoFinalError = null;
           // The product image has already been resolved and verified before the
           // paid content call. Render that selected product once instead of
           // regenerating paid copy for several reserve products.
@@ -36939,7 +37296,7 @@ product_research_model_used: websitePreparedRule.uses_website_content
               summary.website_image_used += 1;
               break;
             } catch (videoError) {
-              finalVideoError = videoError;
+              animatedVideoFinalError = videoError;
               console.warn("Animated Reel product attempt failed", {
                 ruleId: rule.id,
                 postId: post.id,
@@ -36984,7 +37341,7 @@ product_research_model_used: websitePreparedRule.uses_website_content
               })),
             ].slice(0, 8);
             const failureMessage = truncateText(
-              finalVideoError?.message ||
+              animatedVideoFinalError?.message ||
                 "Animated product video failed after the main product and available reserve products were tried.",
               1000
             );
@@ -37076,21 +37433,38 @@ product_research_model_used: websitePreparedRule.uses_website_content
             summary.image_generated += 1;
             summary.website_image_used += 1;
           } catch (imageError) {
-            console.error("Website Text + Ad image generation failed", {
+            console.warn("Website Text + Ad image generation failed; using local delivery card", {
               ruleId: rule.id,
               postId: post.id,
               message: imageError.message,
             });
-
-            await supabase
-              .from("posts")
-              .update({
+            try {
+              const emergencyImage = await createEmergencySocialCardUpload({
+                supabase,
+                rule: ruleWithBrandProfile,
+                brandProfile,
+                content: generatedContent,
+                postId: post.id,
+                fileSuffix: "website-ad-delivery-fallback",
+              });
+              imageUrl = emergencyImage.imageUrl;
+              imageStoragePath = emergencyImage.imageStoragePath;
+              await supabase.from("posts").update({
+                image_url: imageUrl,
+                image_storage_path: imageStoragePath,
+                image_status: "ready",
+                image_prompt: "Local deterministic delivery fallback after AI image failure.",
+                updated_at: nowIso,
+              }).eq("id", post.id);
+              summary.delivery_fallback_image_generated = Number(summary.delivery_fallback_image_generated || 0) + 1;
+            } catch (fallbackError) {
+              await supabase.from("posts").update({
                 image_status: "failed",
                 image_prompt: finalImagePrompt,
                 updated_at: nowIso,
-              })
-              .eq("id", post.id);
-
+              }).eq("id", post.id);
+              throw fallbackError;
+            }
             summary.image_generation_failed += 1;
             summary.warnings += 1;
           }
@@ -37264,39 +37638,75 @@ product_research_model_used: websitePreparedRule.uses_website_content
 
     summary.image_generated += 1;
   } catch (imageError) {
-    console.error("Image generation failed", {
+    console.warn("Image generation failed; using local deterministic delivery card", {
       ruleId: rule.id,
       postId: post.id,
       message: imageError.message,
     });
-
-    await supabase
-      .from("posts")
-      .update({
+    try {
+      const emergencyImage = await createEmergencySocialCardUpload({
+        supabase,
+        rule: ruleWithBrandProfile,
+        brandProfile,
+        content: generatedContent,
+        postId: post.id,
+      });
+      imageUrl = emergencyImage.imageUrl;
+      imageStoragePath = emergencyImage.imageStoragePath;
+      await supabase.from("posts").update({
+        image_url: imageUrl,
+        image_storage_path: imageStoragePath,
+        image_status: "ready",
+        image_prompt: "Local deterministic delivery fallback after AI image failure.",
+        updated_at: nowIso,
+      }).eq("id", post.id);
+      summary.delivery_fallback_image_generated = Number(summary.delivery_fallback_image_generated || 0) + 1;
+      summary.image_generation_failed += 1;
+      summary.warnings += 1;
+    } catch (fallbackError) {
+      await supabase.from("posts").update({
         image_status: "failed",
         image_prompt: finalImagePrompt,
         updated_at: nowIso,
-      })
-      .eq("id", post.id);
-
-    summary.image_generation_failed += 1;
-    throw imageError;
+      }).eq("id", post.id);
+      throw fallbackError;
+    }
   }
 }
 
+        automationCurrentStage = "media_generation";
         if (isAnimatedVideoRule(websitePreparedRule)) {
           if (!videoUrl) {
-            const message = "Animated product video could not be rendered.";
+            const message = animatedVideoFinalError?.message || "Animated product video could not be rendered.";
 
             await supabase
               .from("posts")
               .update({
-                status: "failed",
+                status: "generating",
                 video_status: "failed",
                 video_error: message,
                 updated_at: new Date().toISOString(),
               })
               .eq("id", post.id);
+
+            if (animatedVideoFinalError && isTransientAutomationError(animatedVideoFinalError)) {
+              const transientResult = await deferCurrentOccurrenceForTransientFailure(
+                animatedVideoFinalError,
+                "animated_video_render",
+                { failed_post_id: post.id, media_retry: true }
+              );
+              if (transientResult.terminal) {
+                await failCurrentOccurrence(animatedVideoFinalError, "animated_video_render", {
+                  failed_post_id: post.id,
+                  transient_retry_exhausted: true,
+                  retry_count: transientResult.retryCount,
+                });
+                summary.errors += 1;
+              } else {
+                summary.skipped += 1;
+              }
+              continue;
+            }
 
             await failCurrentOccurrence(message, "animated_video_render", {
               failed_post_id: post.id,
@@ -37357,15 +37767,49 @@ product_research_model_used: websitePreparedRule.uses_website_content
             effectivePostStatus = "pending_approval";
           } catch (carouselSlideError) {
             const message = carouselSlideError.message || "Carousel slides could not be created.";
-            await supabase.from("post_slides").delete().eq("post_id", post.id);
-            await supabase.from("posts").delete().eq("id", post.id);
-            await failCurrentOccurrence(carouselSlideError, "carousel_slide_save", {
-              deleted_failed_post_id: post.id,
-              cost_protection: true,
+            console.warn("Carousel slide creation failed; downgrading to a safe single-image delivery", {
+              ruleId: rule.id,
+              postId: post.id,
+              message,
             });
-            summary.website_content_failed += 1;
-            summary.errors += 1;
-            continue;
+            await supabase.from("post_slides").delete().eq("post_id", post.id);
+
+            let fallbackImageUrl =
+              websiteItems.find((item) => item?.image_url)?.image_url ||
+              websiteItem?.image_url ||
+              imageUrl ||
+              null;
+            let fallbackImageStoragePath = null;
+
+            if (!fallbackImageUrl) {
+              const emergencyImage = await createEmergencySocialCardUpload({
+                supabase,
+                rule: ruleWithBrandProfile,
+                brandProfile,
+                content: generatedContent,
+                postId: post.id,
+                fileSuffix: "carousel-delivery-fallback",
+              });
+              fallbackImageUrl = emergencyImage.imageUrl;
+              fallbackImageStoragePath = emergencyImage.imageStoragePath;
+            }
+
+            const { error: downgradeError } = await supabase.from("posts").update({
+              content_format: "single_image",
+              image_url: fallbackImageUrl,
+              image_storage_path: fallbackImageStoragePath,
+              image_status: fallbackImageUrl ? "ready" : "none",
+              status: "pending_approval",
+              updated_at: new Date().toISOString(),
+            }).eq("id", post.id);
+            if (downgradeError) throw downgradeError;
+
+            websitePreparedRule = { ...websitePreparedRule, content_format: "single_image" };
+            effectivePostStatus = "pending_approval";
+            imageUrl = fallbackImageUrl;
+            imageStoragePath = fallbackImageStoragePath;
+            summary.carousel_downgraded_to_single_image = Number(summary.carousel_downgraded_to_single_image || 0) + 1;
+            summary.warnings += 1;
           }
         }
 
@@ -37619,16 +38063,36 @@ product_research_model_used: websitePreparedRule.uses_website_content
         });
       } catch (error) {
         const message = error.message || "Unknown automation error";
+        const failureStage = automationCurrentStage || "unhandled";
 
         if (
           automationOccurrenceClaimed &&
           automationOccurrenceId &&
           isWebsiteRateLimitError(error)
         ) {
-          const rateLimitResult = await deferCurrentOccurrenceForWebsiteRateLimit(error, "unhandled", {
+          const rateLimitResult = await deferCurrentOccurrenceForWebsiteRateLimit(error, failureStage, {
             website_domain: getWebsiteFetchDomain(error?.domain || error?.url || ""),
           });
           if (rateLimitResult.terminal) {
+            summary.errors += 1;
+          } else {
+            summary.skipped += 1;
+          }
+        } else if (
+          automationOccurrenceClaimed &&
+          automationOccurrenceId &&
+          isTransientAutomationError(error)
+        ) {
+          const transientResult = await deferCurrentOccurrenceForTransientFailure(
+            error,
+            failureStage,
+            { transient_error: true, original_error_code: error?.code || null }
+          );
+          if (transientResult.terminal) {
+            await failCurrentOccurrence(error, failureStage, {
+              transient_retry_exhausted: true,
+              retry_count: transientResult.retryCount,
+            });
             summary.errors += 1;
           } else {
             summary.skipped += 1;
@@ -37645,12 +38109,12 @@ product_research_model_used: websitePreparedRule.uses_website_content
               ? { target_product_count: Number(error.targetProductCount) }
               : {}),
           };
-          await failCurrentOccurrence(error, "unhandled", terminalFailureMetadata);
+          await failCurrentOccurrence(error, failureStage, terminalFailureMetadata);
           summary.errors += 1;
         } else {
           await setRuleError(supabase, rule.id, message);
           await finishRunLog("failed", message, {
-            stage: "unhandled_before_occurrence_claim",
+            stage: failureStage || "unhandled_before_occurrence_claim",
             automatic_retry_scheduled: false,
           });
           summary.errors += 1;
