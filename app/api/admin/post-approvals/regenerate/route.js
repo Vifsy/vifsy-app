@@ -2,7 +2,7 @@ import crypto from "crypto";
 import OpenAI from "openai";
 import { adminContextError, getAdminContext } from "../../../../../lib/adminAuth";
 import { snapshotAdminPostVersion } from "../../../../../lib/adminPostVersions";
-import { generateCarouselOutroSlideImage, getCarouselProductLabelPresentation, renderCarouselProductSlideImage, resolveLockedProductUrlForUse } from "../../../cron/run-automations/route.js";
+import { applyLogoOverlayIfNeeded, generateCarouselOutroSlideImage, getCarouselProductLabelPresentation, renderCarouselProductSlideImage, resolveLockedProductUrlForUse, shouldUseLogoForRule } from "../../../cron/run-automations/route.js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -75,7 +75,7 @@ export async function POST(request) {
   const ruleId = post?.automation_rule_id || occurrence?.automation_rule_id || reviewCase?.automation_rule_id;
   const { data: rule } = ruleId ? await context.admin.from("automation_rules").select("*").eq("id", ruleId).maybeSingle() : { data: null };
   const brandProfileId = post?.brand_profile_id || occurrence?.brand_profile_id || reviewCase?.brand_profile_id || rule?.brand_profile_id;
-  const { data: brandProfile } = brandProfileId ? await context.admin.from("brand_profiles").select("business_name, content_language, website_url, website_product_source_url").eq("id", brandProfileId).maybeSingle() : { data: null };
+  const { data: brandProfile } = brandProfileId ? await context.admin.from("brand_profiles").select("business_name, content_language, website_url, website_product_source_url, logo_url, logo_storage_path, logo_enabled_by_default").eq("id", brandProfileId).maybeSingle() : { data: null };
   const repairUserId = post?.user_id || occurrence?.user_id || reviewCase?.user_id || rule?.user_id || null;
   if (!repairUserId) {
     return Response.json({ ok: false, error: "The customer account for this failed generation is missing." }, { status: 400 });
@@ -83,6 +83,7 @@ export async function POST(request) {
   const language = post?.language || rule?.language || brandProfile?.content_language || "English";
   const campaign = occurrence?.campaign_title || reviewCase?.campaign_title || rule?.name || "campaign";
   const enhancedRule = { ...(rule || {}), brand_profile: brandProfile || null, language, campaign_theme: campaign };
+  const includeLogo = shouldUseLogoForRule(enhancedRule, brandProfile);
   let content = String(body?.content || "").trim();
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -217,13 +218,21 @@ export async function POST(request) {
       productTitle: presentation.title,
       productBrand: presentation.brand,
       productDescriptor: presentation.descriptor,
-      includeLogo: false,
+      includeLogo,
       languageHint: language,
     });
     const path = `admin-regenerated/${post.id}/${index + 1}-${crypto.randomUUID()}.png`;
     const upload = await context.admin.storage.from("post-images").upload(path, Buffer.from(rendered.imageBase64, "base64"), { contentType: "image/png", upsert: false });
     if (upload.error) return Response.json({ ok: false, error: upload.error.message }, { status: 500 });
     const { data: publicData } = context.admin.storage.from("post-images").getPublicUrl(path);
+    const tiktokCleanImageUrl = publicData.publicUrl;
+    let finalImageUrl = tiktokCleanImageUrl;
+    let finalImageStoragePath = path;
+    const logoResult = await applyLogoOverlayIfNeeded({
+      supabase: context.admin, userId: post.user_id, postId: `${post.id}-admin-carousel-${index + 1}`,
+      imageUrl: finalImageUrl, imageStoragePath: finalImageStoragePath, brandProfile, includeLogo,
+    });
+    if (logoResult?.imageUrl) { finalImageUrl = logoResult.imageUrl; finalImageStoragePath = logoResult.imageStoragePath || finalImageStoragePath; }
     slides.push({
       user_id: post.user_id,
       post_id: post.id,
@@ -232,10 +241,13 @@ export async function POST(request) {
       headline: product.title,
       body: product.description || null,
       cta_text: null,
-      image_url: publicData.publicUrl,
+      image_url: finalImageUrl,
       product_url: product.url || null,
-      logo_enabled: false,
+      logo_enabled: includeLogo,
       metadata: {
+        image_storage_path: finalImageStoragePath,
+        tiktok_image_url: tiktokCleanImageUrl,
+        tiktok_image_storage_path: path,
         product_title: product.title,
         product_description: product.description || null,
         product_brand: product.product_brand || null,
@@ -284,6 +296,14 @@ export async function POST(request) {
     const outroUpload = await context.admin.storage.from("post-images").upload(outroPath, Buffer.from(generatedOutro.imageBase64, "base64"), { contentType: "image/png", upsert: false });
     if (outroUpload.error) return Response.json({ ok: false, error: outroUpload.error.message }, { status: 500 });
     const { data: outroPublicData } = context.admin.storage.from("post-images").getPublicUrl(outroPath);
+    const tiktokCleanOutroUrl = outroPublicData.publicUrl;
+    let finalOutroUrl = tiktokCleanOutroUrl;
+    let finalOutroStoragePath = outroPath;
+    const outroLogoResult = await applyLogoOverlayIfNeeded({
+      supabase: context.admin, userId: post.user_id, postId: `${post.id}-admin-carousel-outro`,
+      imageUrl: finalOutroUrl, imageStoragePath: finalOutroStoragePath, brandProfile, includeLogo,
+    });
+    if (outroLogoResult?.imageUrl) { finalOutroUrl = outroLogoResult.imageUrl; finalOutroStoragePath = outroLogoResult.imageStoragePath || finalOutroStoragePath; }
     slides.push({
       user_id: post.user_id,
       post_id: post.id,
@@ -292,10 +312,10 @@ export async function POST(request) {
       headline: outroCopy.headline,
       body: outroCopy.body,
       cta_text: outroCopy.cta_text,
-      image_url: outroPublicData.publicUrl,
+      image_url: finalOutroUrl,
       product_url: brandProfile?.website_url || null,
-      logo_enabled: false,
-      metadata: { carousel_slide_role: "product_outro", admin_regenerated: true, image_prompt: generatedOutro.imagePrompt },
+      logo_enabled: includeLogo,
+      metadata: { carousel_slide_role: "product_outro", admin_regenerated: true, image_prompt: generatedOutro.imagePrompt, image_storage_path: finalOutroStoragePath, tiktok_image_url: tiktokCleanOutroUrl, tiktok_image_storage_path: outroPath },
     });
   }
   const { data: previousSlides, error: previousSlidesError } = await context.admin

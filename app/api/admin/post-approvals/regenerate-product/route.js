@@ -265,6 +265,8 @@ export async function POST(request) {
     let videoUrl = null;
     let videoStoragePath = null;
     let videoRenderId = null;
+    let tiktokCleanImageUrl = null;
+    let tiktokCleanImageStoragePath = null;
 
     if (isAnimated) {
       await context.admin.from("posts").update({
@@ -301,6 +303,8 @@ export async function POST(request) {
       imageUrl = uploaded.imageUrl;
       imageStoragePath = uploaded.imageStoragePath;
       imagePrompt = generated.imagePrompt;
+      tiktokCleanImageUrl = imageUrl;
+      tiktokCleanImageStoragePath = imageStoragePath;
       const logoResult = await applyLogoOverlayIfNeeded({
         supabase: context.admin,
         userId: repairUserId,
@@ -337,6 +341,8 @@ export async function POST(request) {
       imagePrompt = useManualOverride
         ? "Admin-supplied product image rendered with Spreelo product label."
         : "Verified product-page image rendered with Spreelo product identity label.";
+      tiktokCleanImageUrl = imageUrl;
+      tiktokCleanImageStoragePath = imageStoragePath;
       const logoResult = await applyLogoOverlayIfNeeded({
         supabase: context.admin,
         userId: post.user_id,
@@ -352,6 +358,8 @@ export async function POST(request) {
       }
     }
 
+    const existingPublishSettings = post.platform_publish_settings && typeof post.platform_publish_settings === "object" ? post.platform_publish_settings : {};
+    const existingTikTokSettings = existingPublishSettings.tiktok && typeof existingPublishSettings.tiktok === "object" ? existingPublishSettings.tiktok : {};
     const updatePayload = {
       content: generatedContent,
       image_url: imageUrl,
@@ -363,6 +371,20 @@ export async function POST(request) {
       admin_review_status: "pending",
       include_logo: includeLogo,
       logo_url: includeLogo ? brandProfile?.logo_url || null : null,
+      ...(tiktokCleanImageUrl && String(post.platform || "").toLowerCase().includes("tiktok") ? {
+        platform_publish_settings: {
+          ...existingPublishSettings,
+          tiktok: {
+            ...existingTikTokSettings,
+            media_overrides: {
+              ...(existingTikTokSettings.media_overrides || {}),
+              image_url: tiktokCleanImageUrl,
+              image_storage_path: tiktokCleanImageStoragePath || null,
+              source: "admin_pre_logo_clean_media",
+            },
+          },
+        },
+      } : {}),
       updated_at: new Date().toISOString(),
     };
     if (isAnimated) {

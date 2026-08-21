@@ -40,7 +40,7 @@ assert(vercel.includes("/api/cron/refresh-tiktok-tokens"), "TikTok token refresh
 // Customer approval remains mandatory and TikTok-specific requirements are collected there.
 assert(approve.includes("isTikTokTarget(post.platform)"), "TikTok customer approval branch missing");
 assert(approve.includes('name="privacy_level" required'), "manual TikTok privacy choice missing");
-assert(approve.includes('<option value="">Choose visibility'), "TikTok privacy must have no preselected value");
+assert(approve.includes('name="privacy_level" required') && approve.includes('<option value="">'), "TikTok privacy must have no preselected value");
 assert(approve.includes('name="tiktok_consent"'), "explicit TikTok upload consent missing");
 assert(approve.includes("fetchTikTokCreatorInfo"), "fresh TikTok creator info is not queried during approval");
 assert(approve.includes("platform_publish_settings: platformPublishSettings"), "TikTok approved choices are not persisted");

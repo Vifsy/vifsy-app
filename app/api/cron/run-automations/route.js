@@ -28336,6 +28336,8 @@ async function saveCarouselSlidesForPost({
     let slideRenderedBy = 'source_image';
     let productCardRenderError = null;
     let productLabelApplied = false;
+    let tiktokCleanImageUrl = null;
+    let tiktokCleanImageStoragePath = null;
     let productLabelMetadata = {
       productLabelSource: "none",
       productLabelReason: "not_rendered",
@@ -28397,6 +28399,8 @@ async function saveCarouselSlidesForPost({
         slideImageUrl = uploadedImage.imageUrl;
         slideStoragePath = uploadedImage.imageStoragePath;
         slideRenderedBy = 'step95j_product_carousel_render';
+        tiktokCleanImageUrl = slideImageUrl;
+        tiktokCleanImageStoragePath = slideStoragePath;
 
         const logoOverlayResult = await applyLogoOverlayIfNeeded({
           supabase,
@@ -28447,6 +28451,8 @@ async function saveCarouselSlidesForPost({
         slideStoragePath = uploadedImage.imageStoragePath;
         generatedImagePrompt = imagePrompt;
         slideRenderedBy = 'step95g_product_carousel_outro';
+        tiktokCleanImageUrl = slideImageUrl;
+        tiktokCleanImageStoragePath = slideStoragePath;
 
         const logoOverlayResult = await applyLogoOverlayIfNeeded({
           supabase,
@@ -28494,6 +28500,8 @@ async function saveCarouselSlidesForPost({
         source_content_type_id: rule.content_type_id || null,
         product_count: productCount || null,
         image_storage_path: slideStoragePath || null,
+        tiktok_image_url: tiktokCleanImageUrl || slideImageUrl || null,
+        tiktok_image_storage_path: tiktokCleanImageStoragePath || slideStoragePath || null,
         image_prompt: generatedImagePrompt || null,
         overlay_text: slide.overlay_text || null,
         source_image_url: sourceSlideImageUrl || null,
@@ -32955,6 +32963,50 @@ async function fetchImageBufferForOverlay(imageUrl) {
   return Buffer.from(arrayBuffer);
 }
 
+async function persistTikTokCleanSingleImageOverride({
+  supabase,
+  postId,
+  platform,
+  imageUrl,
+  imageStoragePath = null,
+}) {
+  if (!postId || !imageUrl || !getPublishTargets(platform).includes("tiktok")) return;
+  try {
+    const { data: currentPost, error: readError } = await supabase
+      .from("posts")
+      .select("platform_publish_settings")
+      .eq("id", postId)
+      .maybeSingle();
+    if (readError) throw readError;
+    const currentSettings = currentPost?.platform_publish_settings && typeof currentPost.platform_publish_settings === "object"
+      ? currentPost.platform_publish_settings
+      : {};
+    const currentTikTok = currentSettings?.tiktok && typeof currentSettings.tiktok === "object"
+      ? currentSettings.tiktok
+      : {};
+    const nextSettings = {
+      ...currentSettings,
+      tiktok: {
+        ...currentTikTok,
+        media_overrides: {
+          ...(currentTikTok.media_overrides || {}),
+          image_url: imageUrl,
+          image_storage_path: imageStoragePath || null,
+          source: "pre_logo_clean_media",
+        },
+      },
+    };
+    const { error: updateError } = await supabase
+      .from("posts")
+      .update({ platform_publish_settings: nextSettings, updated_at: new Date().toISOString() })
+      .eq("id", postId);
+    if (updateError) throw updateError;
+    console.log("TikTok clean single-image media saved", { postId, imageStoragePath: imageStoragePath || null });
+  } catch (error) {
+    console.warn("Could not save TikTok clean single-image media", { postId, message: error.message });
+  }
+}
+
 export async function applyLogoOverlayIfNeeded({
   supabase,
   userId,
@@ -34784,6 +34836,17 @@ function getTikTokPublishSettings(post) {
   return settings && typeof settings === "object" ? settings : null;
 }
 
+function truncateTikTokUtf16(value, maxUnits) {
+  let text = String(value || "").slice(0, Math.max(0, Number(maxUnits) || 0));
+  if (/[\uD800-\uDBFF]$/.test(text)) text = text.slice(0, -1);
+  return text;
+}
+
+function getTikTokMediaOverrides(post) {
+  const overrides = post?.platform_publish_settings?.tiktok?.media_overrides;
+  return overrides && typeof overrides === "object" && !Array.isArray(overrides) ? overrides : {};
+}
+
 function normalizeTikTokPostInfo(settings, creatorInfo, { isVideo }) {
   if (!settings?.explicit_consent) {
     throw new Error("TikTok publishing choices are missing. The customer must approve the TikTok post before publishing.");
@@ -34823,7 +34886,7 @@ function normalizeTikTokPostInfo(settings, creatorInfo, { isVideo }) {
   if (!isVideo) return common;
   return {
     ...common,
-    title: Array.from(String(settings.title || "")).slice(0, 2200).join(""),
+    title: truncateTikTokUtf16(settings.title || "", 2200),
     disable_duet: creatorInfo?.duet_disabled ? true : Boolean(settings.disable_duet),
     disable_stitch: creatorInfo?.stitch_disabled ? true : Boolean(settings.disable_stitch),
     is_aigc: settings.is_aigc !== false,
@@ -34977,9 +35040,17 @@ async function startOrReconcileTikTokPublish({
     let imageUrls = [];
     if (normalizedFormat === "carousel") {
       const slides = await loadCarouselSlidesForPublish({ supabase, postId: post.id });
-      imageUrls = (slides || []).map((slide) => slide?.image_url).filter(Boolean).slice(0, 35);
-    } else if (post.image_url) {
-      imageUrls = [post.image_url];
+      imageUrls = (slides || [])
+        .map((slide) => {
+          const metadata = getCarouselEmailSlideMetadata(slide);
+          return metadata?.tiktok_image_url || slide?.image_url || null;
+        })
+        .filter(Boolean)
+        .slice(0, 35);
+    } else {
+      const mediaOverrides = getTikTokMediaOverrides(post);
+      const cleanImageUrl = String(mediaOverrides?.image_url || "").trim();
+      if (cleanImageUrl || post.image_url) imageUrls = [cleanImageUrl || post.image_url];
     }
     if (!imageUrls.length) throw new Error("TikTok photo post is missing image media");
     const proxiedImages = imageUrls.map((imageUrl) =>
@@ -34991,13 +35062,27 @@ async function startOrReconcileTikTokPublish({
         baseUrl: APP_URL,
       })
     );
+    const photoTitle = truncateTikTokUtf16(settings?.title || post.content || "", 90);
+    const photoDescription = truncateTikTokUtf16(settings?.title || post.content || "", 4000);
+    console.log("TikTok publish: photo payload prepared", {
+      postId: post.id,
+      contentFormat: normalizedFormat,
+      privacyLevel: postInfo.privacy_level,
+      photoCount: proxiedImages.length,
+      titleUtf16Length: photoTitle.length,
+      descriptionUtf16Length: photoDescription.length,
+      usingCleanMedia: normalizedFormat === "carousel"
+        ? imageUrls.some(Boolean)
+        : Boolean(getTikTokMediaOverrides(post)?.image_url),
+    });
+
     initResult = await initTikTokPhotoPost(accessToken, {
       media_type: "PHOTO",
       post_mode: "DIRECT_POST",
       post_info: {
         ...postInfo,
-        title: Array.from(String(settings?.title || post.content || "")).slice(0, 90).join(""),
-        description: Array.from(String(settings?.title || post.content || "")).slice(0, 4000).join(""),
+        title: photoTitle,
+        description: photoDescription,
         auto_add_music: false,
       },
       source_info: {
@@ -35945,6 +36030,10 @@ async function publishApprovedSocialPosts({
         platform: post.platform,
         targets,
         message: error.message,
+        tiktokCode: error?.tiktokCode || null,
+        tiktokLogId: error?.tiktokLogId || null,
+        httpStatus: error?.status || null,
+        tiktokFinalFailure: Boolean(error?.tiktokFinalFailure),
       });
 
       const authFailure =
@@ -37839,6 +37928,10 @@ product_research_model_used: websitePreparedRule.uses_website_content
             imageStoragePath = uploadedImage.imageStoragePath;
             finalImagePrompt = imagePrompt;
 
+            await persistTikTokCleanSingleImageOverride({
+              supabase, postId: post.id, platform: rule.platform, imageUrl, imageStoragePath,
+            });
+
             const logoOverlayResult = await applyLogoOverlayIfNeeded({
               supabase,
               userId: rule.user_id,
@@ -37967,6 +38060,10 @@ product_research_model_used: websitePreparedRule.uses_website_content
             });
           }
 
+          await persistTikTokCleanSingleImageOverride({
+            supabase, postId: post.id, platform: rule.platform, imageUrl, imageStoragePath,
+          });
+
           const logoOverlayResult = await applyLogoOverlayIfNeeded({
             supabase,
             userId: rule.user_id,
@@ -38047,6 +38144,10 @@ product_research_model_used: websitePreparedRule.uses_website_content
     imageUrl = uploadedImage.imageUrl;
     imageStoragePath = uploadedImage.imageStoragePath;
     finalImagePrompt = imagePrompt;
+
+    await persistTikTokCleanSingleImageOverride({
+      supabase, postId: post.id, platform: rule.platform, imageUrl, imageStoragePath,
+    });
 
     const logoOverlayResult = await applyLogoOverlayIfNeeded({
       supabase,

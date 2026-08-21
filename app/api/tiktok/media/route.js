@@ -1,5 +1,6 @@
 import { getTikTokEnv, verifyTikTokMediaProxySignature } from "../../../../lib/tiktokOAuth.js";
 import { assertPublicHttpUrl } from "../../../../lib/security.js";
+import sharp from "sharp";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -32,6 +33,54 @@ export async function GET(request) {
     }
     if (!upstream.ok || !upstream.body) {
       return new Response("Media unavailable", { status: 502 });
+    }
+
+    const upstreamType = String(upstream.headers.get("content-type") || "").toLowerCase();
+    const looksLikeImage =
+      upstreamType.startsWith("image/") ||
+      /\.(?:png|jpe?g|webp)(?:$|[?#])/i.test(currentUrl);
+
+    if (looksLikeImage) {
+      const sourceBuffer = Buffer.from(await upstream.arrayBuffer());
+      let prepared = null;
+      let qualityUsed = 92;
+      for (const quality of [92, 86, 78]) {
+        const result = await sharp(sourceBuffer)
+          .rotate()
+          .resize({
+            width: 1080,
+            height: 1080,
+            fit: "inside",
+            withoutEnlargement: true,
+          })
+          .flatten({ background: { r: 255, g: 255, b: 255 } })
+          .jpeg({ quality, mozjpeg: true })
+          .toBuffer({ resolveWithObject: true });
+        prepared = result;
+        qualityUsed = quality;
+        if (result.data.byteLength <= 20 * 1024 * 1024) break;
+      }
+
+      if (!prepared?.data?.length || prepared.data.byteLength > 20 * 1024 * 1024) {
+        return new Response("Image could not be prepared for TikTok", { status: 422 });
+      }
+
+      console.log("TikTok photo media prepared", {
+        postId,
+        sourceContentType: upstreamType || null,
+        deliveryContentType: "image/jpeg",
+        width: prepared.info?.width || null,
+        height: prepared.info?.height || null,
+        bytes: prepared.data.byteLength,
+        quality: qualityUsed,
+      });
+
+      const imageHeaders = new Headers();
+      imageHeaders.set("Content-Type", "image/jpeg");
+      imageHeaders.set("Content-Length", String(prepared.data.byteLength));
+      imageHeaders.set("Cache-Control", "public, max-age=300");
+      imageHeaders.set("X-Content-Type-Options", "nosniff");
+      return new Response(prepared.data, { status: 200, headers: imageHeaders });
     }
 
     const headers = new Headers();

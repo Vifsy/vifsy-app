@@ -194,6 +194,8 @@ export async function POST(request) {
     let imageUrl = mode === "text" ? post.image_url || null : post.image_url || null;
     let imageStoragePath = post.image_storage_path || null;
     let imagePrompt = post.image_prompt || null;
+    let tiktokCleanImageUrl = null;
+    let tiktokCleanImageStoragePath = null;
 
     let includeLogo = shouldUseLogoForRule(enhancedRule, brandProfile);
     if (wantsImage) {
@@ -216,6 +218,8 @@ export async function POST(request) {
           imageUrl = uploaded.imageUrl;
           imageStoragePath = uploaded.imageStoragePath;
           imagePrompt = generated.imagePrompt;
+          tiktokCleanImageUrl = imageUrl;
+          tiktokCleanImageStoragePath = imageStoragePath;
 
           const logoResult = await applyLogoOverlayIfNeeded({
             supabase: context.admin,
@@ -249,6 +253,8 @@ export async function POST(request) {
       }
     }
 
+    const existingPublishSettings = post.platform_publish_settings && typeof post.platform_publish_settings === "object" ? post.platform_publish_settings : {};
+    const existingTikTokSettings = existingPublishSettings.tiktok && typeof existingPublishSettings.tiktok === "object" ? existingPublishSettings.tiktok : {};
     const updatePayload = {
       content: generatedContent,
       website_url: sourceUrl || post.website_url || null,
@@ -263,6 +269,20 @@ export async function POST(request) {
       video_error: null,
       include_logo: includeLogo,
       logo_url: includeLogo ? brandProfile?.logo_url || null : null,
+      ...(tiktokCleanImageUrl && String(post.platform || "").toLowerCase().includes("tiktok") ? {
+        platform_publish_settings: {
+          ...existingPublishSettings,
+          tiktok: {
+            ...existingTikTokSettings,
+            media_overrides: {
+              ...(existingTikTokSettings.media_overrides || {}),
+              image_url: tiktokCleanImageUrl,
+              image_storage_path: tiktokCleanImageStoragePath || null,
+              source: "admin_pre_logo_clean_media",
+            },
+          },
+        },
+      } : {}),
       updated_at: new Date().toISOString(),
     };
     const update = await context.admin.from("posts").update(updatePayload).eq("id", post.id);

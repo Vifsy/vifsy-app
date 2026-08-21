@@ -436,48 +436,88 @@ async function getTikTokApprovalContext({ supabase, post }) {
   return { connection: healthy.connection || connection, accessToken: healthy.accessToken, creatorInfo };
 }
 
-function createTikTokApprovalHtml({ post, token, creatorInfo, locale = "en", publicPostingReady, allowPrivateTesting }) {
+function getTikTokApprovalSlideMetadata(slide) {
+  const metadata = slide?.metadata;
+  if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) return metadata;
+  if (typeof metadata === "string") {
+    try { return JSON.parse(metadata) || {}; } catch { return {}; }
+  }
+  return {};
+}
+
+function createTikTokApprovalHtml({
+  post,
+  token,
+  creatorInfo,
+  carouselSlides = [],
+  locale = "en",
+  publicPostingReady,
+  allowPrivateTesting,
+  t,
+}) {
+  const tr = typeof t === "function" ? t : (key) => key;
   const isVideo = Boolean(post.video_url) || String(post.content_format || "") === "animated_video";
-  const previewUrl = isVideo ? post.video_url : post.image_url;
+  const isCarousel = String(post.content_format || "") === "carousel";
+  const mediaOverrides = post?.platform_publish_settings?.tiktok?.media_overrides || {};
+  const singlePreviewUrl = isVideo ? post.video_url : (mediaOverrides.image_url || post.image_url);
+  const slides = isCarousel
+    ? (carouselSlides || []).map((slide) => {
+        const metadata = getTikTokApprovalSlideMetadata(slide);
+        return {
+          imageUrl: metadata.tiktok_image_url || slide?.image_url || "",
+          order: Number(slide?.slide_order || 0),
+        };
+      }).filter((slide) => slide.imageUrl).sort((a,b) => a.order-b.order)
+    : [];
+
   const privacyOptions = Array.isArray(creatorInfo?.privacy_level_options) ? creatorInfo.privacy_level_options : [];
   const labels = {
-    PUBLIC_TO_EVERYONE: "Everyone",
-    MUTUAL_FOLLOW_FRIENDS: "Friends",
-    FOLLOWER_OF_CREATOR: "Followers",
-    SELF_ONLY: "Only me",
+    PUBLIC_TO_EVERYONE: tr("approvePages.tiktok.visibilityEveryone"),
+    MUTUAL_FOLLOW_FRIENDS: tr("approvePages.tiktok.visibilityFriends"),
+    FOLLOWER_OF_CREATOR: tr("approvePages.tiktok.visibilityFollowers"),
+    SELF_ONLY: tr("approvePages.tiktok.visibilityOnlyMe"),
   };
   const options = privacyOptions.map((value) => `<option value="${escapeTikTokHtml(value)}">${escapeTikTokHtml(labels[value] || value)}</option>`).join("");
+
   const modeNotice = publicPostingReady
-    ? `<div class="notice ok"><strong>Public TikTok publishing is enabled.</strong><span>Choose the audience you want for this post. Spreelo will never silently change it to private.</span></div>`
+    ? `<div class="mode-notice mode-ok"><span class="mode-icon">✓</span><div><strong>${escapeTikTokHtml(tr("approvePages.tiktok.publicTitle"))}</strong><span>${escapeTikTokHtml(tr("approvePages.tiktok.publicHelp"))}</span></div></div>`
     : allowPrivateTesting
-      ? `<div class="notice warn"><strong>TikTok test mode</strong><span>Spreelo's TikTok API client has not yet been marked production-ready after TikTok audit. TikTok restricts Direct Post testing to private visibility. Do not use this as a customer reach test.</span></div>`
-      : `<div class="notice warn"><strong>TikTok public publishing is not enabled yet.</strong><span>Spreelo must complete TikTok's Content Posting API audit before customer posts can be published with public reach.</span></div>`;
+      ? `<div class="mode-notice mode-warn"><span class="mode-icon">i</span><div><strong>${escapeTikTokHtml(tr("approvePages.tiktok.testTitle"))}</strong><span>${escapeTikTokHtml(tr("approvePages.tiktok.testHelp"))}</span></div></div>`
+      : `<div class="mode-notice mode-warn"><span class="mode-icon">!</span><div><strong>${escapeTikTokHtml(tr("approvePages.tiktok.notReadyTitle"))}</strong><span>${escapeTikTokHtml(tr("approvePages.tiktok.notReadyHelp"))}</span></div></div>`;
+
   const canSubmit = publicPostingReady || allowPrivateTesting;
-  const media = previewUrl
-    ? (isVideo
-      ? `<video class="preview" src="${escapeTikTokHtml(previewUrl)}" controls playsinline></video>`
-      : `<img class="preview" src="${escapeTikTokHtml(previewUrl)}" alt="TikTok post preview" />`)
-    : `<div class="preview empty">Preview unavailable</div>`;
+  const media = isCarousel && slides.length
+    ? `<div class="carousel-preview" data-count="${slides.length}">
+        <div class="carousel-stage">${slides.map((slide,index)=>`<img class="carousel-slide${index===0?" active":""}" data-slide="${index}" src="${escapeTikTokHtml(slide.imageUrl)}" alt="${escapeTikTokHtml(tr("approvePages.tiktok.previewTitle"))}" />`).join("")}</div>
+        <div class="carousel-nav"><button type="button" class="nav-btn" id="carouselPrev" aria-label="${escapeTikTokHtml(tr("approvePages.tiktok.previous"))}">←</button><span id="carouselCounter">${escapeTikTokHtml(tr("approvePages.tiktok.slideCounter", { index: 1, count: slides.length }))}</span><button type="button" class="nav-btn" id="carouselNext" aria-label="${escapeTikTokHtml(tr("approvePages.tiktok.next"))}">→</button></div>
+        <div class="carousel-dots">${slides.map((_,index)=>`<button type="button" class="dot${index===0?" active":""}" data-dot="${index}" aria-label="${index+1}"></button>`).join("")}</div>
+      </div>`
+    : singlePreviewUrl
+      ? (isVideo
+        ? `<video class="single-preview" src="${escapeTikTokHtml(singlePreviewUrl)}" controls playsinline></video>`
+        : `<img class="single-preview" src="${escapeTikTokHtml(singlePreviewUrl)}" alt="${escapeTikTokHtml(tr("approvePages.tiktok.previewTitle"))}" />`)
+      : `<div class="single-preview preview-empty">${escapeTikTokHtml(tr("approvePages.tiktok.previewUnavailable"))}</div>`;
   const titleMax = isVideo ? 2200 : 4000;
+  const logoUrl = `${APP_URL.replace(/\/$/, "")}/brand/spreelologo.png`;
 
   return `<!doctype html>
-<html lang="${escapeTikTokHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Approve TikTok post · Spreelo</title>
+<html lang="${escapeTikTokHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>${escapeTikTokHtml(tr("approvePages.tiktok.pageTitle"))}</title>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#f6f3ee;color:#101828;font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;padding:28px}.shell{width:min(780px,100%);margin:0 auto}.brand{text-align:center;margin:0 0 18px}.brand img{width:148px;max-width:45vw}.card{background:#fff;border:1px solid #e6e1da;border-radius:24px;box-shadow:0 22px 60px rgba(16,24,40,.09);overflow:hidden}.top{padding:30px 32px 22px;border-bottom:1px solid #eee9e3}.eyebrow{font-size:11px;font-weight:900;letter-spacing:.15em;text-transform:uppercase;color:#e9573f;margin:0 0 8px}.top h1{font-size:28px;letter-spacing:-.03em;margin:0 0 8px}.top p{color:#667085;margin:0;line-height:1.55}.creator{display:flex;align-items:center;gap:12px;margin-top:18px;padding:12px 14px;background:#f8fafc;border:1px solid #e7ebef;border-radius:14px}.creator img{width:44px;height:44px;border-radius:50%;object-fit:cover}.creator strong,.creator span{display:block}.creator span{font-size:13px;color:#667085;margin-top:2px}.content{padding:26px 32px 32px}.preview{display:block;width:100%;max-height:460px;object-fit:contain;background:#111;border-radius:18px;margin-bottom:22px}.preview.empty{height:180px;display:grid;place-items:center;color:#98a2b3;background:#f2f4f7}.notice{display:flex;flex-direction:column;gap:4px;padding:14px 16px;border-radius:13px;margin-bottom:20px;font-size:14px;line-height:1.45}.notice.ok{background:#effaf4;border:1px solid #ccefd9}.notice.warn{background:#fff7e8;border:1px solid #f6dca7}.field{margin-top:18px}.field label{display:block;font-weight:800;margin-bottom:7px}.field small{display:block;color:#667085;margin-top:6px;line-height:1.45}textarea,select{width:100%;border:1px solid #d0d5dd;border-radius:12px;padding:12px 13px;font:inherit;background:#fff}textarea{min-height:150px;resize:vertical}.checks{display:grid;gap:10px;margin-top:12px}.check{display:flex;align-items:flex-start;gap:10px;padding:11px 12px;border:1px solid #e4e7ec;border-radius:12px}.check input{margin-top:2px}.check.disabled{opacity:.5;background:#f7f7f8}.commercial{margin-top:20px;padding:16px;border:1px solid #e4e7ec;border-radius:14px}.commercial-options{display:none;margin-top:10px;gap:9px}.commercial.is-on .commercial-options{display:grid}.consent{margin-top:22px;padding:15px;border-radius:13px;background:#f8fafc;border:1px solid #e4e7ec}.submit{width:100%;margin-top:20px;min-height:50px;border:0;border-radius:13px;background:#101828;color:white;font:inherit;font-weight:850;cursor:pointer}.submit:disabled{opacity:.45;cursor:not-allowed}.foot{text-align:center;color:#98a2b3;font-size:12px;margin-top:14px}@media(max-width:640px){body{padding:14px}.top,.content{padding-left:20px;padding-right:20px}}
-</style></head><body><main class="shell"><div class="brand"><img src="${APP_URL.replace(/\/$/, "")}/brand/spreelologo.png" alt="Spreelo"></div><section class="card"><header class="top"><p class="eyebrow">TikTok · Customer approval</p><h1>Review your TikTok post</h1><p>TikTok requires these publishing choices to be made by you before Spreelo can send the approved post.</p><div class="creator">${creatorInfo?.creator_avatar_url ? `<img src="${escapeTikTokHtml(creatorInfo.creator_avatar_url)}" alt="">` : ""}<div><strong>${escapeTikTokHtml(creatorInfo?.creator_nickname || post?.tiktok_account_name || "TikTok account")}</strong><span>${escapeTikTokHtml(creatorInfo?.creator_username || "Connected TikTok creator")}</span></div></div></header><div class="content">${modeNotice}${media}
-<form method="post" action="/api/approve-post">
-<input type="hidden" name="token" value="${escapeTikTokHtml(token)}"><input type="hidden" name="tiktok" value="1">
-<div class="field"><label for="title">Caption</label><textarea id="title" name="title" maxlength="${titleMax}">${escapeTikTokHtml(post.content || "")}</textarea><small>You can edit Spreelo's generated caption before publishing.</small></div>
-<div class="field"><label for="privacy">Who can see this post?</label><select id="privacy" name="privacy_level" required><option value="">Choose visibility…</option>${options}</select><small>TikTok requires you to choose this manually. Spreelo does not preselect a privacy level.</small></div>
-<div class="field"><label>Interactions</label><div class="checks">
-<label class="check ${creatorInfo?.comment_disabled ? "disabled" : ""}"><input type="checkbox" name="allow_comment" value="1" ${creatorInfo?.comment_disabled ? "disabled" : ""}> <span><strong>Allow comments</strong><small>${creatorInfo?.comment_disabled ? "Disabled by your TikTok account settings." : "Off until you choose it."}</small></span></label>
-${isVideo ? `<label class="check ${creatorInfo?.duet_disabled ? "disabled" : ""}"><input type="checkbox" name="allow_duet" value="1" ${creatorInfo?.duet_disabled ? "disabled" : ""}> <span><strong>Allow Duet</strong><small>${creatorInfo?.duet_disabled ? "Disabled by your TikTok account settings." : "Off until you choose it."}</small></span></label><label class="check ${creatorInfo?.stitch_disabled ? "disabled" : ""}"><input type="checkbox" name="allow_stitch" value="1" ${creatorInfo?.stitch_disabled ? "disabled" : ""}> <span><strong>Allow Stitch</strong><small>${creatorInfo?.stitch_disabled ? "Disabled by your TikTok account settings." : "Off until you choose it."}</small></span></label>` : ""}
-</div></div>
-<div id="commercialBox" class="commercial"><label class="check"><input id="commercialToggle" type="checkbox" name="commercial_content" value="1"> <span><strong>This post promotes a brand, product or service</strong><small>Turn this on when TikTok's commercial-content disclosure applies.</small></span></label><div class="commercial-options"><label class="check"><input type="checkbox" name="brand_organic" value="1"> <span><strong>Your brand</strong><small>The post will be labelled Promotional content.</small></span></label><label class="check"><input type="checkbox" name="brand_content" value="1"> <span><strong>Branded content</strong><small>The post will be labelled Paid partnership.</small></span></label></div></div>
-<div class="consent"><label class="check"><input type="checkbox" name="tiktok_consent" value="1" required> <span><strong>I approve this TikTok upload.</strong><small>By posting, you agree to TikTok's Music Usage Confirmation. If Branded content is selected, TikTok's Branded Content Policy also applies.</small></span></label></div>
-<button class="submit" type="submit" ${canSubmit ? "" : "disabled"}>Approve & schedule TikTok post</button>
-</form><p class="foot">Nothing is sent to TikTok until you submit this approval.</p></div></section></main>
-<script>const toggle=document.getElementById('commercialToggle');const box=document.getElementById('commercialBox');toggle?.addEventListener('change',()=>box.classList.toggle('is-on',toggle.checked));</script></body></html>`;
+:root{--ink:#102033;--muted:#64748b;--line:#dfe7f1;--surface:#fff;--soft:#f5f8fc;--blue:#1769ff;--pink:#f04b8a;--orange:#ff7957;--green:#13a66b}*{box-sizing:border-box}html,body{min-height:100%}body{margin:0;color:var(--ink);font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:#eef3f8}.app-backdrop{position:fixed;inset:0;display:grid;grid-template-columns:220px 1fr;background:#f7f9fc;overflow:hidden}.fake-sidebar{background:#101722;padding:24px 18px}.fake-logo{height:28px;width:116px;background:linear-gradient(90deg,#ff4f88,#7d4cff);border-radius:8px;margin-bottom:34px}.fake-nav{display:grid;gap:11px}.fake-nav i{display:block;height:39px;border-radius:10px;background:rgba(255,255,255,.07)}.fake-nav i:nth-child(2){background:rgba(255,255,255,.14)}.fake-main{padding:24px 34px}.fake-top{height:52px;background:#fff;border:1px solid #e7edf5;border-radius:14px;margin-bottom:24px}.fake-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.fake-card{height:180px;background:#fff;border:1px solid #e7edf5;border-radius:18px}.veil{position:fixed;inset:0;background:rgba(13,24,42,.48);backdrop-filter:blur(5px)}.modal-wrap{position:relative;z-index:2;min-height:100vh;padding:30px 18px;display:flex;align-items:flex-start;justify-content:center}.modal{width:min(1080px,100%);background:rgba(255,255,255,.985);border:1px solid rgba(255,255,255,.75);border-radius:26px;box-shadow:0 34px 90px rgba(10,24,48,.22);overflow:hidden}.modal-head{display:grid;grid-template-columns:1fr auto;gap:22px;padding:28px 32px 24px;border-bottom:1px solid var(--line)}.brandline{display:flex;align-items:center;gap:16px;margin-bottom:16px}.brandline img{width:118px;height:auto}.platform-chip{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border-radius:999px;background:#111;color:#fff;font-size:12px;font-weight:800}.eyebrow{margin:0 0 7px;color:#52637a;font-size:11px;font-weight:900;letter-spacing:.14em;text-transform:uppercase}.modal h1{margin:0;font-size:32px;line-height:1.08;letter-spacing:-.035em}.intro{max-width:720px;margin:10px 0 0;color:var(--muted);line-height:1.55}.creator{align-self:center;min-width:230px;display:flex;align-items:center;gap:11px;padding:11px 13px;background:var(--soft);border:1px solid var(--line);border-radius:15px}.creator img{width:42px;height:42px;border-radius:50%;object-fit:cover}.creator strong,.creator span{display:block}.creator span{font-size:12px;color:var(--muted);margin-top:2px}.body{padding:24px 32px 30px}.mode-notice{display:flex;align-items:flex-start;gap:11px;padding:13px 15px;border-radius:14px;margin-bottom:20px;font-size:13px;line-height:1.45}.mode-notice strong,.mode-notice span{display:block}.mode-notice strong{margin-bottom:2px}.mode-warn{background:#fff7e8;border:1px solid #f4d8a2}.mode-ok{background:#edfbf4;border:1px solid #c6edd9}.mode-icon{display:grid!important;place-items:center;width:24px;height:24px;border-radius:50%;font-weight:900;background:#fff}.layout{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(360px,.95fr);gap:24px}.panel{background:#fff;border:1px solid var(--line);border-radius:20px;padding:18px}.panel-title{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:14px}.panel-title h2{font-size:17px;margin:0 0 3px}.panel-title p{font-size:12px;color:var(--muted);margin:0;line-height:1.4}.single-preview,.carousel-stage{display:block;width:100%;height:480px;object-fit:contain;background:#0f1115;border-radius:16px}.single-preview{object-fit:contain}.preview-empty{display:grid;place-items:center;color:#a1aab8;background:#f4f6f9}.carousel-stage{position:relative;overflow:hidden}.carousel-slide{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transform:translateX(12px);transition:.2s ease}.carousel-slide.active{opacity:1;transform:none}.carousel-nav{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:12px;font-size:12px;font-weight:800;color:#52637a}.nav-btn{width:36px;height:36px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer;font-size:18px}.carousel-dots{display:flex;justify-content:center;gap:6px;margin-top:8px}.dot{width:7px;height:7px;padding:0;border:0;border-radius:50%;background:#ccd5e1;cursor:pointer}.dot.active{background:#1a6cff;transform:scale(1.25)}.field{margin-top:16px}.field:first-child{margin-top:0}.field>label,.section-label{display:block;font-size:13px;font-weight:850;margin-bottom:7px}.field small,.help{display:block;color:var(--muted);font-size:11.5px;line-height:1.45;margin-top:6px}textarea,select{width:100%;border:1px solid #ccd6e3;border-radius:12px;background:#fff;padding:11px 12px;font:inherit;color:var(--ink);outline:none}textarea:focus,select:focus{border-color:#7ca7ff;box-shadow:0 0 0 3px rgba(23,105,255,.09)}textarea{min-height:132px;resize:vertical}.section-box{margin-top:17px;padding-top:16px;border-top:1px solid #e9eef5}.checks{display:grid;gap:9px}.check{display:flex;align-items:flex-start;gap:10px;padding:11px 12px;border:1px solid #e1e7ef;border-radius:12px;background:#fff;cursor:pointer}.check input{margin-top:3px}.check strong,.check small{display:block}.check strong{font-size:13px}.check small{font-size:11.5px;color:var(--muted);line-height:1.4;margin-top:2px}.check.disabled{opacity:.55;background:#f7f8fa;cursor:not-allowed}.commercial-options{display:none;margin-top:9px;gap:8px}.commercial.is-on .commercial-options{display:grid}.consent{margin-top:17px;padding:13px;border:1px solid #d9e4f3;background:#f6f9fd;border-radius:14px}.actions{display:flex;align-items:center;gap:12px;margin-top:18px}.submit{flex:1;min-height:50px;border:0;border-radius:13px;background:linear-gradient(90deg,#132033,#1769ff);color:#fff;font:inherit;font-weight:900;cursor:pointer;box-shadow:0 10px 24px rgba(23,105,255,.18)}.submit:disabled{opacity:.45;cursor:not-allowed}.next-card{margin-top:16px;display:flex;gap:10px;padding:12px 13px;border-radius:13px;background:#f8fafc;border:1px solid #e5ebf3}.next-card strong,.next-card span{display:block}.next-card strong{font-size:12px}.next-card span{font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.4}.foot{margin:14px 0 0;text-align:center;color:#8491a4;font-size:11px}.translation-note{display:inline-flex;margin-top:12px;padding:6px 9px;border-radius:999px;background:#f2f6fb;color:#6b7890;font-size:10.5px}@media(max-width:900px){.fake-sidebar{display:none}.app-backdrop{grid-template-columns:1fr}.modal-head{grid-template-columns:1fr}.creator{min-width:0}.layout{grid-template-columns:1fr}.single-preview,.carousel-stage{height:min(74vw,500px)}}@media(max-width:600px){.modal-wrap{padding:10px}.modal{border-radius:20px}.modal-head,.body{padding:20px}.modal h1{font-size:27px}.panel{padding:14px}.single-preview,.carousel-stage{height:78vw}.brandline{margin-bottom:12px}.creator{width:100%}}
+</style></head><body>
+<div class="app-backdrop" aria-hidden="true"><aside class="fake-sidebar"><div class="fake-logo"></div><div class="fake-nav"><i></i><i></i><i></i><i></i><i></i></div></aside><div class="fake-main"><div class="fake-top"></div><div class="fake-grid"><div class="fake-card"></div><div class="fake-card"></div><div class="fake-card"></div><div class="fake-card"></div><div class="fake-card"></div></div></div></div><div class="veil"></div>
+<main class="modal-wrap"><section class="modal"><header class="modal-head"><div><div class="brandline"><img src="${escapeTikTokHtml(logoUrl)}" alt="Spreelo"><span class="platform-chip">TikTok</span></div><p class="eyebrow">${escapeTikTokHtml(tr("approvePages.tiktok.eyebrow"))}</p><h1>${escapeTikTokHtml(tr("approvePages.tiktok.title"))}</h1><p class="intro">${escapeTikTokHtml(tr("approvePages.tiktok.intro"))}</p><span class="translation-note">${escapeTikTokHtml(tr("approvePages.tiktok.translationReady"))}</span></div><div class="creator">${creatorInfo?.creator_avatar_url ? `<img src="${escapeTikTokHtml(creatorInfo.creator_avatar_url)}" alt="">` : ""}<div><span>${escapeTikTokHtml(tr("approvePages.tiktok.connectedAccount"))}</span><strong>${escapeTikTokHtml(creatorInfo?.creator_nickname || post?.tiktok_account_name || "TikTok")}</strong><span>@${escapeTikTokHtml(String(creatorInfo?.creator_username || "").replace(/^@/, ""))}</span></div></div></header>
+<div class="body">${modeNotice}<div class="layout"><section class="panel"><div class="panel-title"><div><h2>${escapeTikTokHtml(tr("approvePages.tiktok.previewTitle"))}</h2><p>${escapeTikTokHtml(tr("approvePages.tiktok.previewHelp"))}</p></div></div>${media}</section>
+<section class="panel"><div class="panel-title"><div><h2>${escapeTikTokHtml(tr("approvePages.tiktok.settingsTitle"))}</h2><p>${escapeTikTokHtml(tr("approvePages.tiktok.settingsHelp"))}</p></div></div><form method="post" action="/api/approve-post"><input type="hidden" name="token" value="${escapeTikTokHtml(token)}"><input type="hidden" name="tiktok" value="1">
+<div class="field"><label for="title">${escapeTikTokHtml(tr("approvePages.tiktok.caption"))}</label><textarea id="title" name="title" maxlength="${titleMax}">${escapeTikTokHtml(post.content || "")}</textarea><small>${escapeTikTokHtml(tr("approvePages.tiktok.captionHelp"))}</small></div>
+<div class="section-box"><div class="field"><label for="privacy">${escapeTikTokHtml(tr("approvePages.tiktok.visibility"))}</label><select id="privacy" name="privacy_level" required><option value="">${escapeTikTokHtml(tr("approvePages.tiktok.visibilityPlaceholder"))}</option>${options}</select><small>${escapeTikTokHtml(tr("approvePages.tiktok.visibilityHelp"))}</small></div></div>
+<div class="section-box"><span class="section-label">${escapeTikTokHtml(tr("approvePages.tiktok.interactions"))}</span><div class="checks"><label class="check ${creatorInfo?.comment_disabled ? "disabled" : ""}"><input type="checkbox" name="allow_comment" value="1" ${creatorInfo?.comment_disabled ? "disabled" : ""}><span><strong>${escapeTikTokHtml(tr("approvePages.tiktok.allowComments"))}</strong><small>${escapeTikTokHtml(tr(creatorInfo?.comment_disabled ? "approvePages.tiktok.disabledByAccount" : "approvePages.tiktok.offUntilChosen"))}</small></span></label>${isVideo ? `<label class="check ${creatorInfo?.duet_disabled ? "disabled" : ""}"><input type="checkbox" name="allow_duet" value="1" ${creatorInfo?.duet_disabled ? "disabled" : ""}><span><strong>${escapeTikTokHtml(tr("approvePages.tiktok.allowDuet"))}</strong><small>${escapeTikTokHtml(tr(creatorInfo?.duet_disabled ? "approvePages.tiktok.disabledByAccount" : "approvePages.tiktok.offUntilChosen"))}</small></span></label><label class="check ${creatorInfo?.stitch_disabled ? "disabled" : ""}"><input type="checkbox" name="allow_stitch" value="1" ${creatorInfo?.stitch_disabled ? "disabled" : ""}><span><strong>${escapeTikTokHtml(tr("approvePages.tiktok.allowStitch"))}</strong><small>${escapeTikTokHtml(tr(creatorInfo?.stitch_disabled ? "approvePages.tiktok.disabledByAccount" : "approvePages.tiktok.offUntilChosen"))}</small></span></label>` : ""}</div></div>
+<div id="commercialBox" class="section-box commercial"><span class="section-label">${escapeTikTokHtml(tr("approvePages.tiktok.commercialTitle"))}</span><label class="check"><input id="commercialToggle" type="checkbox" name="commercial_content" value="1"><span><strong>${escapeTikTokHtml(tr("approvePages.tiktok.commercialToggle"))}</strong><small>${escapeTikTokHtml(tr("approvePages.tiktok.commercialHelp"))}</small></span></label><div class="commercial-options"><label class="check"><input type="checkbox" name="brand_organic" value="1"><span><strong>${escapeTikTokHtml(tr("approvePages.tiktok.yourBrand"))}</strong><small>${escapeTikTokHtml(tr("approvePages.tiktok.yourBrandHelp"))}</small></span></label><label class="check"><input type="checkbox" name="brand_content" value="1"><span><strong>${escapeTikTokHtml(tr("approvePages.tiktok.brandedContent"))}</strong><small>${escapeTikTokHtml(tr("approvePages.tiktok.brandedContentHelp"))}</small></span></label></div></div>
+<div class="consent"><span class="section-label">${escapeTikTokHtml(tr("approvePages.tiktok.consentTitle"))}</span><label class="check"><input type="checkbox" name="tiktok_consent" value="1" required><span><strong>${escapeTikTokHtml(tr("approvePages.tiktok.consent"))}</strong><small>${escapeTikTokHtml(tr("approvePages.tiktok.consentHelp"))}</small></span></label></div><div class="actions"><button class="submit" type="submit" ${canSubmit ? "" : "disabled"}>${escapeTikTokHtml(tr("approvePages.tiktok.submit"))}</button></div></form><div class="next-card"><span>→</span><div><strong>${escapeTikTokHtml(tr("approvePages.tiktok.nextTitle"))}</strong><span>${escapeTikTokHtml(tr("approvePages.tiktok.nextHelp"))}</span></div></div><p class="foot">${escapeTikTokHtml(tr("approvePages.tiktok.foot"))}</p></section></div></div></section></main>
+<script>
+const commercialToggle=document.getElementById('commercialToggle');const commercialBox=document.getElementById('commercialBox');commercialToggle?.addEventListener('change',()=>commercialBox.classList.toggle('is-on',commercialToggle.checked));
+const slides=[...document.querySelectorAll('.carousel-slide')];const dots=[...document.querySelectorAll('.dot')];const counter=document.getElementById('carouselCounter');let slideIndex=0;const counterTemplate=${JSON.stringify(tr("approvePages.tiktok.slideCounter", { index: "__INDEX__", count: "__COUNT__" }))};function showSlide(next){if(!slides.length)return;slideIndex=(next+slides.length)%slides.length;slides.forEach((el,i)=>el.classList.toggle('active',i===slideIndex));dots.forEach((el,i)=>el.classList.toggle('active',i===slideIndex));if(counter)counter.textContent=counterTemplate.replace('__INDEX__',String(slideIndex+1)).replace('__COUNT__',String(slides.length));}document.getElementById('carouselPrev')?.addEventListener('click',()=>showSlide(slideIndex-1));document.getElementById('carouselNext')?.addEventListener('click',()=>showSlide(slideIndex+1));dots.forEach((el,i)=>el.addEventListener('click',()=>showSlide(i)));
+</script></body></html>`;
 }
 
 function htmlResponse({ title, message, status = "success", httpStatus = 200, t, locale }) {
@@ -610,21 +650,33 @@ export async function GET(request) {
       try {
         const { creatorInfo } = await getTikTokApprovalContext({ supabase, post });
         const { publicPostingReady, allowPrivateTesting } = getTikTokEnv();
+        let carouselSlides = [];
+        if (String(post.content_format || "") === "carousel") {
+          const { data: loadedSlides, error: slidesError } = await supabase
+            .from("post_slides")
+            .select("slide_order, image_url, metadata")
+            .eq("post_id", post.id)
+            .order("slide_order", { ascending: true });
+          if (slidesError) throw slidesError;
+          carouselSlides = loadedSlides || [];
+        }
         return new Response(
           createTikTokApprovalHtml({
             post,
             token,
             creatorInfo,
+            carouselSlides,
             locale: translator.locale,
             publicPostingReady,
             allowPrivateTesting,
+            t: translator.t,
           }),
           { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } }
         );
       } catch (tiktokError) {
         return htmlResponse({
-          title: "TikTok connection needs attention",
-          message: tiktokError.message || "Spreelo could not load the current TikTok publishing settings.",
+          title: translator.t("approvePages.tiktok.connectionTitle"),
+          message: tiktokError.message || translator.t("approvePages.tiktok.connectionMessage"),
           status: "error",
           httpStatus: tiktokError?.requiresReconnect ? 409 : 502,
           t: translator.t,
@@ -730,7 +782,8 @@ export async function POST(request) {
     if (form.get("tiktok_consent") !== "1") throw new Error("TikTok publishing requires your explicit upload consent");
 
     const titleLimit = isVideo ? 2200 : 4000;
-    const title = Array.from(String(form.get("title") || post.content || "")).slice(0, titleLimit).join("");
+    let title = String(form.get("title") || post.content || "").slice(0, titleLimit);
+    if (/[\uD800-\uDBFF]$/.test(title)) title = title.slice(0, -1);
     const currentSettings = post.platform_publish_settings && typeof post.platform_publish_settings === "object"
       ? post.platform_publish_settings
       : {};
@@ -738,6 +791,7 @@ export async function POST(request) {
     const platformPublishSettings = {
       ...currentSettings,
       tiktok: {
+        ...((currentSettings?.tiktok && typeof currentSettings.tiktok === "object") ? currentSettings.tiktok : {}),
         title,
         privacy_level: privacyLevel,
         disable_comment: !allowComment,
@@ -766,16 +820,16 @@ export async function POST(request) {
 
     await supabase.from("admin_review_cases").update({ status: "customer_approved", needs_review: false, updated_at: approvedAt }).eq("post_id", post.id);
     return htmlResponse({
-      title: "TikTok post approved",
-      message: "Your TikTok publishing choices were saved. Spreelo will publish the approved post at its scheduled time.",
+      title: translator.t("approvePages.tiktok.approvedTitle"),
+      message: translator.t("approvePages.tiktok.approvedMessage"),
       status: "success",
       t: translator.t,
       locale: translator.locale,
     });
   } catch (error) {
     return htmlResponse({
-      title: "Could not approve TikTok post",
-      message: error.message || "The TikTok approval could not be completed.",
+      title: translator.t("approvePages.tiktok.failedTitle"),
+      message: error.message || translator.t("approvePages.tiktok.failedMessage"),
       status: "error",
       httpStatus: 400,
       t: translator.t,
