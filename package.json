@@ -111,7 +111,9 @@
     "test:v144.00": "node scripts/test-v144-00-delivery-first-resilience.mjs",
     "test:v144.01": "node scripts/test-v144-01-admin-review-workbench.mjs",
     "test:v144.02": "node scripts/test-v144-02-tiktok-integration.mjs",
-    "test:v144.03": "node scripts/test-v144-03-tiktok-media-polish.mjs"
+    "test:v144.03": "node scripts/test-v144-03-tiktok-media-polish.mjs",
+    "test:v144.04": "node scripts/test-v144-04-approval-recovery.mjs",
+    "test:v144.05": "node scripts/test-v144-05-approval-orchestration-durable-research.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

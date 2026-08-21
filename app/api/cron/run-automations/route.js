@@ -10408,12 +10408,15 @@ function buildApprovalEmailHtml({
   imageUrl,
   carouselSlides = [],
   isCarouselDraft = false,
+  contentFormat = "",
   nextRule = null,
   upcomingPlanUrl = "",
 }) {
   const platformLabel = rule.platform || "Social media";
   const postTypeLabel = rule.post_type || "Post";
   const safeImageUrl = imageUrl ? escapeHtml(imageUrl) : "";
+  const previewUrl = `${approveUrl}${String(approveUrl || "").includes("?") ? "&" : "?"}preview=1`;
+  const isAnimatedVideoPreview = normalizeContentFormat(contentFormat || rule?.content_format) === "animated_video";
   const titleKey = isCarouselDraft ? "emails.approval.carouselTitle" : "emails.approval.title";
   const introKey = isCarouselDraft ? "emails.approval.carouselIntro" : "emails.approval.intro";
   const buttonKey = isCarouselDraft ? "emails.approval.button" : "emails.approval.button";
@@ -10477,11 +10480,20 @@ function buildApprovalEmailHtml({
                 ? `
             <tr>
               <td style="padding:0 28px 20px;">
-                <img
+                ${isAnimatedVideoPreview ? `<a href="${escapeHtml(previewUrl)}" title="${escapeHtml(t("emails.approval.previewMedia"))}" style="display:block;position:relative;text-decoration:none;line-height:0;border-radius:14px;overflow:hidden;border:1px solid #e5e7eb;background:#111827;">
+                  <img
+                    src="${safeImageUrl}"
+                    alt="${escapeHtml(t("emails.approval.imageAlt"))}"
+                    style="display:block;width:100%;max-width:584px;border:0;"
+                  />
+                  <span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:inline-flex;width:68px;height:68px;border-radius:999px;background:rgba(11,23,36,.88);border:3px solid rgba(255,255,255,.95);align-items:center;justify-content:center;box-shadow:0 10px 28px rgba(0,0,0,.28);">
+                    <span style="display:block;margin-left:5px;width:0;height:0;border-top:13px solid transparent;border-bottom:13px solid transparent;border-left:21px solid #fff;"></span>
+                  </span>
+                </a>` : `<img
                   src="${safeImageUrl}"
                   alt="${escapeHtml(t("emails.approval.imageAlt"))}"
                   style="display:block;width:100%;max-width:584px;border-radius:14px;border:1px solid #e5e7eb;"
-                />
+                />`}
               </td>
             </tr>
             `
@@ -24923,9 +24935,49 @@ async function getDurableCampaignResearchResponse({
 
   let job = await selectJob();
   if (job?.request_fingerprint && job.request_fingerprint !== requestFingerprint) {
-    throw new Error(
-      "The saved campaign research does not match this automation occurrence."
-    );
+    const durableResponseId = String(job.openai_response_id || "").trim();
+    const hasDurableResponse = Boolean(durableResponseId || (job.status === "completed" && job.output_text));
+
+    if (hasDurableResponse) {
+      // v144.05: occurrence_id + research_round owns an already-started durable
+      // response. Dynamic exclusions may change on resume and must not orphan it.
+      console.warn("Campaign research fingerprint changed while durable response exists; resuming occurrence-owned response", {
+        ruleId: rule?.id,
+        occurrenceId: automationOccurrenceId,
+        researchRound,
+        openaiResponseId: durableResponseId || null,
+        savedFingerprint: String(job.request_fingerprint || "").slice(0, 16),
+        currentFingerprint: String(requestFingerprint || "").slice(0, 16),
+      });
+    } else {
+      // No OpenAI response exists yet, so refresh the dormant job instead of
+      // terminally failing the automation occurrence.
+      console.warn("Campaign research fingerprint changed before response start; refreshing durable job", {
+        ruleId: rule?.id,
+        occurrenceId: automationOccurrenceId,
+        researchRound,
+        savedFingerprint: String(job.request_fingerprint || "").slice(0, 16),
+        currentFingerprint: String(requestFingerprint || "").slice(0, 16),
+      });
+      const { error: fingerprintUpdateError } = await supabase
+        .from("automation_campaign_research_jobs")
+        .update({
+          request_fingerprint: requestFingerprint,
+          status: job.status === "failed" ? "starting" : job.status,
+          last_error: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", job.id);
+      if (fingerprintUpdateError) {
+        throw new Error(`Could not refresh the durable campaign research job: ${fingerprintUpdateError.message}`);
+      }
+      job = {
+        ...job,
+        request_fingerprint: requestFingerprint,
+        status: job.status === "failed" ? "starting" : job.status,
+        last_error: null,
+      };
+    }
   }
 
   if (!job) {
@@ -33305,6 +33357,7 @@ export async function sendApprovalEmail({
         imageUrl,
         carouselSlides,
         isCarouselDraft,
+        contentFormat: normalizedContentFormat,
         nextRule,
         upcomingPlanUrl,
       }),
@@ -35294,6 +35347,7 @@ async function publishApprovedSocialPosts({
     let tiktokConnectionForPost = null;
     let youtubeConnectionForPost = null;
     let activePublishTarget = null;
+    let awaitingTikTokCustomerApproval = false;
 
     try {
       if (!post.content) {
@@ -35613,70 +35667,6 @@ async function publishApprovedSocialPosts({
         });
         summary.threads_published += 1;
         activePublishTarget = null;
-      }
-
-      if (targets.includes("tiktok")) {
-        activePublishTarget = "tiktok";
-        summary.tiktok_publish_checked += 1;
-
-        tiktokConnectionForPost = await getTikTokConnectionForBrand({
-          supabase,
-          userId: post.user_id,
-          brandProfileId: post.brand_profile_id,
-        });
-
-        console.log("TikTok publish: connection lookup", {
-          postId: post.id,
-          found: Boolean(tiktokConnectionForPost),
-          creatorOpenId: tiktokConnectionForPost?.page_id || null,
-          tokenExpiresAt: tiktokConnectionForPost?.token_expires_at || null,
-        });
-
-        if (!tiktokConnectionForPost?.id || !tiktokConnectionForPost?.page_access_token) {
-          summary.tiktok_publish_skipped_no_config += 1;
-          throw new Error("No connected TikTok account found for this brand");
-        }
-
-        if (!["single_image", "carousel", "animated_video"].includes(normalizedFormat)) {
-          summary.tiktok_publish_skipped_no_media += 1;
-          throw new Error("This Spreelo post format cannot be published to TikTok");
-        }
-
-        const tiktokResult = await startOrReconcileTikTokPublish({
-          supabase,
-          post,
-          connection: tiktokConnectionForPost,
-          publishReceipts,
-          nowIso,
-        });
-
-        if (tiktokResult?.pending) {
-          summary.tiktok_publish_pending += 1;
-          activePublishTarget = null;
-        } else {
-          const publicPostIds = Array.isArray(tiktokResult?.statusData?.publicaly_available_post_id)
-            ? tiktokResult.statusData.publicaly_available_post_id.map((id) => String(id))
-            : [];
-          const approvedTikTokSettings = getTikTokPublishSettings(post);
-
-          await persistPublishedTarget({
-            supabase,
-            postId: post.id,
-            publishedTargetSet,
-            publishReceipts,
-            target: "tiktok",
-            receipt: {
-              state: "published",
-              publish_id: String(tiktokResult?.publishId || ""),
-              post_ids: publicPostIds,
-              privacy_level: approvedTikTokSettings?.privacy_level || null,
-              recorded_at: nowIso,
-            },
-            nowIso,
-          });
-          summary.tiktok_published += 1;
-          activePublishTarget = null;
-        }
       }
 
       if (targets.includes("youtube")) {
@@ -35999,6 +35989,79 @@ async function publishApprovedSocialPosts({
         activePublishTarget = null;
       }
 
+      if (targets.includes("tiktok")) {
+        activePublishTarget = "tiktok";
+        summary.tiktok_publish_checked += 1;
+
+        const approvedTikTokSettings = getTikTokPublishSettings(post);
+        if (!approvedTikTokSettings?.explicit_consent) {
+          awaitingTikTokCustomerApproval = true;
+          summary.tiktok_publish_pending += 1;
+          console.info("TikTok publish deferred awaiting customer approval", {
+            postId: post.id,
+            publishedTargets: Array.from(publishedTargetSet),
+          });
+          activePublishTarget = null;
+        } else {
+          tiktokConnectionForPost = await getTikTokConnectionForBrand({
+            supabase,
+            userId: post.user_id,
+            brandProfileId: post.brand_profile_id,
+          });
+
+          console.log("TikTok publish: connection lookup", {
+            postId: post.id,
+            found: Boolean(tiktokConnectionForPost),
+            creatorOpenId: tiktokConnectionForPost?.page_id || null,
+            tokenExpiresAt: tiktokConnectionForPost?.token_expires_at || null,
+          });
+
+          if (!tiktokConnectionForPost?.id || !tiktokConnectionForPost?.page_access_token) {
+            summary.tiktok_publish_skipped_no_config += 1;
+            throw new Error("No connected TikTok account found for this brand");
+          }
+
+          if (!["single_image", "carousel", "animated_video"].includes(normalizedFormat)) {
+            summary.tiktok_publish_skipped_no_media += 1;
+            throw new Error("This Spreelo post format cannot be published to TikTok");
+          }
+
+          const tiktokResult = await startOrReconcileTikTokPublish({
+            supabase,
+            post,
+            connection: tiktokConnectionForPost,
+            publishReceipts,
+            nowIso,
+          });
+
+          if (tiktokResult?.pending) {
+            summary.tiktok_publish_pending += 1;
+            activePublishTarget = null;
+          } else {
+            const publicPostIds = Array.isArray(tiktokResult?.statusData?.publicaly_available_post_id)
+              ? tiktokResult.statusData.publicaly_available_post_id.map((id) => String(id))
+              : [];
+            await persistPublishedTarget({
+              supabase,
+              postId: post.id,
+              publishedTargetSet,
+              publishReceipts,
+              target: "tiktok",
+              receipt: {
+                state: "published",
+                publish_id: String(tiktokResult?.publishId || ""),
+                post_ids: publicPostIds,
+                privacy_level: approvedTikTokSettings?.privacy_level || null,
+                recorded_at: nowIso,
+              },
+              nowIso,
+            });
+            summary.tiktok_published += 1;
+            activePublishTarget = null;
+          }
+        }
+      }
+
       const allDesiredTargetsPublished = desiredTargets.every((target) =>
         publishedTargetSet.has(target)
       );
@@ -36010,7 +36073,11 @@ async function publishApprovedSocialPosts({
           published_targets: Array.from(publishedTargetSet),
           publish_receipts: publishReceipts,
           publish_locked_until: null,
-          next_publish_attempt_at: allDesiredTargetsPublished ? null : addMinutesIso(new Date(nowIso), 1),
+          next_publish_attempt_at: allDesiredTargetsPublished
+            ? null
+            : awaitingTikTokCustomerApproval
+              ? addHoursIso(new Date(nowIso), 24)
+              : addMinutesIso(new Date(nowIso), 1),
           last_publish_error: null,
           updated_at: nowIso,
         })
@@ -36171,27 +36238,15 @@ async function publishApprovedSocialPosts({
 
       summary.social_publish_failed += 1;
 
-      if (targets.includes("facebook")) {
-        summary.facebook_publish_failed += 1;
-      }
-
-      if (targets.includes("instagram")) {
-        summary.instagram_publish_failed += 1;
-      }
-
-      if (targets.includes("pinterest")) {
-        summary.pinterest_publish_failed += 1;
-      }
-
-      if (targets.includes("threads")) {
-        summary.threads_publish_failed += 1;
-      }
-      if (targets.includes("tiktok")) {
-        summary.tiktok_publish_failed += 1;
-      }
-      if (targets.includes("youtube")) {
-        summary.youtube_publish_failed += 1;
-      }
+      // Count the platform that actually failed, not every destination on the post.
+      // Successful earlier destinations are persisted independently and must not
+      // be reported as failed just because a later destination failed.
+      if (activePublishTarget === "facebook") summary.facebook_publish_failed += 1;
+      if (activePublishTarget === "instagram") summary.instagram_publish_failed += 1;
+      if (activePublishTarget === "pinterest") summary.pinterest_publish_failed += 1;
+      if (activePublishTarget === "threads") summary.threads_publish_failed += 1;
+      if (activePublishTarget === "tiktok") summary.tiktok_publish_failed += 1;
+      if (activePublishTarget === "youtube") summary.youtube_publish_failed += 1;
     }
   }
 }

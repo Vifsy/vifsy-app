@@ -414,6 +414,10 @@ function isTikTokTarget(platform) {
   return String(platform || "").toLowerCase().replaceAll(" ", "").includes("tiktok");
 }
 
+function hasTikTokExplicitApproval(post) {
+  return Boolean(post?.platform_publish_settings?.tiktok?.explicit_consent);
+}
+
 async function getTikTokApprovalContext({ supabase, post }) {
   const { data: connection, error } = await supabase
     .from("social_connections")
@@ -443,6 +447,97 @@ function getTikTokApprovalSlideMetadata(slide) {
     try { return JSON.parse(metadata) || {}; } catch { return {}; }
   }
   return {};
+}
+
+
+async function loadApprovalCarouselSlides({ supabase, postId }) {
+  const { data, error } = await supabase
+    .from("post_slides")
+    .select("slide_order, image_url, metadata")
+    .eq("post_id", postId)
+    .order("slide_order", { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+async function markGeneralPostApproved({ supabase, post }) {
+  if (!post?.id) throw new Error("Post is missing from the approval request");
+  const approvedAt = post.approved_at || new Date().toISOString();
+  const { error: updateError } = await supabase
+    .from("posts")
+    .update({
+      status: "approved",
+      approved_at: approvedAt,
+      publish_locked_until: null,
+      next_publish_attempt_at: null,
+      last_publish_error: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", post.id);
+  if (updateError) throw updateError;
+
+  await supabase
+    .from("admin_review_cases")
+    .update({
+      status: "customer_approved",
+      needs_review: false,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("post_id", post.id);
+
+  return approvedAt;
+}
+
+async function renderTikTokApprovalResponse({ supabase, post, token, translator }) {
+  const { creatorInfo } = await getTikTokApprovalContext({ supabase, post });
+  const { publicPostingReady, allowPrivateTesting } = getTikTokEnv();
+  const carouselSlides = String(post.content_format || "") === "carousel"
+    ? await loadApprovalCarouselSlides({ supabase, postId: post.id })
+    : [];
+  return new Response(
+    createTikTokApprovalHtml({
+      post,
+      token,
+      creatorInfo,
+      carouselSlides,
+      locale: translator.locale,
+      publicPostingReady,
+      allowPrivateTesting,
+      t: translator.t,
+    }),
+    { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } }
+  );
+}
+
+function createGeneralApprovalPreviewHtml({ post, token, carouselSlides = [], locale = "en", t }) {
+  const tr = typeof t === "function" ? t : (key) => key;
+  const logoUrl = `${APP_URL.replace(/\/$/, "")}/brand/spreelologo.png`;
+  const isVideo = Boolean(post.video_url) || String(post.content_format || "") === "animated_video";
+  const isCarousel = String(post.content_format || "") === "carousel";
+  const safeContent = escapeTikTokHtml(post.content || "").replace(/\n/g, "<br>");
+  const slides = (carouselSlides || [])
+    .filter((slide) => slide?.image_url)
+    .sort((a, b) => Number(a?.slide_order || 0) - Number(b?.slide_order || 0));
+
+  let media = `<div class="empty">${escapeTikTokHtml(tr("approvePages.tiktok.previewUnavailable"))}</div>`;
+  let mediaHint = tr("approvePages.preview.imageHint");
+  if (isVideo && post.video_url) {
+    media = `<video class="media" src="${escapeTikTokHtml(post.video_url)}" poster="${escapeTikTokHtml(post.image_url || "")}" controls playsinline></video>`;
+    mediaHint = tr("approvePages.preview.videoHint");
+  } else if (isCarousel && slides.length) {
+    media = `<div class="carousel"><div class="stage">${slides.map((slide, index) => `<img class="slide${index === 0 ? " active" : ""}" data-slide="${index}" src="${escapeTikTokHtml(slide.image_url)}" alt="">`).join("")}</div><div class="nav"><button type="button" id="prev">←</button><span id="counter">1 / ${slides.length}</span><button type="button" id="next">→</button></div></div>`;
+    mediaHint = tr("approvePages.preview.carouselHint");
+  } else if (post.image_url) {
+    media = `<img class="media" src="${escapeTikTokHtml(post.image_url)}" alt="">`;
+  }
+
+  const tiktokNote = isTikTokTarget(post.platform)
+    ? `<div class="note"><strong>TikTok</strong><span>${escapeTikTokHtml(tr("approvePages.preview.tiktokNote"))}</span></div>`
+    : "";
+
+  return `<!doctype html><html lang="${escapeTikTokHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>${escapeTikTokHtml(tr("approvePages.preview.pageTitle"))}</title><style>
+  :root{--ink:#102033;--muted:#667085;--line:#e3e8ef;--accent:#ef6849}*{box-sizing:border-box}body{margin:0;min-height:100vh;font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;color:var(--ink);background:#edf2f7}.backdrop{position:fixed;inset:0;background:linear-gradient(135deg,#f7f9fc,#eef2f7)}.veil{position:fixed;inset:0;background:rgba(13,24,42,.46);backdrop-filter:blur(5px)}main{position:relative;z-index:2;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:28px 16px}.modal{width:min(1040px,100%);background:#fff;border-radius:26px;box-shadow:0 32px 90px rgba(10,24,48,.24);overflow:hidden}.head{padding:26px 30px 22px;border-bottom:1px solid var(--line)}.brand{display:flex;align-items:center;gap:14px;margin-bottom:15px}.brand img{width:118px}.chip{padding:6px 10px;border-radius:999px;background:#102033;color:white;font-size:11px;font-weight:800}.eyebrow{margin:0 0 7px;font-size:11px;letter-spacing:.13em;text-transform:uppercase;font-weight:900;color:#7a4751}h1{margin:0;font-size:31px;letter-spacing:-.03em}.intro{margin:9px 0 0;max-width:760px;color:var(--muted);line-height:1.55}.grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(330px,.95fr);gap:22px;padding:24px 30px 30px}.panel{border:1px solid var(--line);border-radius:19px;padding:17px;background:#fff}.panel h2{margin:0 0 4px;font-size:16px}.hint{margin:0 0 13px;color:var(--muted);font-size:12px;line-height:1.45}.media,.stage,.empty{display:block;width:100%;height:500px;object-fit:contain;background:#11151b;border-radius:15px}.empty{display:grid;place-items:center;color:#94a3b8;background:#f4f6f9}.stage{position:relative;overflow:hidden}.slide{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:.18s ease}.slide.active{opacity:1}.nav{display:flex;justify-content:center;align-items:center;gap:12px;margin-top:10px;font-size:12px;font-weight:800}.nav button{width:38px;height:38px;border:1px solid var(--line);background:#fff;border-radius:10px;cursor:pointer}.copy{font-size:14px;line-height:1.65;color:#253449;white-space:normal}.note{display:flex;gap:10px;margin-top:18px;padding:12px;border:1px solid #f3d0c5;background:#fff7f3;border-radius:13px}.note strong,.note span{display:block}.note strong{font-size:12px}.note span{font-size:11.5px;color:var(--muted);line-height:1.4}.actions{display:grid;gap:10px;margin-top:20px}.approve{min-height:50px;border:0;border-radius:13px;background:#102033;color:#fff;font:inherit;font-weight:900;cursor:pointer}.reject{display:flex;justify-content:center;align-items:center;min-height:44px;border:1px solid #d8dee7;border-radius:13px;color:#536174;text-decoration:none;font-weight:800;font-size:13px}@media(max-width:860px){.grid{grid-template-columns:1fr}.media,.stage,.empty{height:min(76vw,520px)}}@media(max-width:560px){main{padding:10px}.modal{border-radius:20px}.head,.grid{padding:20px}h1{font-size:26px}.media,.stage,.empty{height:78vw}}
+  </style></head><body><div class="backdrop"></div><div class="veil"></div><main><section class="modal"><header class="head"><div class="brand"><img src="${escapeTikTokHtml(logoUrl)}" alt="Spreelo"><span class="chip">${escapeTikTokHtml(String(post.platform || "Social media"))}</span></div><p class="eyebrow">${escapeTikTokHtml(tr("approvePages.preview.eyebrow"))}</p><h1>${escapeTikTokHtml(tr("approvePages.preview.title"))}</h1><p class="intro">${escapeTikTokHtml(tr("approvePages.preview.intro"))}</p></header><div class="grid"><section class="panel"><h2>${escapeTikTokHtml(tr("approvePages.preview.mediaTitle"))}</h2><p class="hint">${escapeTikTokHtml(mediaHint)}</p>${media}</section><section class="panel"><h2>${escapeTikTokHtml(tr("approvePages.preview.copyTitle"))}</h2><div class="copy">${safeContent}</div>${tiktokNote}<div class="actions"><form method="post" action="/api/approve-post"><input type="hidden" name="token" value="${escapeTikTokHtml(token)}"><input type="hidden" name="general_approval" value="1"><button class="approve" type="submit">${escapeTikTokHtml(tr("approvePages.preview.approve"))}</button></form><a class="reject" href="/api/reject-post?token=${encodeURIComponent(token)}&lang=${encodeURIComponent(locale)}">${escapeTikTokHtml(tr("approvePages.preview.reject"))}</a></div></section></div></section></main>${isCarousel && slides.length ? `<script>const slides=[...document.querySelectorAll('.slide')];let i=0;const counter=document.getElementById('counter');function show(n){i=(n+slides.length)%slides.length;slides.forEach((el,x)=>el.classList.toggle('active',x===i));if(counter)counter.textContent=(i+1)+' / '+slides.length}document.getElementById('prev')?.addEventListener('click',()=>show(i-1));document.getElementById('next')?.addEventListener('click',()=>show(i+1));</script>` : ""}</body></html>`;
 }
 
 function createTikTokApprovalHtml({
@@ -546,7 +641,6 @@ export async function GET(request) {
 
     if (!supabaseUrl || !serviceRoleKey) {
       translator = await getApproveTranslations({ locale: requestLocale });
-
       return htmlResponse({
         title: translator.t("approvePages.configurationError.title"),
         message: translator.t("approvePages.configurationError.message"),
@@ -559,14 +653,11 @@ export async function GET(request) {
 
     const url = new URL(request.url);
     const token = url.searchParams.get("token");
+    const previewRequested = url.searchParams.get("preview") === "1";
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     if (!token) {
-      translator = await getApproveTranslations({
-        supabase,
-        locale: requestLocale,
-      });
-
+      translator = await getApproveTranslations({ supabase, locale: requestLocale });
       return htmlResponse({
         title: translator.t("approvePages.invalidLink.title"),
         message: translator.t("approvePages.invalidLink.message"),
@@ -579,35 +670,23 @@ export async function GET(request) {
 
     const { data: post, error: postError } = await supabase
       .from("posts")
-      .select("id, user_id, status, approval_token, language, brand_profile_id, content_format, platform, content, image_url, video_url, platform_publish_settings")
+      .select("id, user_id, status, approval_token, language, brand_profile_id, content_format, platform, content, image_url, video_url, platform_publish_settings, approved_at, published_at")
       .eq("approval_token", token)
       .single();
 
     let brandProfile = null;
-
     if (post?.brand_profile_id) {
       const { data: loadedBrandProfile } = await supabase
         .from("brand_profiles")
         .select("id, content_language")
         .eq("id", post.brand_profile_id)
         .maybeSingle();
-
       brandProfile = loadedBrandProfile || null;
     }
 
     const userAppLanguage = await getUserAppLanguage(supabase, post?.user_id);
-    const postLocale = resolveApprovalPageLocale({
-      request,
-      url,
-      post,
-      brandProfile,
-      userAppLanguage,
-    });
-
-    translator = await getApproveTranslations({
-      supabase,
-      locale: postLocale,
-    });
+    const postLocale = resolveApprovalPageLocale({ request, url, post, brandProfile, userAppLanguage });
+    translator = await getApproveTranslations({ supabase, locale: postLocale });
 
     if (postError || !post) {
       return htmlResponse({
@@ -618,6 +697,62 @@ export async function GET(request) {
         t: translator.t,
         locale: translator.locale,
       });
+    }
+
+    const tikTokTarget = isTikTokTarget(post.platform);
+    const tikTokApprovalMissing = tikTokTarget && !hasTikTokExplicitApproval(post);
+    console.log("Approval link opened", {
+      postId: post.id,
+      status: post.status,
+      platform: post.platform || null,
+      previewRequested,
+      tikTokTarget,
+      tikTokApprovalMissing,
+    });
+
+    if (post.status === "published" || post.status === "rejected") {
+      return htmlResponse({
+        title: translator.t("approvePages.cannotApprove.title"),
+        message: translator.t("approvePages.cannotApprove.message", { status: post.status }),
+        status: "error",
+        httpStatus: 409,
+        t: translator.t,
+        locale: translator.locale,
+      });
+    }
+
+    // The play button is a preview-only path. It must never approve on open.
+    if (previewRequested && post.status === "pending_approval") {
+      const carouselSlides = String(post.content_format || "") === "carousel"
+        ? await loadApprovalCarouselSlides({ supabase, postId: post.id })
+        : [];
+      return new Response(
+        createGeneralApprovalPreviewHtml({
+          post,
+          token,
+          carouselSlides,
+          locale: translator.locale,
+          t: translator.t,
+        }),
+        { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } }
+      );
+    }
+
+    // If general approval already happened but TikTok still needs its mandatory
+    // choices, opening either approval path resumes exactly at the TikTok step.
+    if (post.status === "approved" && tikTokApprovalMissing) {
+      try {
+        return await renderTikTokApprovalResponse({ supabase, post, token, translator });
+      } catch (tiktokError) {
+        return htmlResponse({
+          title: translator.t("approvePages.tiktok.connectionTitle"),
+          message: tiktokError.message || translator.t("approvePages.tiktok.connectionMessage"),
+          status: "error",
+          httpStatus: tiktokError?.requiresReconnect ? 409 : 502,
+          t: translator.t,
+          locale: translator.locale,
+        });
+      }
     }
 
     if (post.status === "approved") {
@@ -631,12 +766,11 @@ export async function GET(request) {
       });
     }
 
-    if (post.status !== "pending_approval") {
+    const repairableStatus = ["pending_approval", "failed"].includes(post.status);
+    if (!repairableStatus) {
       return htmlResponse({
         title: translator.t("approvePages.cannotApprove.title"),
-        message: translator.t("approvePages.cannotApprove.message", {
-          status: post.status,
-        }),
+        message: translator.t("approvePages.cannotApprove.message", { status: post.status }),
         status: "error",
         httpStatus: 409,
         t: translator.t,
@@ -644,35 +778,14 @@ export async function GET(request) {
       });
     }
 
+    // Direct email approval: release all ordinary destinations immediately.
+    // TikTok remains a separate second consent step and must not gate the others.
+    const approvedAt = await markGeneralPostApproved({ supabase, post });
+    const approvedPost = { ...post, status: "approved", approved_at: approvedAt };
 
-
-    if (isTikTokTarget(post.platform)) {
+    if (tikTokTarget && !hasTikTokExplicitApproval(approvedPost)) {
       try {
-        const { creatorInfo } = await getTikTokApprovalContext({ supabase, post });
-        const { publicPostingReady, allowPrivateTesting } = getTikTokEnv();
-        let carouselSlides = [];
-        if (String(post.content_format || "") === "carousel") {
-          const { data: loadedSlides, error: slidesError } = await supabase
-            .from("post_slides")
-            .select("slide_order, image_url, metadata")
-            .eq("post_id", post.id)
-            .order("slide_order", { ascending: true });
-          if (slidesError) throw slidesError;
-          carouselSlides = loadedSlides || [];
-        }
-        return new Response(
-          createTikTokApprovalHtml({
-            post,
-            token,
-            creatorInfo,
-            carouselSlides,
-            locale: translator.locale,
-            publicPostingReady,
-            allowPrivateTesting,
-            t: translator.t,
-          }),
-          { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } }
-        );
+        return await renderTikTokApprovalResponse({ supabase, post: approvedPost, token, translator });
       } catch (tiktokError) {
         return htmlResponse({
           title: translator.t("approvePages.tiktok.connectionTitle"),
@@ -686,34 +799,6 @@ export async function GET(request) {
     }
 
     const isCarouselPost = post.content_format === "carousel";
-    const approvedAt = new Date().toISOString();
-
-    const { error: updateError } = await supabase
-      .from("posts")
-      .update({
-        status: "approved",
-        approved_at: approvedAt,
-        updated_at: approvedAt,
-      })
-      .eq("id", post.id);
-
-    if (updateError) {
-      return htmlResponse({
-        title: translator.t("approvePages.failed.title"),
-        message: translator.t("approvePages.failed.message"),
-        status: "error",
-        httpStatus: 500,
-        t: translator.t,
-        locale: translator.locale,
-      });
-    }
-
-    await supabase.from("admin_review_cases").update({
-      status: "customer_approved",
-      needs_review: false,
-      updated_at: approvedAt,
-    }).eq("post_id", post.id);
-
     return htmlResponse({
       title: translator.t(isCarouselPost ? "approvePages.carouselApprovedV2.title" : "approvePages.approved.title"),
       message: translator.t(isCarouselPost ? "approvePages.carouselApprovedV2.message" : "approvePages.approved.message"),
@@ -734,13 +819,13 @@ export async function GET(request) {
   }
 }
 
-
 export async function POST(request) {
   let translator = createFallbackTranslator();
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!supabaseUrl || !serviceRoleKey) throw new Error("Spreelo approval configuration is incomplete");
+
     const supabase = createClient(supabaseUrl, serviceRoleKey);
     const form = await request.formData();
     const token = String(form.get("token") || "").trim();
@@ -748,21 +833,78 @@ export async function POST(request) {
 
     const { data: post, error: postError } = await supabase
       .from("posts")
-      .select("id, user_id, brand_profile_id, status, approval_token, language, content_format, platform, content, image_url, video_url, platform_publish_settings")
+      .select("id, user_id, brand_profile_id, status, approval_token, language, content_format, platform, content, image_url, video_url, platform_publish_settings, approved_at, published_at")
       .eq("approval_token", token)
       .single();
     if (postError || !post) throw new Error("This approval link is no longer valid");
+
     translator = await getApproveTranslations({ supabase, locale: post.language || "en" });
-    if (!isTikTokTarget(post.platform)) throw new Error("This approval form is only for TikTok posts");
-    if (post.status === "approved") {
-      return htmlResponse({ title: translator.t("approvePages.alreadyApproved.title"), message: translator.t("approvePages.alreadyApproved.message"), status: "success", t: translator.t, locale: translator.locale });
+
+    if (form.get("general_approval") === "1") {
+      if (["published", "rejected"].includes(post.status)) {
+        throw new Error(`This post cannot be approved while its status is ${post.status}`);
+      }
+      if (!["pending_approval", "approved", "failed"].includes(post.status)) {
+        throw new Error(`This post cannot be approved while its status is ${post.status}`);
+      }
+
+      if (post.status !== "approved") {
+        const approvedAt = await markGeneralPostApproved({ supabase, post });
+        post.status = "approved";
+        post.approved_at = approvedAt;
+      }
+
+      if (isTikTokTarget(post.platform) && !hasTikTokExplicitApproval(post)) {
+        return await renderTikTokApprovalResponse({ supabase, post, token, translator });
+      }
+
+      const isCarouselPost = post.content_format === "carousel";
+      return htmlResponse({
+        title: translator.t(isCarouselPost ? "approvePages.carouselApprovedV2.title" : "approvePages.approved.title"),
+        message: translator.t(isCarouselPost ? "approvePages.carouselApprovedV2.message" : "approvePages.approved.message"),
+        status: "success",
+        t: translator.t,
+        locale: translator.locale,
+      });
     }
-    if (post.status !== "pending_approval") throw new Error(`This post cannot be approved while its status is ${post.status}`);
+
+    if (!isTikTokTarget(post.platform)) throw new Error("This approval form is only for TikTok posts");
+    const alreadyHasTikTokApproval = hasTikTokExplicitApproval(post);
+    console.log("TikTok approval submitted", {
+      postId: post.id,
+      previousStatus: post.status,
+      alreadyHasTikTokApproval,
+    });
+
+    if (post.status === "approved" && alreadyHasTikTokApproval) {
+      return htmlResponse({
+        title: translator.t("approvePages.alreadyApproved.title"),
+        message: translator.t("approvePages.alreadyApproved.message"),
+        status: "success",
+        t: translator.t,
+        locale: translator.locale,
+      });
+    }
+
+    const repairableTikTokApproval = !alreadyHasTikTokApproval && ["approved", "failed"].includes(post.status);
+    if (post.status !== "pending_approval" && !repairableTikTokApproval) {
+      throw new Error(`This post cannot be approved while its status is ${post.status}`);
+    }
+
+    // Legacy/recovery protection: TikTok consent is step two. If an old post
+    // reaches this form while still pending, record the general approval first.
+    if (post.status === "pending_approval") {
+      const approvedAt = await markGeneralPostApproved({ supabase, post });
+      post.status = "approved";
+      post.approved_at = approvedAt;
+    }
 
     const { creatorInfo } = await getTikTokApprovalContext({ supabase, post });
     const privacyLevel = String(form.get("privacy_level") || "").trim();
     const availablePrivacy = Array.isArray(creatorInfo?.privacy_level_options) ? creatorInfo.privacy_level_options : [];
-    if (!privacyLevel || !availablePrivacy.includes(privacyLevel)) throw new Error("Choose one of the visibility options currently allowed by your TikTok account");
+    if (!privacyLevel || !availablePrivacy.includes(privacyLevel)) {
+      throw new Error("Choose one of the visibility options currently allowed by your TikTok account");
+    }
 
     const { publicPostingReady, allowPrivateTesting } = getTikTokEnv();
     if (!publicPostingReady) {
@@ -784,10 +926,11 @@ export async function POST(request) {
     const titleLimit = isVideo ? 2200 : 4000;
     let title = String(form.get("title") || post.content || "").slice(0, titleLimit);
     if (/[\uD800-\uDBFF]$/.test(title)) title = title.slice(0, -1);
+
     const currentSettings = post.platform_publish_settings && typeof post.platform_publish_settings === "object"
       ? post.platform_publish_settings
       : {};
-    const approvedAt = new Date().toISOString();
+    const approvedAt = post.approved_at || new Date().toISOString();
     const platformPublishSettings = {
       ...currentSettings,
       tiktok: {
@@ -802,7 +945,7 @@ export async function POST(request) {
         is_aigc: isVideo ? true : undefined,
         creator_nickname: creatorInfo?.creator_nickname || null,
         creator_username: creatorInfo?.creator_username || null,
-        approved_at: approvedAt,
+        approved_at: new Date().toISOString(),
         explicit_consent: true,
       },
     };
@@ -813,12 +956,19 @@ export async function POST(request) {
         status: "approved",
         approved_at: approvedAt,
         platform_publish_settings: platformPublishSettings,
-        updated_at: approvedAt,
+        publish_locked_until: null,
+        next_publish_attempt_at: null,
+        last_publish_error: null,
+        updated_at: new Date().toISOString(),
       })
       .eq("id", post.id);
     if (updateError) throw updateError;
 
-    await supabase.from("admin_review_cases").update({ status: "customer_approved", needs_review: false, updated_at: approvedAt }).eq("post_id", post.id);
+    await supabase
+      .from("admin_review_cases")
+      .update({ status: "customer_approved", needs_review: false, updated_at: new Date().toISOString() })
+      .eq("post_id", post.id);
+
     return htmlResponse({
       title: translator.t("approvePages.tiktok.approvedTitle"),
       message: translator.t("approvePages.tiktok.approvedMessage"),
