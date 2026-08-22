@@ -115,7 +115,8 @@
     "test:v144.04": "node scripts/test-v144-04-approval-recovery.mjs",
     "test:v144.05": "node scripts/test-v144-05-approval-orchestration-durable-research.mjs",
     "test:v144.06": "node scripts/test-v144-06-premium-approval-variety-cover.mjs",
-    "test:v144.07": "node scripts/test-v144-07-kling-ai-video.mjs"
+    "test:v144.07": "node scripts/test-v144-07-kling-ai-video.mjs",
+    "test:v144.08": "node scripts/test-v144-08-social-account-reconnect.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

@@ -17,7 +17,7 @@ const vercel = JSON.parse(read("vercel.json"));
 assert.match(oauth, /youtube\.upload/);
 assert.match(oauth, /youtube\.readonly/);
 assert.match(oauth, /access_type:\s*"offline"/);
-assert.match(oauth, /prompt:\s*"consent"/);
+assert.match(oauth, /prompt:\s*"consent select_account"/);
 assert.match(oauth, /refresh_token/);
 assert.match(oauth, /uploadType.*resumable/s);
 assert.match(oauth, /privacyStatus/);
