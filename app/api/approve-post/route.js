@@ -88,318 +88,296 @@ function resolveApprovalPageLocale({ request, url, post, brandProfile, userAppLa
   });
 }
 
-function createHtmlPage({ title, message, status = "success", t, locale = "en" }) {
-  const isSuccess = status === "success";
-  const logoUrl = `${APP_URL.replace(/\/$/, "")}/brand/spreelologo.png`;
-
+function getApprovalExperienceCss() {
   return `
-<!doctype html>
-<html lang="${locale}">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light" />
-    <title>${title}</title>
-    <style>
-      :root {
-        --spreelo-ink: #0b1724;
-        --spreelo-muted: #667085;
-        --spreelo-line: #e8e3dc;
-        --spreelo-surface: rgba(255, 255, 255, 0.96);
-        --spreelo-accent: #ef6849;
-        --spreelo-accent-deep: #c84b31;
-        --spreelo-accent-soft: #fff0e8;
-        --spreelo-bg: #f7f4ef;
-      }
-
-      * { box-sizing: border-box; }
-
-      html, body { min-height: 100%; }
-
-      body {
-        margin: 0;
-        min-height: 100vh;
-        font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
-        background:
-          radial-gradient(circle at 18% 18%, rgba(239, 104, 73, 0.10), transparent 30%),
-          radial-gradient(circle at 84% 80%, rgba(11, 23, 36, 0.07), transparent 28%),
-          var(--spreelo-bg);
-        color: var(--spreelo-ink);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 28px;
-        overflow-x: hidden;
-      }
-
-      .page-glow {
-        position: fixed;
-        inset: 0;
-        pointer-events: none;
-        overflow: hidden;
-      }
-
-      .page-glow::before,
-      .page-glow::after {
-        content: "";
-        position: absolute;
-        width: 280px;
-        height: 280px;
-        border-radius: 999px;
-        filter: blur(1px);
-        opacity: 0.45;
-      }
-
-      .page-glow::before {
-        left: -105px;
-        top: -115px;
-        background: linear-gradient(145deg, rgba(255, 107, 82, 0.26), rgba(239, 62, 47, 0.03));
-      }
-
-      .page-glow::after {
-        right: -115px;
-        bottom: -135px;
-        background: linear-gradient(145deg, rgba(11, 23, 36, 0.12), rgba(255, 255, 255, 0));
-      }
-
-      .shell {
-        width: 100%;
-        max-width: 640px;
-        position: relative;
-        z-index: 1;
-      }
-
-      .brand-row {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-bottom: 18px;
-      }
-
-      .brand-row img {
-        display: block;
-        width: 150px;
-        max-width: 46vw;
-        height: auto;
-      }
-
-      .card {
-        position: relative;
-        overflow: hidden;
-        width: 100%;
-        background: var(--spreelo-surface);
-        border: 1px solid rgba(11, 23, 36, 0.09);
-        border-radius: 26px;
-        padding: 42px 42px 36px;
-        box-shadow:
-          0 28px 70px rgba(11, 23, 36, 0.10),
-          0 4px 14px rgba(11, 23, 36, 0.04);
-        text-align: center;
-        backdrop-filter: blur(14px);
-      }
-
-      .card::before {
-        content: "";
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 100%;
-        height: 5px;
-        background: linear-gradient(90deg, #ff6b52 0%, #ef3e2f 46%, #8b5cf6 100%);
-      }
-
-      .status-wrap {
-        display: flex;
-        justify-content: center;
-        margin: 2px 0 22px;
-      }
-
-      .badge {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 62px;
-        height: 62px;
-        border-radius: 20px;
-        background: ${isSuccess ? "#effaf4" : "#fff1f0"};
-        color: ${isSuccess ? "#16834b" : "#b42318"};
-        border: 1px solid ${isSuccess ? "#ccefd9" : "#ffd3ce"};
-        box-shadow: 0 10px 28px ${isSuccess ? "rgba(22, 131, 75, 0.12)" : "rgba(180, 35, 24, 0.10)"};
-      }
-
-      .badge svg {
-        width: 28px;
-        height: 28px;
-        stroke-width: 2.2;
-      }
-
-      .eyebrow {
-        margin: 0 0 9px;
-        color: var(--spreelo-accent-deep);
-        font-size: 11px;
-        font-weight: 900;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
-      }
-
-      h1 {
-        margin: 0 auto 12px;
-        max-width: 520px;
-        font-size: clamp(27px, 5vw, 34px);
-        line-height: 1.15;
-        letter-spacing: -0.035em;
-        font-weight: 850;
-      }
-
-      .message {
-        margin: 0 auto;
-        max-width: 470px;
-        color: #526071;
-        font-size: 16px;
-        line-height: 1.65;
-      }
-
-      .button-row {
-        display: flex;
-        justify-content: center;
-        gap: 12px;
-        flex-wrap: wrap;
-        margin-top: 28px;
-      }
-
-      a,
-      button {
-        min-height: 46px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        padding: 12px 20px;
-        border-radius: 13px;
-        text-decoration: none;
-        font-family: inherit;
-        font-weight: 800;
-        font-size: 14px;
-        cursor: pointer;
-        transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease, border-color 160ms ease;
-      }
-
-      a:hover,
-      button:hover {
-        transform: translateY(-1px);
-      }
-
-      .primary-action {
-        background: var(--spreelo-ink);
-        color: #ffffff;
-        border: 1px solid var(--spreelo-ink);
-        box-shadow: 0 10px 24px rgba(11, 23, 36, 0.16);
-      }
-
-      .primary-action:hover {
-        background: #152437;
-        border-color: #152437;
-        box-shadow: 0 13px 28px rgba(11, 23, 36, 0.20);
-      }
-
-      .secondary-action {
-        background: #ffffff;
-        color: var(--spreelo-ink);
-        border: 1px solid #d9dde3;
-        box-shadow: 0 4px 12px rgba(11, 23, 36, 0.04);
-      }
-
-      .secondary-action:hover {
-        border-color: #bfc6cf;
-        background: #fbfbfc;
-      }
-
-      .arrow {
-        width: 22px;
-        height: 22px;
-        border-radius: 7px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        background: var(--spreelo-accent);
-        color: white;
-        line-height: 1;
-        font-size: 15px;
-      }
-
-      .divider {
-        width: 54px;
-        height: 3px;
-        margin: 28px auto 15px;
-        border-radius: 999px;
-        background: var(--spreelo-accent-soft);
-      }
-
-      .small-text {
-        margin: 0;
-        color: #7b8491;
-        font-size: 12.5px;
-        line-height: 1.55;
-      }
-
-      @media (max-width: 560px) {
-        body { padding: 18px; }
-        .brand-row { margin-bottom: 14px; }
-        .brand-row img { width: 132px; }
-        .card { padding: 34px 22px 28px; border-radius: 22px; }
-        .badge { width: 56px; height: 56px; border-radius: 18px; }
-        .message { font-size: 15px; }
-        .button-row { flex-direction: column-reverse; }
-        a, button { width: 100%; }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="page-glow" aria-hidden="true"></div>
-    <main class="shell">
-      <div class="brand-row">
-        <img src="${logoUrl}" alt="Spreelo" />
-      </div>
-
-      <section class="card">
-        <div class="status-wrap">
-          <div class="badge" aria-hidden="true">
-            ${
-              isSuccess
-                ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
-                : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 8v5" stroke-linecap="round"/><path d="M12 17h.01" stroke-linecap="round"/><circle cx="12" cy="12" r="9"/></svg>`
-            }
-          </div>
-        </div>
-
-        <p class="eyebrow">SPREELO</p>
-        <h1>${title}</h1>
-        <p class="message">${message}</p>
-
-        ${
-          isSuccess
-            ? `
-              <div class="button-row">
-                <button class="secondary-action" type="button" onclick="window.close()">${t("approvePages.closePage")}</button>
-                <a class="primary-action" href="${APP_URL}">${t("approvePages.openSpreelo")}<span class="arrow">→</span></a>
-              </div>
-
-              <div class="divider"></div>
-              <p class="small-text">${t("approvePages.safeClose")}</p>
-            `
-            : `
-              <div class="button-row">
-                <a class="primary-action" href="${APP_URL}">${t("approvePages.openSpreelo")}<span class="arrow">→</span></a>
-              </div>
-            `
-        }
-      </section>
-    </main>
-  </body>
-</html>
-`;
+    :root {
+      --sp-ink: #0b1733;
+      --sp-muted: #68738b;
+      --sp-line: #e4e8f1;
+      --sp-soft: #f7f8fc;
+      --sp-purple: #7627ee;
+      --sp-purple-2: #9b2ee9;
+      --sp-pink: #d91ebd;
+      --sp-coral: #ff6258;
+      --sp-green: #168a58;
+      --sp-green-bg: #ecfbf3;
+      --sp-green-line: #ccefdc;
+      --sp-warn-bg: #fff7e9;
+      --sp-warn-line: #f2d49b;
+      --sp-error: #b42318;
+    }
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--sp-ink);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      background:
+        radial-gradient(circle at 7% 9%, rgba(119,39,238,.10), transparent 21%),
+        radial-gradient(circle at 94% 88%, rgba(255,98,88,.15), transparent 25%),
+        linear-gradient(135deg, #fbfbff 0%, #f7f8ff 58%, #fff8fb 100%);
+    }
+    body::before, body::after {
+      content: "";
+      position: fixed;
+      pointer-events: none;
+      z-index: 0;
+    }
+    body::before {
+      left: 0; bottom: 7%; width: 135px; height: 160px;
+      opacity: .46;
+      background-image: radial-gradient(circle, #8e62ff 1.25px, transparent 1.35px);
+      background-size: 14px 14px;
+      mask-image: linear-gradient(90deg, #000, transparent);
+    }
+    body::after {
+      right: -100px; bottom: -120px; width: 390px; height: 390px;
+      background: linear-gradient(135deg, rgba(142,55,239,.23), rgba(255,90,106,.42));
+      transform: rotate(18deg);
+      border-radius: 70px;
+      filter: blur(.2px);
+    }
+    .sp-page {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      padding: 28px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+    }
+    .sp-shell {
+      width: min(1460px, 100%);
+      background: rgba(255,255,255,.985);
+      border: 1px solid rgba(225,229,239,.94);
+      border-radius: 26px;
+      box-shadow: 0 26px 78px rgba(33,28,70,.10);
+      overflow: hidden;
+    }
+    .sp-topbar {
+      min-height: 78px;
+      padding: 20px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      border-bottom: 1px solid var(--sp-line);
+    }
+    .sp-logo { display: block; width: 158px; height: auto; }
+    .sp-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--sp-green-line);
+      background: var(--sp-green-bg);
+      color: var(--sp-green);
+      font-size: 13px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .sp-status.is-error { color: var(--sp-error); background: #fff1f0; border-color: #ffd3ce; }
+    .sp-status-icon {
+      width: 20px; height: 20px; border-radius: 999px;
+      display: grid; place-items: center;
+      border: 1px solid currentColor;
+      font-size: 12px; line-height: 1;
+    }
+    .sp-hero {
+      padding: 26px 34px 10px;
+      display: grid;
+      grid-template-columns: minmax(0,1fr) auto;
+      gap: 38px;
+      align-items: start;
+    }
+    .sp-kicker { margin: 0 0 7px; color: #6e5d84; font-size: 11px; font-weight: 900; letter-spacing: .13em; text-transform: uppercase; }
+    .sp-title { margin: 0; font-size: clamp(30px, 3.1vw, 43px); line-height: 1.08; letter-spacing: -.045em; font-weight: 900; }
+    .sp-subtitle { margin: 8px 0 0; font-size: 16px; font-weight: 760; color: #17213a; }
+    .sp-intro { margin: 6px 0 0; max-width: 790px; color: var(--sp-muted); font-size: 14px; line-height: 1.55; }
+    .sp-stepper {
+      min-width: 390px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      align-items: start;
+      gap: 0;
+      padding-top: 8px;
+    }
+    .sp-step { position: relative; text-align: center; color: #7b859b; font-size: 12px; font-weight: 750; }
+    .sp-step:not(:last-child)::after {
+      content: ""; position: absolute; top: 16px; left: calc(50% + 22px); right: calc(-50% + 22px);
+      height: 2px; background: #e0e4ec;
+    }
+    .sp-step.done:not(:last-child)::after, .sp-step.active:not(:last-child)::after { background: linear-gradient(90deg,#c4a5ff,#e3d5ff); }
+    .sp-step-dot {
+      position: relative; z-index: 1; margin: 0 auto 8px; width: 34px; height: 34px; border-radius: 999px;
+      display: grid; place-items: center; background: #f0f2f6; color: #748097; border: 1px solid #e4e7ed; font-size: 13px; font-weight: 900;
+    }
+    .sp-step.done .sp-step-dot { background: #f0f2f6; color: #29364e; }
+    .sp-step.active { color: var(--sp-purple); }
+    .sp-step.active .sp-step-dot { color: #fff; background: linear-gradient(135deg,var(--sp-purple),var(--sp-purple-2)); border-color: transparent; box-shadow: 0 8px 20px rgba(118,39,238,.22); }
+    .sp-content { padding: 20px 34px 34px; }
+    .sp-grid { display: grid; grid-template-columns: minmax(0,1.38fr) minmax(360px,.92fr); gap: 22px; align-items: stretch; }
+    .sp-card { background: #fff; border: 1px solid var(--sp-line); border-radius: 17px; padding: 20px; box-shadow: 0 3px 10px rgba(25,28,52,.02); }
+    .sp-card + .sp-card { margin-top: 15px; }
+    .sp-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 13px; }
+    .sp-card h2 { margin: 0; font-size: 17px; letter-spacing: -.015em; }
+    .sp-card p.sp-help { margin: 5px 0 0; color: var(--sp-muted); font-size: 12.5px; line-height: 1.45; }
+    .sp-quote { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; color: var(--sp-purple); background: #f3eaff; font-weight: 900; font-size: 24px; }
+    .sp-media-wrap { position: relative; overflow: hidden; border-radius: 15px; background: #eaf7fc; min-height: 480px; display: grid; place-items: center; }
+    .sp-media { display: block; width: 100%; height: 540px; object-fit: contain; background: #101319; }
+    .sp-media.is-image { background: #f7f8fb; }
+    .sp-empty { width: 100%; min-height: 460px; display: grid; place-items: center; color: #8a95a8; background: #f7f8fb; }
+    .sp-carousel-stage { position: relative; width: 100%; height: 540px; background: #101319; }
+    .sp-carousel-slide { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity .18s ease; }
+    .sp-carousel-slide.active { opacity: 1; }
+    .sp-carousel-nav { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 10px; font-size: 12px; font-weight: 850; }
+    .sp-nav-btn { width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--sp-line); background: #fff; cursor: pointer; color: var(--sp-ink); font-size: 18px; }
+    .sp-tabs { display: inline-flex; gap: 5px; padding: 4px; border-radius: 11px; border: 1px solid var(--sp-line); background: #fff; }
+    .sp-platform { display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 7px 11px; border-radius: 8px; color: #263149; font-size: 12px; font-weight: 850; }
+    .sp-platform:first-child { background: #10182a; color: #fff; }
+    .sp-platform img { width: 18px; height: 18px; object-fit: contain; }
+    .sp-copy { color: #202b43; font-size: 14px; line-height: 1.75; white-space: normal; overflow-wrap: anywhere; }
+    .sp-note { display: flex; align-items: flex-start; gap: 10px; padding: 13px 14px; border-radius: 12px; border: 1px solid #ffcdbf; background: #fff7f4; }
+    .sp-note-icon { width: 25px; height: 25px; flex: 0 0 auto; border-radius: 8px; display: grid; place-items: center; background: #fff; font-weight: 900; }
+    .sp-note strong, .sp-note span { display: block; }
+    .sp-note strong { font-size: 12.5px; }
+    .sp-note span { margin-top: 2px; font-size: 11.5px; color: var(--sp-muted); line-height: 1.4; }
+    .sp-detail-row { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: center; padding: 12px 0; border-top: 1px solid #eef0f5; font-size: 12.5px; }
+    .sp-detail-row:first-of-type { border-top: 0; }
+    .sp-detail-label { display: flex; align-items: center; gap: 9px; color: #667188; }
+    .sp-detail-value { font-weight: 800; color: #27324a; text-align: right; }
+    .sp-actions { display: grid; grid-template-columns: minmax(0,.82fr) minmax(0,1.18fr); gap: 12px; margin-top: 16px; }
+    .sp-btn { min-height: 52px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 18px; font: inherit; font-size: 14px; font-weight: 900; text-decoration: none; cursor: pointer; }
+    .sp-btn-secondary { color: var(--sp-ink); background: #fff; border: 1.5px solid #b782ff; }
+    .sp-btn-primary { color: #fff; border: 0; background: linear-gradient(95deg,var(--sp-purple) 0%,var(--sp-pink) 52%,var(--sp-coral) 100%); box-shadow: 0 12px 25px rgba(160,42,194,.18); }
+    .sp-btn-dark { color: #fff; border: 0; background: #0d172b; box-shadow: 0 10px 23px rgba(13,23,43,.16); }
+    .sp-btn:disabled { opacity: .48; cursor: not-allowed; }
+    .sp-field { margin-top: 15px; }
+    .sp-field:first-child { margin-top: 0; }
+    .sp-field > label, .sp-section-label { display: block; margin-bottom: 7px; font-size: 12.5px; font-weight: 900; color: #202a41; }
+    .sp-field small { display: block; margin-top: 6px; color: var(--sp-muted); font-size: 11.3px; line-height: 1.45; }
+    .sp-input, .sp-select { width: 100%; border: 1px solid #d8dee9; border-radius: 11px; background: #fff; color: var(--sp-ink); padding: 11px 12px; font: inherit; outline: none; }
+    .sp-input:focus, .sp-select:focus { border-color: #a569ff; box-shadow: 0 0 0 3px rgba(118,39,238,.09); }
+    textarea.sp-input { min-height: 125px; resize: vertical; }
+    .sp-section { margin-top: 16px; padding-top: 15px; border-top: 1px solid #edf0f5; }
+    .sp-checks { display: grid; gap: 8px; }
+    .sp-check { display: flex; align-items: flex-start; gap: 10px; padding: 11px 12px; border: 1px solid #e2e6ee; border-radius: 11px; background: #fff; cursor: pointer; }
+    .sp-check input { margin-top: 3px; accent-color: var(--sp-purple); }
+    .sp-check strong, .sp-check small { display: block; }
+    .sp-check strong { font-size: 12.5px; }
+    .sp-check small { margin-top: 2px; color: var(--sp-muted); font-size: 11px; line-height: 1.4; }
+    .sp-check.disabled { opacity: .52; background: #f7f8fa; cursor: not-allowed; }
+    .sp-commercial-options { display: none; margin-top: 8px; gap: 8px; }
+    .sp-commercial.is-on .sp-commercial-options { display: grid; }
+    .sp-consent { margin-top: 16px; padding: 12px; border: 1px solid #dfe4ee; background: #f8f9fc; border-radius: 12px; }
+    .sp-mode { display: flex; align-items: flex-start; gap: 10px; padding: 12px 13px; margin-bottom: 14px; border-radius: 12px; font-size: 12px; line-height: 1.45; }
+    .sp-mode.warn { background: var(--sp-warn-bg); border: 1px solid var(--sp-warn-line); }
+    .sp-mode.ok { background: var(--sp-green-bg); border: 1px solid var(--sp-green-line); }
+    .sp-mode strong, .sp-mode span { display: block; }
+    .sp-mode span { margin-top: 2px; color: #616c82; }
+    .sp-account { display: flex; align-items: center; gap: 10px; padding: 10px 11px; border: 1px solid var(--sp-line); border-radius: 12px; background: #f8f9fc; }
+    .sp-account img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }
+    .sp-account strong, .sp-account span { display: block; }
+    .sp-account span { font-size: 10.5px; color: var(--sp-muted); }
+    .sp-account strong { font-size: 12.5px; margin: 1px 0; }
+    .sp-next { margin-top: 13px; padding: 11px 12px; border: 1px solid #e3e7ef; border-radius: 11px; background: #fafbfe; font-size: 11.5px; color: var(--sp-muted); line-height: 1.45; }
+    .sp-next strong { color: #28334a; }
+    .sp-foot { margin: 11px 0 0; text-align: center; color: #929aaa; font-size: 10.5px; }
+    .sp-success-wrap { padding: 26px 34px 42px; }
+    .sp-success-card { max-width: 720px; margin: 20px auto 0; padding: 42px; border: 1px solid var(--sp-line); border-radius: 18px; text-align: center; background: #fff; box-shadow: 0 8px 26px rgba(25,28,52,.04); }
+    .sp-success-icon { width: 64px; height: 64px; margin: 0 auto 18px; border-radius: 18px; display: grid; place-items: center; background: var(--sp-green-bg); border: 1px solid var(--sp-green-line); color: var(--sp-green); font-size: 28px; font-weight: 900; }
+    .sp-success-card h2 { margin: 0; font-size: 31px; letter-spacing: -.035em; }
+    .sp-success-card p { max-width: 560px; margin: 10px auto 0; color: var(--sp-muted); font-size: 14px; line-height: 1.6; }
+    .sp-success-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 11px; margin-top: 24px; }
+    .sp-success-actions .sp-btn { min-width: 160px; }
+    @media (max-width: 980px) {
+      .sp-page { padding: 14px; }
+      .sp-hero { grid-template-columns: 1fr; gap: 18px; }
+      .sp-stepper { min-width: 0; width: min(460px,100%); }
+      .sp-grid { grid-template-columns: 1fr; }
+      .sp-media, .sp-carousel-stage { height: min(74vw, 560px); }
+    }
+    @media (max-width: 620px) {
+      .sp-page { padding: 7px; }
+      .sp-shell { border-radius: 19px; }
+      .sp-topbar { min-height: 66px; padding: 16px 18px; }
+      .sp-logo { width: 132px; }
+      .sp-status { font-size: 11px; padding: 7px 10px; }
+      .sp-hero { padding: 22px 18px 8px; }
+      .sp-title { font-size: 31px; }
+      .sp-content { padding: 14px 18px 22px; }
+      .sp-card { padding: 15px; }
+      .sp-media-wrap { min-height: 0; }
+      .sp-media, .sp-carousel-stage { height: 78vw; }
+      .sp-actions { grid-template-columns: 1fr; }
+      .sp-stepper { font-size: 10px; }
+      .sp-success-wrap { padding: 10px 18px 28px; }
+      .sp-success-card { padding: 30px 20px; }
+      .sp-success-actions { flex-direction: column; }
+      .sp-success-actions .sp-btn { width: 100%; }
+    }
+  `;
 }
 
+function getApprovalStepperHtml({ t, activeStep = 2 }) {
+  const tr = typeof t === "function" ? t : (key) => key;
+  const steps = [
+    tr("approvePages.experience.stepCreated"),
+    tr("approvePages.experience.stepReview"),
+    tr("approvePages.experience.stepPublish"),
+  ];
+  return `<div class="sp-stepper">${steps.map((label, index) => {
+    const step = index + 1;
+    const state = step < activeStep ? "done" : step === activeStep ? "active" : "";
+    const dot = step < activeStep ? "✓" : String(step);
+    return `<div class="sp-step ${state}"><div class="sp-step-dot">${dot}</div><span>${escapeTikTokHtml(label)}</span></div>`;
+  }).join("")}</div>`;
+}
+
+function getApprovalPlatformNames(platform, t = null) {
+  const tr = typeof t === "function" ? t : (key) => key;
+  const value = String(platform || "").toLowerCase();
+  const definitions = [
+    ["tiktok", "TikTok", "tiktok.png"],
+    ["youtube", "YouTube", "youtube.png"],
+    ["instagram", "Instagram", "instagram.png"],
+    ["facebook", "Facebook", "facebook.png"],
+    ["threads", "Threads", "threads.svg"],
+    ["pinterest", "Pinterest", "pinterest.png"],
+    ["linkedin", "LinkedIn", "linkedin.png"],
+  ];
+  const found = definitions.filter(([key]) => value.includes(key));
+  if (found.length) return found;
+  return [["social", String(platform || tr("approvePages.experience.socialMedia")), null]];
+}
+
+function getApprovalPlatformChipsHtml(platform, t = null) {
+  return `<div class="sp-tabs">${getApprovalPlatformNames(platform, t).map(([, label, icon]) => `<span class="sp-platform">${icon ? `<img src="${APP_URL.replace(/\/$/, "")}/social-icons/${icon}" alt="">` : ""}${escapeTikTokHtml(label)}</span>`).join("")}</div>`;
+}
+
+function createHtmlPage({ title, message, status = "success", t, locale = "en" }) {
+  const tr = typeof t === "function" ? t : (key) => key;
+  const isSuccess = status === "success";
+  const logoUrl = `${APP_URL.replace(/\/$/, "")}/brand/spreelologo.png`;
+  return `<!doctype html>
+<html lang="${escapeTikTokHtml(locale)}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>${escapeTikTokHtml(title)}</title>
+<style>${getApprovalExperienceCss()}</style>
+</head>
+<body>
+<main class="sp-page"><section class="sp-shell">
+<header class="sp-topbar"><img class="sp-logo" src="${escapeTikTokHtml(logoUrl)}" alt="Spreelo"><span class="sp-status ${isSuccess ? "" : "is-error"}"><span class="sp-status-icon">${isSuccess ? "✓" : "!"}</span>${escapeTikTokHtml(tr(isSuccess ? "approvePages.experience.readyToPublish" : "approvePages.experience.needsAttention"))}</span></header>
+<section class="sp-hero"><div><p class="sp-kicker">${escapeTikTokHtml(tr("approvePages.experience.kicker"))}</p><h1 class="sp-title">${escapeTikTokHtml(title)}</h1><p class="sp-subtitle">${escapeTikTokHtml(tr(isSuccess ? "approvePages.experience.successSubtitle" : "approvePages.experience.errorSubtitle"))}</p></div>${getApprovalStepperHtml({ t: tr, activeStep: isSuccess ? 3 : 2 })}</section>
+<div class="sp-success-wrap"><section class="sp-success-card"><div class="sp-success-icon">${isSuccess ? "✓" : "!"}</div><h2>${escapeTikTokHtml(title)}</h2><p>${escapeTikTokHtml(message)}</p><div class="sp-success-actions">${isSuccess ? `<button class="sp-btn sp-btn-secondary" type="button" onclick="window.close()">${escapeTikTokHtml(tr("approvePages.closePage"))}</button>` : ""}<a class="sp-btn sp-btn-primary" href="${escapeTikTokHtml(APP_URL)}">${escapeTikTokHtml(tr("approvePages.openSpreelo"))} →</a></div>${isSuccess ? `<div class="sp-next"><strong>${escapeTikTokHtml(tr("approvePages.experience.nextTitle"))}</strong><br>${escapeTikTokHtml(tr("approvePages.safeClose"))}</div>` : ""}</section></div>
+</section></main>
+</body></html>`;
+}
 
 function escapeTikTokHtml(value) {
   return String(value ?? "")
@@ -519,25 +497,49 @@ function createGeneralApprovalPreviewHtml({ post, token, carouselSlides = [], lo
     .filter((slide) => slide?.image_url)
     .sort((a, b) => Number(a?.slide_order || 0) - Number(b?.slide_order || 0));
 
-  let media = `<div class="empty">${escapeTikTokHtml(tr("approvePages.tiktok.previewUnavailable"))}</div>`;
-  let mediaHint = tr("approvePages.preview.imageHint");
+  let media = `<div class="sp-empty">${escapeTikTokHtml(tr("approvePages.tiktok.previewUnavailable"))}</div>`;
   if (isVideo && post.video_url) {
-    media = `<video class="media" src="${escapeTikTokHtml(post.video_url)}" poster="${escapeTikTokHtml(post.image_url || "")}" controls playsinline></video>`;
-    mediaHint = tr("approvePages.preview.videoHint");
+    media = `<div class="sp-media-wrap"><video id="approvalVideo" class="sp-media" src="${escapeTikTokHtml(post.video_url)}" poster="${escapeTikTokHtml(post.image_url || "")}" controls playsinline></video></div>`;
   } else if (isCarousel && slides.length) {
-    media = `<div class="carousel"><div class="stage">${slides.map((slide, index) => `<img class="slide${index === 0 ? " active" : ""}" data-slide="${index}" src="${escapeTikTokHtml(slide.image_url)}" alt="">`).join("")}</div><div class="nav"><button type="button" id="prev">←</button><span id="counter">1 / ${slides.length}</span><button type="button" id="next">→</button></div></div>`;
-    mediaHint = tr("approvePages.preview.carouselHint");
+    media = `<div class="sp-media-wrap"><div class="sp-carousel-stage">${slides.map((slide, index) => `<img class="sp-carousel-slide${index === 0 ? " active" : ""}" data-slide="${index}" src="${escapeTikTokHtml(slide.image_url)}" alt="">`).join("")}</div></div><div class="sp-carousel-nav"><button type="button" class="sp-nav-btn" id="generalPrev" aria-label="${escapeTikTokHtml(tr("approvePages.tiktok.previous"))}">←</button><span id="generalCounter">1 / ${slides.length}</span><button type="button" class="sp-nav-btn" id="generalNext" aria-label="${escapeTikTokHtml(tr("approvePages.tiktok.next"))}">→</button></div>`;
   } else if (post.image_url) {
-    media = `<img class="media" src="${escapeTikTokHtml(post.image_url)}" alt="">`;
+    media = `<div class="sp-media-wrap"><img class="sp-media is-image" src="${escapeTikTokHtml(post.image_url)}" alt=""></div>`;
   }
 
   const tiktokNote = isTikTokTarget(post.platform)
-    ? `<div class="note"><strong>TikTok</strong><span>${escapeTikTokHtml(tr("approvePages.preview.tiktokNote"))}</span></div>`
+    ? `<div class="sp-note"><div class="sp-note-icon">♪</div><div><strong>${escapeTikTokHtml(tr("approvePages.preview.tiktokStepTitle"))}</strong><span>${escapeTikTokHtml(tr("approvePages.preview.tiktokStepHelp"))}</span></div></div>`
     : "";
 
-  return `<!doctype html><html lang="${escapeTikTokHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>${escapeTikTokHtml(tr("approvePages.preview.pageTitle"))}</title><style>
-  :root{--ink:#102033;--muted:#667085;--line:#e3e8ef;--accent:#ef6849}*{box-sizing:border-box}body{margin:0;min-height:100vh;font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;color:var(--ink);background:#edf2f7}.backdrop{position:fixed;inset:0;background:linear-gradient(135deg,#f7f9fc,#eef2f7)}.veil{position:fixed;inset:0;background:rgba(13,24,42,.46);backdrop-filter:blur(5px)}main{position:relative;z-index:2;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:28px 16px}.modal{width:min(1040px,100%);background:#fff;border-radius:26px;box-shadow:0 32px 90px rgba(10,24,48,.24);overflow:hidden}.head{padding:26px 30px 22px;border-bottom:1px solid var(--line)}.brand{display:flex;align-items:center;gap:14px;margin-bottom:15px}.brand img{width:118px}.chip{padding:6px 10px;border-radius:999px;background:#102033;color:white;font-size:11px;font-weight:800}.eyebrow{margin:0 0 7px;font-size:11px;letter-spacing:.13em;text-transform:uppercase;font-weight:900;color:#7a4751}h1{margin:0;font-size:31px;letter-spacing:-.03em}.intro{margin:9px 0 0;max-width:760px;color:var(--muted);line-height:1.55}.grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(330px,.95fr);gap:22px;padding:24px 30px 30px}.panel{border:1px solid var(--line);border-radius:19px;padding:17px;background:#fff}.panel h2{margin:0 0 4px;font-size:16px}.hint{margin:0 0 13px;color:var(--muted);font-size:12px;line-height:1.45}.media,.stage,.empty{display:block;width:100%;height:500px;object-fit:contain;background:#11151b;border-radius:15px}.empty{display:grid;place-items:center;color:#94a3b8;background:#f4f6f9}.stage{position:relative;overflow:hidden}.slide{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:.18s ease}.slide.active{opacity:1}.nav{display:flex;justify-content:center;align-items:center;gap:12px;margin-top:10px;font-size:12px;font-weight:800}.nav button{width:38px;height:38px;border:1px solid var(--line);background:#fff;border-radius:10px;cursor:pointer}.copy{font-size:14px;line-height:1.65;color:#253449;white-space:normal}.note{display:flex;gap:10px;margin-top:18px;padding:12px;border:1px solid #f3d0c5;background:#fff7f3;border-radius:13px}.note strong,.note span{display:block}.note strong{font-size:12px}.note span{font-size:11.5px;color:var(--muted);line-height:1.4}.actions{display:grid;gap:10px;margin-top:20px}.approve{min-height:50px;border:0;border-radius:13px;background:#102033;color:#fff;font:inherit;font-weight:900;cursor:pointer}.reject{display:flex;justify-content:center;align-items:center;min-height:44px;border:1px solid #d8dee7;border-radius:13px;color:#536174;text-decoration:none;font-weight:800;font-size:13px}@media(max-width:860px){.grid{grid-template-columns:1fr}.media,.stage,.empty{height:min(76vw,520px)}}@media(max-width:560px){main{padding:10px}.modal{border-radius:20px}.head,.grid{padding:20px}h1{font-size:26px}.media,.stage,.empty{height:78vw}}
-  </style></head><body><div class="backdrop"></div><div class="veil"></div><main><section class="modal"><header class="head"><div class="brand"><img src="${escapeTikTokHtml(logoUrl)}" alt="Spreelo"><span class="chip">${escapeTikTokHtml(String(post.platform || "Social media"))}</span></div><p class="eyebrow">${escapeTikTokHtml(tr("approvePages.preview.eyebrow"))}</p><h1>${escapeTikTokHtml(tr("approvePages.preview.title"))}</h1><p class="intro">${escapeTikTokHtml(tr("approvePages.preview.intro"))}</p></header><div class="grid"><section class="panel"><h2>${escapeTikTokHtml(tr("approvePages.preview.mediaTitle"))}</h2><p class="hint">${escapeTikTokHtml(mediaHint)}</p>${media}</section><section class="panel"><h2>${escapeTikTokHtml(tr("approvePages.preview.copyTitle"))}</h2><div class="copy">${safeContent}</div>${tiktokNote}<div class="actions"><form method="post" action="/api/approve-post"><input type="hidden" name="token" value="${escapeTikTokHtml(token)}"><input type="hidden" name="general_approval" value="1"><button class="approve" type="submit">${escapeTikTokHtml(tr("approvePages.preview.approve"))}</button></form><a class="reject" href="/api/reject-post?token=${encodeURIComponent(token)}&lang=${encodeURIComponent(locale)}">${escapeTikTokHtml(tr("approvePages.preview.reject"))}</a></div></section></div></section></main>${isCarousel && slides.length ? `<script>const slides=[...document.querySelectorAll('.slide')];let i=0;const counter=document.getElementById('counter');function show(n){i=(n+slides.length)%slides.length;slides.forEach((el,x)=>el.classList.toggle('active',x===i));if(counter)counter.textContent=(i+1)+' / '+slides.length}document.getElementById('prev')?.addEventListener('click',()=>show(i-1));document.getElementById('next')?.addEventListener('click',()=>show(i+1));</script>` : ""}</body></html>`;
+  const formatValue = isVideo ? tr("approvePages.preview.videoFormat") : isCarousel ? tr("approvePages.preview.carouselFormat", { count: slides.length }) : tr("approvePages.preview.imageFormat");
+
+  return `<!doctype html>
+<html lang="${escapeTikTokHtml(locale)}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>${escapeTikTokHtml(tr("approvePages.preview.pageTitle"))}</title>
+<style>${getApprovalExperienceCss()}
+.sp-preview-meta{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:14px;border-top:1px solid #edf0f5;padding-top:14px}.sp-meta{display:flex;align-items:center;gap:10px;padding:0 16px;border-left:1px solid #edf0f5}.sp-meta:first-child{border-left:0;padding-left:6px}.sp-meta-icon{width:32px;height:32px;border-radius:9px;background:#f3f4f8;display:grid;place-items:center;font-size:15px}.sp-meta strong,.sp-meta span{display:block}.sp-meta strong{font-size:12.5px}.sp-meta span{font-size:10.5px;color:var(--sp-muted);margin-top:2px}@media(max-width:620px){.sp-preview-meta{grid-template-columns:1fr}.sp-meta{border-left:0;border-top:1px solid #edf0f5;padding:10px 0}.sp-meta:first-child{border-top:0}}</style>
+</head>
+<body>
+<main class="sp-page"><section class="sp-shell">
+<header class="sp-topbar"><img class="sp-logo" src="${escapeTikTokHtml(logoUrl)}" alt="Spreelo"><span class="sp-status"><span class="sp-status-icon">✓</span>${escapeTikTokHtml(tr("approvePages.experience.readyToPublish"))}</span></header>
+<section class="sp-hero"><div><p class="sp-kicker">${escapeTikTokHtml(tr("approvePages.preview.eyebrow"))}</p><h1 class="sp-title">${escapeTikTokHtml(tr("approvePages.preview.titleV2"))}</h1><p class="sp-subtitle">${escapeTikTokHtml(tr("approvePages.preview.subtitleV2"))}</p><p class="sp-intro">${escapeTikTokHtml(tr("approvePages.preview.intro"))}</p></div>${getApprovalStepperHtml({ t: tr, activeStep: 2 })}</section>
+<div class="sp-content"><div class="sp-grid">
+<section class="sp-card"><div class="sp-card-head"><div><h2>${escapeTikTokHtml(tr("approvePages.preview.mediaTitle"))}</h2><p class="sp-help">${escapeTikTokHtml(tr(isVideo ? "approvePages.preview.videoHint" : isCarousel ? "approvePages.preview.carouselHint" : "approvePages.preview.imageHint"))}</p></div>${getApprovalPlatformChipsHtml(post.platform, tr)}</div>${media}
+<div class="sp-preview-meta"><div class="sp-meta"><div class="sp-meta-icon">◷</div><div><strong id="mediaDuration">${escapeTikTokHtml(isVideo ? tr("approvePages.preview.loadingMedia") : "—")}</strong><span>${escapeTikTokHtml(tr("approvePages.preview.duration"))}</span></div></div><div class="sp-meta"><div class="sp-meta-icon">▣</div><div><strong id="mediaFormat">${escapeTikTokHtml(formatValue)}</strong><span>${escapeTikTokHtml(tr("approvePages.preview.format"))}</span></div></div><div class="sp-meta"><div class="sp-meta-icon">▤</div><div><strong id="mediaResolution">${escapeTikTokHtml(isVideo ? tr("approvePages.preview.loadingMedia") : "—")}</strong><span>${escapeTikTokHtml(tr("approvePages.preview.resolution"))}</span></div></div></div>
+</section>
+<aside><section class="sp-card"><div class="sp-card-head"><div><h2>${escapeTikTokHtml(tr("approvePages.preview.copyTitle"))}</h2></div><span class="sp-quote">“</span></div><div class="sp-copy">${safeContent}</div></section>
+<section class="sp-card"><div class="sp-card-head"><div><h2>${escapeTikTokHtml(tr("approvePages.preview.detailsTitle"))}</h2></div></div><div class="sp-detail-row"><span class="sp-detail-label">◎ ${escapeTikTokHtml(tr("approvePages.preview.selectedChannels"))}</span><span class="sp-detail-value">${getApprovalPlatformNames(post.platform, tr).map(([,label])=>escapeTikTokHtml(label)).join(" · ")}</span></div>${tiktokNote ? `<div style="margin-top:12px">${tiktokNote}</div>` : ""}<div class="sp-detail-row"><span class="sp-detail-label">◷ ${escapeTikTokHtml(tr("approvePages.preview.releaseTiming"))}</span><span class="sp-detail-value">${escapeTikTokHtml(tr("approvePages.preview.releaseTimingValue"))}</span></div></section>
+<div class="sp-actions"><a class="sp-btn sp-btn-secondary" href="/api/reject-post?token=${encodeURIComponent(token)}&lang=${encodeURIComponent(locale)}">${escapeTikTokHtml(tr("approvePages.preview.reject"))}</a><form method="post" action="/api/approve-post" style="margin:0"><input type="hidden" name="token" value="${escapeTikTokHtml(token)}"><input type="hidden" name="ui_locale" value="${escapeTikTokHtml(locale)}"><input type="hidden" name="general_approval" value="1"><button class="sp-btn sp-btn-primary" style="width:100%" type="submit">✓ ${escapeTikTokHtml(tr("approvePages.preview.approveV2"))}</button></form></div>
+</aside></div></div>
+</section></main>
+<script>
+const slides=[...document.querySelectorAll('.sp-carousel-slide')];let slideIndex=0;const generalCounter=document.getElementById('generalCounter');function showGeneralSlide(next){if(!slides.length)return;slideIndex=(next+slides.length)%slides.length;slides.forEach((el,i)=>el.classList.toggle('active',i===slideIndex));if(generalCounter)generalCounter.textContent=(slideIndex+1)+' / '+slides.length;}document.getElementById('generalPrev')?.addEventListener('click',()=>showGeneralSlide(slideIndex-1));document.getElementById('generalNext')?.addEventListener('click',()=>showGeneralSlide(slideIndex+1));
+const approvalVideo=document.getElementById('approvalVideo');if(approvalVideo){approvalVideo.addEventListener('loadedmetadata',()=>{const duration=document.getElementById('mediaDuration');const format=document.getElementById('mediaFormat');const resolution=document.getElementById('mediaResolution');if(duration&&Number.isFinite(approvalVideo.duration)){const seconds=Math.max(0,Math.round(approvalVideo.duration));duration.textContent='00:'+String(seconds).padStart(2,'0');}if(resolution&&approvalVideo.videoWidth&&approvalVideo.videoHeight){resolution.textContent=approvalVideo.videoWidth+'×'+approvalVideo.videoHeight;}if(format&&approvalVideo.videoWidth&&approvalVideo.videoHeight){const gcd=(a,b)=>b?gcd(b,a%b):a;const d=gcd(approvalVideo.videoWidth,approvalVideo.videoHeight);const rw=Math.round(approvalVideo.videoWidth/d);const rh=Math.round(approvalVideo.videoHeight/d);format.textContent=(rw<=30&&rh<=30)?(rw+':'+rh):${JSON.stringify(tr("approvePages.preview.videoFormat"))};}});}
+</script>
+</body></html>`;
 }
 
 function createTikTokApprovalHtml({
@@ -575,44 +577,55 @@ function createTikTokApprovalHtml({
   const options = privacyOptions.map((value) => `<option value="${escapeTikTokHtml(value)}">${escapeTikTokHtml(labels[value] || value)}</option>`).join("");
 
   const modeNotice = publicPostingReady
-    ? `<div class="mode-notice mode-ok"><span class="mode-icon">✓</span><div><strong>${escapeTikTokHtml(tr("approvePages.tiktok.publicTitle"))}</strong><span>${escapeTikTokHtml(tr("approvePages.tiktok.publicHelp"))}</span></div></div>`
+    ? `<div class="sp-mode ok"><div class="sp-note-icon">✓</div><div><strong>${escapeTikTokHtml(tr("approvePages.tiktok.publicTitle"))}</strong><span>${escapeTikTokHtml(tr("approvePages.tiktok.publicHelp"))}</span></div></div>`
     : allowPrivateTesting
-      ? `<div class="mode-notice mode-warn"><span class="mode-icon">i</span><div><strong>${escapeTikTokHtml(tr("approvePages.tiktok.testTitle"))}</strong><span>${escapeTikTokHtml(tr("approvePages.tiktok.testHelp"))}</span></div></div>`
-      : `<div class="mode-notice mode-warn"><span class="mode-icon">!</span><div><strong>${escapeTikTokHtml(tr("approvePages.tiktok.notReadyTitle"))}</strong><span>${escapeTikTokHtml(tr("approvePages.tiktok.notReadyHelp"))}</span></div></div>`;
+      ? `<div class="sp-mode warn"><div class="sp-note-icon">i</div><div><strong>${escapeTikTokHtml(tr("approvePages.tiktok.testTitle"))}</strong><span>${escapeTikTokHtml(tr("approvePages.tiktok.testHelp"))}</span></div></div>`
+      : `<div class="sp-mode warn"><div class="sp-note-icon">!</div><div><strong>${escapeTikTokHtml(tr("approvePages.tiktok.notReadyTitle"))}</strong><span>${escapeTikTokHtml(tr("approvePages.tiktok.notReadyHelp"))}</span></div></div>`;
 
   const canSubmit = publicPostingReady || allowPrivateTesting;
   const media = isCarousel && slides.length
-    ? `<div class="carousel-preview" data-count="${slides.length}">
-        <div class="carousel-stage">${slides.map((slide,index)=>`<img class="carousel-slide${index===0?" active":""}" data-slide="${index}" src="${escapeTikTokHtml(slide.imageUrl)}" alt="${escapeTikTokHtml(tr("approvePages.tiktok.previewTitle"))}" />`).join("")}</div>
-        <div class="carousel-nav"><button type="button" class="nav-btn" id="carouselPrev" aria-label="${escapeTikTokHtml(tr("approvePages.tiktok.previous"))}">←</button><span id="carouselCounter">${escapeTikTokHtml(tr("approvePages.tiktok.slideCounter", { index: 1, count: slides.length }))}</span><button type="button" class="nav-btn" id="carouselNext" aria-label="${escapeTikTokHtml(tr("approvePages.tiktok.next"))}">→</button></div>
-        <div class="carousel-dots">${slides.map((_,index)=>`<button type="button" class="dot${index===0?" active":""}" data-dot="${index}" aria-label="${index+1}"></button>`).join("")}</div>
-      </div>`
+    ? `<div class="sp-media-wrap"><div class="sp-carousel-stage">${slides.map((slide,index)=>`<img class="sp-carousel-slide${index===0?" active":""}" data-slide="${index}" src="${escapeTikTokHtml(slide.imageUrl)}" alt="${escapeTikTokHtml(tr("approvePages.tiktok.previewTitle"))}">`).join("")}</div></div><div class="sp-carousel-nav"><button type="button" class="sp-nav-btn" id="carouselPrev" aria-label="${escapeTikTokHtml(tr("approvePages.tiktok.previous"))}">←</button><span id="carouselCounter">${escapeTikTokHtml(tr("approvePages.tiktok.slideCounter", { index: 1, count: slides.length }))}</span><button type="button" class="sp-nav-btn" id="carouselNext" aria-label="${escapeTikTokHtml(tr("approvePages.tiktok.next"))}">→</button></div>`
     : singlePreviewUrl
       ? (isVideo
-        ? `<video class="single-preview" src="${escapeTikTokHtml(singlePreviewUrl)}" controls playsinline></video>`
-        : `<img class="single-preview" src="${escapeTikTokHtml(singlePreviewUrl)}" alt="${escapeTikTokHtml(tr("approvePages.tiktok.previewTitle"))}" />`)
-      : `<div class="single-preview preview-empty">${escapeTikTokHtml(tr("approvePages.tiktok.previewUnavailable"))}</div>`;
+        ? `<div class="sp-media-wrap"><video class="sp-media" src="${escapeTikTokHtml(singlePreviewUrl)}" controls playsinline></video></div>`
+        : `<div class="sp-media-wrap"><img class="sp-media is-image" src="${escapeTikTokHtml(singlePreviewUrl)}" alt="${escapeTikTokHtml(tr("approvePages.tiktok.previewTitle"))}"></div>`)
+      : `<div class="sp-empty">${escapeTikTokHtml(tr("approvePages.tiktok.previewUnavailable"))}</div>`;
   const titleMax = isVideo ? 2200 : 4000;
   const logoUrl = `${APP_URL.replace(/\/$/, "")}/brand/spreelologo.png`;
+  const accountUsername = String(creatorInfo?.creator_username || "").replace(/^@/, "");
 
   return `<!doctype html>
-<html lang="${escapeTikTokHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>${escapeTikTokHtml(tr("approvePages.tiktok.pageTitle"))}</title>
-<style>
-:root{--ink:#102033;--muted:#64748b;--line:#dfe7f1;--surface:#fff;--soft:#f5f8fc;--blue:#1769ff;--pink:#f04b8a;--orange:#ff7957;--green:#13a66b}*{box-sizing:border-box}html,body{min-height:100%}body{margin:0;color:var(--ink);font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:#eef3f8}.app-backdrop{position:fixed;inset:0;display:grid;grid-template-columns:220px 1fr;background:#f7f9fc;overflow:hidden}.fake-sidebar{background:#101722;padding:24px 18px}.fake-logo{height:28px;width:116px;background:linear-gradient(90deg,#ff4f88,#7d4cff);border-radius:8px;margin-bottom:34px}.fake-nav{display:grid;gap:11px}.fake-nav i{display:block;height:39px;border-radius:10px;background:rgba(255,255,255,.07)}.fake-nav i:nth-child(2){background:rgba(255,255,255,.14)}.fake-main{padding:24px 34px}.fake-top{height:52px;background:#fff;border:1px solid #e7edf5;border-radius:14px;margin-bottom:24px}.fake-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.fake-card{height:180px;background:#fff;border:1px solid #e7edf5;border-radius:18px}.veil{position:fixed;inset:0;background:rgba(13,24,42,.48);backdrop-filter:blur(5px)}.modal-wrap{position:relative;z-index:2;min-height:100vh;padding:30px 18px;display:flex;align-items:flex-start;justify-content:center}.modal{width:min(1080px,100%);background:rgba(255,255,255,.985);border:1px solid rgba(255,255,255,.75);border-radius:26px;box-shadow:0 34px 90px rgba(10,24,48,.22);overflow:hidden}.modal-head{display:grid;grid-template-columns:1fr auto;gap:22px;padding:28px 32px 24px;border-bottom:1px solid var(--line)}.brandline{display:flex;align-items:center;gap:16px;margin-bottom:16px}.brandline img{width:118px;height:auto}.platform-chip{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border-radius:999px;background:#111;color:#fff;font-size:12px;font-weight:800}.eyebrow{margin:0 0 7px;color:#52637a;font-size:11px;font-weight:900;letter-spacing:.14em;text-transform:uppercase}.modal h1{margin:0;font-size:32px;line-height:1.08;letter-spacing:-.035em}.intro{max-width:720px;margin:10px 0 0;color:var(--muted);line-height:1.55}.creator{align-self:center;min-width:230px;display:flex;align-items:center;gap:11px;padding:11px 13px;background:var(--soft);border:1px solid var(--line);border-radius:15px}.creator img{width:42px;height:42px;border-radius:50%;object-fit:cover}.creator strong,.creator span{display:block}.creator span{font-size:12px;color:var(--muted);margin-top:2px}.body{padding:24px 32px 30px}.mode-notice{display:flex;align-items:flex-start;gap:11px;padding:13px 15px;border-radius:14px;margin-bottom:20px;font-size:13px;line-height:1.45}.mode-notice strong,.mode-notice span{display:block}.mode-notice strong{margin-bottom:2px}.mode-warn{background:#fff7e8;border:1px solid #f4d8a2}.mode-ok{background:#edfbf4;border:1px solid #c6edd9}.mode-icon{display:grid!important;place-items:center;width:24px;height:24px;border-radius:50%;font-weight:900;background:#fff}.layout{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(360px,.95fr);gap:24px}.panel{background:#fff;border:1px solid var(--line);border-radius:20px;padding:18px}.panel-title{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:14px}.panel-title h2{font-size:17px;margin:0 0 3px}.panel-title p{font-size:12px;color:var(--muted);margin:0;line-height:1.4}.single-preview,.carousel-stage{display:block;width:100%;height:480px;object-fit:contain;background:#0f1115;border-radius:16px}.single-preview{object-fit:contain}.preview-empty{display:grid;place-items:center;color:#a1aab8;background:#f4f6f9}.carousel-stage{position:relative;overflow:hidden}.carousel-slide{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transform:translateX(12px);transition:.2s ease}.carousel-slide.active{opacity:1;transform:none}.carousel-nav{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:12px;font-size:12px;font-weight:800;color:#52637a}.nav-btn{width:36px;height:36px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer;font-size:18px}.carousel-dots{display:flex;justify-content:center;gap:6px;margin-top:8px}.dot{width:7px;height:7px;padding:0;border:0;border-radius:50%;background:#ccd5e1;cursor:pointer}.dot.active{background:#1a6cff;transform:scale(1.25)}.field{margin-top:16px}.field:first-child{margin-top:0}.field>label,.section-label{display:block;font-size:13px;font-weight:850;margin-bottom:7px}.field small,.help{display:block;color:var(--muted);font-size:11.5px;line-height:1.45;margin-top:6px}textarea,select{width:100%;border:1px solid #ccd6e3;border-radius:12px;background:#fff;padding:11px 12px;font:inherit;color:var(--ink);outline:none}textarea:focus,select:focus{border-color:#7ca7ff;box-shadow:0 0 0 3px rgba(23,105,255,.09)}textarea{min-height:132px;resize:vertical}.section-box{margin-top:17px;padding-top:16px;border-top:1px solid #e9eef5}.checks{display:grid;gap:9px}.check{display:flex;align-items:flex-start;gap:10px;padding:11px 12px;border:1px solid #e1e7ef;border-radius:12px;background:#fff;cursor:pointer}.check input{margin-top:3px}.check strong,.check small{display:block}.check strong{font-size:13px}.check small{font-size:11.5px;color:var(--muted);line-height:1.4;margin-top:2px}.check.disabled{opacity:.55;background:#f7f8fa;cursor:not-allowed}.commercial-options{display:none;margin-top:9px;gap:8px}.commercial.is-on .commercial-options{display:grid}.consent{margin-top:17px;padding:13px;border:1px solid #d9e4f3;background:#f6f9fd;border-radius:14px}.actions{display:flex;align-items:center;gap:12px;margin-top:18px}.submit{flex:1;min-height:50px;border:0;border-radius:13px;background:linear-gradient(90deg,#132033,#1769ff);color:#fff;font:inherit;font-weight:900;cursor:pointer;box-shadow:0 10px 24px rgba(23,105,255,.18)}.submit:disabled{opacity:.45;cursor:not-allowed}.next-card{margin-top:16px;display:flex;gap:10px;padding:12px 13px;border-radius:13px;background:#f8fafc;border:1px solid #e5ebf3}.next-card strong,.next-card span{display:block}.next-card strong{font-size:12px}.next-card span{font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.4}.foot{margin:14px 0 0;text-align:center;color:#8491a4;font-size:11px}.translation-note{display:inline-flex;margin-top:12px;padding:6px 9px;border-radius:999px;background:#f2f6fb;color:#6b7890;font-size:10.5px}@media(max-width:900px){.fake-sidebar{display:none}.app-backdrop{grid-template-columns:1fr}.modal-head{grid-template-columns:1fr}.creator{min-width:0}.layout{grid-template-columns:1fr}.single-preview,.carousel-stage{height:min(74vw,500px)}}@media(max-width:600px){.modal-wrap{padding:10px}.modal{border-radius:20px}.modal-head,.body{padding:20px}.modal h1{font-size:27px}.panel{padding:14px}.single-preview,.carousel-stage{height:78vw}.brandline{margin-bottom:12px}.creator{width:100%}}
-</style></head><body>
-<div class="app-backdrop" aria-hidden="true"><aside class="fake-sidebar"><div class="fake-logo"></div><div class="fake-nav"><i></i><i></i><i></i><i></i><i></i></div></aside><div class="fake-main"><div class="fake-top"></div><div class="fake-grid"><div class="fake-card"></div><div class="fake-card"></div><div class="fake-card"></div><div class="fake-card"></div><div class="fake-card"></div></div></div></div><div class="veil"></div>
-<main class="modal-wrap"><section class="modal"><header class="modal-head"><div><div class="brandline"><img src="${escapeTikTokHtml(logoUrl)}" alt="Spreelo"><span class="platform-chip">TikTok</span></div><p class="eyebrow">${escapeTikTokHtml(tr("approvePages.tiktok.eyebrow"))}</p><h1>${escapeTikTokHtml(tr("approvePages.tiktok.title"))}</h1><p class="intro">${escapeTikTokHtml(tr("approvePages.tiktok.intro"))}</p><span class="translation-note">${escapeTikTokHtml(tr("approvePages.tiktok.translationReady"))}</span></div><div class="creator">${creatorInfo?.creator_avatar_url ? `<img src="${escapeTikTokHtml(creatorInfo.creator_avatar_url)}" alt="">` : ""}<div><span>${escapeTikTokHtml(tr("approvePages.tiktok.connectedAccount"))}</span><strong>${escapeTikTokHtml(creatorInfo?.creator_nickname || post?.tiktok_account_name || "TikTok")}</strong><span>@${escapeTikTokHtml(String(creatorInfo?.creator_username || "").replace(/^@/, ""))}</span></div></div></header>
-<div class="body">${modeNotice}<div class="layout"><section class="panel"><div class="panel-title"><div><h2>${escapeTikTokHtml(tr("approvePages.tiktok.previewTitle"))}</h2><p>${escapeTikTokHtml(tr("approvePages.tiktok.previewHelp"))}</p></div></div>${media}</section>
-<section class="panel"><div class="panel-title"><div><h2>${escapeTikTokHtml(tr("approvePages.tiktok.settingsTitle"))}</h2><p>${escapeTikTokHtml(tr("approvePages.tiktok.settingsHelp"))}</p></div></div><form method="post" action="/api/approve-post"><input type="hidden" name="token" value="${escapeTikTokHtml(token)}"><input type="hidden" name="tiktok" value="1">
-<div class="field"><label for="title">${escapeTikTokHtml(tr("approvePages.tiktok.caption"))}</label><textarea id="title" name="title" maxlength="${titleMax}">${escapeTikTokHtml(post.content || "")}</textarea><small>${escapeTikTokHtml(tr("approvePages.tiktok.captionHelp"))}</small></div>
-<div class="section-box"><div class="field"><label for="privacy">${escapeTikTokHtml(tr("approvePages.tiktok.visibility"))}</label><select id="privacy" name="privacy_level" required><option value="">${escapeTikTokHtml(tr("approvePages.tiktok.visibilityPlaceholder"))}</option>${options}</select><small>${escapeTikTokHtml(tr("approvePages.tiktok.visibilityHelp"))}</small></div></div>
-<div class="section-box"><span class="section-label">${escapeTikTokHtml(tr("approvePages.tiktok.interactions"))}</span><div class="checks"><label class="check ${creatorInfo?.comment_disabled ? "disabled" : ""}"><input type="checkbox" name="allow_comment" value="1" ${creatorInfo?.comment_disabled ? "disabled" : ""}><span><strong>${escapeTikTokHtml(tr("approvePages.tiktok.allowComments"))}</strong><small>${escapeTikTokHtml(tr(creatorInfo?.comment_disabled ? "approvePages.tiktok.disabledByAccount" : "approvePages.tiktok.offUntilChosen"))}</small></span></label>${isVideo ? `<label class="check ${creatorInfo?.duet_disabled ? "disabled" : ""}"><input type="checkbox" name="allow_duet" value="1" ${creatorInfo?.duet_disabled ? "disabled" : ""}><span><strong>${escapeTikTokHtml(tr("approvePages.tiktok.allowDuet"))}</strong><small>${escapeTikTokHtml(tr(creatorInfo?.duet_disabled ? "approvePages.tiktok.disabledByAccount" : "approvePages.tiktok.offUntilChosen"))}</small></span></label><label class="check ${creatorInfo?.stitch_disabled ? "disabled" : ""}"><input type="checkbox" name="allow_stitch" value="1" ${creatorInfo?.stitch_disabled ? "disabled" : ""}><span><strong>${escapeTikTokHtml(tr("approvePages.tiktok.allowStitch"))}</strong><small>${escapeTikTokHtml(tr(creatorInfo?.stitch_disabled ? "approvePages.tiktok.disabledByAccount" : "approvePages.tiktok.offUntilChosen"))}</small></span></label>` : ""}</div></div>
-<div id="commercialBox" class="section-box commercial"><span class="section-label">${escapeTikTokHtml(tr("approvePages.tiktok.commercialTitle"))}</span><label class="check"><input id="commercialToggle" type="checkbox" name="commercial_content" value="1"><span><strong>${escapeTikTokHtml(tr("approvePages.tiktok.commercialToggle"))}</strong><small>${escapeTikTokHtml(tr("approvePages.tiktok.commercialHelp"))}</small></span></label><div class="commercial-options"><label class="check"><input type="checkbox" name="brand_organic" value="1"><span><strong>${escapeTikTokHtml(tr("approvePages.tiktok.yourBrand"))}</strong><small>${escapeTikTokHtml(tr("approvePages.tiktok.yourBrandHelp"))}</small></span></label><label class="check"><input type="checkbox" name="brand_content" value="1"><span><strong>${escapeTikTokHtml(tr("approvePages.tiktok.brandedContent"))}</strong><small>${escapeTikTokHtml(tr("approvePages.tiktok.brandedContentHelp"))}</small></span></label></div></div>
-<div class="consent"><span class="section-label">${escapeTikTokHtml(tr("approvePages.tiktok.consentTitle"))}</span><label class="check"><input type="checkbox" name="tiktok_consent" value="1" required><span><strong>${escapeTikTokHtml(tr("approvePages.tiktok.consent"))}</strong><small>${escapeTikTokHtml(tr("approvePages.tiktok.consentHelp"))}</small></span></label></div><div class="actions"><button class="submit" type="submit" ${canSubmit ? "" : "disabled"}>${escapeTikTokHtml(tr("approvePages.tiktok.submit"))}</button></div></form><div class="next-card"><span>→</span><div><strong>${escapeTikTokHtml(tr("approvePages.tiktok.nextTitle"))}</strong><span>${escapeTikTokHtml(tr("approvePages.tiktok.nextHelp"))}</span></div></div><p class="foot">${escapeTikTokHtml(tr("approvePages.tiktok.foot"))}</p></section></div></div></section></main>
+<html lang="${escapeTikTokHtml(locale)}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>${escapeTikTokHtml(tr("approvePages.tiktok.pageTitle"))}</title>
+<style>${getApprovalExperienceCss()}
+.sp-tiktok-grid{grid-template-columns:minmax(0,1.08fr) minmax(390px,.92fr)}.sp-settings-card{max-height:none}.sp-account-row{display:flex;justify-content:flex-end;margin-top:11px}.sp-tiktok-submit{width:100%;margin-top:16px}.sp-tiktok-preview-note{margin-top:12px;color:var(--sp-muted);font-size:11px;text-align:center}@media(max-width:980px){.sp-tiktok-grid{grid-template-columns:1fr}.sp-account-row{justify-content:flex-start}}</style>
+</head>
+<body>
+<main class="sp-page"><section class="sp-shell">
+<header class="sp-topbar"><img class="sp-logo" src="${escapeTikTokHtml(logoUrl)}" alt="Spreelo"><span class="sp-status"><span class="sp-status-icon">✓</span>${escapeTikTokHtml(tr("approvePages.experience.readyToPublish"))}</span></header>
+<section class="sp-hero"><div><p class="sp-kicker">${escapeTikTokHtml(tr("approvePages.tiktok.eyebrow"))}</p><h1 class="sp-title">${escapeTikTokHtml(tr("approvePages.tiktok.title"))}</h1><p class="sp-subtitle">${escapeTikTokHtml(tr("approvePages.tiktok.subtitleV2"))}</p><p class="sp-intro">${escapeTikTokHtml(tr("approvePages.tiktok.intro"))}</p><div class="sp-account-row"><div class="sp-account">${creatorInfo?.creator_avatar_url ? `<img src="${escapeTikTokHtml(creatorInfo.creator_avatar_url)}" alt="">` : ""}<div><span>${escapeTikTokHtml(tr("approvePages.tiktok.connectedAccount"))}</span><strong>${escapeTikTokHtml(creatorInfo?.creator_nickname || "TikTok")}</strong>${accountUsername ? `<span>@${escapeTikTokHtml(accountUsername)}</span>` : ""}</div></div></div></div>${getApprovalStepperHtml({ t: tr, activeStep: 2 })}</section>
+<div class="sp-content">${modeNotice}<div class="sp-grid sp-tiktok-grid">
+<section class="sp-card"><div class="sp-card-head"><div><h2>${escapeTikTokHtml(tr("approvePages.tiktok.previewTitle"))}</h2><p class="sp-help">${escapeTikTokHtml(tr("approvePages.tiktok.previewHelp"))}</p></div>${getApprovalPlatformChipsHtml("TikTok", tr)}</div>${media}<p class="sp-tiktok-preview-note">${escapeTikTokHtml(tr("approvePages.tiktok.translationReady"))}</p></section>
+<section class="sp-card sp-settings-card"><div class="sp-card-head"><div><h2>${escapeTikTokHtml(tr("approvePages.tiktok.settingsTitle"))}</h2><p class="sp-help">${escapeTikTokHtml(tr("approvePages.tiktok.settingsHelp"))}</p></div></div>
+<form method="post" action="/api/approve-post"><input type="hidden" name="token" value="${escapeTikTokHtml(token)}"><input type="hidden" name="ui_locale" value="${escapeTikTokHtml(locale)}"><input type="hidden" name="tiktok" value="1">
+<div class="sp-field"><label for="title">${escapeTikTokHtml(tr("approvePages.tiktok.caption"))}</label><textarea class="sp-input" id="title" name="title" maxlength="${titleMax}">${escapeTikTokHtml(post.content || "")}</textarea><small>${escapeTikTokHtml(tr("approvePages.tiktok.captionHelp"))}</small></div>
+<div class="sp-section"><div class="sp-field"><label for="privacy">${escapeTikTokHtml(tr("approvePages.tiktok.visibility"))}</label><select class="sp-select" id="privacy" name="privacy_level" required><option value="">${escapeTikTokHtml(tr("approvePages.tiktok.visibilityPlaceholder"))}</option>${options}</select><small>${escapeTikTokHtml(tr("approvePages.tiktok.visibilityHelp"))}</small></div></div>
+<div class="sp-section"><span class="sp-section-label">${escapeTikTokHtml(tr("approvePages.tiktok.interactions"))}</span><div class="sp-checks"><label class="sp-check ${creatorInfo?.comment_disabled ? "disabled" : ""}"><input type="checkbox" name="allow_comment" value="1" ${creatorInfo?.comment_disabled ? "disabled" : ""}><span><strong>${escapeTikTokHtml(tr("approvePages.tiktok.allowComments"))}</strong><small>${escapeTikTokHtml(tr(creatorInfo?.comment_disabled ? "approvePages.tiktok.disabledByAccount" : "approvePages.tiktok.offUntilChosen"))}</small></span></label>${isVideo ? `<label class="sp-check ${creatorInfo?.duet_disabled ? "disabled" : ""}"><input type="checkbox" name="allow_duet" value="1" ${creatorInfo?.duet_disabled ? "disabled" : ""}><span><strong>${escapeTikTokHtml(tr("approvePages.tiktok.allowDuet"))}</strong><small>${escapeTikTokHtml(tr(creatorInfo?.duet_disabled ? "approvePages.tiktok.disabledByAccount" : "approvePages.tiktok.offUntilChosen"))}</small></span></label><label class="sp-check ${creatorInfo?.stitch_disabled ? "disabled" : ""}"><input type="checkbox" name="allow_stitch" value="1" ${creatorInfo?.stitch_disabled ? "disabled" : ""}><span><strong>${escapeTikTokHtml(tr("approvePages.tiktok.allowStitch"))}</strong><small>${escapeTikTokHtml(tr(creatorInfo?.stitch_disabled ? "approvePages.tiktok.disabledByAccount" : "approvePages.tiktok.offUntilChosen"))}</small></span></label>` : ""}</div></div>
+<div id="commercialBox" class="sp-section sp-commercial"><span class="sp-section-label">${escapeTikTokHtml(tr("approvePages.tiktok.commercialTitle"))}</span><label class="sp-check"><input id="commercialToggle" type="checkbox" name="commercial_content" value="1"><span><strong>${escapeTikTokHtml(tr("approvePages.tiktok.commercialToggle"))}</strong><small>${escapeTikTokHtml(tr("approvePages.tiktok.commercialHelp"))}</small></span></label><div class="sp-commercial-options"><label class="sp-check"><input type="checkbox" name="brand_organic" value="1"><span><strong>${escapeTikTokHtml(tr("approvePages.tiktok.yourBrand"))}</strong><small>${escapeTikTokHtml(tr("approvePages.tiktok.yourBrandHelp"))}</small></span></label><label class="sp-check"><input type="checkbox" name="brand_content" value="1"><span><strong>${escapeTikTokHtml(tr("approvePages.tiktok.brandedContent"))}</strong><small>${escapeTikTokHtml(tr("approvePages.tiktok.brandedContentHelp"))}</small></span></label></div></div>
+<div class="sp-consent"><span class="sp-section-label">${escapeTikTokHtml(tr("approvePages.tiktok.consentTitle"))}</span><label class="sp-check"><input type="checkbox" name="tiktok_consent" value="1" required><span><strong>${escapeTikTokHtml(tr("approvePages.tiktok.consent"))}</strong><small>${escapeTikTokHtml(tr("approvePages.tiktok.consentHelp"))}</small></span></label></div>
+<button class="sp-btn sp-btn-primary sp-tiktok-submit" type="submit" ${canSubmit ? "" : "disabled"}>✓ ${escapeTikTokHtml(tr("approvePages.tiktok.submitV2"))}</button></form>
+<div class="sp-next"><strong>${escapeTikTokHtml(tr("approvePages.tiktok.nextTitle"))}</strong><br>${escapeTikTokHtml(tr("approvePages.tiktok.nextHelp"))}</div><p class="sp-foot">${escapeTikTokHtml(tr("approvePages.tiktok.foot"))}</p>
+</section></div></div>
+</section></main>
 <script>
 const commercialToggle=document.getElementById('commercialToggle');const commercialBox=document.getElementById('commercialBox');commercialToggle?.addEventListener('change',()=>commercialBox.classList.toggle('is-on',commercialToggle.checked));
-const slides=[...document.querySelectorAll('.carousel-slide')];const dots=[...document.querySelectorAll('.dot')];const counter=document.getElementById('carouselCounter');let slideIndex=0;const counterTemplate=${JSON.stringify(tr("approvePages.tiktok.slideCounter", { index: "__INDEX__", count: "__COUNT__" }))};function showSlide(next){if(!slides.length)return;slideIndex=(next+slides.length)%slides.length;slides.forEach((el,i)=>el.classList.toggle('active',i===slideIndex));dots.forEach((el,i)=>el.classList.toggle('active',i===slideIndex));if(counter)counter.textContent=counterTemplate.replace('__INDEX__',String(slideIndex+1)).replace('__COUNT__',String(slides.length));}document.getElementById('carouselPrev')?.addEventListener('click',()=>showSlide(slideIndex-1));document.getElementById('carouselNext')?.addEventListener('click',()=>showSlide(slideIndex+1));dots.forEach((el,i)=>el.addEventListener('click',()=>showSlide(i)));
-</script></body></html>`;
+const slides=[...document.querySelectorAll('.sp-carousel-slide')];const counter=document.getElementById('carouselCounter');let slideIndex=0;const counterTemplate=${JSON.stringify(tr("approvePages.tiktok.slideCounter", { index: "__INDEX__", count: "__COUNT__" }))};function showSlide(next){if(!slides.length)return;slideIndex=(next+slides.length)%slides.length;slides.forEach((el,i)=>el.classList.toggle('active',i===slideIndex));if(counter)counter.textContent=counterTemplate.replace('__INDEX__',String(slideIndex+1)).replace('__COUNT__',String(slides.length));}document.getElementById('carouselPrev')?.addEventListener('click',()=>showSlide(slideIndex-1));document.getElementById('carouselNext')?.addEventListener('click',()=>showSlide(slideIndex+1));
+</script>
+</body></html>`;
 }
 
 function htmlResponse({ title, message, status = "success", httpStatus = 200, t, locale }) {
@@ -746,7 +759,7 @@ export async function GET(request) {
       } catch (tiktokError) {
         return htmlResponse({
           title: translator.t("approvePages.tiktok.connectionTitle"),
-          message: tiktokError.message || translator.t("approvePages.tiktok.connectionMessage"),
+          message: translator.t(tiktokError?.requiresReconnect ? "approvePages.tiktok.reconnectMessage" : "approvePages.tiktok.connectionMessage"),
           status: "error",
           httpStatus: tiktokError?.requiresReconnect ? 409 : 502,
           t: translator.t,
@@ -789,7 +802,7 @@ export async function GET(request) {
       } catch (tiktokError) {
         return htmlResponse({
           title: translator.t("approvePages.tiktok.connectionTitle"),
-          message: tiktokError.message || translator.t("approvePages.tiktok.connectionMessage"),
+          message: translator.t(tiktokError?.requiresReconnect ? "approvePages.tiktok.reconnectMessage" : "approvePages.tiktok.connectionMessage"),
           status: "error",
           httpStatus: tiktokError?.requiresReconnect ? 409 : 502,
           t: translator.t,
@@ -810,7 +823,7 @@ export async function GET(request) {
   } catch (error) {
     return htmlResponse({
       title: translator.t("approvePages.unexpected.title"),
-      message: error.message || translator.t("approvePages.unexpected.message"),
+      message: translator.t("approvePages.unexpected.message"),
       status: "error",
       httpStatus: 500,
       t: translator.t,
@@ -824,28 +837,35 @@ export async function POST(request) {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!supabaseUrl || !serviceRoleKey) throw new Error("Spreelo approval configuration is incomplete");
+    if (!supabaseUrl || !serviceRoleKey) throw new Error("approval_configuration_incomplete");
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
     const form = await request.formData();
     const token = String(form.get("token") || "").trim();
-    if (!token) throw new Error("Approval token is missing");
+    if (!token) throw new Error("approval_token_missing");
 
     const { data: post, error: postError } = await supabase
       .from("posts")
       .select("id, user_id, brand_profile_id, status, approval_token, language, content_format, platform, content, image_url, video_url, platform_publish_settings, approved_at, published_at")
       .eq("approval_token", token)
       .single();
-    if (postError || !post) throw new Error("This approval link is no longer valid");
+    if (postError || !post) throw new Error("approval_link_invalid");
 
-    translator = await getApproveTranslations({ supabase, locale: post.language || "en" });
+    const requestedUiLocale = resolveUiLocaleFromLanguageName(form.get("ui_locale"));
+    const userAppLanguage = await getUserAppLanguage(supabase, post.user_id);
+    const postUiLocale =
+      requestedUiLocale ||
+      resolveUiLocaleFromLanguageName(userAppLanguage) ||
+      resolveUiLocaleFromLanguageName(post.language) ||
+      "en";
+    translator = await getApproveTranslations({ supabase, locale: postUiLocale });
 
     if (form.get("general_approval") === "1") {
       if (["published", "rejected"].includes(post.status)) {
-        throw new Error(`This post cannot be approved while its status is ${post.status}`);
+        throw new Error(`approval_status_blocked:${post.status}`);
       }
       if (!["pending_approval", "approved", "failed"].includes(post.status)) {
-        throw new Error(`This post cannot be approved while its status is ${post.status}`);
+        throw new Error(`approval_status_blocked:${post.status}`);
       }
 
       if (post.status !== "approved") {
@@ -868,7 +888,7 @@ export async function POST(request) {
       });
     }
 
-    if (!isTikTokTarget(post.platform)) throw new Error("This approval form is only for TikTok posts");
+    if (!isTikTokTarget(post.platform)) throw new Error("approval_tiktok_only");
     const alreadyHasTikTokApproval = hasTikTokExplicitApproval(post);
     console.log("TikTok approval submitted", {
       postId: post.id,
@@ -888,7 +908,7 @@ export async function POST(request) {
 
     const repairableTikTokApproval = !alreadyHasTikTokApproval && ["approved", "failed"].includes(post.status);
     if (post.status !== "pending_approval" && !repairableTikTokApproval) {
-      throw new Error(`This post cannot be approved while its status is ${post.status}`);
+      throw new Error(`approval_status_blocked:${post.status}`);
     }
 
     // Legacy/recovery protection: TikTok consent is step two. If an old post
@@ -903,13 +923,14 @@ export async function POST(request) {
     const privacyLevel = String(form.get("privacy_level") || "").trim();
     const availablePrivacy = Array.isArray(creatorInfo?.privacy_level_options) ? creatorInfo.privacy_level_options : [];
     if (!privacyLevel || !availablePrivacy.includes(privacyLevel)) {
-      throw new Error("Choose one of the visibility options currently allowed by your TikTok account");
+      throw new Error("approval_visibility_invalid");
     }
 
     const { publicPostingReady, allowPrivateTesting } = getTikTokEnv();
+    // TikTok public publishing is not enabled until the Content Posting API audit is complete.
     if (!publicPostingReady) {
-      if (!allowPrivateTesting) throw new Error("TikTok public publishing is not enabled yet. Spreelo must complete TikTok's Content Posting API audit first.");
-      if (privacyLevel !== "SELF_ONLY") throw new Error("TikTok test mode can only publish privately until Spreelo's TikTok API client has passed audit.");
+      if (!allowPrivateTesting) throw new Error("approval_tiktok_public_not_ready");
+      if (privacyLevel !== "SELF_ONLY") throw new Error("approval_tiktok_private_only");
     }
 
     const isVideo = Boolean(post.video_url) || String(post.content_format || "") === "animated_video";
@@ -919,9 +940,9 @@ export async function POST(request) {
     const commercialContent = form.get("commercial_content") === "1";
     const brandOrganic = commercialContent && form.get("brand_organic") === "1";
     const brandContent = commercialContent && form.get("brand_content") === "1";
-    if (commercialContent && !brandOrganic && !brandContent) throw new Error("Choose Your brand, Branded content, or both for TikTok's commercial-content disclosure");
-    if (brandContent && privacyLevel === "SELF_ONLY") throw new Error("TikTok does not allow Branded content to use private visibility");
-    if (form.get("tiktok_consent") !== "1") throw new Error("TikTok publishing requires your explicit upload consent");
+    if (commercialContent && !brandOrganic && !brandContent) throw new Error("approval_commercial_choice");
+    if (brandContent && privacyLevel === "SELF_ONLY") throw new Error("approval_branded_private");
+    if (form.get("tiktok_consent") !== "1") throw new Error("approval_consent_missing");
 
     const titleLimit = isVideo ? 2200 : 4000;
     let title = String(form.get("title") || post.content || "").slice(0, titleLimit);
@@ -943,6 +964,7 @@ export async function POST(request) {
         brand_content_toggle: Boolean(brandContent),
         brand_organic_toggle: Boolean(brandOrganic),
         is_aigc: isVideo ? true : undefined,
+        video_cover_timestamp_ms: isVideo ? 1000 : undefined,
         creator_nickname: creatorInfo?.creator_nickname || null,
         creator_username: creatorInfo?.creator_username || null,
         approved_at: new Date().toISOString(),
@@ -977,9 +999,28 @@ export async function POST(request) {
       locale: translator.locale,
     });
   } catch (error) {
+    const rawCode = String(error?.message || "");
+    const statusMatch = rawCode.match(/^approval_status_blocked:(.+)$/);
+    const validationKey =
+      rawCode === "approval_configuration_incomplete" ? "approvePages.validation.configurationIncomplete" :
+      rawCode === "approval_token_missing" ? "approvePages.validation.tokenMissing" :
+      rawCode === "approval_link_invalid" ? "approvePages.validation.linkInvalid" :
+      rawCode === "approval_tiktok_only" ? "approvePages.validation.tiktokOnly" :
+      rawCode === "approval_visibility_invalid" ? "approvePages.validation.visibility" :
+      rawCode === "approval_tiktok_public_not_ready" ? "approvePages.validation.tiktokPublicNotReady" :
+      rawCode === "approval_tiktok_private_only" ? "approvePages.validation.tiktokPrivateOnly" :
+      rawCode === "approval_commercial_choice" ? "approvePages.validation.commercialChoice" :
+      rawCode === "approval_branded_private" ? "approvePages.validation.brandedPrivate" :
+      rawCode === "approval_consent_missing" ? "approvePages.validation.consent" :
+      null;
+    console.error("Approval submission failed", { code: rawCode, message: error?.message || null });
     return htmlResponse({
       title: translator.t("approvePages.tiktok.failedTitle"),
-      message: error.message || translator.t("approvePages.tiktok.failedMessage"),
+      message: statusMatch
+        ? translator.t("approvePages.validation.statusBlocked", { status: statusMatch[1] })
+        : validationKey
+          ? translator.t(validationKey)
+          : translator.t("approvePages.tiktok.failedMessage"),
       status: "error",
       httpStatus: 400,
       t: translator.t,

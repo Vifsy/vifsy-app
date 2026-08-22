@@ -3610,6 +3610,84 @@ function getProductFamilyKey(item, sourceUrl = "") {
   return canonicalUrl ? `${host || "store"}|url:${normalizeComparableValue(canonicalUrl)}` : "";
 }
 
+function getProductDiversityProfile(item) {
+  const text = normalizeSearchText([
+    item?.title,
+    item?.item_title,
+    item?.product_display_type,
+    item?.display_product_type,
+    item?.category,
+    ...(Array.isArray(item?.tags) ? item.tags : []),
+  ].filter(Boolean).join(" "));
+
+  let family = "";
+  if (/\b(?:soda|soft drink|carbonated|cola|lemonade|drink|beverage|juice|energy drink|water|coffee|tea|fanta|pepsi|sprite|dr pepper|mountain dew)\b/i.test(text)) family = "beverage";
+  else if (/\b(?:candy|sweets?|gummy|gummies|jelly|chocolate|lollipop|licorice|liquorice|cotton candy|chew|fudge|caramel|wax bottle)\b/i.test(text)) family = "sweet_snack";
+  else if (/\b(?:crisps?|chips?|popcorn|pretzel|nuts?|savou?ry snack)\b/i.test(text)) family = "savory_snack";
+  else if (/\b(?:shoe|shoes|sneaker|boot|boots|sandal|footwear)\b/i.test(text)) family = "footwear";
+  else if (/\b(?:shirt|t-shirt|tee|dress|jacket|coat|hoodie|sweater|trousers|pants|jeans|clothing|apparel)\b/i.test(text)) family = "apparel";
+  else if (/\b(?:bag|backpack|handbag|purse|wallet)\b/i.test(text)) family = "bag_accessory";
+  else if (/\b(?:skincare|cream|serum|shampoo|conditioner|makeup|cosmetic|perfume|fragrance)\b/i.test(text)) family = "beauty";
+  else if (/\b(?:toy|game|puzzle|doll|figure|lego)\b/i.test(text)) family = "toy_game";
+  else if (/\b(?:phone|laptop|tablet|headphone|speaker|camera|charger|electronics?)\b/i.test(text)) family = "electronics";
+  else if (/\b(?:mystery box|bundle|gift box|selection box|assorted box)\b/i.test(text)) family = "bundle";
+
+  let packageForm = "";
+  if (/\b(?:can|cans|canned|tin)\b/i.test(text)) packageForm = "can";
+  else if (/\b(?:bottle|bottles)\b/i.test(text)) packageForm = "bottle";
+  else if (/\b(?:box|case|fridge pack|carton)\b/i.test(text)) packageForm = "box";
+  else if (/\b(?:bag|pouch|sachet)\b/i.test(text)) packageForm = "bag";
+  else if (/\b(?:jar|tub)\b/i.test(text)) packageForm = "jar";
+  else if (/\b(?:bar|bars)\b/i.test(text)) packageForm = "bar";
+
+  return { family, packageForm };
+}
+
+function getRecentProductDiversityProfiles(usedItems, limit = 8) {
+  return (usedItems || [])
+    .filter(Boolean)
+    .slice(0, Math.max(1, limit))
+    .map((item) => ({ item, ...getProductDiversityProfile(item) }))
+    .filter((profile) => profile.family || profile.packageForm);
+}
+
+function scoreProductDiversityAgainstRecentHistory(item, usedItems) {
+  const candidate = getProductDiversityProfile(item);
+  const recent = getRecentProductDiversityProfiles(usedItems, 8);
+  if ((!candidate.family && !candidate.packageForm) || !recent.length) return 0;
+
+  let score = 0;
+  const mostRecent = recent[0];
+  if (candidate.family && mostRecent?.family && candidate.family === mostRecent.family) score -= 82;
+  else if (candidate.family && recent.slice(0, 4).some((profile) => profile.family === candidate.family)) score -= 34;
+
+  if (candidate.packageForm && mostRecent?.packageForm && candidate.packageForm === mostRecent.packageForm) score -= 28;
+  else if (candidate.packageForm && recent.slice(0, 3).some((profile) => profile.packageForm === candidate.packageForm)) score -= 12;
+
+  if (
+    candidate.family && candidate.packageForm &&
+    candidate.family === mostRecent?.family &&
+    candidate.packageForm === mostRecent?.packageForm
+  ) score -= 22;
+
+  return score;
+}
+
+function hasMeaningfullyDiverseProductCandidate(items, recentUsedItems) {
+  const recent = getRecentProductDiversityProfiles(recentUsedItems, 4);
+  if (!recent.length) return true;
+  const mostRecent = recent[0];
+  return (items || []).some((item) => {
+    const candidate = getProductDiversityProfile(item);
+    if (candidate.family && mostRecent.family && candidate.family !== mostRecent.family) return true;
+    if (!candidate.family || !mostRecent.family) {
+      return Boolean(candidate.packageForm && mostRecent.packageForm && candidate.packageForm !== mostRecent.packageForm);
+    }
+    return false;
+  });
+}
+
+
 function dedupeWebsiteItemsByUrlTitleAndImage(items = []) {
   const seen = new Set();
   const seenUrls = new Set();
@@ -5762,6 +5840,9 @@ async function discoverProductsFromStoreMapAgent({
     let shelfProducts = [];
     try {
       const shelfDiagnosticStart = candidateDiagnostics.length;
+      const recentProductUrls = (recentUsedItems || [])
+        .map((item) => item?.item_url || item?.product_url || item?.url || "")
+        .filter(Boolean);
       shelfProducts = await discoverProductsFromFocusedCategory({
         supabase,
         categoryUrl: shelf.url,
@@ -5769,6 +5850,7 @@ async function discoverProductsFromStoreMapAgent({
         limit: agentTargets.shelfProductLimit,
         diagnostics: candidateDiagnostics,
         deadlineMs: agentDeadline,
+        excludeProductUrls: recentProductUrls,
         verificationCache,
       });
       const shelfCandidateDiagnostics = candidateDiagnostics.slice(
@@ -5833,13 +5915,24 @@ async function discoverProductsFromStoreMapAgent({
       isValidCarouselProduct
     );
     if (uniqueVerified.length >= agentTargets.minimumVerifiedProducts) {
+      const diversitySatisfied =
+        requiredCount >= CAROUSEL_PRODUCT_SLIDE_TARGET ||
+        !(recentUsedItems || []).length ||
+        hasMeaningfullyDiverseProductCandidate(uniqueVerified, recentUsedItems);
       console.log("Store Map Product Agent reached initial technical pool target", {
         ruleId: rule?.id,
         shelfUrl: shelf.url,
         verifiedCount: uniqueVerified.length,
         technicalPoolTarget: agentTargets.minimumVerifiedProducts,
+        diversitySatisfied,
+        recentDiversityHistoryCount: getRecentProductDiversityProfiles(recentUsedItems, 8).length,
       });
-      break;
+      if (diversitySatisfied) break;
+      console.log("Store Map Product Agent continuing to another shelf for cross-format variety", {
+        ruleId: rule?.id,
+        shelfUrl: shelf.url,
+        recentProductProfiles: getRecentProductDiversityProfiles(recentUsedItems, 4).map(({ family, packageForm }) => ({ family, packageForm })),
+      });
     }
     if (shelfProducts?.rateLimited) {
       agentRateLimited = true;
@@ -13452,7 +13545,21 @@ async function getRecentUsedWebsiteItems({
     limit,
   });
 
-  return [...historyItems, ...slideItems, ...domainCatalogItems];
+  const merged = [...historyItems, ...slideItems, ...domainCatalogItems]
+    .sort((left, right) => {
+      const leftTime = new Date(left?.created_at || 0).getTime() || 0;
+      const rightTime = new Date(right?.created_at || 0).getTime() || 0;
+      return rightTime - leftTime;
+    });
+  const seen = new Set();
+  return merged.filter((item) => {
+    const key = normalizeComparableValue(
+      item?.item_url || item?.product_url || item?.url || item?.item_title || item?.title || item?.item_image_url || item?.image_url
+    );
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, Math.max(limit, 1));
 }
 
 function hasWebsiteItemAlreadyBeenUsed(item, usedItems, sourceUrl) {
@@ -19312,7 +19419,11 @@ async function chooseUnusedWebsiteItem({
     .sort((a, b) => {
       if (!rule) return 0;
 
-      const scoreDelta = scoreWebsiteItemForRule(b, rule) - scoreWebsiteItemForRule(a, rule);
+      const aScore = scoreWebsiteItemForRule(a, rule) +
+        scoreProductDiversityAgainstRecentHistory(a, usedItems);
+      const bScore = scoreWebsiteItemForRule(b, rule) +
+        scoreProductDiversityAgainstRecentHistory(b, usedItems);
+      const scoreDelta = bScore - aScore;
 
       if (scoreDelta !== 0) return scoreDelta;
 
@@ -26977,6 +27088,8 @@ async function prepareWebsiteContentForRule({
         brandProfile,
         websiteUrl,
         requiredCount: 1,
+        recentUsedItems,
+        usedWebsiteImageUrlsThisRun,
       });
       if (storeMapSingleProductResult.products.length) {
         catalogItems = dedupeWebsiteItemsByUrlTitleAndImage([
@@ -32469,8 +32582,12 @@ function hasHardSemanticModelConflict(review) {
 
 function hasHardSemanticVariantConflict(review) {
   const reason = String(review?.reason || "").toLowerCase();
-  return /(?:colou?r|variant|design)[^.!]{0,120}(?:does not match|doesn't match|do not match|conflict|mismatch|different|wrong|not matching)/i.test(
-    reason
+  const variantDimension = "(?:colou?r|variant|design|size|weight|volume|capacity|pack(?:age)? size|pack count|quantity|count)";
+  const conflictWord = "(?:does not match|doesn't match|do not match|conflict|mismatch|different|wrong|not matching|inconsistent|discrepancy)";
+  return (
+    new RegExp(`${variantDimension}[^.!]{0,140}${conflictWord}`, "i").test(reason) ||
+    new RegExp(`${conflictWord}[^.!]{0,140}${variantDimension}`, "i").test(reason) ||
+    /\b\d+(?:[.,]\d+)?\s*(?:ml|cl|dl|l|g|kg|oz|lb|lbs|fl\s*oz)\b[^.!]{0,120}\b(?:while|but|whereas|instead of|vs\.?|versus)\b[^.!]{0,120}\b\d+(?:[.,]\d+)?\s*(?:ml|cl|dl|l|g|kg|oz|lb|lbs|fl\s*oz)\b/i.test(reason)
   );
 }
 
@@ -32589,7 +32706,7 @@ async function reviewResolvedProductImageIdentity({
         "This is a safety gate: false positives are worse than rejecting an image. Treat a correct result as the official clean catalogue/packshot image or another clearly matching image of the exact named product. Match the product type and, when visible or named, the brand/model/design. " +
         "A different product category or conflicting visible brand/model must be rejected (for example sneakers vs a clothing set, or one brand/model of backpack vs a different one). " +
         "If an expected brand is supplied and a genuinely different visible logo/brand is present, observed_brand must name the visible brand and brand_or_model_conflict MUST be true. Parent-brand, sub-brand or co-brand wording is compatible when the observed brand contains the expected brand identity rather than contradicting it; extra compatible brand words alone are not a mismatch. Never call genuinely unrelated brands consistent. " +
-        "When the locked product page explicitly names a colour/variant, a clearly conflicting colour/design is evidence that the image is not the locked item. People or animals are allowed if they are genuinely showing the named product. " +
+        "When the locked product page explicitly names a colour/variant, a clearly conflicting colour/design is evidence that the image is not the locked item. A visible conflict in named size, weight, volume, capacity, quantity or pack count is also a hard variant mismatch (for example 591 ml shown for a locked 473 ml product) and must be rejected rather than accepted as close enough. People or animals are allowed if they are genuinely showing the named product. " +
         "Also return display_product_type: a short customer-facing product type in the language used by the product title. Base it on the locked title/page facts and what is visibly marketed. For a set, describe the main marketed item plus the included item when clear (for example a backpack with pencil case), rather than blindly repeating a misleading retailer taxonomy label. Do not include brand, model name or colour in display_product_type. " +
         "The same-page lock is the primary source of truth; this visual check is only a final safety belt. Reject an obvious product-type/model/variant conflict rather than trying to repair it with a different image.",
     },
@@ -34884,6 +35001,8 @@ async function getTikTokConnectionForBrand({ supabase, userId, brandProfileId })
   return data || null;
 }
 
+const TIKTOK_VIDEO_COVER_TIMESTAMP_MS = 1000;
+
 function getTikTokPublishSettings(post) {
   const settings = post?.platform_publish_settings?.tiktok;
   return settings && typeof settings === "object" ? settings : null;
@@ -34937,12 +35056,17 @@ function normalizeTikTokPostInfo(settings, creatorInfo, { isVideo }) {
   }
 
   if (!isVideo) return common;
+  const requestedCoverTimestamp = Number(settings?.video_cover_timestamp_ms);
+  const videoCoverTimestampMs = Number.isFinite(requestedCoverTimestamp) && requestedCoverTimestamp >= 0
+    ? Math.round(requestedCoverTimestamp)
+    : TIKTOK_VIDEO_COVER_TIMESTAMP_MS;
   return {
     ...common,
     title: truncateTikTokUtf16(settings.title || "", 2200),
     disable_duet: creatorInfo?.duet_disabled ? true : Boolean(settings.disable_duet),
     disable_stitch: creatorInfo?.stitch_disabled ? true : Boolean(settings.disable_stitch),
     is_aigc: settings.is_aigc !== false,
+    video_cover_timestamp_ms: videoCoverTimestampMs,
   };
 }
 
@@ -35084,6 +35208,11 @@ async function startOrReconcileTikTokPublish({
       expiresAtMs,
       secret: mediaSigningSecret,
       baseUrl: APP_URL,
+    });
+    console.log("TikTok publish: video payload prepared", {
+      postId: post.id,
+      privacyLevel: postInfo.privacy_level,
+      videoCoverTimestampMs: postInfo.video_cover_timestamp_ms,
     });
     initResult = await initTikTokVideoPost(accessToken, {
       post_info: postInfo,
