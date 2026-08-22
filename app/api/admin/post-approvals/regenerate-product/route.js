@@ -123,6 +123,23 @@ export async function POST(request) {
   const { data: rule } = ruleId
     ? await context.admin.from("automation_rules").select("*").eq("id", ruleId).maybeSingle()
     : { data: null };
+
+  const isKlingAiVideoPost =
+    String(post?.video_provider || "").trim().toLowerCase() === "kling" ||
+    String(rule?.content_type_id || "").trim().toLowerCase() === "ai_product_video" ||
+    String(rule?.animation_style || "").trim().toLowerCase() === "kling_product_video";
+
+  if (isKlingAiVideoPost) {
+    return Response.json(
+      {
+        ok: false,
+        error:
+          "This AI product-video post is limited to one Kling generation. Spreelo will not regenerate or replace the video on the same post. Create a new AI product-video post if a new generation is intentionally required.",
+        code: "KLING_SINGLE_GENERATION_PER_POST",
+      },
+      { status: 409 }
+    );
+  }
   const brandProfileId = post?.brand_profile_id || occurrence?.brand_profile_id || reviewCase?.brand_profile_id || rule?.brand_profile_id || null;
   const { data: brandProfile } = brandProfileId
     ? await context.admin.from("brand_profiles").select("*").eq("id", brandProfileId).maybeSingle()

@@ -21,6 +21,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/finalize-kling-videos",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/run-brand-analysis-jobs",
       "schedule": "* * * * *"
     },

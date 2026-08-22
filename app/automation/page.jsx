@@ -429,6 +429,20 @@ const contentTypes = [
     animationStyle: "product_push",
   },
   {
+    id: "ai_product_video",
+    label: "AI product video",
+    shortLabel: "AI video",
+    description:
+      "Turn one verified website product image into a real 6-second 9:16 AI video with a product-safe, attention-grabbing concept.",
+    prompt:
+      "Use the website URL from the brand profile. Identify one concrete, verified product with a usable product image from the website. Create a social media caption that promotes that exact product in a helpful, trustworthy and sales-focused way. The caption will be paired with a short AI-generated product video. Use only information that clearly appears on the website. Do not invent prices, discounts, guarantees, features or availability.",
+    imagePrompt:
+      "Create a 6-second 9:16 AI product video from the verified product image. Use a strong scroll-stopping hook that genuinely fits the product. The uploaded product image is authoritative: only show product surfaces and details already visible in that image. Never reveal or invent the back, sides, top, bottom, underside, interior or hidden labels. Keep the product at the same visible camera angle and preserve visible branding, colors, proportions and printed details exactly.",
+    usesWebsiteContent: true,
+    contentFormat: "animated_video",
+    animationStyle: "kling_product_video",
+  },
+  {
     id: "carousel_website_item",
     label: "Product image carousel",
     shortLabel: "Image carousel",
@@ -614,6 +628,7 @@ const RETIRED_CONTENT_TYPE_FALLBACKS = {
 const slotTypeIcons = {
   website_item: "🛍️",
   animated_website_item: "▶",
+  ai_product_video: "✦",
   carousel_website_item: "▦",
   problem_solution: "🧩",
   tips: "💡",
@@ -640,6 +655,7 @@ function getSlotTypeIcon(slot) {
 const slotTypeIconComponents = {
   website_item: ShoppingBag,
   animated_website_item: Video,
+  ai_product_video: Video,
   carousel_website_item: Layers,
   problem_solution: Puzzle,
   tips: Lightbulb,
@@ -995,7 +1011,7 @@ function getBrandSafeContentTypeId(typeId, websiteProductModeAvailable) {
   }
 
   if (!websiteProductModeAvailable) {
-    if (["website_item", "website_item_text_ad", "animated_website_item"].includes(typeId)) {
+    if (["website_item", "website_item_text_ad", "animated_website_item", "ai_product_video"].includes(typeId)) {
       return "problem_solution";
     }
     if (typeId === "carousel_website_item") return "mini_guide";
@@ -1090,6 +1106,7 @@ function getVisibleContentTypes(websiteProductModeAvailable) {
         "website_item",
         "website_item_text_ad",
         "animated_website_item",
+        "ai_product_video",
         "carousel_website_item",
       ].includes(type.id)
     ) {
@@ -3016,6 +3033,10 @@ function getSlotDisplayDescription(slot) {
 }
 
 function getSlotImageLabel(slot) {
+  if (slot.contentTypeId === "ai_product_video") {
+    return "AI product video";
+  }
+
   if (slot.contentFormat === "animated_video") {
     return "Animated product video";
   }
@@ -3041,6 +3062,7 @@ function getContentTypeIcon(typeId) {
     website_item: "🛒",
     website_item_text_ad: "✦",
     animated_website_item: "▶",
+    ai_product_video: "✦",
     carousel_website_item: "▦",
     problem_solution: "⚡",
     tips: "💡",
@@ -3067,6 +3089,7 @@ function getContentPreviewCardId(typeId) {
     website_item: "product_focus",
     website_item_text_ad: "product_ad",
     animated_website_item: "animated_product",
+    ai_product_video: "animated_product",
     carousel_website_item: "website_carousel",
     problem_solution: "problem_solution",
     tips: "tips_advice",
@@ -5946,7 +5969,8 @@ export default function AutomationPage() {
     const createsStandaloneAiVisual = Boolean(slot?.generateImage)
       && !slot?.usesWebsiteContent
       && slot?.contentFormat !== "animated_video"
-      && slot?.contentTypeId !== "animated_website_item";
+      && slot?.contentTypeId !== "animated_website_item"
+      && slot?.contentTypeId !== "ai_product_video";
     return createsStandaloneAiVisual && !alreadyMentionsAiVisual
       ? `${description} ${t("automation.previewCard.aiImageSuffix")}`
       : description;
@@ -6479,6 +6503,7 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
       "website_item",
       "website_item_text_ad",
       "animated_website_item",
+      "ai_product_video",
       "carousel_website_item",
     ]);
 

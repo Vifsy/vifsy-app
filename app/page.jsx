@@ -268,6 +268,7 @@ const DASHBOARD_CONTENT_TYPE_KEYS = {
   website_item: "dashboard.contentType.productPost",
   website_item_text_ad: "dashboard.contentType.productAd",
   animated_website_item: "dashboard.contentType.animatedProductReel",
+  ai_product_video: "dashboard.contentType.aiProductVideo",
   carousel_website_item: "dashboard.contentType.productCarousel",
   problem_solution: "dashboard.contentType.problemSolution",
   tips: "dashboard.contentType.tips",

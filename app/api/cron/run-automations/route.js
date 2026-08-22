@@ -41,6 +41,7 @@ import {
   queueShotstackRender,
   waitForShotstackRender,
 } from "../../../../lib/shotstack.js";
+import { submitKlingImageToVideo } from "../../../../lib/kling.js";
 import {
   buildVideoBackgroundProfile,
   chooseVideoBackground,
@@ -169,6 +170,10 @@ const APP_URL = "https://app.spreelo.com";
 const RESEND_FROM_EMAIL = "Spreelo <noreply@spreelo.com>";
 const POST_VIDEOS_BUCKET = "post-videos";
 const ANIMATED_VIDEO_DURATION_SECONDS = 5;
+const KLING_AI_VIDEO_DURATION_SECONDS = Math.max(
+  3,
+  Math.min(15, Number(process.env.KLING_VIDEO_DURATION_SECONDS || 6) || 6)
+);
 const ANIMATED_TEXT_PANEL_SOURCE_WIDTH = 1408;
 const ANIMATED_TEXT_PANEL_SOURCE_HEIGHT = 480;
 const ANIMATED_TEXT_PANEL_LEFT = 128;
@@ -2654,7 +2659,7 @@ async function findAutomationDraftsForRule({ supabase, ruleId }) {
   const { data, error } = await supabase
     .from("posts")
     .select(
-      "id, user_id, status, created_at, updated_at, content_format, image_storage_path, video_storage_path, video_status, video_render_id, slide_count, slide_generation_status, slide_render_status"
+      "id, user_id, status, created_at, updated_at, content_format, image_storage_path, video_storage_path, video_status, video_render_id, video_provider, slide_count, slide_generation_status, slide_render_status"
     )
     .eq("automation_rule_id", ruleId)
     .in("status", ["pending_approval", "generating"])
@@ -2729,6 +2734,13 @@ function isIncompleteAnimatedVideoDraftPost(post) {
 
 function isStaleIncompleteAnimatedVideoDraft(post, now) {
   if (!isIncompleteAnimatedVideoDraftPost(post)) {
+    return false;
+  }
+
+  // Kling is asynchronous and can legitimately sit in the provider queue well
+  // beyond the old 20-minute Shotstack draft grace period. Its dedicated
+  // finalizer owns timeout/failure handling and must never trigger a re-submit.
+  if (String(post?.video_provider || "").trim().toLowerCase() === "kling") {
     return false;
   }
 
@@ -12993,6 +13005,158 @@ function isCarouselRule(rule) {
 
 function isAnimatedVideoRule(rule) {
   return normalizeContentFormat(rule?.content_format) === "animated_video";
+}
+
+function isKlingAiVideoRule(rule) {
+  return (
+    String(rule?.content_type_id || "").trim().toLowerCase() === "ai_product_video" ||
+    String(rule?.animation_style || "").trim().toLowerCase() === "kling_product_video"
+  );
+}
+
+function isShotstackAnimatedVideoRule(rule) {
+  return isAnimatedVideoRule(rule) && !isKlingAiVideoRule(rule);
+}
+
+async function createKlingProductReferenceFrame(sourceImageBuffer) {
+  if (!sourceImageBuffer?.length) {
+    throw new Error("Kling AI video needs a verified product image buffer");
+  }
+
+  // Deterministically fit the authoritative product image inside a 9:16 canvas.
+  // No product pixels are invented or AI-redrawn. Kling therefore starts from a
+  // vertical frame while the exact verified source remains the visual anchor.
+  return sharp(sourceImageBuffer)
+    .rotate()
+    .resize({
+      width: 1080,
+      height: 1920,
+      fit: "contain",
+      background: { r: 247, g: 248, b: 252, alpha: 1 },
+      withoutEnlargement: false,
+    })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
+function getKlingProductPromptFallback({ rule, postContent }) {
+  const item = rule?.website_item || {};
+  const title = String(item?.title || item?.item_title || "the verified product").trim();
+  const description = truncateText(
+    String(item?.description || item?.body || item?.reason || "").replace(/\s+/g, " ").trim(),
+    500
+  );
+  const campaignContext = truncateText(
+    String(rule?.campaign_theme || rule?.strategy_notes || rule?.name || "").replace(/\s+/g, " ").trim(),
+    300
+  );
+  const captionContext = truncateText(
+    String(postContent || "").replace(/\s+/g, " ").trim(),
+    500
+  );
+
+  return [
+    `Create a premium, scroll-stopping 6-second vertical social-media advertisement for ${title}.`,
+    description ? `Verified product context: ${description}.` : "",
+    campaignContext ? `Campaign context: ${campaignContext}.` : "",
+    captionContext ? `Caption context: ${captionContext}.` : "",
+    "Use one continuous shot with a strong visual hook in the first second and product-relevant motion in the environment.",
+    "The uploaded first frame is the authoritative product reference. The product itself must remain visually identical to that frame for the entire video.",
+    "ONLY show product surfaces and details already visible in the first frame. Never reveal, infer, reconstruct or invent the back, sides, top, bottom, underside, interior, hidden edges, hidden labels or any unseen feature.",
+    "Do not rotate, flip, spin, turn, orbit around, tilt to reveal, pick up or reposition the product in a way that exposes a new viewing angle. Keep the product facing the same camera angle throughout.",
+    "Preserve the visible silhouette, proportions, color, material, branding, logos, printed text and packaging exactly. Do not morph or redesign the product.",
+    "People, hands, animals, props, particles, lighting and environmental action may appear only if they do not cover important product details or force a new product angle.",
+    "Camera movement may be a gentle push-in, pull-back or slight lateral move only; no orbit and no reveal around the product.",
+    "Do not generate new readable overlay text, captions, prices, labels, logos or watermarks.",
+    "Make the result feel native to TikTok, Instagram Reels and YouTube Shorts: immediate, surprising, polished and believable rather than a simple spinning product render.",
+  ].filter(Boolean).join(" ");
+}
+
+async function buildKlingProductVideoPrompt({ openai, rule, postContent }) {
+  const fallback = getKlingProductPromptFallback({ rule, postContent });
+  if (!openai) return fallback;
+
+  const item = rule?.website_item || {};
+  const productTitle = String(item?.title || item?.item_title || "verified product").trim();
+  const productDescription = truncateText(
+    String(item?.description || item?.body || item?.reason || "").replace(/\s+/g, " ").trim(),
+    700
+  );
+  const brandName = String(rule?.brand_profile?.business_name || "").trim();
+  const campaignContext = truncateText(
+    String(rule?.campaign_theme || rule?.strategy_notes || rule?.name || "").replace(/\s+/g, " ").trim(),
+    500
+  );
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: POST_TEXT_MODEL,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are Spreelo's short-form product video director. Return strict JSON only. Design one attention-grabbing but physically plausible single-shot concept. Product identity safety is more important than spectacle.",
+        },
+        {
+          role: "user",
+          content: `
+Create a Kling image-to-video motion prompt for one 6-second 9:16 social ad.
+
+Brand: ${brandName || "Not provided"}
+Product: ${productTitle}
+Verified product description: ${productDescription || "Not provided"}
+Campaign context: ${campaignContext || "Not provided"}
+Post caption context: ${truncateText(String(postContent || ""), 700)}
+
+Return JSON: {"creative_strategy":"...","motion_prompt":"..."}.
+
+Creative goals:
+- strong scroll-stopping event in the first 1 second
+- scene must suit the actual product/category
+- feel native to TikTok/Reels/Shorts, not a generic studio spin
+- one continuous shot, visually understandable in 6 seconds
+- environment, props, people, hands, animals or effects may add interest when genuinely appropriate
+
+NON-NEGOTIABLE PRODUCT RULES:
+- the uploaded first frame is authoritative
+- the product must stay at the SAME visible camera angle throughout
+- ONLY surfaces/details already visible in the first frame may ever be shown
+- never reveal or invent back, sides, top, bottom, underside, interior, hidden edges or hidden labels
+- never rotate, flip, spin, turn, orbit around or tilt the product to reveal a new angle
+- preserve visible shape, proportions, colors, materials, branding, logos and printed text exactly
+- do not add new readable overlay text, prices, claims, logos or watermarks
+- use gentle push-in/pull-back/lateral camera movement only; no orbit/reveal
+- if interaction would expose an unseen product area, keep the product stationary and put the action around it instead
+`,
+        },
+      ],
+      max_tokens: 650,
+      temperature: 0.7,
+    });
+
+    const parsed = safeJsonParse(completion?.choices?.[0]?.message?.content || "");
+    const creativePrompt = String(parsed?.motion_prompt || "").replace(/\s+/g, " ").trim();
+    if (!creativePrompt) return fallback;
+
+    const safetyTail = [
+      "CRITICAL PRODUCT LOCK: the first frame is authoritative.",
+      "Keep the product at exactly the same visible viewing angle for the whole clip.",
+      "Show only product surfaces/details visible in the first frame; never reveal or invent any unseen side, back, top, bottom, underside, interior, hidden edge or label.",
+      "No product rotation, spin, flip, orbit, turn, morph, redesign or new readable text.",
+      "Preserve visible branding, colors, proportions and printed details exactly.",
+      "Single 6-second vertical social-media shot with no new overlay text or watermark.",
+    ].join(" ");
+
+    return truncateText(`${creativePrompt} ${safetyTail}`, 2450);
+  } catch (error) {
+    console.warn("Kling creative prompt generation fell back to deterministic prompt", {
+      ruleId: rule?.id || null,
+      productTitle,
+      message: error?.message || String(error),
+    });
+    return fallback;
+  }
 }
 
 function normalizeSlideText(value, maxLength = 180) {
@@ -37654,17 +37818,55 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
         }
 
         if (isAnimatedVideoRule(websitePreparedRule || rule)) {
-          const preparedAnimatedCandidates = await prepareAnimatedReelProductCandidates({
-            openai,
-            ruleId: rule.id,
-            primaryItem: websiteItem,
-            reserveItems: websiteReserveItems,
-            sourceUrl: websiteSourceUrl || brandProfile?.website_url || rule.website_url || "",
-            maximumCandidates: 4,
-          });
+          if (isKlingAiVideoRule(websitePreparedRule || rule)) {
+            // Kling needs the exact verified source image, not the Shotstack
+            // cutout/overlay preparation chain. Avoid any unnecessary AI image
+            // edit here: fetch the authoritative product pixels once and build
+            // the 9:16 reference deterministically later.
+            const normalizedImageUrl = normalizeShopifyImageWidthUrl(
+              websiteItem?.image_url,
+              1600
+            );
+            const authoritativeImageUrl = resolveUrl(
+              normalizedImageUrl,
+              websiteItem?.url || normalizedImageUrl
+            );
+            if (
+              !websiteItem ||
+              !authoritativeImageUrl ||
+              !isHttpUrl(authoritativeImageUrl) ||
+              isBadProductImageUrl(authoritativeImageUrl)
+            ) {
+              throw new Error(
+                "AI product video could not find a usable verified product image."
+              );
+            }
 
-          animatedReelCandidates = preparedAnimatedCandidates.candidates;
-          animatedReelRejectedCandidates = preparedAnimatedCandidates.rejected;
+            const sourceImageBuffer = await fetchImageBufferForOverlay(authoritativeImageUrl);
+            animatedReelCandidates = [
+              {
+                item: websiteItem,
+                imageSelection: {
+                  url: authoritativeImageUrl,
+                  source: "kling_verified_product_image",
+                  sourceImageBuffer,
+                },
+              },
+            ];
+            animatedReelRejectedCandidates = [];
+          } else {
+            const preparedAnimatedCandidates = await prepareAnimatedReelProductCandidates({
+              openai,
+              ruleId: rule.id,
+              primaryItem: websiteItem,
+              reserveItems: websiteReserveItems,
+              sourceUrl: websiteSourceUrl || brandProfile?.website_url || rule.website_url || "",
+              maximumCandidates: 4,
+            });
+
+            animatedReelCandidates = preparedAnimatedCandidates.candidates;
+            animatedReelRejectedCandidates = preparedAnimatedCandidates.rejected;
+          }
 
           if (!animatedReelCandidates.length) {
             const attemptedTitles = animatedReelRejectedCandidates
@@ -37672,7 +37874,7 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
               .filter(Boolean)
               .slice(0, 4);
             throw new Error(
-              `Animated product Reel could not find a usable product image after checking the main product and up to three reserves${attemptedTitles.length ? `: ${attemptedTitles.join(", ")}` : ""}.`
+              `Animated product video could not find a usable product image after checking the main product and available reserves${attemptedTitles.length ? `: ${attemptedTitles.join(", ")}` : ""}.`
             );
           }
 
@@ -37778,14 +37980,22 @@ scheduled_for: scheduledPublishAtIso,
             image_prompt: wantsImage ? websitePreparedRule.image_prompt || null : null,
             content_format: normalizeContentFormat(websitePreparedRule.content_format),
             video_status: isAnimatedVideoRule(websitePreparedRule) ? "rendering" : "none",
-            video_provider: isAnimatedVideoRule(websitePreparedRule) ? "shotstack" : null,
-            video_duration_seconds: isAnimatedVideoRule(websitePreparedRule)
+            video_provider: isKlingAiVideoRule(websitePreparedRule)
+              ? "kling"
+              : isShotstackAnimatedVideoRule(websitePreparedRule)
+              ? "shotstack"
+              : null,
+            video_duration_seconds: isKlingAiVideoRule(websitePreparedRule)
+              ? KLING_AI_VIDEO_DURATION_SECONDS
+              : isShotstackAnimatedVideoRule(websitePreparedRule)
               ? ANIMATED_VIDEO_DURATION_SECONDS
               : null,
     text_model_used: POST_TEXT_MODEL,
 image_model_used:
   wantsImage && websitePreparedRule.image_source !== "uploaded"
-    ? isAnimatedVideoRule(websitePreparedRule)
+    ? isKlingAiVideoRule(websitePreparedRule)
+      ? null
+      : isShotstackAnimatedVideoRule(websitePreparedRule)
       ? ANIMATED_OVERLAY_IMAGE_MODEL
       : IMAGE_MODEL
     : null,
@@ -37848,6 +38058,7 @@ product_research_model_used: websitePreparedRule.uses_website_content
         let videoStoragePath = null;
         let videoRenderId = null;
         let animatedVideoFinalError = null;
+        let klingPrompt = null;
 
         const isWebsiteBasedPost = Boolean(websitePreparedRule.uses_website_content || websiteItem || websiteSourceUrl);
         const ruleImageSource = String(websitePreparedRule.image_source || "").trim().toLowerCase();
@@ -37922,7 +38133,202 @@ product_research_model_used: websitePreparedRule.uses_website_content
 
           summary.uploaded_image_used =
             Number(summary.uploaded_image_used || 0) + 1;
-        } else if (wantsImage && isAnimatedVideoRule(ruleWithBrandProfile)) {
+        } else if (wantsImage && isKlingAiVideoRule(ruleWithBrandProfile)) {
+          automationCurrentStage = "kling_video_submit";
+          const candidate = animatedReelCandidates[0];
+          const sourceImageBuffer = candidate?.imageSelection?.sourceImageBuffer;
+
+          if (!candidate?.item || !sourceImageBuffer?.length) {
+            const message = "Kling AI product video needs one verified source product image.";
+            await supabase.from("posts").update({
+              image_status: "failed",
+              video_status: "failed",
+              video_error: message,
+              updated_at: new Date().toISOString(),
+            }).eq("id", post.id);
+            await failCurrentOccurrence(message, "kling_video_prepare", {
+              failed_post_id: post.id,
+              kling_no_retry: true,
+            });
+            summary.errors += 1;
+            continue;
+          }
+
+          try {
+            const referenceFrameBuffer = await createKlingProductReferenceFrame(sourceImageBuffer);
+            const uploadedReference = await uploadGeneratedImageToStorage({
+              supabase,
+              imageBase64: referenceFrameBuffer.toString("base64"),
+              userId: rule.user_id,
+              postId: post.id,
+              fileSuffix: "kling-reference",
+            });
+
+            imageUrl = uploadedReference.imageUrl;
+            imageStoragePath = uploadedReference.imageStoragePath;
+            finalImagePrompt =
+              "Product-safe 9:16 Kling start frame made deterministically from the verified website product image without AI redraw.";
+
+            if (!imageUrl) {
+              throw new Error("Could not create a public Kling reference-frame URL");
+            }
+
+            klingPrompt = await buildKlingProductVideoPrompt({
+              openai,
+              rule: {
+                ...ruleWithBrandProfile,
+                website_item: candidate.item,
+              },
+              postContent: generatedContent,
+            });
+
+            // This RPC is the hard cost guard. It can move a post from 0 -> 1
+            // generation exactly once, atomically across all queue workers.
+            const { data: klingClaimed, error: klingClaimError } = await supabase.rpc(
+              "claim_kling_video_generation",
+              { p_post_id: post.id }
+            );
+
+            if (klingClaimError) {
+              const migrationHint = /claim_kling_video_generation/i.test(
+                String(klingClaimError?.message || "")
+              )
+                ? " Run spreelo-v144.07-SQL.sql in Supabase before using AI product video."
+                : "";
+              throw new Error(
+                `Could not claim the one allowed Kling generation.${migrationHint} ${klingClaimError.message || ""}`.trim()
+              );
+            }
+
+            if (klingClaimed !== true) {
+              const message =
+                "This post has already consumed its one allowed Kling generation. No second generation was submitted.";
+              await supabase.from("posts").update({
+                image_url: imageUrl,
+                image_storage_path: imageStoragePath,
+                image_status: "ready",
+                image_prompt: finalImagePrompt,
+                video_status: "failed",
+                video_error: message,
+                updated_at: new Date().toISOString(),
+              }).eq("id", post.id);
+              await failCurrentOccurrence(message, "kling_generation_claim", {
+                failed_post_id: post.id,
+                kling_no_retry: true,
+              });
+              summary.errors += 1;
+              continue;
+            }
+
+            await supabase.from("posts").update({
+              content: generatedContent,
+              website_url: candidate.item?.url || websiteSourceUrl || null,
+              image_url: imageUrl,
+              image_storage_path: imageStoragePath,
+              image_status: "ready",
+              image_prompt: finalImagePrompt,
+              video_provider: "kling",
+              video_status: "submitting",
+              video_duration_seconds: KLING_AI_VIDEO_DURATION_SECONDS,
+              kling_prompt: klingPrompt,
+              kling_reference_image_url: imageUrl,
+              include_logo: false,
+              logo_url: null,
+              updated_at: new Date().toISOString(),
+            }).eq("id", post.id);
+
+            // IMPORTANT: exactly one provider submission. submitKlingImageToVideo
+            // intentionally has no retry loop. If this call fails, the post is
+            // terminally failed and never auto-submitted again.
+            const klingSubmission = await submitKlingImageToVideo({
+              imageUrl,
+              prompt: klingPrompt,
+              externalTaskId: post.id,
+            });
+
+            videoRenderId = klingSubmission.taskId;
+            const submittedStatus = klingSubmission.status || "submitted";
+            const submittedAtIso = new Date().toISOString();
+
+            // Persist the remote task id before any optional diagnostics. Once
+            // Kling has accepted a task, this id is the only job Spreelo may
+            // ever poll for this post.
+            const { error: klingCriticalUpdateError } = await supabase.from("posts").update({
+              video_render_id: videoRenderId,
+              video_status: submittedStatus,
+              video_provider: "kling",
+              video_duration_seconds: klingSubmission.durationSeconds || KLING_AI_VIDEO_DURATION_SECONDS,
+              video_error: null,
+              kling_task_id: videoRenderId,
+              kling_task_status: submittedStatus,
+              kling_submitted_at: submittedAtIso,
+              updated_at: submittedAtIso,
+            }).eq("id", post.id);
+
+            if (klingCriticalUpdateError) {
+              // The provider may already have accepted/billed this exact task.
+              // Never solve a persistence error by submitting a replacement.
+              throw new Error(
+                `Kling task ${videoRenderId} was submitted, but Spreelo could not persist its task id: ${klingCriticalUpdateError.message || "unknown database error"}`
+              );
+            }
+
+            const { error: klingDiagnosticsUpdateError } = await supabase.from("posts").update({
+              kling_prompt: klingPrompt,
+              kling_reference_image_url: imageUrl,
+              kling_api_family: klingSubmission.apiFamily || null,
+              kling_model: klingSubmission.model || null,
+              kling_resolution: klingSubmission.resolution || null,
+              kling_audio: klingSubmission.audio || null,
+              updated_at: new Date().toISOString(),
+            }).eq("id", post.id);
+
+            if (klingDiagnosticsUpdateError) {
+              console.warn("Kling task persisted but optional diagnostics could not be saved", {
+                ruleId: rule.id,
+                postId: post.id,
+                taskId: videoRenderId,
+                message: klingDiagnosticsUpdateError.message,
+              });
+              summary.warnings += 1;
+            }
+
+            websiteItem = candidate.item;
+            websiteReserveItems = animatedReelCandidates.slice(1).map((entry) => entry.item);
+            usedWebsiteImageUrlsThisRun.add(normalizeComparableValue(websiteItem?.image_url));
+            summary.video_submitted = Number(summary.video_submitted || 0) + 1;
+            summary.website_image_used += 1;
+          } catch (videoError) {
+            const failureMessage = truncateText(
+              videoError?.message || "Kling AI product video could not be submitted.",
+              1000
+            );
+            await supabase.from("posts").update({
+              image_url: imageUrl,
+              image_storage_path: imageStoragePath,
+              image_status: imageUrl ? "ready" : "failed",
+              image_prompt: finalImagePrompt,
+              video_url: null,
+              video_storage_path: null,
+              video_status: "failed",
+              video_provider: "kling",
+              video_render_id: videoRenderId || null,
+              video_error: failureMessage,
+              kling_task_id: videoRenderId || null,
+              kling_task_status: "failed",
+              updated_at: new Date().toISOString(),
+            }).eq("id", post.id);
+
+            await failCurrentOccurrence(videoError, "kling_video_submit", {
+              failed_post_id: post.id,
+              kling_no_retry: true,
+              kling_task_id: videoRenderId || null,
+            });
+            summary.video_generation_failed = Number(summary.video_generation_failed || 0) + 1;
+            summary.errors += 1;
+            continue;
+          }
+        } else if (wantsImage && isShotstackAnimatedVideoRule(ruleWithBrandProfile)) {
           finalImagePrompt =
             "9:16 animated product Reel using an automatically selected uploaded MP4 background, the unchanged original website product, a separate OpenAI text overlay and Shotstack HTML5 zoom motion.";
 
@@ -38406,7 +38812,28 @@ product_research_model_used: websitePreparedRule.uses_website_content
 }
 
         automationCurrentStage = "media_generation";
-        if (isAnimatedVideoRule(websitePreparedRule)) {
+        if (isKlingAiVideoRule(websitePreparedRule)) {
+          if (!videoRenderId) {
+            const message = "Kling AI product video was not submitted.";
+            await supabase.from("posts").update({
+              status: "generating",
+              video_status: "failed",
+              video_error: message,
+              updated_at: new Date().toISOString(),
+            }).eq("id", post.id);
+            await failCurrentOccurrence(message, "kling_video_submit", {
+              failed_post_id: post.id,
+              kling_no_retry: true,
+            });
+            summary.errors += 1;
+            continue;
+          }
+
+          // Kling is asynchronous. Keep the post in generating state while the
+          // separate finalizer polls this exact task id and copies the finished
+          // MP4 into Spreelo storage. No second provider generation is allowed.
+          effectivePostStatus = "generating";
+        } else if (isShotstackAnimatedVideoRule(websitePreparedRule)) {
           if (!videoUrl) {
             const message = animatedVideoFinalError?.message || "Animated product video could not be rendered.";
 
@@ -38760,20 +39187,27 @@ product_research_model_used: websitePreparedRule.uses_website_content
           },
         });
 
+        const asyncKlingPending =
+          isKlingAiVideoRule(websitePreparedRule) && effectivePostStatus === "generating";
+
         await upsertAdminReviewCase(supabase, {
           occurrence_id: automationOccurrenceId,
           post_id: post.id,
           user_id: rule.user_id,
           brand_profile_id: rule.brand_profile_id || null,
           automation_rule_id: rule.id,
-          status: sentDirectlyToCustomer ? "sent_directly" : "awaiting_spreelo",
+          status: asyncKlingPending
+            ? "creating"
+            : sentDirectlyToCustomer
+            ? "sent_directly"
+            : "awaiting_spreelo",
           scheduled_for: scheduledPublishAtIso,
           campaign_title: rule.name || rule.campaign_theme || null,
           content_type_label: rule.content_type_label || rule.post_type || null,
           content_format: normalizeContentFormat(rule.content_format),
           draft_content: generatedContent,
           product_items: adminProductItems,
-          needs_review: !sentDirectlyToCustomer,
+          needs_review: asyncKlingPending ? false : !sentDirectlyToCustomer,
           delivered_at: sentDirectlyToCustomer ? new Date().toISOString() : null,
         });
 

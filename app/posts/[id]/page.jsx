@@ -62,6 +62,12 @@ function formatVideoStatus(status, t) {
   if (!status || status === "none") return null;
 
   const labels = {
+    submitting: t("posts.videoStatus.rendering"),
+    submitted: t("posts.videoStatus.rendering"),
+    created: t("posts.videoStatus.rendering"),
+    queued: t("posts.videoStatus.rendering"),
+    pending: t("posts.videoStatus.rendering"),
+    processing: t("posts.videoStatus.rendering"),
     rendering: t("posts.videoStatus.rendering"),
     ready: t("posts.videoStatus.ready"),
     failed: t("posts.videoStatus.failed"),
