@@ -4,6 +4,7 @@ import {
   isKlingTaskFailed,
   isKlingTaskSuccessful,
 } from "../../../../lib/kling.js";
+import { normalizeVideoDurationSeconds } from "../../../../lib/videoDuration.js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -172,10 +173,11 @@ async function finalizeReadyTask(supabase, post, task) {
       kling_task_status: task.status || "succeeded",
       kling_completed_at: nowIso,
       kling_last_polled_at: nowIso,
-      video_duration_seconds:
-        Number(task.durationSeconds || post.video_duration_seconds || 0) ||
-        post.video_duration_seconds ||
-        6,
+      video_duration_seconds: normalizeVideoDurationSeconds(
+        task.durationSeconds,
+        post.video_duration_seconds,
+        6
+      ),
       video_error: null,
       status: "pending_approval",
       updated_at: nowIso,
