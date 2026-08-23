@@ -33,6 +33,7 @@ export default function CreatePost() {
   const [includeHashtags, setIncludeHashtags] = useState(true);
 
   const [generatedPost, setGeneratedPost] = useState("");
+  const [generationCostSessionId, setGenerationCostSessionId] = useState(null);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -40,6 +41,7 @@ export default function CreatePost() {
   async function generateDraft() {
     setMessage("");
     setGeneratedPost("");
+    setGenerationCostSessionId(null);
 
     if (!idea.trim()) {
       setMessage(t("create.errorIdeaRequired"));
@@ -87,6 +89,7 @@ export default function CreatePost() {
       }
 
       setGeneratedPost(data.content || "");
+      setGenerationCostSessionId(data.generation_cost_session_id || null);
     } catch (error) {
       setMessage(error.message || t("create.errorGeneric"));
     }
@@ -113,26 +116,55 @@ export default function CreatePost() {
       return;
     }
 
-    const { error } = await supabase.from("posts").insert({
-      user_id: user.id,
-      platform,
-      tone,
-      language,
-      post_type: postType,
-      idea,
-      content: generatedPost,
-      status: "draft",
-      website_url: websiteUrl,
-      length,
-      include_emojis: includeEmojis,
-      include_hashtags: includeHashtags,
-      cta_type: ctaType,
-      updated_at: new Date().toISOString(),
-    });
+    const generatedPostId = globalThis.crypto?.randomUUID?.() || null;
+    const { error } = await supabase
+      .from("posts")
+      .insert({
+        ...(generatedPostId ? { id: generatedPostId } : {}),
+        user_id: user.id,
+        platform,
+        tone,
+        language,
+        post_type: postType,
+        idea,
+        content: generatedPost,
+        status: "draft",
+        website_url: websiteUrl,
+        length,
+        include_emojis: includeEmojis,
+        include_hashtags: includeHashtags,
+        cta_type: ctaType,
+        updated_at: new Date().toISOString(),
+      });
 
     if (error) {
       setMessage(error.message);
     } else {
+      // Cost binding is deliberately best-effort and happens only after the
+      // existing draft insert succeeded. It cannot make a successful draft
+      // save fail or trigger any additional AI/provider generation call.
+      if (generationCostSessionId && generatedPostId) {
+        try {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+          if (session?.access_token) {
+            await fetch("/api/generation-cost/bind", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${session.access_token}`,
+              },
+              body: JSON.stringify({
+                postId: generatedPostId,
+                generationCostSessionId,
+              }),
+            });
+          }
+        } catch (costError) {
+          console.warn("Draft saved but generation cost could not be attached", costError);
+        }
+      }
       setMessage(t("create.draftSaved"));
     }
 

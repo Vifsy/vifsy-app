@@ -2,6 +2,7 @@ import crypto from "crypto";
 import OpenAI from "openai";
 import { adminContextError, getAdminContext } from "../../../../../lib/adminAuth";
 import { snapshotAdminPostVersion } from "../../../../../lib/adminPostVersions";
+import { createGenerationCostTracker, wrapOpenAIForCostTracking } from "../../../../../lib/generationCostTracking";
 import { applyLogoOverlayIfNeeded, generateCarouselOutroSlideImage, getCarouselProductLabelPresentation, renderCarouselProductSlideImage, resolveLockedProductUrlForUse, shouldUseLogoForRule } from "../../../cron/run-automations/route.js";
 
 export const dynamic = "force-dynamic";
@@ -85,7 +86,15 @@ export async function POST(request) {
   const enhancedRule = { ...(rule || {}), brand_profile: brandProfile || null, language, campaign_theme: campaign };
   const includeLogo = shouldUseLogoForRule(enhancedRule, brandProfile);
   let content = String(body?.content || "").trim();
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const costTracker = createGenerationCostTracker({
+    supabase: context.admin,
+    occurrenceId: occurrenceId || null,
+    postId: post?.id || null,
+  });
+  const openai = wrapOpenAIForCostTracking(
+    new OpenAI({ apiKey: process.env.OPENAI_API_KEY }),
+    () => costTracker
+  );
 
   // v143.69: URL-first remains the default. A deliberate admin manual
   // override is a safety valve for sites that cannot be fetched. Manual data is
@@ -184,6 +193,7 @@ export async function POST(request) {
     }).select("*").single();
     if (insert.error) return Response.json({ ok: false, error: insert.error.message }, { status: 500 });
     post = insert.data;
+    try { await costTracker.bindPost(post.id); } catch {}
     if (occurrenceId) {
       await context.admin.from("automation_occurrences").update({
         post_id: post.id,

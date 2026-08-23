@@ -161,6 +161,19 @@ export async function GET(request) {
       : Promise.resolve({ data: [] }),
   ]);
 
+  let generationCostRows = [];
+  if (postIds.length) {
+    const costResult = await context.admin
+      .from("post_generation_cost_summaries")
+      .select("post_id, amount, currency, complete, breakdown, updated_at")
+      .in("post_id", postIds);
+    if (!costResult.error) {
+      generationCostRows = costResult.data || [];
+    } else if (!/post_generation_cost_summaries|schema cache|does not exist/i.test(String(costResult.error.message || ""))) {
+      console.warn("Admin generation-cost summaries could not be loaded", { message: costResult.error.message });
+    }
+  }
+
   let versionRows = [];
   if (postIds.length) {
     const versionsResult = await context.admin
@@ -224,6 +237,9 @@ export async function GET(request) {
     map[version.post_id].push(version);
     return map;
   }, {});
+  const generationCostMap = Object.fromEntries(
+    (generationCostRows || []).map((row) => [row.post_id, row])
+  );
 
   const getEditableProductItems = (post) => {
     const slideProducts = (slidesMap[post.id] || [])
@@ -304,6 +320,11 @@ export async function GET(request) {
     ok: true,
     posts: [...postRows.map((item) => ({
       ...item,
+      generation_cost_amount: generationCostMap[item.id]?.amount ?? null,
+      generation_cost_currency: generationCostMap[item.id]?.currency || null,
+      generation_cost_complete: generationCostMap[item.id]?.complete === true,
+      generation_cost_breakdown: generationCostMap[item.id]?.breakdown || {},
+      generation_cost_updated_at: generationCostMap[item.id]?.updated_at || null,
       content_type_id: ruleMap[item.automation_rule_id]?.content_type_id || null,
       content_type_label: ruleMap[item.automation_rule_id]?.content_type_label || item.post_type || null,
       admin_product_items: getEditableProductItems(item),

@@ -12793,3 +12793,23 @@ html body .campaign-v14335-slot-list article:has(.custom-time-popover) {
 .admin-v14401-version-list strong { color:#303b4d;font-size:11px; }
 .admin-v14401-version-list small { color:#8a94a3;font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
 .admin-v14401-version-list button { min-height:28px;display:inline-flex;align-items:center;gap:4px;padding:0 7px;border:1px solid #dfe4ea;border-radius:7px;background:#fff;color:#536072;font-size:10px;font-weight:850;cursor:pointer; }
+
+/* Spreelo v144.12 — exact provider-native generation cost visibility */
+.admin-v14401-workbench .admin-v14370-review-row {
+  grid-template-columns:auto 58px minmax(230px,1fr) minmax(105px,auto) minmax(115px,auto) minmax(105px,auto) auto auto !important;
+}
+.admin-v14412-review-cost strong { color:#253247!important;font-variant-numeric:tabular-nums;white-space:nowrap; }
+.admin-v14412-cost-card { display:grid;gap:10px;padding:14px;border:1px solid #e4e9ef;border-radius:13px;background:#fff; }
+.admin-v14412-cost-card .admin-v14401-source-head > span { color:#6b7584;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.05em; }
+.admin-v14412-cost-events { display:grid;gap:6px; }
+.admin-v14412-cost-events > div { display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 9px;border-radius:9px;background:#f8fafc; }
+.admin-v14412-cost-events span { min-width:0;color:#697586;font-size:10.5px;font-weight:750;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.admin-v14412-cost-events strong { color:#263246;font-size:10.5px;font-weight:900;font-variant-numeric:tabular-nums;white-space:nowrap; }
+@media (max-width:1180px){
+  .admin-v14401-workbench .admin-v14370-review-row{grid-template-columns:auto 54px minmax(200px,1fr) minmax(110px,auto) auto auto!important}
+  .admin-v14401-workbench .admin-v14370-review-time:not(.admin-v14412-review-cost){display:none}
+}
+@media (max-width:760px){
+  .admin-v14401-workbench .admin-v14370-review-row{grid-template-columns:auto 48px minmax(0,1fr) auto!important}
+  .admin-v14401-workbench .admin-v14412-review-cost{display:none}
+}

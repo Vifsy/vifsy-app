@@ -42,6 +42,7 @@ import {
   waitForShotstackRender,
 } from "../../../../lib/shotstack.js";
 import { submitKlingImageToVideo } from "../../../../lib/kling.js";
+import { createGenerationCostTracker, wrapOpenAIForCostTracking } from "../../../../lib/generationCostTracking.js";
 import {
   buildVideoBackgroundProfile,
   chooseVideoBackground,
@@ -32597,6 +32598,7 @@ export async function generateAnimatedProductVideo({
   postContent,
   userId,
   postId,
+  costTracker = null,
 }) {
   const assets = await createAnimatedProductVideoAssets({
     openai,
@@ -32630,6 +32632,22 @@ export async function generateAnimatedProductVideo({
     .eq("id", postId);
 
   const render = await waitForShotstackRender({ renderId });
+  if (costTracker?.recordShotstack) {
+    try {
+      await costTracker.recordShotstack({
+        renderId,
+        billableSeconds: render.billableSeconds,
+        plan: render.plan,
+        environment: render.environment,
+      });
+    } catch (costError) {
+      console.warn("Shotstack generation cost tracking failed without affecting the render", {
+        postId,
+        renderId,
+        message: costError?.message || String(costError),
+      });
+    }
+  }
   const storedVideo = await uploadRenderedVideoToStorage({
     supabase,
     videoUrl: render.url,
@@ -37261,9 +37279,14 @@ async function runAutomationCron(request, options = {}) {
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    const openai = new OpenAI({
+    let activeGenerationCostTracker = null;
+    const rawOpenai = new OpenAI({
       apiKey: openaiApiKey,
     });
+    const openai = wrapOpenAIForCostTracking(
+      rawOpenai,
+      () => activeGenerationCostTracker
+    );
 
     const now = new Date();
     const nowIso = now.toISOString();
@@ -37320,6 +37343,7 @@ async function runAutomationCron(request, options = {}) {
     let claimedRulesThisRun = 0;
 
     for (const queuedRule of rules || []) {
+      activeGenerationCostTracker = null;
       if (claimedRulesThisRun >= SMART_QUEUE_BATCH_SIZE) {
         break;
       }
@@ -37674,6 +37698,11 @@ async function runAutomationCron(request, options = {}) {
             Number(summary.skipped_duplicate_occurrence || 0) + 1;
           continue;
         }
+
+        activeGenerationCostTracker = createGenerationCostTracker({
+          supabase,
+          occurrenceId: automationOccurrenceId,
+        });
 
         const adminPostReviewRequired = await getAdminPostReviewGate(
           supabase,
@@ -38535,6 +38564,15 @@ product_research_model_used: websitePreparedRule.uses_website_content
         }
 
         automationRunPostId = post.id;
+        try {
+          await activeGenerationCostTracker?.bindPost(post.id);
+        } catch (costError) {
+          console.warn("Generation cost binding failed without affecting post generation", {
+            postId: post.id,
+            occurrenceId: automationOccurrenceId,
+            message: costError?.message || String(costError),
+          });
+        }
 
         const adminProductItems = (Array.isArray(websiteItems) ? websiteItems : websiteItem ? [websiteItem] : [])
           .map((item) => ({
@@ -38882,6 +38920,7 @@ product_research_model_used: websitePreparedRule.uses_website_content
                 postContent: attemptContent,
                 userId: rule.user_id,
                 postId: post.id,
+                costTracker: activeGenerationCostTracker,
               });
 
               imageUrl = animatedVideo.posterUrl;

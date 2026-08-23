@@ -1,8 +1,13 @@
 import OpenAI from "openai";
+import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { normalizeSingleContentLanguage } from "../../../lib/contentLanguage.js";
+import {
+  createGenerationCostTracker,
+  wrapOpenAIForCostTracking,
+} from "../../../lib/generationCostTracking.js";
 
-const openai = new OpenAI({
+const rawOpenai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
@@ -73,6 +78,28 @@ export async function POST(request) {
 
     const normalizedLanguage = normalizeSingleContentLanguage(language, "English");
 
+    // v144.12: meter the existing manual-create model call without changing
+    // how the post is generated. The random session is later bound to the
+    // saved draft after the client receives its post id. Metering is strictly
+    // non-fatal: if the admin-only table is unavailable, generation continues.
+    const generationCostSessionId = randomUUID();
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const adminSupabase = serviceRoleKey
+      ? createClient(supabaseUrl, serviceRoleKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        })
+      : null;
+    const costTracker = adminSupabase
+      ? createGenerationCostTracker({
+          supabase: adminSupabase,
+          generationSessionId: generationCostSessionId,
+          generationUserId: user.id,
+        })
+      : null;
+    const openai = costTracker
+      ? wrapOpenAIForCostTracking(rawOpenai, () => costTracker)
+      : rawOpenai;
+
     const emojiRule = includeEmojis
       ? "Use emojis where they make the post more engaging, but do not overdo it."
       : "Do not use emojis.";
@@ -126,6 +153,7 @@ Rules:
 
     return Response.json({
       content: response.output_text,
+      generation_cost_session_id: generationCostSessionId,
     });
   } catch (error) {
     return Response.json(

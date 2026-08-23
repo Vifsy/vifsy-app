@@ -2,6 +2,7 @@ import crypto from "crypto";
 import OpenAI from "openai";
 import { adminContextError, getAdminContext } from "../../../../../lib/adminAuth";
 import { snapshotAdminPostVersion } from "../../../../../lib/adminPostVersions";
+import { createGenerationCostTracker, wrapOpenAIForCostTracking } from "../../../../../lib/generationCostTracking";
 import {
   applyLogoOverlayIfNeeded,
   createEmergencySocialCardUpload,
@@ -146,7 +147,15 @@ export async function POST(request) {
       });
     }
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const costTracker = createGenerationCostTracker({
+      supabase: context.admin,
+      occurrenceId: resolvedOccurrenceId || null,
+      postId: post?.id || null,
+    });
+    const openai = wrapOpenAIForCostTracking(
+      new OpenAI({ apiKey: process.env.OPENAI_API_KEY }),
+      () => costTracker
+    );
     const existingContent = String(body?.content || post?.content || reviewCase?.draft_content || "").trim();
     let generatedContent = existingContent;
     if (mode !== "media") {
@@ -189,6 +198,7 @@ export async function POST(request) {
       }).select("*").single();
       if (insert.error || !insert.data) throw new Error(insert.error?.message || "Could not create repaired post.");
       post = insert.data;
+      try { await costTracker.bindPost(post.id); } catch {}
     }
 
     let imageUrl = mode === "text" ? post.image_url || null : post.image_url || null;

@@ -5,6 +5,7 @@ import {
   isKlingTaskSuccessful,
 } from "../../../../lib/kling.js";
 import { normalizeVideoDurationSeconds } from "../../../../lib/videoDuration.js";
+import { createGenerationCostTracker } from "../../../../lib/generationCostTracking.js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -212,7 +213,7 @@ export async function GET(request) {
     const { data: posts, error } = await supabase
       .from("posts")
       .select(
-        "id, user_id, status, video_provider, video_status, video_duration_seconds, video_error, kling_generation_count, kling_task_id, kling_task_status, kling_submitted_at, kling_last_polled_at"
+        "id, user_id, status, video_provider, video_status, video_duration_seconds, video_error, kling_generation_count, kling_task_id, kling_task_status, kling_submitted_at, kling_last_polled_at, kling_model, kling_resolution, kling_audio"
       )
       .eq("video_provider", "kling")
       .in("video_status", pendingStatuses)
@@ -286,6 +287,29 @@ export async function GET(request) {
         await markKlingPostFailed(supabase, post, "kling_video_result", message);
         summary.failed += 1;
         continue;
+      }
+
+      try {
+        const costTracker = createGenerationCostTracker({ supabase, postId: post.id });
+        await costTracker.recordKling({
+          model: post.kling_model || "kling-3.0",
+          durationSeconds: normalizeVideoDurationSeconds(
+            task.durationSeconds,
+            post.video_duration_seconds,
+            6
+          ),
+          resolution: post.kling_resolution || "720p",
+          audio: post.kling_audio || "off",
+          taskId: post.kling_task_id,
+          billingAt: post.kling_submitted_at || null,
+          succeeded: true,
+        });
+      } catch (costError) {
+        console.warn("Kling generation cost tracking failed without affecting finalization", {
+          postId: post.id,
+          taskId: post.kling_task_id,
+          message: costError?.message || String(costError),
+        });
       }
 
       try {

@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import { adminContextError, getAdminContext } from "../../../../../lib/adminAuth";
 import { buildProductContentContract } from "../../../../../lib/productEngineV2";
 import { snapshotAdminPostVersion } from "../../../../../lib/adminPostVersions";
+import { createGenerationCostTracker, wrapOpenAIForCostTracking } from "../../../../../lib/generationCostTracking";
 import {
   applyLogoOverlayIfNeeded,
   generateAnimatedProductVideo,
@@ -155,7 +156,15 @@ export async function POST(request) {
   if (!repairUserId) {
     return Response.json({ ok: false, error: "The customer account for this failed generation is missing." }, { status: 400 });
   }
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const costTracker = createGenerationCostTracker({
+    supabase: context.admin,
+    occurrenceId: occurrenceId || null,
+    postId: post?.id || null,
+  });
+  const openai = wrapOpenAIForCostTracking(
+    new OpenAI({ apiKey: process.env.OPENAI_API_KEY }),
+    () => costTracker
+  );
 
   try {
     if (post?.id) {
@@ -256,6 +265,7 @@ export async function POST(request) {
         throw new Error(insert.error?.message || "Could not create a repaired product post.");
       }
       post = insert.data;
+      try { await costTracker.bindPost(post.id); } catch {}
       if (occurrenceId) {
         await context.admin.from("automation_occurrences").update({
           post_id: post.id,
@@ -302,6 +312,7 @@ export async function POST(request) {
         postContent: generatedContent,
         userId: repairUserId,
         postId: post.id,
+        costTracker,
       });
       imageUrl = rendered.posterUrl;
       imageStoragePath = rendered.posterStoragePath;

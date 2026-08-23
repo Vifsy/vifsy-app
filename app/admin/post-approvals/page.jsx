@@ -47,6 +47,30 @@ function formatDate(value) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
+function formatNativeMoney(amount, currency) {
+  const numeric = Number(amount);
+  const code = String(currency || "").trim().toUpperCase();
+  if (!Number.isFinite(numeric) || !code) return null;
+  return `${code} ${numeric.toFixed(9)}`;
+}
+
+function formatGenerationCost(post) {
+  const totals = post?.generation_cost_breakdown?.totals;
+  if (totals && typeof totals === "object") {
+    const parts = Object.entries(totals)
+      .map(([currency, amount]) => formatNativeMoney(amount, currency))
+      .filter(Boolean);
+    if (parts.length) return parts.join(" + ");
+  }
+  return formatNativeMoney(post?.generation_cost_amount, post?.generation_cost_currency) || "—";
+}
+
+function getGenerationCostEvents(post) {
+  return Array.isArray(post?.generation_cost_breakdown?.events)
+    ? post.generation_cost_breakdown.events
+    : [];
+}
+
 function statusMeta(status, t) {
   if (status === "creating") return { label: t("admin.approvals.statusCreating"), className: "pending", Icon: LoaderCircle };
   if (status === "needs_repair") return { label: t("admin.approvals.statusNeedsRepair"), className: "failed", Icon: AlertTriangle };
@@ -859,6 +883,7 @@ export default function AdminPostApprovalsPage() {
                     <em>{String(post.content || "").replace(/\s+/g, " ").slice(0, 120) || t("admin.approvals.noContent")}</em>
                   </span>
                   <span className="admin-v14370-review-time"><small>{t("admin.approvals.created")}</small><strong>{formatDate(post.created_at)}</strong></span>
+                  <span className="admin-v14370-review-time admin-v14412-review-cost"><small>{t("admin.approvals.generationCost")}</small><strong>{formatGenerationCost(post)}</strong></span>
                   <span className="admin-v14370-review-time"><small>{t("admin.approvals.scheduled")}</small><strong>{formatDate(post.scheduled_for)}</strong></span>
                   <span className={`admin-approval-status ${meta.className}`}><meta.Icon size={15} />{meta.label}</span>
                   <span className="admin-v14370-review-open">{t("admin.approvals.reviewPost")} <ChevronRight size={18} /></span>
@@ -1067,7 +1092,21 @@ export default function AdminPostApprovalsPage() {
                     <div><dt>{t("admin.approvals.created")}</dt><dd>{formatDate(selectedPost.created_at)}</dd></div>
                     <div><dt>{t("admin.approvals.scheduled")}</dt><dd>{formatDate(selectedPost.scheduled_for)}</dd></div>
                     <div><dt>{t("admin.approvals.platform")}</dt><dd>{selectedPost.platform || "—"}</dd></div>
+                    <div><dt>{t("admin.approvals.generationCost")}</dt><dd>{formatGenerationCost(selectedPost)}</dd></div>
                   </dl>
+                  {getGenerationCostEvents(selectedPost).length ? (
+                    <div className="admin-v14412-cost-card">
+                      <div className="admin-v14401-source-head"><strong>{t("admin.approvals.costBreakdown")}</strong><span>{selectedPost.generation_cost_complete ? t("admin.approvals.costExact") : t("admin.approvals.costPartial")}</span></div>
+                      <div className="admin-v14412-cost-events">
+                        {getGenerationCostEvents(selectedPost).map((event, index) => (
+                          <div key={`${event.provider || "provider"}-${event.provider_request_id || index}`}>
+                            <span>{String(event.provider || "").toUpperCase()} · {event.model || event.service || event.operation || "API"}</span>
+                            <strong>{event.amount == null ? `${Number(event.usage_quantity || 0).toFixed(4)} ${event.usage_unit || "units"}` : formatNativeMoney(event.amount, event.currency)}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   <div className={`admin-brand-review-policy admin-v14401-brand-policy ${selectedPost.brand_admin_review_required === false ? "direct" : "review"}`}>
                     <div className="admin-v14401-policy-head"><strong>{t("admin.approvals.brandReviewPolicy")}</strong><span>{selectedPost.brand_admin_review_required === false ? "Direktleverans" : selectedPost.brand_admin_review_required === true ? "Admin först" : "Ärver globalt"}</span></div>
                     <p>{selectedPost.brand_admin_review_required === false ? "Lyckade inlägg skickas direkt till kunden. Fel och osäkra genereringar stannar alltid här." : "Lyckade inlägg hålls för Spreelo-granskning innan kunden får dem."}</p>

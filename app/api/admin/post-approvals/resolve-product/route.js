@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { adminContextError, getAdminContext } from "../../../../../lib/adminAuth";
+import { createGenerationCostTracker, wrapOpenAIForCostTracking } from "../../../../../lib/generationCostTracking";
 import { resolveLockedProductUrlForUse } from "../../../cron/run-automations/route.js";
 
 export const dynamic = "force-dynamic";
@@ -55,7 +56,15 @@ export async function POST(request) {
   const websiteUrl = String(
     brand?.website_product_source_url || brand?.website_url || productUrl
   ).trim();
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const costTracker = createGenerationCostTracker({
+    supabase: context.admin,
+    occurrenceId: occurrenceId || null,
+    postId: post?.id || null,
+  });
+  const openai = wrapOpenAIForCostTracking(
+    new OpenAI({ apiKey: process.env.OPENAI_API_KEY }),
+    () => costTracker
+  );
 
   try {
     const product = await resolveLockedProductUrlForUse({
