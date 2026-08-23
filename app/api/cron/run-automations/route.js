@@ -3499,6 +3499,7 @@ function isValidCarouselProduct(item) {
     pageType === "product" &&
     item?.product_image_identity_unresolved !== true &&
     item?.product_image_identity_verified !== false &&
+    isProductEligibleForPromotion(item) &&
     (item?.product_page_verified !== true ||
       hasConcreteProductPageProof(item)) &&
     item?.title &&
@@ -13324,28 +13325,6 @@ async function createKlingProductReferenceFrame(sourceImageBuffer) {
   return frame;
 }
 
-function sanitizeKlingOverlayPhrase(value) {
-  const phrase = String(value || "")
-    .replace(/https?:\/\/\S+/gi, " ")
-    .replace(/[#@]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!phrase) return "";
-  // Kling text is intentionally beta. Keep AI-written overlays non-factual so
-  // a typography mistake cannot turn into a false price/specification claim.
-  if (/\d|%|[$€£¥₹]|\b(?:kr|sek|usd|eur|gb|tb|hz|w|mah|mp|fps)\b/i.test(phrase)) {
-    return "";
-  }
-  return truncateText(phrase, 46);
-}
-
-function getKlingOverlayLanguage(rule) {
-  return normalizeSingleContentLanguage(
-    rule?.language || rule?.brand_profile?.content_language,
-    "English"
-  );
-}
-
 function getKlingProductPromptFallback({ rule, postContent }) {
   const item = rule?.website_item || {};
   const title = String(item?.title || item?.item_title || "the verified product").trim();
@@ -13362,7 +13341,6 @@ function getKlingProductPromptFallback({ rule, postContent }) {
     500
   );
   const campaignIdentityLock = formatCampaignIdentityLockForPrompt(rule);
-  const overlayLanguage = getKlingOverlayLanguage(rule);
 
   return [
     `Create a premium, highly scroll-stopping 6-second vertical social-media advertisement for ${title}.`,
@@ -13379,8 +13357,7 @@ function getKlingProductPromptFallback({ rule, postContent }) {
     "Preserve the visible silhouette, proportions, color, material, branding, logos, printed text and packaging exactly. Do not morph or redesign the product.",
     "People, hands, animals, props, particles, lighting and environmental action may appear only if they do not cover important product details or force a new product angle.",
     "Camera movement may be a punchy push-in, pull-back or lateral move, but no orbit or hidden-side reveal.",
-    `TEXT BETA: create one or two stylish, clearly readable marketing text moments in ${overlayLanguage}. Keep each phrase to roughly 2-5 words and integrate the typography into the motion design.`,
-    "The overlay text may be creative but must stay non-factual: no prices, discounts, percentages, dates, stock claims, technical specifications, guarantees or invented product features. Do not create or alter logos. No watermarks.",
+    "Do not generate any new readable overlay text, captions, slogans, prices, labels or typography inside the video. Preserve only text that already exists physically on the verified product reference. Do not create or alter logos. No watermarks.",
     "Make the result feel native to TikTok, Instagram Reels and YouTube Shorts: immediate, surprising, sales-oriented, polished and believable rather than a simple product animation.",
   ].filter(Boolean).join(" ");
 }
@@ -13400,7 +13377,6 @@ async function buildKlingProductVideoPrompt({ openai, rule, postContent }) {
     String(rule?.campaign_theme || rule?.strategy_notes || rule?.name || "").replace(/\s+/g, " ").trim(),
     500
   );
-  const overlayLanguage = getKlingOverlayLanguage(rule);
 
   try {
     const completion = await openai.chat.completions.create({
@@ -13423,13 +13399,11 @@ Verified product description: ${productDescription || "Not provided"}
 Campaign context: ${campaignContext || "Not provided"}
 ${formatCampaignIdentityLockForPrompt(rule) || "No campaign identity lock applies."}
 Post caption context: ${truncateText(String(postContent || ""), 700)}
-Overlay language: ${overlayLanguage}
-
 Return JSON exactly in this shape:
-{"creative_strategy":"...","overlay_text":["...","..."],"motion_prompt":"..."}.
+{"creative_strategy":"...","motion_prompt":"..."}.
 
 Creative goals:
-- if a CAMPAIGN IDENTITY LOCK is present, the scene and all overlay text must stay exclusively inside that active campaign and must not introduce another holiday/campaign/occasion
+- if a CAMPAIGN IDENTITY LOCK is present, the scene must stay exclusively inside that active campaign and must not introduce another holiday/campaign/occasion
 - the verified retailer product reference is already large in frame from the first frame; do NOT create a small-card-to-full-screen expansion
 - create a pattern interrupt in the first 0.5-1.0 second using the environment, lighting, people/props, particles or a surprising product-relevant event
 - escalate quickly and deliver a satisfying visual payoff by the final second
@@ -13437,12 +13411,9 @@ Creative goals:
 - one coherent 6-second shot; environment may transform dramatically while the product identity stays locked
 - people, hands, animals, props or effects may add interest when genuinely appropriate
 
-OVERLAY TEXT BETA:
-- write 1 or 2 short phrases in ${overlayLanguage}; each should normally be 2-5 words
-- make them punchy, modern and sales-oriented, designed to look good as motion typography
-- keep them NON-FACTUAL: no prices, discounts, percentages, dates, stock/availability, guarantees, technical specifications or unverified features
-- do not include digits in the overlay phrases
-- do not invent another campaign, holiday or occasion
+TEXT SAFETY:
+- do not generate any new readable overlay text, captions, slogans, prices, labels or typography
+- preserve only readable text that is physically present on the verified product reference
 - do not create a fake logo or watermark
 
 NON-NEGOTIABLE PRODUCT RULES:
@@ -13463,21 +13434,13 @@ NON-NEGOTIABLE PRODUCT RULES:
     const parsed = safeJsonParse(completion?.choices?.[0]?.message?.content || "");
     const creativePrompt = String(parsed?.motion_prompt || "").replace(/\s+/g, " ").trim();
     if (!creativePrompt) return fallback;
-    const overlayPhrases = (Array.isArray(parsed?.overlay_text) ? parsed.overlay_text : [])
-      .map(sanitizeKlingOverlayPhrase)
-      .filter(Boolean)
-      .slice(0, 2);
-    const overlayInstruction = overlayPhrases.length
-      ? `Render only these exact readable overlay phrases, with stylish motion typography in ${overlayLanguage}: ${overlayPhrases.map((phrase) => `"${phrase}"`).join(" then ")}. Do not add any other readable marketing text.`
-      : `Create at most two very short non-factual readable marketing phrases in ${overlayLanguage}; no digits, prices, discounts, specs, dates or availability claims.`;
-
     const safetyTail = [
       "CRITICAL PRODUCT LOCK: the first frame is authoritative; never extend or complete product areas that are not visible in it.",
       "Keep the product large in frame and at exactly the same visible viewing angle for the whole clip; do not begin with or create a small image card that expands to full screen.",
       "Show only product surfaces/details visible in the first frame; never reveal or invent any unseen side, back, top, bottom, underside, interior, hidden edge or label.",
       "No product rotation, spin, flip, orbit, turn, morph or redesign.",
       "Preserve visible branding, colors, proportions and printed product details exactly.",
-      overlayInstruction,
+      "Do not generate any new readable overlay text, captions, slogans, prices, labels or typography. Preserve only text that already exists physically on the verified product reference.",
       "No fake logos and no watermark.",
       "Make the environmental action bold, surprising and sales-oriented, with an immediate first-second hook and a clear final payoff.",
     ].join(" ");
@@ -15043,7 +15006,10 @@ function filterWebsiteCatalogItemsForRule(items, rule) {
     const itemUrl = item?.url || item?.product_url || item?.item_url || "";
     const sourceUrl = item?.source_url || item?.website_url || itemUrl;
 
-    return !isLikelyBadDiscoveryPageUrl(itemUrl, sourceUrl);
+    return (
+      !isLikelyBadDiscoveryPageUrl(itemUrl, sourceUrl) &&
+      !isProductKnownUnavailableForPromotion(item)
+    );
   });
 
   if (isProductIntentScopedWebsiteRule(rule)) {
@@ -19961,11 +19927,18 @@ function scoreWebsiteItemForRule(item, rule) {
 }
 
 function isAcceptableWebsiteTextProductSelection(item, rule) {
+  if (isProductKnownUnavailableForPromotion(item)) {
+    return false;
+  }
+
   if (!isProductIntentScopedWebsiteRule(rule)) {
     return true;
   }
 
-  return scoreCampaignFitForRule(item, rule) >= CAMPAIGN_MINIMUM_PRODUCT_FIT_SCORE;
+  return (
+    isProductEligibleForPromotion(item) &&
+    scoreCampaignFitForRule(item, rule) >= CAMPAIGN_MINIMUM_PRODUCT_FIT_SCORE
+  );
 }
 
 async function chooseUnusedWebsiteItem({
@@ -20003,7 +19976,7 @@ async function chooseUnusedWebsiteItem({
       ...item,
       item_key: item?.item_key || createItemKey(item),
     }))
-    .filter((item) => item?.url || item?.title)
+    .filter((item) => (item?.url || item?.title) && !isProductKnownUnavailableForPromotion(item))
     .sort((a, b) => {
       if (!rule) return 0;
 
@@ -20610,6 +20583,88 @@ function getStructuredProductBrand(product) {
   return String(raw || "").trim();
 }
 
+function normalizeProductAvailabilityStatus(value) {
+  const raw = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\/schema\.org\//i, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
+  if (!raw) return "unknown";
+  if (/discontinued|utgått|utgatt|utgången|utgangen/.test(raw)) return "discontinued";
+  if (/out of stock|outofstock|sold out|soldout|unavailable|slut i lager|ej i lager/.test(raw)) return "out_of_stock";
+  if (/pre ?order|förbeställ|forbestall/.test(raw)) return "preorder";
+  if (/back ?order|restorder/.test(raw)) return "backorder";
+  if (/in stock|instock|i lager/.test(raw)) return "in_stock";
+  if (/available|orderable|buyable|kan köpas|kan kopas/.test(raw)) return "available";
+  return "unknown";
+}
+
+function getStructuredProductAvailability(product) {
+  const offers = Array.isArray(product?.offers)
+    ? product.offers
+    : product?.offers
+      ? [product.offers]
+      : [];
+  for (const offer of offers) {
+    const normalized = normalizeProductAvailabilityStatus(offer?.availability);
+    if (normalized !== "unknown") return normalized;
+  }
+  return "unknown";
+}
+
+function getProductPromotionAvailability(item) {
+  return normalizeProductAvailabilityStatus(
+    item?.locked_product_availability ||
+      item?.availability_status ||
+      item?.availability ||
+      item?.product_availability ||
+      ""
+  );
+}
+
+function isProductKnownUnavailableForPromotion(item) {
+  return ["out_of_stock", "discontinued"].includes(
+    getProductPromotionAvailability(item)
+  );
+}
+
+function isProductConfirmedPurchasable(item) {
+  return ["in_stock", "available", "preorder", "backorder"].includes(
+    getProductPromotionAvailability(item)
+  );
+}
+
+function hasDirectProductPurchaseAction(html) {
+  return /(?:add[-_\s]?to[-_\s]?(?:cart|bag)|buy\s+now|order\s+now|lägg\s+i\s+varukorg|lagg\s+i\s+varukorg|köp\s+nu|kop\s+nu|beställ\s+nu|bestall\s+nu|product-form(?:__submit)?)/i.test(
+    String(html || "")
+  );
+}
+
+function inferCurrentProductAvailability({ product, html, fallback = "unknown" }) {
+  const structured = getStructuredProductAvailability(product);
+  if (structured !== "unknown") return structured;
+
+  const pageText = normalizeSearchText(stripHtmlToText(html || ""));
+  if (/\b(?:denna produkt har utgatt|denna produkt har utgått|product has been discontinued|discontinued product)\b/i.test(pageText)) {
+    return "discontinued";
+  }
+  if (/\b(?:out of stock|sold out|slut i lager|ej i lager|currently unavailable)\b/i.test(pageText)) {
+    return "out_of_stock";
+  }
+  if (hasDirectProductPurchaseAction(html)) return "available";
+
+  return normalizeProductAvailabilityStatus(fallback);
+}
+
+function isProductEligibleForPromotion(item) {
+  if (isProductKnownUnavailableForPromotion(item)) return false;
+  return Boolean(
+    isProductConfirmedPurchasable(item) ||
+      item?.purchase_action_detected === true
+  );
+}
+
 function findExactPageJsonLdProduct(html, pageUrl) {
   const products = extractJsonLdObjects(html).filter((item) =>
     normalizeJsonLdType(item?.["@type"]).some((type) => type.includes("product"))
@@ -20722,6 +20777,11 @@ function extractLockedProductObjectFromHtml({ html, pageUrl, websiteUrl }) {
       ""
   ).trim();
   const price = product ? getProductPriceFromJsonLd(product) : "";
+  const availability = inferCurrentProductAvailability({
+    product,
+    html,
+    fallback: "unknown",
+  });
   const source = structuredImages.length
     ? "json_ld_main_product_object"
     : "page_level_product_metadata";
@@ -20735,6 +20795,7 @@ function extractLockedProductObjectFromHtml({ html, pageUrl, websiteUrl }) {
     color,
     description,
     price,
+    availability,
     primaryImageUrl,
     imageUrls: imageUrls.slice(0, 12),
     source,
@@ -21528,6 +21589,15 @@ async function extractProductDataFromProductPage({
     source: extractedPricing.price_source,
   });
   const price = safeMainPrice.price;
+  const purchaseActionDetected = hasDirectProductPurchaseAction(html);
+  const currentAvailability = inferCurrentProductAvailability({
+    product,
+    html,
+    fallback:
+      webSearchProduct?.availability_status ||
+      webSearchProduct?.availability ||
+      "unknown",
+  });
 
   if (extractedPricing.price && !price) {
     console.log("Product Engine V2 rejected unsafe product price", {
@@ -21688,11 +21758,9 @@ async function extractProductDataFromProductPage({
     commerce_platform: commercePlatform,
     category: productCategory,
     tags: productTags,
-    availability: String(
-      product?.offers?.availability ||
-        (Array.isArray(product?.offers) ? product.offers[0]?.availability : "") ||
-        ""
-    ).replace(/^https?:\/\/schema.org\//i, ""),
+    availability: currentAvailability,
+    availability_status: currentAvailability,
+    purchase_action_detected: purchaseActionDetected,
     page_type: pageClassification.pageType === "unknown" ? "product" : pageClassification.pageType,
     page_type_confidence: pageClassification.confidence,
     page_type_reason: pageClassification.reason,
@@ -24866,6 +24934,7 @@ async function repairAuthoritativeWebAgentProductAssets({
   deadlineMs,
   rule,
   researchRound,
+  allowPurchasableReplacements = false,
 }) {
   const startedAt = Date.now();
   const allowedDomain = getWebsiteFetchDomain(websiteUrl);
@@ -24915,6 +24984,8 @@ For every supplied product:
 - A stale URL may come from an older commerce platform or search index. Prefer the retailer's current canonical URL structure.
 - Open the current official result immediately before returning it. Confirm that it loads as a live product page rather than a 404, redirect loop, search result, category or cached snippet.
 - Treat the MAIN PRODUCT block on the opened product detail page as one indivisible object. Read current_title, product_identifier/SKU, brand, category, color, current_price and the main image from that same main-product block.
+- Also read current purchase availability from that same official main-product page. Verify whether the product can actually be purchased or ordered NOW. availability_status must be exactly one of in_stock, available, preorder, backorder, out_of_stock, discontinued or unknown. Use unknown only when the opened official product page genuinely does not establish purchase availability. Never infer availability from an old search snippet.
+- Return availability_evidence as a concise description of the current official purchase control/status you observed, for example add-to-cart/orderable, preorder, sold out or discontinued.
 - Return the best direct product-image file URL that is visibly attached to the MAIN PRODUCT on that exact opened product detail page.
 - The image, current_title and product facts must come from the same opened current_url and the same main-product block. Never borrow an image or text from recommendations, related products, search-result cards, colour swatches, "more from the brand" sections or image-search thumbnails.
 - Set image_source_page_url to the exact product detail page where the returned image is attached to the main product, and set image_is_main_product_asset=true only when you verified that relationship.
@@ -24925,6 +24996,18 @@ For every supplied product:
 - Return image_alt_text when the main image exposes it, otherwise an empty string.
 - Return main_product_evidence as a concise description of the main-product block that jointly proves the title and image belong together.
 - Keep identity_evidence concise and state the exact title, SKU/product number or other official evidence that proves the match.
+${allowPurchasableReplacements ? `
+PURCHASABLE REPLACEMENT RULE — DELIVERY SAFE:
+- First inspect the exact selected candidate. If it is currently in_stock, available, preorder or backorder, keep that exact identity and set replacement_for_unavailable=false.
+- If and only if the exact selected candidate is explicitly out_of_stock or discontinued on its current official page, do not return that dead product. Search ${allowedDomain} in the SAME request for a different CURRENT product that is actually purchasable/orderable now and is a strong fit for the supplied product_family and campaign/product intent.
+- A replacement must be opened on its own current official product page and must satisfy the same strict same-page title/image/product binding rules.
+- Set selected_candidate_availability_status to the unavailable status you observed on the originally selected candidate, set replacement_for_unavailable=true and explain the substitution briefly in replacement_reason.
+- Never substitute merely because availability is unknown. If the selected candidate's availability cannot be established, return it with availability_status=unknown and replacement_for_unavailable=false; the caller will decide whether to use it.
+- Prefer a less-perfect but clearly relevant purchasable product over an unavailable product. Do not return an unavailable replacement.` : `
+- Never substitute a different product identity. Set replacement_for_unavailable=false and replacement_reason to an empty string.`}
+
+Campaign/product intent context for replacement relevance:
+${truncateText(buildCampaignResearchText(rule) || String(rule?.prompt || ""), 900)}
 
 Return only the required JSON structure.`.trim();
 
@@ -24979,6 +25062,33 @@ Return only the required JSON structure.`.trim();
                     image_url: { type: "string" },
                     image_source_page_url: { type: "string" },
                     image_is_main_product_asset: { type: "boolean" },
+                    availability_status: {
+                      type: "string",
+                      enum: [
+                        "in_stock",
+                        "available",
+                        "preorder",
+                        "backorder",
+                        "out_of_stock",
+                        "discontinued",
+                        "unknown"
+                      ],
+                    },
+                    availability_evidence: { type: "string" },
+                    selected_candidate_availability_status: {
+                      type: "string",
+                      enum: [
+                        "in_stock",
+                        "available",
+                        "preorder",
+                        "backorder",
+                        "out_of_stock",
+                        "discontinued",
+                        "unknown"
+                      ],
+                    },
+                    replacement_for_unavailable: { type: "boolean" },
+                    replacement_reason: { type: "string" },
                     product_identifier: { type: "string" },
                     brand: { type: "string" },
                     category: { type: "string" },
@@ -25000,6 +25110,11 @@ Return only the required JSON structure.`.trim();
                     "image_url",
                     "image_source_page_url",
                     "image_is_main_product_asset",
+                    "availability_status",
+                    "availability_evidence",
+                    "selected_candidate_availability_status",
+                    "replacement_for_unavailable",
+                    "replacement_reason",
                     "product_identifier",
                     "brand",
                     "category",
@@ -25070,6 +25185,20 @@ Return only the required JSON structure.`.trim();
         websiteUrl
       ) || "";
     const imageUrl = String(repairedProduct?.image_url || "").trim();
+    const availabilityStatus = normalizeProductAvailabilityStatus(
+      repairedProduct?.availability_status
+    );
+    const availabilityEvidence = String(
+      repairedProduct?.availability_evidence || ""
+    ).trim();
+    const selectedCandidateAvailabilityStatus = normalizeProductAvailabilityStatus(
+      repairedProduct?.selected_candidate_availability_status
+    );
+    const replacementForUnavailable =
+      repairedProduct?.replacement_for_unavailable === true;
+    const replacementReason = String(
+      repairedProduct?.replacement_reason || ""
+    ).trim();
     const imageSourcePageUrl =
       canonicalizeWebsiteProductUrl(
         repairedProduct?.image_source_page_url,
@@ -25079,6 +25208,18 @@ Return only the required JSON structure.`.trim();
       imageSourcePageUrl &&
         normalizeComparableValue(imageSourcePageUrl) ===
           normalizeComparableValue(currentUrl)
+    );
+    const exactIdentityRecovered = isRecoveredAuthoritativeProductIdentity({
+      selectedCandidate,
+      recoveredProduct: repairedProduct,
+    });
+    const safePurchasableReplacement = Boolean(
+      allowPurchasableReplacements &&
+        replacementForUnavailable &&
+        ["out_of_stock", "discontinued"].includes(
+          selectedCandidateAvailabilityStatus
+        ) &&
+        isProductConfirmedPurchasable({ availability_status: availabilityStatus })
     );
     if (
       !currentUrl ||
@@ -25092,10 +25233,7 @@ Return only the required JSON structure.`.trim();
       repairedProduct?.image_is_main_product_asset !== true ||
       !sameOpenedProductPage ||
       !String(repairedProduct?.identity_evidence || "").trim() ||
-      !isRecoveredAuthoritativeProductIdentity({
-        selectedCandidate,
-        recoveredProduct: repairedProduct,
-      })
+      (!exactIdentityRecovered && !safePurchasableReplacement)
     ) {
       console.warn("Authoritative product asset repair rejected an unbound or mismatched recovery", {
         ruleId: rule?.id,
@@ -25107,6 +25245,11 @@ Return only the required JSON structure.`.trim();
         imageIsMainProductAsset:
           repairedProduct?.image_is_main_product_asset === true,
         sameOpenedProductPage,
+        exactIdentityRecovered,
+        replacementForUnavailable,
+        selectedCandidateAvailabilityStatus,
+        recoveredAvailabilityStatus: availabilityStatus,
+        safePurchasableReplacement,
       });
       continue;
     }
@@ -25130,9 +25273,16 @@ Return only the required JSON structure.`.trim();
       category: String(repairedProduct?.category || "").trim(),
       product_color: String(repairedProduct?.color || "").trim(),
       price: String(repairedProduct?.current_price || "").trim(),
+      availability: availabilityStatus,
+      availability_status: availabilityStatus,
+      availability_evidence: availabilityEvidence,
+      selected_candidate_availability_status: selectedCandidateAvailabilityStatus,
+      availability_replacement_for_unavailable: safePurchasableReplacement,
+      availability_replacement_reason: replacementReason,
       technical_identity_recovered: true,
-      technical_identity_recovery_source:
-        "gpt55_exact_canonical_asset_repair",
+      technical_identity_recovery_source: safePurchasableReplacement
+        ? "gpt55_purchasable_replacement"
+        : "gpt55_exact_canonical_asset_repair",
       technical_identity_same_page_verified: true,
       product_image_page_bound: true,
       product_image_page_bound_source: "gpt55_exact_repair_same_page",
@@ -25149,6 +25299,8 @@ Return only the required JSON structure.`.trim();
       locked_product_category: String(repairedProduct?.category || "").trim(),
       locked_product_color: String(repairedProduct?.color || "").trim(),
       locked_product_price: String(repairedProduct?.current_price || "").trim(),
+      locked_product_availability: availabilityStatus,
+      locked_product_availability_evidence: availabilityEvidence,
       locked_product_primary_image_url: imageUrl,
       locked_product_image_urls: [imageUrl],
       locked_product_image_alt_text: String(
@@ -25283,6 +25435,9 @@ async function hydrateAuthoritativeWebAgentProduct({
         color: String(candidate?.locked_product_color || candidate?.product_color || "").trim(),
         description: String(candidate?.description || candidate?.reason || "").trim(),
         price: String(candidate?.locked_product_price || "").trim(),
+        availability: normalizeProductAvailabilityStatus(
+          candidate?.locked_product_availability || candidate?.availability_status || candidate?.availability
+        ),
         primaryImageUrl: repairedImage,
         imageUrls: Array.isArray(candidate?.locked_product_image_urls)
           ? candidate.locked_product_image_urls.filter(Boolean).slice(0, 12)
@@ -25373,6 +25528,9 @@ async function hydrateAuthoritativeWebAgentProduct({
     locked_product_category: lockedProduct.category || "",
     locked_product_color: lockedProduct.color || "",
     locked_product_price: lockedProduct.price || "",
+    availability: normalizeProductAvailabilityStatus(lockedProduct.availability),
+    availability_status: normalizeProductAvailabilityStatus(lockedProduct.availability),
+    locked_product_availability: normalizeProductAvailabilityStatus(lockedProduct.availability),
     locked_product_primary_image_url: normalized.image_url,
     locked_product_image_urls: lockedProduct.imageUrls,
     locked_product_fingerprint: lockedProduct.fingerprint,
@@ -26984,6 +27142,9 @@ Search strategy:
 
 Product quality rules:
 - Return only real product pages from the allowed customer domain.
+- For physical/e-commerce products, the CURRENT official product page must show that the exact product can actually be purchased or ordered now. Open the final product page before returning it and verify a current purchase control or explicit orderable/in-stock/preorder/backorder status.
+- Never return a product that the official page marks as discontinued, utgått, sold out, out of stock, unavailable or no longer orderable. Old indexed product pages are not eligible just because they still exist in search results.
+- If availability cannot be verified on the current official page, skip that candidate and find another product instead.
 - A product page must be about one specific product that a customer can buy, book, order, rent, request a quote for or contact the business about.
 - Do not return the homepage.
 - Do not return brand pages.
@@ -27037,6 +27198,8 @@ JSON shape:
       "title": "Exact product title",
       "url": "Full product page URL",
       "price": "Visible price if clearly found, otherwise empty string",
+      "availability_status": "in_stock, available, preorder or backorder",
+      "availability_evidence": "Short evidence from the current official page that the product can be purchased or ordered now",
       "reason": "Short reason why this product fits the campaign, buyer and recipient"
     }
   ],
@@ -27123,10 +27286,28 @@ For campaign carousels, stop once you have enough concrete product pages for a u
       continue;
     }
 
+    const availabilityStatus = normalizeProductAvailabilityStatus(
+      product?.availability_status
+    );
+    if (isProductKnownUnavailableForPromotion({ availability_status: availabilityStatus })) {
+      console.log("Product researcher skipped product explicitly marked unavailable", {
+        ruleId: rule?.id,
+        websiteUrl,
+        productUrl,
+        title: product?.title || null,
+        availability: availabilityStatus,
+        attempt,
+      });
+      continue;
+    }
+
     validProducts.push({
       title: String(product?.title || "").trim(),
       url: productUrl,
       price: String(product?.price || "").trim(),
+      availability: availabilityStatus,
+      availability_status: availabilityStatus,
+      availability_evidence: String(product?.availability_evidence || "").trim(),
       reason: String(product?.reason || "").trim(),
     });
   }
@@ -27268,11 +27449,14 @@ async function findWebsiteProductWithWebSearch({
   let indexedSecurityFallbackBatches = sharedIndexedSecurityState.batchExecuted
     ? 1
     : 0;
+  const availabilityRejectedCandidates = [];
   const campaignPrompt = buildCampaignResearchText(rule);
 
   const getIndexedFallbackItems = () =>
     dedupeWebsiteItemsByUrlTitleAndImage(
-      [...indexedSecurityRecoveredByUrl.values()].filter(Boolean)
+      [...indexedSecurityRecoveredByUrl.values()].filter(
+        (item) => item && isProductConfirmedPurchasable(item)
+      )
     )
       .sort(
         (left, right) =>
@@ -27327,6 +27511,7 @@ async function findWebsiteProductWithWebSearch({
       deadlineMs,
       rule,
       researchRound: 1,
+      allowPurchasableReplacements: true,
     }).catch((repairError) => {
       console.warn("Indexed exact-product fallback batch could not repair security-blocked products", {
         ruleId: rule?.id,
@@ -27354,6 +27539,28 @@ async function findWebsiteProductWithWebSearch({
         cachedItem: repairedCandidate,
       });
       if (!hydrated?.url || !hydrated?.title || !hydrated?.image_url) continue;
+
+      if (!isProductConfirmedPurchasable(hydrated)) {
+        availabilityRejectedCandidates.push({
+          title: hydrated?.title || repairedCandidate?.title || "",
+          url: hydrated?.url || repairedCandidate?.url || "",
+          availability: getProductPromotionAvailability(hydrated),
+        });
+        console.info("Indexed security fallback rejected product that is not currently purchasable", {
+          ruleId: rule?.id,
+          brandProfileId: rule?.brand_profile_id,
+          websiteUrl,
+          productUrl: hydrated?.url || null,
+          title: hydrated?.title || null,
+          availability: getProductPromotionAvailability(hydrated),
+          availabilityEvidence:
+            hydrated?.locked_product_availability_evidence ||
+            hydrated?.availability_evidence ||
+            null,
+          attempt,
+        });
+        continue;
+      }
 
       const recovered = {
         ...hydrated,
@@ -27412,6 +27619,7 @@ async function findWebsiteProductWithWebSearch({
       candidateCount: repairInputs.length,
       repairedCount: repair?.repairedCandidates?.length || 0,
       recoveredCount: recoveredItems.length,
+      availabilityRejectedCount: availabilityRejectedCandidates.length,
       targetVerifiedCount,
       additionalResearchAttemptsSkipped: true,
       modelCallsForExactRepair: 1,
@@ -27454,8 +27662,8 @@ async function findWebsiteProductWithWebSearch({
       usedWebsiteItems,
       // v144.11: once this domain is already known to answer Spreelo with 403,
       // candidate discovery can use the inexpensive research model. Exact
-      // product identity + exact original image are still locked by the single
-      // GPT-5.5 authoritative repair batch below.
+      // product identity + exact original image + purchase availability are
+      // still locked by the single GPT-5.5 authoritative repair batch below.
       researchModel:
         allowIndexedSecurityFallback && knownSecurityBlocked
           ? PRODUCT_RESEARCH_FAST_MODEL
@@ -27560,11 +27768,11 @@ async function findWebsiteProductWithWebSearch({
               allowIndexedSecurityFallback &&
               isWebsiteSecurityBlockedError(directProductError)
             ) {
-              // v144.11: one security-blocked product proves that the direct
-              // verification path is unavailable for this retailer. Repair the
-              // whole useful candidate batch in ONE GPT-5.5 call instead of
-              // paying one exact-repair call per product, then stop the extra
-              // domain_site_search / backup_broad rounds for this run.
+              // v144.17: one security-blocked product proves that the direct
+              // verification path is unavailable. Repair the whole useful
+              // candidate batch in ONE GPT-5.5 call. The same call may replace
+              // an explicitly unavailable indexed candidate with a different
+              // current purchasable product from the official retailer domain.
               const recoveredBatch = await recoverIndexedSecurityBlockedBatch({
                 candidateProducts,
                 directProductError,
@@ -27575,12 +27783,13 @@ async function findWebsiteProductWithWebSearch({
                 return getIndexedFallbackItems();
               }
 
-              console.warn("Indexed security fallback batch returned no exact products; additional paid web-research rounds were skipped", {
+              console.warn("Indexed security fallback batch returned no confirmed purchasable product; additional paid web-research rounds were skipped", {
                 ruleId: rule?.id,
                 brandProfileId: rule?.brand_profile_id,
                 websiteUrl,
                 attempt,
                 targetVerifiedCount,
+                rejectedUnavailableCount: availabilityRejectedCandidates.length,
               });
               return [];
             }
@@ -27607,6 +27816,22 @@ async function findWebsiteProductWithWebSearch({
             attempt,
           });
 
+          continue;
+        }
+
+        if (isProductKnownUnavailableForPromotion(websiteItem)) {
+          console.info("Product researcher rejected currently unavailable product", {
+            ruleId: rule?.id,
+            productUrl: websiteItem.url,
+            title: websiteItem.title,
+            availability: getProductPromotionAvailability(websiteItem),
+            attempt,
+          });
+          availabilityRejectedCandidates.push({
+            title: websiteItem.title,
+            url: websiteItem.url,
+            availability: getProductPromotionAvailability(websiteItem),
+          });
           continue;
         }
 
