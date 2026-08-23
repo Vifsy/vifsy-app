@@ -10073,6 +10073,7 @@ function buildAutomationPrompt(rule) {
         includePrice: !isAnimatedVideoRule(rule),
       });
   const campaignStrategyText = formatCampaignStrategyForPrompt(rule);
+  const campaignIdentityLockText = formatCampaignIdentityLockForPrompt(rule);
   const authorizedCampaignOfferText = formatAuthorizedCampaignOfferForPrompt(rule);
   const hasAuthorizedCampaignOffer = Boolean(getAuthorizedCampaignOffer(rule));
   const focusedPageContextText = formatFocusedPageContextForPrompt(rule);
@@ -10125,6 +10126,8 @@ ${focusedPageContextText}
 
 ${campaignStrategyText}
 
+${campaignIdentityLockText}
+
 ${authorizedCampaignOfferText}
 
 Platform: ${rule.platform || "Instagram"}
@@ -10156,6 +10159,7 @@ Critical brand relevance rules:
 - If the User instruction says "behind the scenes", describe something that would realistically happen in this specific business.
 - Keep the content useful, specific and trustworthy.
 - If Campaign strategy is provided, follow it carefully.
+- If a CAMPAIGN IDENTITY LOCK is provided, it is authoritative. Never introduce or blend in a different named campaign, holiday, theme day, season, shopping event or occasion, even if another supplied context mentions one.
 - If the strategy says marketing_angle "awareness", focus on interest, recognition, timing or inspiration before selling.
 - If the strategy says marketing_angle "engagement", make the post easy to react to, comment on or relate to.
 - If the strategy says marketing_angle "product_discovery", help the audience discover a suitable product, service, idea or option.
@@ -10349,6 +10353,7 @@ Infer the visual style from the brand profile, selected website item, user instr
 }
 
 Image quality rules:
+- If a CAMPAIGN IDENTITY LOCK is provided above, it is authoritative over every supporting field. Never introduce or visualize another named campaign, holiday, theme day, season, shopping event or occasion.
 - The image must feel relevant to the specific business and post, not random.
 - Use a clear visual subject or scene that supports the message.
 - Make it visually attractive, polished and suitable for social media.
@@ -13236,20 +13241,109 @@ async function createKlingProductReferenceFrame(sourceImageBuffer) {
     throw new Error("Kling AI video needs a verified product image buffer");
   }
 
-  // Deterministically fit the authoritative product image inside a 9:16 canvas.
-  // No product pixels are invented or AI-redrawn. Kling therefore starts from a
-  // vertical frame while the exact verified source remains the visual anchor.
-  return sharp(sourceImageBuffer)
+  // v144.15: the paid Kling generation must start with the complete verified
+  // product already large in frame. Never place a landscape retailer image as
+  // a tiny centered rectangle on a 9:16 canvas. A local pixel-preserving cutout
+  // is preferred; when that is not safe, the unchanged official frame is shown
+  // large over a blurred copy of itself. No product pixels are AI-redrawn.
+  const normalizedSource = await sharp(sourceImageBuffer)
     .rotate()
-    .resize({
-      width: 1080,
-      height: 1920,
-      fit: "contain",
-      background: { r: 247, g: 248, b: 252, alpha: 1 },
-      withoutEnlargement: false,
-    })
     .png({ compressionLevel: 9 })
     .toBuffer();
+  const sourceMetadata = await sharp(normalizedSource).metadata();
+  const background = await sharp(normalizedSource)
+    .resize({ width: 1080, height: 1920, fit: "cover" })
+    .blur(34)
+    .modulate({ brightness: 0.58, saturation: 0.72 })
+    .png()
+    .toBuffer();
+  const shade = Buffer.from(`
+    <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920">
+      <defs>
+        <linearGradient id="v" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#07111f" stop-opacity="0.30"/>
+          <stop offset="0.52" stop-color="#07111f" stop-opacity="0.08"/>
+          <stop offset="1" stop-color="#07111f" stop-opacity="0.42"/>
+        </linearGradient>
+      </defs>
+      <rect width="1080" height="1920" fill="url(#v)"/>
+    </svg>
+  `);
+
+  let productLayer = null;
+  let compositionMode = "official_frame_large";
+  try {
+    const prepared = await prepareAnimatedProductCutout(normalizedSource);
+    productLayer = await sharp(prepared.cutoutBuffer)
+      .resize({
+        width: 900,
+        height: 1420,
+        fit: "inside",
+        withoutEnlargement: false,
+      })
+      .png({ compressionLevel: 9 })
+      .toBuffer();
+    compositionMode = `pixel_preserving_${prepared.analysis?.mode || "cutout"}`;
+  } catch (error) {
+    productLayer = await sharp(normalizedSource)
+      .resize({
+        width: 1020,
+        height: 1500,
+        fit: "inside",
+        withoutEnlargement: false,
+      })
+      .png({ compressionLevel: 9 })
+      .toBuffer();
+    console.info("Kling reference used large official frame because local cutout was unavailable", {
+      message: error?.message || String(error),
+    });
+  }
+
+  const productMetadata = await sharp(productLayer).metadata();
+  const productWidth = Number(productMetadata.width || 900);
+  const productHeight = Number(productMetadata.height || 1200);
+  const left = Math.max(0, Math.round((1080 - productWidth) / 2));
+  const top = Math.max(120, Math.round((1920 - productHeight) / 2));
+  const frame = await sharp(background)
+    .composite([
+      { input: shade, left: 0, top: 0 },
+      { input: productLayer, left, top },
+    ])
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+
+  console.info("Kling product reference frame prepared", {
+    compositionMode,
+    sourceWidth: Number(sourceMetadata.width || 0) || null,
+    sourceHeight: Number(sourceMetadata.height || 0) || null,
+    productLayerWidth: productWidth,
+    productLayerHeight: productHeight,
+    fullProductLargeFromFirstFrame: true,
+    generatedProductPixels: false,
+  });
+  return frame;
+}
+
+function sanitizeKlingOverlayPhrase(value) {
+  const phrase = String(value || "")
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/[#@]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!phrase) return "";
+  // Kling text is intentionally beta. Keep AI-written overlays non-factual so
+  // a typography mistake cannot turn into a false price/specification claim.
+  if (/\d|%|[$€£¥₹]|\b(?:kr|sek|usd|eur|gb|tb|hz|w|mah|mp|fps)\b/i.test(phrase)) {
+    return "";
+  }
+  return truncateText(phrase, 46);
+}
+
+function getKlingOverlayLanguage(rule) {
+  return normalizeSingleContentLanguage(
+    rule?.language || rule?.brand_profile?.content_language,
+    "English"
+  );
 }
 
 function getKlingProductPromptFallback({ rule, postContent }) {
@@ -13267,21 +13361,27 @@ function getKlingProductPromptFallback({ rule, postContent }) {
     String(postContent || "").replace(/\s+/g, " ").trim(),
     500
   );
+  const campaignIdentityLock = formatCampaignIdentityLockForPrompt(rule);
+  const overlayLanguage = getKlingOverlayLanguage(rule);
 
   return [
-    `Create a premium, scroll-stopping 6-second vertical social-media advertisement for ${title}.`,
+    `Create a premium, highly scroll-stopping 6-second vertical social-media advertisement for ${title}.`,
     description ? `Verified product context: ${description}.` : "",
     campaignContext ? `Campaign context: ${campaignContext}.` : "",
+    campaignIdentityLock ? campaignIdentityLock : "",
     captionContext ? `Caption context: ${captionContext}.` : "",
-    "Use one continuous shot with a strong visual hook in the first second and product-relevant motion in the environment.",
+    "Start with the complete product already large and visually dominant in the first frame; never animate a small picture card expanding to fill the screen.",
+    "Create an immediate pattern interrupt in the first 0.5-1.0 second through the environment: lighting snap, particles, dramatic room transformation, product-relevant action, people or props when appropriate. The product itself stays physically stable.",
+    "Make the scene escalate quickly and deliver a clear visual payoff by the final second. Avoid a generic slow zoom, simple spin, floating product or empty studio demonstration.",
     "The uploaded first frame is the authoritative product reference. The product itself must remain visually identical to that frame for the entire video.",
-    "ONLY show product surfaces and details already visible in the first frame. Never reveal, infer, reconstruct or invent the back, sides, top, bottom, underside, interior, hidden edges, hidden labels or any unseen feature.",
+    "The complete marketed product is already visible in the first frame. Do not crop it out of frame later and do not reveal, infer, reconstruct or invent any product area that is not visible in the first frame.",
     "Do not rotate, flip, spin, turn, orbit around, tilt to reveal, pick up or reposition the product in a way that exposes a new viewing angle. Keep the product facing the same camera angle throughout.",
     "Preserve the visible silhouette, proportions, color, material, branding, logos, printed text and packaging exactly. Do not morph or redesign the product.",
     "People, hands, animals, props, particles, lighting and environmental action may appear only if they do not cover important product details or force a new product angle.",
-    "Camera movement may be a gentle push-in, pull-back or slight lateral move only; no orbit and no reveal around the product.",
-    "Do not generate new readable overlay text, captions, prices, labels, logos or watermarks.",
-    "Make the result feel native to TikTok, Instagram Reels and YouTube Shorts: immediate, surprising, polished and believable rather than a simple spinning product render.",
+    "Camera movement may be a punchy push-in, pull-back or lateral move, but no orbit or hidden-side reveal.",
+    `TEXT BETA: create one or two stylish, clearly readable marketing text moments in ${overlayLanguage}. Keep each phrase to roughly 2-5 words and integrate the typography into the motion design.`,
+    "The overlay text may be creative but must stay non-factual: no prices, discounts, percentages, dates, stock claims, technical specifications, guarantees or invented product features. Do not create or alter logos. No watermarks.",
+    "Make the result feel native to TikTok, Instagram Reels and YouTube Shorts: immediate, surprising, sales-oriented, polished and believable rather than a simple product animation.",
   ].filter(Boolean).join(" ");
 }
 
@@ -13300,6 +13400,7 @@ async function buildKlingProductVideoPrompt({ openai, rule, postContent }) {
     String(rule?.campaign_theme || rule?.strategy_notes || rule?.name || "").replace(/\s+/g, " ").trim(),
     500
   );
+  const overlayLanguage = getKlingOverlayLanguage(rule);
 
   try {
     const completion = await openai.chat.completions.create({
@@ -13309,59 +13410,79 @@ async function buildKlingProductVideoPrompt({ openai, rule, postContent }) {
         {
           role: "system",
           content:
-            "You are Spreelo's short-form product video director. Return strict JSON only. Design one attention-grabbing but physically plausible single-shot concept. Product identity safety is more important than spectacle.",
+            "You are Spreelo's short-form product video director. Return strict JSON only. Design one highly attention-grabbing, sales-oriented but physically plausible 6-second concept. Product identity safety is more important than spectacle.",
         },
         {
           role: "user",
           content: `
 Create a Kling image-to-video motion prompt for one 6-second 9:16 social ad.
 
-Brand: ${brandName || "Not provided"}
+Brand/store: ${brandName || "Not provided"}
 Product: ${productTitle}
 Verified product description: ${productDescription || "Not provided"}
 Campaign context: ${campaignContext || "Not provided"}
+${formatCampaignIdentityLockForPrompt(rule) || "No campaign identity lock applies."}
 Post caption context: ${truncateText(String(postContent || ""), 700)}
+Overlay language: ${overlayLanguage}
 
-Return JSON: {"creative_strategy":"...","motion_prompt":"..."}.
+Return JSON exactly in this shape:
+{"creative_strategy":"...","overlay_text":["...","..."],"motion_prompt":"..."}.
 
 Creative goals:
-- strong scroll-stopping event in the first 1 second
-- scene must suit the actual product/category
-- feel native to TikTok/Reels/Shorts, not a generic studio spin
-- one continuous shot, visually understandable in 6 seconds
-- environment, props, people, hands, animals or effects may add interest when genuinely appropriate
+- if a CAMPAIGN IDENTITY LOCK is present, the scene and all overlay text must stay exclusively inside that active campaign and must not introduce another holiday/campaign/occasion
+- product is already large and complete in frame from the first frame; do NOT create a small-card-to-full-screen expansion
+- create a pattern interrupt in the first 0.5-1.0 second using the environment, lighting, people/props, particles or a surprising product-relevant event
+- escalate quickly and deliver a satisfying visual payoff by the final second
+- feel native to TikTok/Reels/Shorts and commercially persuasive, not a generic studio spin or slow zoom
+- one coherent 6-second shot; environment may transform dramatically while the product identity stays locked
+- people, hands, animals, props or effects may add interest when genuinely appropriate
+
+OVERLAY TEXT BETA:
+- write 1 or 2 short phrases in ${overlayLanguage}; each should normally be 2-5 words
+- make them punchy, modern and sales-oriented, designed to look good as motion typography
+- keep them NON-FACTUAL: no prices, discounts, percentages, dates, stock/availability, guarantees, technical specifications or unverified features
+- do not include digits in the overlay phrases
+- do not invent another campaign, holiday or occasion
+- do not create a fake logo or watermark
 
 NON-NEGOTIABLE PRODUCT RULES:
-- the uploaded first frame is authoritative
+- the uploaded first frame is authoritative and already shows the complete product
 - the product must stay at the SAME visible camera angle throughout
-- ONLY surfaces/details already visible in the first frame may ever be shown
+- only surfaces/details already visible in the first frame may ever be shown
 - never reveal or invent back, sides, top, bottom, underside, interior, hidden edges or hidden labels
 - never rotate, flip, spin, turn, orbit around or tilt the product to reveal a new angle
-- preserve visible shape, proportions, colors, materials, branding, logos and printed text exactly
-- do not add new readable overlay text, prices, claims, logos or watermarks
-- use gentle push-in/pull-back/lateral camera movement only; no orbit/reveal
+- preserve visible shape, proportions, colors, materials, branding, logos and printed product text exactly
 - if interaction would expose an unseen product area, keep the product stationary and put the action around it instead
 `,
         },
       ],
-      max_tokens: 650,
-      temperature: 0.7,
+      max_tokens: 760,
+      temperature: 0.75,
     });
 
     const parsed = safeJsonParse(completion?.choices?.[0]?.message?.content || "");
     const creativePrompt = String(parsed?.motion_prompt || "").replace(/\s+/g, " ").trim();
     if (!creativePrompt) return fallback;
+    const overlayPhrases = (Array.isArray(parsed?.overlay_text) ? parsed.overlay_text : [])
+      .map(sanitizeKlingOverlayPhrase)
+      .filter(Boolean)
+      .slice(0, 2);
+    const overlayInstruction = overlayPhrases.length
+      ? `Render only these exact readable overlay phrases, with stylish motion typography in ${overlayLanguage}: ${overlayPhrases.map((phrase) => `"${phrase}"`).join(" then ")}. Do not add any other readable marketing text.`
+      : `Create at most two very short non-factual readable marketing phrases in ${overlayLanguage}; no digits, prices, discounts, specs, dates or availability claims.`;
 
     const safetyTail = [
-      "CRITICAL PRODUCT LOCK: the first frame is authoritative.",
-      "Keep the product at exactly the same visible viewing angle for the whole clip.",
+      "CRITICAL PRODUCT LOCK: the first frame is authoritative and already contains the complete product.",
+      "Keep the product large in frame and at exactly the same visible viewing angle for the whole clip; do not begin with or create a small image card that expands to full screen.",
       "Show only product surfaces/details visible in the first frame; never reveal or invent any unseen side, back, top, bottom, underside, interior, hidden edge or label.",
-      "No product rotation, spin, flip, orbit, turn, morph, redesign or new readable text.",
-      "Preserve visible branding, colors, proportions and printed details exactly.",
-      "Single 6-second vertical social-media shot with no new overlay text or watermark.",
+      "No product rotation, spin, flip, orbit, turn, morph or redesign.",
+      "Preserve visible branding, colors, proportions and printed product details exactly.",
+      overlayInstruction,
+      "No fake logos and no watermark.",
+      "Make the environmental action bold, surprising and sales-oriented, with an immediate first-second hook and a clear final payoff.",
     ].join(" ");
 
-    return truncateText(`${creativePrompt} ${safetyTail}`, 2450);
+    return truncateText(`${creativePrompt} ${safetyTail}`, 3000);
   } catch (error) {
     console.warn("Kling creative prompt generation fell back to deterministic prompt", {
       ruleId: rule?.id || null,
@@ -14717,6 +14838,90 @@ function formatAuthorizedCampaignOfferForPrompt(rule) {
   return `Authorized customer-supplied campaign offer:\n${offer}\n\nMandatory offer rules:\n- This exact campaign offer was entered by the customer and is verified for this campaign.\n- Use only the exact discount, campaign code, currency and dates supplied in the campaign instruction.\n- Never change, convert, translate, round or invent any campaign value.\n- This authorized campaign offer is the only exception to general rules that prohibit unverified discount claims.`;
 }
 
+function getCampaignIdentityLock(rule) {
+  if (!isCampaignScopedWebsiteRule(rule)) {
+    return null;
+  }
+
+  const themeContract = getCampaignThemeContract(rule);
+  const strategy = normalizeCampaignMarketingStrategy(
+    rule?.campaign_marketing_strategy
+  );
+  const prompt = String(rule?.prompt || "");
+  const imagePrompt = String(rule?.image_prompt || "");
+  const activeCampaignCandidates = [
+    themeContract?.primaryTheme,
+    strategy?.primaryTheme,
+    extractPromptLineValue(prompt, "Campaign"),
+    extractPromptLineValue(prompt, "Campaign title"),
+    extractPromptLineValue(prompt, "Campaign name"),
+    extractPromptLineValue(imagePrompt, "Campaign"),
+    extractPromptLineValue(imagePrompt, "Campaign title"),
+    extractPromptLineValue(imagePrompt, "Campaign name"),
+    rule?.campaign_title,
+    rule?.campaign_name,
+    rule?.campaign_opportunity_title,
+    rule?.name,
+  ]
+    .map((value) => normalizeCampaignStrategyText(value, 120))
+    .filter(Boolean);
+
+  const activeCampaign = activeCampaignCandidates[0] || "";
+  const approvedThemeTerms = collectUniqueTerms(
+    [
+      ...(themeContract?.approvedThemeTerms || []),
+      ...(themeContract?.essentialThemeTerms || []),
+      ...(strategy?.themeAnchorTerms || []),
+      ...(strategy?.directThemeEvidence || []),
+      ...extractExplicitCampaignMatchTerms(rule),
+    ],
+    30
+  );
+  const normalizedApprovedTerms = new Set(
+    [activeCampaign, ...approvedThemeTerms]
+      .map((term) => normalizeSearchText(term).trim())
+      .filter(Boolean)
+  );
+  const competingThemeTerms = collectUniqueTerms(
+    [
+      ...(themeContract?.competingThemeTerms || []),
+      ...(strategy?.competingThemeTerms || []),
+    ],
+    30
+  ).filter(
+    (term) => !normalizedApprovedTerms.has(normalizeSearchText(term).trim())
+  );
+
+  if (!activeCampaign && !approvedThemeTerms.length) {
+    return null;
+  }
+
+  return {
+    activeCampaign: activeCampaign || approvedThemeTerms[0],
+    approvedThemeTerms,
+    competingThemeTerms,
+  };
+}
+
+function formatCampaignIdentityLockForPrompt(rule) {
+  const lock = getCampaignIdentityLock(rule);
+  if (!lock) return "";
+
+  return `CAMPAIGN IDENTITY LOCK — MANDATORY:
+Active campaign / occasion: ${lock.activeCampaign}
+Allowed direct theme terms: ${lock.approvedThemeTerms.length ? lock.approvedThemeTerms.join(", ") : lock.activeCampaign}
+Known competing campaigns / occasions to exclude: ${lock.competingThemeTerms.length ? lock.competingThemeTerms.join(", ") : "No specific competing terms were supplied; still exclude every other named campaign, holiday, theme day or occasion."}
+
+Campaign lock rules:
+- Treat the Active campaign / occasion above as the one and only campaign identity for this post.
+- Never mention, imply, combine with, visually represent or write copy for another named holiday, campaign, theme day, season, shopping event or occasion.
+- Do not turn the product into a gift or recommendation for a different named occasion.
+- If product descriptions, reserve products, strategy notes, examples, previous captions, image context or any other supplied text contain a different campaign/occasion, treat that reference as stale or irrelevant and ignore it.
+- The campaign identity lock overrides conflicting campaign wording anywhere else in the prompt, including draft/final post text used only as supporting context.
+- If the exact verified product name itself contains wording that resembles another occasion, preserve the exact product name when necessary, but do not reuse that wording as campaign messaging.
+- Creativity is encouraged inside the active campaign, but changing or blending the campaign identity is forbidden.`;
+}
+
 function formatCampaignVisualContextForPrompt(rule) {
   if (!isCampaignScopedWebsiteRule(rule)) {
     return "";
@@ -14735,8 +14940,9 @@ function formatCampaignVisualContextForPrompt(rule) {
     .filter(Boolean)
     .join(" | ");
   const authorizedOffer = getAuthorizedCampaignOffer(rule);
+  const campaignIdentityLock = formatCampaignIdentityLockForPrompt(rule);
 
-  return `Campaign visual context:
+  return `${campaignIdentityLock ? `${campaignIdentityLock}\n\n` : ""}Campaign visual context:
 ${campaignTheme || "Campaign theme not explicitly named."}
 Authorized campaign offer: ${authorizedOffer || "Not provided"}
 Product/theme match terms: ${matchTerms.length ? matchTerms.join(", ") : "Not provided"}
@@ -20404,6 +20610,57 @@ function getStructuredProductBrand(product) {
   return String(raw || "").trim();
 }
 
+function normalizeProductAvailabilityStatus(value) {
+  const raw = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\/schema\.org\//i, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
+  if (!raw) return "unknown";
+  if (/discontinued|utgått|utgatt/.test(raw)) return "discontinued";
+  if (/out of stock|outofstock|sold out|soldout|unavailable|slut i lager|ej i lager/.test(raw)) return "out_of_stock";
+  if (/pre ?order|förbeställ|forbestall/.test(raw)) return "preorder";
+  if (/back ?order/.test(raw)) return "backorder";
+  if (/in stock|instock|available|i lager/.test(raw)) return "in_stock";
+  return "unknown";
+}
+
+function getStructuredProductAvailability(product) {
+  const offers = Array.isArray(product?.offers)
+    ? product.offers
+    : product?.offers
+      ? [product.offers]
+      : [];
+  for (const offer of offers) {
+    const normalized = normalizeProductAvailabilityStatus(offer?.availability);
+    if (normalized !== "unknown") return normalized;
+  }
+  return "unknown";
+}
+
+function getProductPromotionAvailability(item) {
+  return normalizeProductAvailabilityStatus(
+    item?.locked_product_availability ||
+      item?.availability ||
+      item?.product_availability ||
+      ""
+  );
+}
+
+function isProductClearlyUnavailableForPromotion(item) {
+  return ["out_of_stock", "discontinued"].includes(
+    getProductPromotionAvailability(item)
+  );
+}
+
+function getProductPromotionAvailabilityPriority(item) {
+  const availability = getProductPromotionAvailability(item);
+  if (["in_stock", "preorder", "backorder"].includes(availability)) return 0;
+  if (availability === "unknown") return 1;
+  return 2;
+}
+
 function findExactPageJsonLdProduct(html, pageUrl) {
   const products = extractJsonLdObjects(html).filter((item) =>
     normalizeJsonLdType(item?.["@type"]).some((type) => type.includes("product"))
@@ -20516,6 +20773,7 @@ function extractLockedProductObjectFromHtml({ html, pageUrl, websiteUrl }) {
       ""
   ).trim();
   const price = product ? getProductPriceFromJsonLd(product) : "";
+  const availability = product ? getStructuredProductAvailability(product) : "unknown";
   const source = structuredImages.length
     ? "json_ld_main_product_object"
     : "page_level_product_metadata";
@@ -20529,6 +20787,7 @@ function extractLockedProductObjectFromHtml({ html, pageUrl, websiteUrl }) {
     color,
     description,
     price,
+    availability,
     primaryImageUrl,
     imageUrls: imageUrls.slice(0, 12),
     source,
@@ -24710,9 +24969,12 @@ For every supplied product:
 - Open the current official result immediately before returning it. Confirm that it loads as a live product page rather than a 404, redirect loop, search result, category or cached snippet.
 - Treat the MAIN PRODUCT block on the opened product detail page as one indivisible object. Read current_title, product_identifier/SKU, brand, category, color, current_price and the main image from that same main-product block.
 - Return the best direct product-image file URL that is visibly attached to the MAIN PRODUCT on that exact opened product detail page.
+- Also return up to 6 direct image-file URLs from the exact same MAIN PRODUCT gallery in gallery_image_urls. These must all depict the selected product/variant and must never come from recommendations, related products, search-result cards, colour swatches or editorial modules. Include image_url in gallery_image_urls when possible.
+- For generative product media, identify the best official gallery image where the entire marketed product is visibly inside the frame. Put that exact URL in full_product_reference_image_url and set full_product_reference_visible=true only when the whole product (or whole marketed set) is visible with no physical edge cropped off. Reject detail crops, close-ups, packaging-only images and images that show only part of the product. If no such official gallery image can be evidenced, return an empty URL and false.
 - The image, current_title and product facts must come from the same opened current_url and the same main-product block. Never borrow an image or text from recommendations, related products, search-result cards, colour swatches, "more from the brand" sections or image-search thumbnails.
 - Set image_source_page_url to the exact product detail page where the returned image is attached to the main product, and set image_is_main_product_asset=true only when you verified that relationship.
 - The image must be a real product image, not a logo, icon, placeholder, category banner, editorial hero or guessed URL.
+- Read the current purchase availability from the same official product page. availability_status must be exactly one of in_stock, available, preorder, backorder, out_of_stock, discontinued or unknown. Use unknown when the page does not make availability clear; never infer availability from a search snippet alone.
 - Preserve original_rank exactly. Return no row when the same identity cannot be evidenced.
 - Do not substitute a similar product or a different colour/size/style variant when the selected title, URL or identity hints specify a variant. If the exact selected variant cannot be evidenced, return no row.
 - Treat model/style/article identifiers as stronger evidence than shared brand, colour, campaign or category words.
@@ -24749,7 +25011,7 @@ Return only the required JSON structure.`.trim();
       tool_choice: "required",
       instructions,
       ...getReasoningOptionsForModel(PRODUCT_RESEARCH_MODEL),
-      max_output_tokens: 4500,
+      max_output_tokens: 5600,
       text: {
         format: {
           type: "json_schema",
@@ -24771,8 +25033,29 @@ Return only the required JSON structure.`.trim();
                     current_title: { type: "string" },
                     current_url: { type: "string" },
                     image_url: { type: "string" },
+                    gallery_image_urls: {
+                      type: "array",
+                      items: { type: "string" },
+                      maxItems: 6,
+                    },
+                    full_product_reference_image_url: { type: "string" },
+                    full_product_reference_visible: { type: "boolean" },
+                    full_product_reference_evidence: { type: "string" },
                     image_source_page_url: { type: "string" },
                     image_is_main_product_asset: { type: "boolean" },
+                    availability_status: {
+                      type: "string",
+                      enum: [
+                        "in_stock",
+                        "available",
+                        "preorder",
+                        "backorder",
+                        "out_of_stock",
+                        "discontinued",
+                        "unknown"
+                      ],
+                    },
+                    availability_evidence: { type: "string" },
                     product_identifier: { type: "string" },
                     brand: { type: "string" },
                     category: { type: "string" },
@@ -24792,8 +25075,14 @@ Return only the required JSON structure.`.trim();
                     "current_title",
                     "current_url",
                     "image_url",
+                    "gallery_image_urls",
+                    "full_product_reference_image_url",
+                    "full_product_reference_visible",
+                    "full_product_reference_evidence",
                     "image_source_page_url",
                     "image_is_main_product_asset",
+                    "availability_status",
+                    "availability_evidence",
                     "product_identifier",
                     "brand",
                     "category",
@@ -24864,6 +25153,34 @@ Return only the required JSON structure.`.trim();
         websiteUrl
       ) || "";
     const imageUrl = String(repairedProduct?.image_url || "").trim();
+    const requestedFullProductReferenceUrl = String(
+      repairedProduct?.full_product_reference_image_url || ""
+    ).trim();
+    const galleryImageUrls = [...new Set([
+      imageUrl,
+      requestedFullProductReferenceUrl,
+      ...(Array.isArray(repairedProduct?.gallery_image_urls)
+        ? repairedProduct.gallery_image_urls
+        : []),
+    ]
+      .map((value) => String(value || "").trim())
+      .filter((value) => isHttpUrl(value) && !isBadProductImageUrl(value)))]
+      .slice(0, 6);
+    const fullProductReferenceUrl =
+      repairedProduct?.full_product_reference_visible === true &&
+      isHttpUrl(requestedFullProductReferenceUrl) &&
+      !isBadProductImageUrl(requestedFullProductReferenceUrl) &&
+      galleryImageUrls.some(
+        (value) =>
+          (canonicalProductImageAssetKey(value) || normalizeComparableValue(value)) ===
+          (canonicalProductImageAssetKey(requestedFullProductReferenceUrl) ||
+            normalizeComparableValue(requestedFullProductReferenceUrl))
+      )
+        ? requestedFullProductReferenceUrl
+        : "";
+    const availabilityStatus = normalizeProductAvailabilityStatus(
+      repairedProduct?.availability_status
+    );
     const imageSourcePageUrl =
       canonicalizeWebsiteProductUrl(
         repairedProduct?.image_source_page_url,
@@ -24932,6 +25249,7 @@ Return only the required JSON structure.`.trim();
       product_image_page_bound_source: "gpt55_exact_repair_same_page",
       product_image_source_page_url: imageSourcePageUrl,
       product_identity_locked: true,
+      locked_product_primary_image_url: imageUrl,
       locked_product_source: "gpt55_main_product_block",
       locked_product_url: currentUrl,
       locked_product_title:
@@ -24943,8 +25261,17 @@ Return only the required JSON structure.`.trim();
       locked_product_category: String(repairedProduct?.category || "").trim(),
       locked_product_color: String(repairedProduct?.color || "").trim(),
       locked_product_price: String(repairedProduct?.current_price || "").trim(),
-      locked_product_primary_image_url: imageUrl,
-      locked_product_image_urls: [imageUrl],
+      availability: availabilityStatus,
+      locked_product_availability: availabilityStatus,
+      locked_product_availability_evidence: String(
+        repairedProduct?.availability_evidence || ""
+      ).trim(),
+      locked_product_image_urls: galleryImageUrls.length ? galleryImageUrls : [imageUrl],
+      generative_reference_image_url: fullProductReferenceUrl || null,
+      generative_reference_full_product_visible: Boolean(fullProductReferenceUrl),
+      generative_reference_evidence: fullProductReferenceUrl
+        ? String(repairedProduct?.full_product_reference_evidence || "").trim()
+        : "",
       locked_product_image_alt_text: String(
         repairedProduct?.image_alt_text || ""
       ).trim(),
@@ -25077,10 +25404,24 @@ async function hydrateAuthoritativeWebAgentProduct({
         color: String(candidate?.locked_product_color || candidate?.product_color || "").trim(),
         description: String(candidate?.description || candidate?.reason || "").trim(),
         price: String(candidate?.locked_product_price || "").trim(),
+        availability: normalizeProductAvailabilityStatus(
+          candidate?.locked_product_availability || candidate?.availability
+        ),
+        availabilityEvidence: String(
+          candidate?.locked_product_availability_evidence || ""
+        ).trim(),
         primaryImageUrl: repairedImage,
         imageUrls: Array.isArray(candidate?.locked_product_image_urls)
           ? candidate.locked_product_image_urls.filter(Boolean).slice(0, 12)
           : [repairedImage],
+        generativeReferenceImageUrl: String(
+          candidate?.generative_reference_image_url || ""
+        ).trim(),
+        generativeReferenceFullProductVisible:
+          candidate?.generative_reference_full_product_visible === true,
+        generativeReferenceEvidence: String(
+          candidate?.generative_reference_evidence || ""
+        ).trim(),
         source: String(candidate?.locked_product_source || "gpt55_main_product_block"),
         fingerprint:
           String(candidate?.locked_product_fingerprint || "").trim() ||
@@ -25167,8 +25508,24 @@ async function hydrateAuthoritativeWebAgentProduct({
     locked_product_category: lockedProduct.category || "",
     locked_product_color: lockedProduct.color || "",
     locked_product_price: lockedProduct.price || "",
+    availability: normalizeProductAvailabilityStatus(lockedProduct.availability),
+    locked_product_availability: normalizeProductAvailabilityStatus(lockedProduct.availability),
+    locked_product_availability_evidence:
+      lockedProduct.availabilityEvidence || candidate?.locked_product_availability_evidence || "",
     locked_product_primary_image_url: normalized.image_url,
     locked_product_image_urls: lockedProduct.imageUrls,
+    generative_reference_image_url:
+      lockedProduct.generativeReferenceFullProductVisible === true &&
+      lockedProduct.generativeReferenceImageUrl
+        ? lockedProduct.generativeReferenceImageUrl
+        : candidate?.generative_reference_image_url || null,
+    generative_reference_full_product_visible:
+      lockedProduct.generativeReferenceFullProductVisible === true ||
+      candidate?.generative_reference_full_product_visible === true,
+    generative_reference_evidence:
+      lockedProduct.generativeReferenceEvidence ||
+      candidate?.generative_reference_evidence ||
+      "",
     locked_product_fingerprint: lockedProduct.fingerprint,
     product_image_page_bound: true,
     product_image_page_bound_source: lockedProduct.source,
@@ -27087,9 +27444,6 @@ async function findWebsiteProductWithWebSearch({
       return getIndexedFallbackItems();
     }
 
-    indexedSecurityFallbackBatches += 1;
-    sharedIndexedSecurityState.batchExecuted = true;
-
     const repairInputs = dedupeUrlItems(candidateProducts || [])
       .slice(0, securityRepairBatchSize)
       .map((candidate, index) => ({
@@ -27100,6 +27454,27 @@ async function findWebsiteProductWithWebSearch({
       }));
 
     if (!repairInputs.length) return [];
+
+    // A carousel repair that has fewer distinct candidate products than the
+    // required verified pool can never satisfy the caller, even if every
+    // repair succeeds. Skip that paid GPT-5.5 repair and let the already
+    // existing broader campaign fallback gather enough candidates first.
+    // Single-product target=1 is deliberately unaffected.
+    if (targetVerifiedCount > 1 && repairInputs.length < targetVerifiedCount) {
+      console.info("Indexed security fallback batch skipped because candidate pool cannot satisfy target", {
+        ruleId: rule?.id,
+        brandProfileId: rule?.brand_profile_id,
+        websiteUrl,
+        attempt,
+        candidateCount: repairInputs.length,
+        targetVerifiedCount,
+        paidExactRepairSkipped: true,
+      });
+      return [];
+    }
+
+    indexedSecurityFallbackBatches += 1;
+    sharedIndexedSecurityState.batchExecuted = true;
 
     console.log("Indexed security fallback batch started", {
       ruleId: rule?.id,
@@ -28453,6 +28828,7 @@ async function validateProductCopyIdentityWithModel({
         ).trim()}`
     )
     .join("\n");
+  const campaignIdentityLockText = formatCampaignIdentityLockForPrompt(rule);
 
   const response = await openai.responses.create(
     {
@@ -28468,6 +28844,8 @@ async function validateProductCopyIdentityWithModel({
 Allowed selected products:
 ${allowedProductsText}
 
+${campaignIdentityLockText || "No campaign identity lock applies to this post."}
+
 Draft:
 ${String(content || "").trim()}
 
@@ -28478,7 +28856,10 @@ Rules:
 - For a single-product post, any concrete product mention must refer to that one selected product.
 - For a carousel, concrete product mentions must be among the selected carousel products.
 - If uncertain whether a concrete named product is one of the selected products, mark it invalid.
-Return a strict identity verdict.`,
+- If a CAMPAIGN IDENTITY LOCK is present, independently verify campaign identity. The draft must stay inside the one active campaign/occasion and must not introduce, blend with or imply another named holiday, campaign, theme day, season, shopping event or occasion.
+- A conflicting campaign mention is invalid even if the product could also be suitable for that other occasion.
+- Do not flag the exact selected product name solely because the official product name itself happens to contain occasion-like wording; only flag it when the draft uses that wording as a different campaign message.
+Return a strict product-and-campaign identity verdict.`,
             },
           ],
         },
@@ -28502,12 +28883,19 @@ Return a strict identity verdict.`,
                 type: "array",
                 items: { type: "string" },
               },
+              campaign_valid: { type: "boolean" },
+              conflicting_campaign_mentions: {
+                type: "array",
+                items: { type: "string" },
+              },
               reason: { type: "string" },
             },
             required: [
               "valid",
               "mentioned_products",
               "invalid_mentions",
+              "campaign_valid",
+              "conflicting_campaign_mentions",
               "reason",
             ],
           },
@@ -28518,14 +28906,31 @@ Return a strict identity verdict.`,
   );
 
   const parsed = safeJsonParse(getOpenAiResponseOutputText(response)) || {};
+  const invalidProductMentions = Array.isArray(parsed?.invalid_mentions)
+    ? parsed.invalid_mentions
+    : [];
+  const conflictingCampaignMentions = Array.isArray(
+    parsed?.conflicting_campaign_mentions
+  )
+    ? parsed.conflicting_campaign_mentions
+    : [];
+  const campaignValid = campaignIdentityLockText
+    ? parsed?.campaign_valid === true
+    : true;
+
   return {
-    valid: parsed?.valid === true,
+    valid: parsed?.valid === true && campaignValid,
+    productValid: parsed?.valid === true,
+    campaignValid,
     mentionedProducts: Array.isArray(parsed?.mentioned_products)
       ? parsed.mentioned_products
       : [],
-    invalidMentions: Array.isArray(parsed?.invalid_mentions)
-      ? parsed.invalid_mentions
-      : [],
+    invalidMentions: [
+      ...invalidProductMentions,
+      ...conflictingCampaignMentions,
+    ],
+    invalidProductMentions,
+    conflictingCampaignMentions,
     reason: String(parsed?.reason || "").trim(),
   };
 }
@@ -28570,16 +28975,19 @@ ${selectedProducts
 Rejected draft:
 ${String(content || "").trim()}
 
-Identity validator reason:
-${validation?.reason || "The draft contained a product identity mismatch."}
+Identity/campaign validator reason:
+${validation?.reason || "The draft contained a product or campaign identity mismatch."}
 
-Invalid concrete product mentions:
+Invalid product/campaign mentions:
 ${(validation?.invalidMentions || []).join(", ") || "unknown"}
+
+${formatCampaignIdentityLockForPrompt(rule)}
 
 Rewrite the post now.
 - Never name, imply, recommend or invent a concrete product outside the selected list.
 - Generic category wording is allowed.
 - If you are not certain of an exact product name, use generic campaign/category wording instead.
+- If a campaign identity lock applies, remove every reference to another named campaign/holiday/occasion and keep the rewritten post exclusively inside the active campaign.
 - Do not add new product facts.`,
       },
     ],
@@ -28673,6 +29081,9 @@ export async function generateAutomationPostWithProductContractValidation(openai
       ruleId: rule?.id || null,
       contentFormat: normalizeContentFormat(rule?.content_format),
       mentionedProducts: identityValidation.mentionedProducts,
+      campaignValid: identityValidation.campaignValid,
+      conflictingCampaignMentions:
+        identityValidation.conflictingCampaignMentions || [],
     });
     return content || deterministicFallback();
   }
@@ -28681,6 +29092,9 @@ export async function generateAutomationPostWithProductContractValidation(openai
     ruleId: rule?.id || null,
     contentFormat: normalizeContentFormat(rule?.content_format),
     invalidMentions: identityValidation.invalidMentions,
+    campaignValid: identityValidation.campaignValid,
+    conflictingCampaignMentions:
+      identityValidation.conflictingCampaignMentions || [],
     reason: identityValidation.reason,
   });
 
@@ -28743,6 +29157,9 @@ export async function generateAutomationPostWithProductContractValidation(openai
   console.info("Product copy corrected and passed identity gate", {
     ruleId: rule?.id || null,
     mentionedProducts: secondValidation.mentionedProducts,
+    campaignValid: secondValidation.campaignValid,
+    conflictingCampaignMentions:
+      secondValidation.conflictingCampaignMentions || [],
   });
   return rewritten;
 }
@@ -28943,9 +29360,12 @@ CTA type: ${rule.cta_type || "Soft CTA"}
 Caption already created for the post:
 ${postContent || "Not provided"}
 
+${formatCampaignIdentityLockForPrompt(rule)}
+
 ${formatAuthorizedCampaignOfferForPrompt(rule)}
 
 Rules:
+- If a CAMPAIGN IDENTITY LOCK is provided above, all carousel copy and the final outro must stay inside that one campaign. Never introduce another named holiday, campaign, theme day, season, shopping event or occasion.
 - Create exactly ${selectedProducts.length} product slides in the same order as the selected products.
 - Then create 1 final outro slide that acts as a closing CTA for the whole carousel.
 - Every product slide must focus on its matching product only.
@@ -29637,8 +30057,11 @@ ${customVisualDirection ? `Customer's visual direction:
 ${customVisualDirection}` : "No extra custom visual direction was provided."}
 
 Rules:
-- The provided product image is the real product reference. Keep the product clearly recognizable.
+- If a CAMPAIGN IDENTITY LOCK is provided above, it is authoritative over the User instruction, Final post text, product context and every other supporting field. Never write or visualize another named campaign, holiday, theme day, season, shopping event or occasion.
+- The provided product image is the real product reference and has been selected because the complete product is visible. Keep that complete product clearly recognizable and inside the final frame.
 - Preserve the product's core identity, silhouette, dominant colors, print/design, and overall appearance.
+- Keep the same visible product viewing angle. Do not rotate the product to reveal, reconstruct or invent a hidden back, side, top, bottom, underside, interior or other unseen detail.
+- Do not crop away part of the marketed product in the final ad. Build the creative environment around the complete verified product instead.
 - Preserve the exact visible product color from the verified source image.
 - Do not recolor the product or create a new color variant that is not verified.
 - If multiple colors exist on the website, still keep the exact source-image color unless a different verified color is explicitly selected.
@@ -30338,9 +30761,33 @@ async function collectAnimatedProductImageCandidates(websiteItem) {
     candidates.push({ url: resolved, ...metadata });
   };
 
+  add(websiteItem?.generative_reference_image_url, {
+    source: "verified_full_product_reference",
+    identityScore: 180,
+  });
   add(websiteItem?.image_url, { source: "selected_product_image", identityScore: 120 });
+  for (const galleryUrl of Array.isArray(websiteItem?.locked_product_image_urls)
+    ? websiteItem.locked_product_image_urls
+    : []) {
+    add(galleryUrl, { source: "locked_product_gallery", identityScore: 115 });
+  }
+  for (const candidate of Array.isArray(websiteItem?.product_image_verified_candidates)
+    ? websiteItem.product_image_verified_candidates
+    : []) {
+    add(candidate?.url, {
+      source: candidate?.source || "verified_product_gallery",
+      identityScore: 110,
+    });
+  }
 
-  if (websiteItem?.url && isHttpUrl(websiteItem.url)) {
+  const skipKnownBlockedGalleryFetch = Boolean(
+    websiteItem?.product_identity_locked === true &&
+      websiteItem?.technical_identity_same_page_verified === true &&
+      (Number(websiteItem?.technical_page_status || 0) === 403 ||
+        websiteItem?.technical_page_fetched === false)
+  );
+
+  if (websiteItem?.url && isHttpUrl(websiteItem.url) && !skipKnownBlockedGalleryFetch) {
     try {
       const html = await fetchHtml(websiteItem.url);
       const jsonLdProduct = findBestJsonLdProduct(
@@ -30383,7 +30830,10 @@ async function collectAnimatedProductImageCandidates(websiteItem) {
       // attempted first. Gallery discovery is only a quality/cutout fallback
       // and must never displace that authoritative asset through a noisy score.
       const sourcePriority = (candidate) => {
+        if (candidate.source === "verified_full_product_reference") return 1300;
         if (candidate.source === "selected_product_image") return 1000;
+        if (candidate.source === "locked_product_gallery") return 900;
+        if (candidate.source === "verified_product_gallery") return 850;
         if (candidate.source === "product_json_ld") return 700;
         if (candidate.source === "product_meta_image") return 500;
         return 0;
@@ -30394,6 +30844,300 @@ async function collectAnimatedProductImageCandidates(websiteItem) {
       );
     })
     .slice(0, 12);
+}
+
+export async function selectGenerativeProductReferenceImage(
+  websiteItem,
+  { openai = null, ruleId = null } = {}
+) {
+  const candidates = (await collectAnimatedProductImageCandidates(websiteItem))
+    .filter((candidate) => candidate?.url)
+    .slice(0, 6);
+  if (!candidates.length) {
+    throw new Error("No verified official product images were available for generative media");
+  }
+
+  const declaredReferenceUrl = String(
+    websiteItem?.generative_reference_image_url || ""
+  ).trim();
+  const hasAuthoritativeFullProductHint = Boolean(
+    websiteItem?.generative_reference_full_product_visible === true &&
+      declaredReferenceUrl
+  );
+
+  // Even an authoritative web-research result is only a gallery hint here.
+  // v144.15 deliberately validates the actual image pixels before any paid
+  // generative media is created. This prevents a correctly identified but
+  // tightly cropped/detail image from being treated as a safe full-product
+  // reference merely because the product page metadata was correct.
+  if (!openai) {
+    throw new Error(
+      "Full-product reference visibility could not be verified for generative media"
+    );
+  }
+
+  const content = [
+    {
+      type: "input_text",
+      text:
+        "Choose a safe ecommerce reference image for generative product media. " +
+        "For every supplied ID, verify that it depicts the exact named product and whether the ENTIRE marketed physical product (or entire marketed set) is visibly inside the image frame. " +
+        "full_product_visible must be false if any physical edge of the marketed product is cropped off, if the image is only a detail/close-up, if only one part of a larger marketed product is shown, or if only packaging is shown. " +
+        "A clean background is preferred but not required. Do not infer hidden product areas. False positives are worse than rejection. Return one result for every ID.",
+    },
+  ];
+  const productTitle = String(
+    websiteItem?.title || websiteItem?.item_title || "verified product"
+  ).trim();
+  const productIdentifier = String(
+    websiteItem?.locked_product_identifier ||
+      websiteItem?.product_identifier ||
+      ""
+  ).trim();
+  const productBrand = getExpectedProductBrand(websiteItem);
+  for (let index = 0; index < candidates.length; index += 1) {
+    const candidate = candidates[index];
+    content.push({
+      type: "input_text",
+      text:
+        `ID ${index}; exact product: ${productTitle}; ` +
+        `brand: ${productBrand || "not provided"}; ` +
+        `identifier: ${productIdentifier || "not provided"}; ` +
+        `source: ${candidate.source || "official gallery"}`,
+    });
+    content.push({
+      type: "input_image",
+      image_url: candidate.url,
+      detail: "high",
+    });
+  }
+
+  try {
+    const response = await openai.responses.create(
+      {
+        model: PRODUCT_RESEARCH_FAST_MODEL,
+        input: [{ role: "user", content }],
+        max_output_tokens: 1500,
+        text: {
+          format: {
+            type: "json_schema",
+            name: "generative_full_product_reference_review",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                images: {
+                  type: "array",
+                  minItems: candidates.length,
+                  maxItems: candidates.length,
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      id: { type: "integer", minimum: 0, maximum: 5 },
+                      matches_exact_product: { type: "boolean" },
+                      full_product_visible: { type: "boolean" },
+                      cropped_by_frame: { type: "boolean" },
+                      detail_or_closeup: { type: "boolean" },
+                      packaging_only: { type: "boolean" },
+                      confidence: { type: "number", minimum: 0, maximum: 1 },
+                      reason: { type: "string" },
+                    },
+                    required: [
+                      "id",
+                      "matches_exact_product",
+                      "full_product_visible",
+                      "cropped_by_frame",
+                      "detail_or_closeup",
+                      "packaging_only",
+                      "confidence",
+                      "reason",
+                    ],
+                  },
+                },
+              },
+              required: ["images"],
+            },
+          },
+        },
+      },
+      { timeout: 30_000, maxRetries: 0 }
+    );
+    const generativeReferenceUsage = response?.usage || null;
+    const parsed = safeJsonParse(getOpenAiResponseOutputText(response));
+    const reviews = Array.isArray(parsed?.images) ? parsed.images : [];
+    const accepted = reviews
+      .map((review) => ({
+        review,
+        candidate: candidates[Number(review?.id)],
+      }))
+      .filter(
+        ({ review, candidate }) =>
+          candidate &&
+          review?.matches_exact_product === true &&
+          review?.full_product_visible === true &&
+          review?.cropped_by_frame !== true &&
+          review?.detail_or_closeup !== true &&
+          review?.packaging_only !== true &&
+          Number(review?.confidence || 0) >= 0.88
+      )
+      .sort((left, right) => {
+        const sourcePriority = (entry) =>
+          entry?.candidate?.source === "verified_full_product_reference"
+            ? 4
+            : entry?.candidate?.source === "selected_product_image"
+              ? 3
+              : entry?.candidate?.source === "locked_product_gallery"
+                ? 2
+                : 1;
+        return (
+          sourcePriority(right) - sourcePriority(left) ||
+          Number(right.review?.confidence || 0) -
+            Number(left.review?.confidence || 0)
+        );
+      })[0];
+
+    if (!accepted?.candidate?.url) {
+      console.warn("Generative product reference rejected because no official image showed the complete product", {
+        ruleId,
+        productUrl: websiteItem?.url || null,
+        productTitle,
+        candidateImageCount: candidates.length,
+        availability: getProductPromotionAvailability(websiteItem),
+        usage: generativeReferenceUsage,
+        reviews: reviews.slice(0, 6).map((review) => ({
+          id: review?.id,
+          fullProductVisible: review?.full_product_visible === true,
+          croppedByFrame: review?.cropped_by_frame === true,
+          detailOrCloseup: review?.detail_or_closeup === true,
+          packagingOnly: review?.packaging_only === true,
+          confidence: Number(review?.confidence || 0),
+          reason: review?.reason || null,
+        })),
+      });
+      throw new Error(
+        "No official product image showed the complete verified product safely enough for generative media"
+      );
+    }
+
+    const sourceImageBuffer = await fetchImageBufferForOverlay(
+      accepted.candidate.url
+    );
+    console.info("Generative product reference selected from official gallery", {
+      ruleId,
+      productUrl: websiteItem?.url || null,
+      productTitle,
+      imageUrl: accepted.candidate.url,
+      source: accepted.candidate.source,
+      fullProductVisible: true,
+      confidence: Number(accepted.review?.confidence || 0),
+      reason: accepted.review?.reason || null,
+      candidateImageCount: candidates.length,
+      availability: getProductPromotionAvailability(websiteItem),
+      usage: generativeReferenceUsage,
+      authoritativeFullProductHint: hasAuthoritativeFullProductHint,
+      selectionMethod: "visual_full_product_gate",
+    });
+    return {
+      url: accepted.candidate.url,
+      source: accepted.candidate.source || "official_product_gallery",
+      sourceImageBuffer,
+      fullProductVisible: true,
+      confidence: Number(accepted.review?.confidence || 0),
+      selectionMethod: "visual_full_product_gate",
+    };
+  } catch (error) {
+    if (/No official product image showed/.test(String(error?.message || ""))) {
+      throw error;
+    }
+    throw new Error(
+      `Full-product reference verification failed before paid generative media: ${
+        error?.message || String(error)
+      }`
+    );
+  }
+}
+
+export async function prepareGenerativeProductReferenceCandidates({
+  openai = null,
+  ruleId = null,
+  primaryItem,
+  reserveItems = [],
+  sourceUrl = "",
+  maximumCandidates = 4,
+}) {
+  const rawCandidates = [primaryItem, ...(reserveItems || [])]
+    .filter(Boolean)
+    .map((item, index) => ({ item, index }))
+    .sort(
+      (left, right) =>
+        getProductPromotionAvailabilityPriority(left.item) -
+          getProductPromotionAvailabilityPriority(right.item) ||
+        left.index - right.index
+    );
+  const rejected = [];
+
+  for (const entry of rawCandidates.slice(0, maximumCandidates)) {
+    const rawItem = entry.item;
+    const normalized = normalizeWebsiteItem(
+      rawItem,
+      rawItem?.url || sourceUrl
+    );
+    const item = { ...rawItem, ...(normalized || {}) };
+    if (!normalized?.url || !normalized?.title || !normalized?.image_url) {
+      rejected.push({
+        item,
+        stage: "product_filter",
+        message: "Product or verified image was unavailable for generative media",
+      });
+      continue;
+    }
+    if (isProductClearlyUnavailableForPromotion(item)) {
+      rejected.push({
+        item,
+        stage: "availability",
+        message: `Product is ${getProductPromotionAvailability(item)} and was not used for sales-oriented generative media`,
+      });
+      console.info("Generative product candidate skipped because it is clearly unavailable", {
+        ruleId,
+        productUrl: item?.url || null,
+        productTitle: item?.title || null,
+        availability: getProductPromotionAvailability(item),
+      });
+      continue;
+    }
+
+    try {
+      const imageSelection = await selectGenerativeProductReferenceImage(item, {
+        openai,
+        ruleId,
+      });
+      const selectedItem = {
+        ...item,
+        image_url: imageSelection.url,
+        generative_reference_image_url: imageSelection.url,
+        generative_reference_full_product_visible: true,
+        generative_reference_selection_method: imageSelection.selectionMethod,
+      };
+      const remainingItems = rawCandidates
+        .filter((other) => other.item !== rawItem)
+        .map((other) => other.item);
+      return {
+        candidate: { item: selectedItem, imageSelection },
+        remainingItems,
+        rejected,
+      };
+    } catch (error) {
+      rejected.push({
+        item,
+        stage: "full_product_reference",
+        message: error?.message || "Complete product reference could not be verified",
+      });
+    }
+  }
+
+  return { candidate: null, remainingItems: [], rejected };
 }
 
 async function prepareAnimatedProductSafePanel(sourceImageBuffer) {
@@ -37968,6 +38712,8 @@ let useWebsiteImage = false;
 let websitePreparedRule = rule;
 let animatedReelCandidates = [];
 let animatedReelRejectedCandidates = [];
+let generativeProductReferenceCandidate = null;
+let generativeProductReferenceRejected = [];
 automationCurrentStage = "focused_page_context";
 const focusedPageContext = await prepareFocusedPageContextForRule(rule);
 
@@ -38364,55 +39110,88 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
             : [websiteItem];
         }
 
-        if (isAnimatedVideoRule(websitePreparedRule || rule)) {
-          if (isKlingAiVideoRule(websitePreparedRule || rule)) {
-            // Kling needs the exact verified source image, not the Shotstack
-            // cutout/overlay preparation chain. Avoid any unnecessary AI image
-            // edit here: fetch the authoritative product pixels once and build
-            // the 9:16 reference deterministically later.
-            const normalizedImageUrl = normalizeShopifyImageWidthUrl(
-              websiteItem?.image_url,
-              1600
-            );
-            const authoritativeImageUrl = resolveUrl(
-              normalizedImageUrl,
-              websiteItem?.url || normalizedImageUrl
-            );
-            if (
-              !websiteItem ||
-              !authoritativeImageUrl ||
-              !isHttpUrl(authoritativeImageUrl) ||
-              isBadProductImageUrl(authoritativeImageUrl)
-            ) {
-              throw new Error(
-                "AI product video could not find a usable verified product image."
-              );
-            }
+        const needsCompleteGenerativeProductReference = Boolean(
+          websiteItem &&
+            (isAnimatedVideoRule(websitePreparedRule || rule) ||
+              isWebsiteTextAdRule(websitePreparedRule || rule))
+        );
 
-            const sourceImageBuffer = await fetchImageBufferForOverlay(authoritativeImageUrl);
-            animatedReelCandidates = [
-              {
-                item: websiteItem,
-                imageSelection: {
-                  url: authoritativeImageUrl,
-                  source: "kling_verified_product_image",
-                  sourceImageBuffer,
-                },
-              },
-            ];
-            animatedReelRejectedCandidates = [];
-          } else {
-            const preparedAnimatedCandidates = await prepareAnimatedReelProductCandidates({
+        if (needsCompleteGenerativeProductReference) {
+          automationCurrentStage = "generative_product_reference";
+          const preparedReference =
+            await prepareGenerativeProductReferenceCandidates({
               openai,
               ruleId: rule.id,
               primaryItem: websiteItem,
               reserveItems: websiteReserveItems,
-              sourceUrl: websiteSourceUrl || brandProfile?.website_url || rule.website_url || "",
+              sourceUrl:
+                websiteSourceUrl ||
+                brandProfile?.website_url ||
+                rule.website_url ||
+                "",
               maximumCandidates: 4,
             });
+          generativeProductReferenceCandidate = preparedReference.candidate;
+          generativeProductReferenceRejected = preparedReference.rejected || [];
+
+          if (!generativeProductReferenceCandidate) {
+            const attemptedTitles = generativeProductReferenceRejected
+              .map((entry) => entry?.item?.title || entry?.item?.item_title)
+              .filter(Boolean)
+              .slice(0, 4);
+            throw new Error(
+              `Generative product media could not find an available official image where the complete product is visible after checking the main product and reserves${
+                attemptedTitles.length ? `: ${attemptedTitles.join(", ")}` : ""
+              }.`
+            );
+          }
+
+          websiteItem = generativeProductReferenceCandidate.item;
+          websiteReserveItems = preparedReference.remainingItems || [];
+          productContentContract = buildProductContentContract(
+            [websiteItem],
+            websiteReserveItems
+          );
+          automationRunWebsiteItem = websiteItem;
+          automationRunWebsiteItems = [websiteItem];
+        }
+
+        if (isAnimatedVideoRule(websitePreparedRule || rule)) {
+          if (isKlingAiVideoRule(websitePreparedRule || rule)) {
+            animatedReelCandidates = generativeProductReferenceCandidate
+              ? [
+                  {
+                    ...generativeProductReferenceCandidate,
+                    imageSelection: {
+                      ...generativeProductReferenceCandidate.imageSelection,
+                      source: "kling_verified_product_image",
+                      verifiedReferenceSource:
+                        generativeProductReferenceCandidate.imageSelection?.source || null,
+                    },
+                  },
+                ]
+              : [];
+            animatedReelRejectedCandidates = generativeProductReferenceRejected;
+          } else {
+            const preparedAnimatedCandidates =
+              await prepareAnimatedReelProductCandidates({
+                openai,
+                ruleId: rule.id,
+                primaryItem: websiteItem,
+                reserveItems: websiteReserveItems,
+                sourceUrl:
+                  websiteSourceUrl ||
+                  brandProfile?.website_url ||
+                  rule.website_url ||
+                  "",
+                maximumCandidates: 4,
+              });
 
             animatedReelCandidates = preparedAnimatedCandidates.candidates;
-            animatedReelRejectedCandidates = preparedAnimatedCandidates.rejected;
+            animatedReelRejectedCandidates = [
+              ...generativeProductReferenceRejected,
+              ...(preparedAnimatedCandidates.rejected || []),
+            ];
           }
 
           if (!animatedReelCandidates.length) {
@@ -38421,14 +39200,14 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
               .filter(Boolean)
               .slice(0, 4);
             throw new Error(
-              `Animated product video could not find a usable product image after checking the main product and available reserves${attemptedTitles.length ? `: ${attemptedTitles.join(", ")}` : ""}.`
+              `Animated product video could not find a usable complete product image after checking the main product and available reserves${attemptedTitles.length ? `: ${attemptedTitles.join(", ")}` : ""}.`
             );
           }
 
           websiteItem = animatedReelCandidates[0].item;
-          websiteReserveItems = animatedReelCandidates
-            .slice(1)
-            .map((entry) => entry.item);
+          // Keep the existing reserve set for copy safety and non-paid
+          // preflight fallback. The paid Kling provider is still submitted
+          // exactly once after one reference is selected.
           productContentContract = buildProductContentContract(
             [websiteItem],
             websiteReserveItems

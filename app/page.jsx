@@ -1271,6 +1271,9 @@ export default function Home() {
         recurringCount={recurringSchedules.length}
         scheduledCount={scheduledPlanGroups.length + standaloneScheduledPosts.length}
         campaignCount={calendarCampaignPlans.length}
+        recurringSchedules={recurringSchedules}
+        scheduleActionLoading={scheduleActionLoading}
+        onSetRecurringScheduleState={setOperationalPlanState}
         suggestedCampaign={suggestedCampaign ? {
           id: suggestedCampaign.id,
           title: dashboardText(suggestedCampaign.title, t("dashboard.suggestedCampaign")),

@@ -10,6 +10,7 @@ import {
   generateLockedProductPostContentForUse,
   generateWebsiteItemAdImage,
   getCarouselProductLabelPresentation,
+  prepareGenerativeProductReferenceCandidates,
   renderCarouselProductSlideImage,
   resolveLockedProductUrlForUse,
   shouldUseLogoForRule,
@@ -173,7 +174,7 @@ export async function POST(request) {
         createdBy: context.user.id,
       });
     }
-    const lockedProduct = useManualOverride
+    let lockedProduct = useManualOverride
       ? {
           ...suppliedProduct,
           title: suppliedProduct.title,
@@ -206,6 +207,33 @@ export async function POST(request) {
           rule: rule || { id: ruleId || "admin-product-regeneration", brand_profile_id: brandProfileId },
           ruleId: ruleId || "admin-product-regeneration",
         });
+    const requestedContentFormat = String(
+      post?.content_format || occurrence?.content_format || reviewCase?.content_format || rule?.content_format || "single_image"
+    ).toLowerCase();
+    const requestedContentType = String(
+      rule?.content_type_id || post?.post_type || occurrence?.content_type_id || reviewCase?.content_type_label || "website_item"
+    ).toLowerCase();
+    if (
+      requestedContentFormat === "animated_video" ||
+      requestedContentType === "website_item_text_ad"
+    ) {
+      const preparedReference = await prepareGenerativeProductReferenceCandidates({
+        openai,
+        ruleId: ruleId || "admin-product-regeneration",
+        primaryItem: lockedProduct,
+        reserveItems: [],
+        sourceUrl: websiteUrl,
+        maximumCandidates: 1,
+      });
+      if (!preparedReference.candidate) {
+        throw new Error(
+          preparedReference.rejected?.[0]?.message ||
+            "Admin regeneration could not verify an available official image showing the complete product."
+        );
+      }
+      lockedProduct = preparedReference.candidate.item;
+    }
+
     const product = normalizeProduct(lockedProduct, productUrl);
     const enhancedRule = {
       ...(rule || {}),
