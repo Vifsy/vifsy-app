@@ -7113,6 +7113,14 @@ async function prepareCarouselProductsForRule({
   );
   const websiteAccessProtected =
     isWebsiteAccessProtectedState(websiteAccessState);
+  // v144.22: security-protected retailers must not block a deliverable
+  // five-product carousel solely because a sixth reserve product could not be
+  // verified. Five exact, in-stock, image-verified products are the delivery
+  // contract; the reserve remains best-effort for protected domains. Normal
+  // retailers keep the stricter six-product (5 + reserve) requirement.
+  const campaignRequiredVerifiedCount = websiteAccessProtected
+    ? CAROUSEL_PRODUCT_SLIDE_TARGET
+    : CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED;
 
   let catalogItems = filterWebsiteCatalogItemsForRule(
     await getWebsiteProductCatalogItems({
@@ -7226,7 +7234,7 @@ async function prepareCarouselProductsForRule({
           ruleId: rule?.id,
           brandProfileId: rule?.brand_profile_id,
           websiteUrl,
-          targetVerifiedCount: CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED,
+          targetVerifiedCount: campaignRequiredVerifiedCount,
         });
 
         const indexedFallbackItems = await findWebsiteProductWithWebSearch({
@@ -7242,7 +7250,7 @@ async function prepareCarouselProductsForRule({
           deadlineMs: productPreparationDeadline,
           verificationCache: productVerificationCache,
           allowIndexedSecurityFallback: true,
-          desiredVerifiedCount: CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED,
+          desiredVerifiedCount: campaignRequiredVerifiedCount,
           indexedSecurityRepairBatchSize: 8,
           indexedSecurityFallbackState,
         });
@@ -7266,7 +7274,7 @@ async function prepareCarouselProductsForRule({
 
         if (
           rankedIndexedItems.length >=
-          CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED
+          campaignRequiredVerifiedCount
         ) {
           const resolvedIndexedItems =
             await resolveLargestProductImagesBeforeGeneration({
@@ -7294,7 +7302,7 @@ async function prepareCarouselProductsForRule({
 
           if (
             finalIndexedItems.length >=
-            CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED
+            campaignRequiredVerifiedCount
           ) {
             const indexedCarouselResult =
               await finalizeCarouselFromPrimaryCampaignWebResearch({
@@ -7305,6 +7313,7 @@ async function prepareCarouselProductsForRule({
                 contentType,
                 recentUsedItems,
                 usedWebsiteImageUrlsThisRun,
+                requireReserve: false,
                 researchResult: {
                   executed: true,
                   candidates: rankedIndexedItems,
@@ -7381,6 +7390,7 @@ async function prepareCarouselProductsForRule({
           cachedWebsiteItems: catalogItems,
           deadlineMs: productPreparationDeadline,
           researchRound,
+          requiredVerifiedCount: campaignRequiredVerifiedCount,
         });
         if (!roundResult?.executed) {
           // A budget-skipped round did not call GPT-5.5 and must not be
@@ -7471,13 +7481,16 @@ async function prepareCarouselProductsForRule({
             newlyReviewedProductCount: productsNeedingFinalVerification.length,
             finalVerifiedProductCount: combinedFinalVerifiedProducts.length,
             requiredVerifiedProductCount:
-              CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED,
+              campaignRequiredVerifiedCount,
           });
         }
 
+        const hasRequiredVerifiedProductCount = websiteAccessProtected
+          ? combinedFinalVerifiedProducts.length >= CAROUSEL_PRODUCT_SLIDE_TARGET
+          : combinedFinalVerifiedProducts.length >=
+            CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED;
         if (
-          combinedFinalVerifiedProducts.length >=
-            CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED &&
+          hasRequiredVerifiedProductCount &&
           hasAdequatePrimaryCampaignCarouselVariety(
             combinedFinalVerifiedProducts,
             combinedSelectionMode
@@ -7496,9 +7509,9 @@ async function prepareCarouselProductsForRule({
               technicallyHydratedProductCount: combinedHydratedProducts.length,
               finalVerifiedProductCount: combinedFinalVerifiedProducts.length,
               requiredVerifiedProductCount:
-                CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED,
+                campaignRequiredVerifiedCount,
               requiredCarouselProductCount: CAROUSEL_PRODUCT_SLIDE_TARGET,
-              requiredReserveProductCount: 1,
+              requiredReserveProductCount: websiteAccessProtected ? 0 : 1,
             }
           );
         }
@@ -7543,6 +7556,7 @@ async function prepareCarouselProductsForRule({
           contentType,
           recentUsedItems,
           usedWebsiteImageUrlsThisRun,
+          requireReserve: !websiteAccessProtected,
           researchResult: primaryCampaignWebResearch,
         });
 
@@ -7551,7 +7565,9 @@ async function prepareCarouselProductsForRule({
       }
 
       const authoritativeResearchError = new Error(
-        `GPT-5.5 web research completed ${researchRounds.length} round(s), but only ${combinedFinalVerifiedProducts.length} products passed the final exact image-identity gate. Spreelo requires ${CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED} final verified products (${CAROUSEL_PRODUCT_SLIDE_TARGET} carousel products + at least 1 reserve) before publishing. The legacy candidate flow was deliberately not used.`
+        websiteAccessProtected
+          ? `GPT-5.5 web research completed ${researchRounds.length} round(s), but only ${combinedFinalVerifiedProducts.length} products passed the final exact image-identity gate. Spreelo requires ${CAROUSEL_PRODUCT_SLIDE_TARGET} final verified products (${CAROUSEL_PRODUCT_SLIDE_TARGET} carousel products) before publishing on a protected retailer. The legacy candidate flow was deliberately not used.`
+          : `GPT-5.5 web research completed ${researchRounds.length} round(s), but only ${combinedFinalVerifiedProducts.length} products passed the final exact image-identity gate. Spreelo requires ${CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED} final verified products (${CAROUSEL_PRODUCT_SLIDE_TARGET} carousel products + at least 1 reserve) before publishing. The legacy candidate flow was deliberately not used.`
       );
       authoritativeResearchError.code =
         "CAMPAIGN_AUTHORITATIVE_WEB_RESEARCH_INSUFFICIENT_ASSETS";
@@ -7559,7 +7575,7 @@ async function prepareCarouselProductsForRule({
       authoritativeResearchError.verifiedProductCount =
         combinedFinalVerifiedProducts.length;
       authoritativeResearchError.targetProductCount =
-        CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED;
+        campaignRequiredVerifiedCount;
       authoritativeResearchError.candidateCount = combinedCandidates.length;
       throw authoritativeResearchError;
     } catch (error) {
@@ -26750,6 +26766,7 @@ async function findPrimaryCampaignProductsWithWebSearch({
   cachedWebsiteItems = [],
   deadlineMs = Number.POSITIVE_INFINITY,
   researchRound = 1,
+  requiredVerifiedCount = CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED,
 }) {
   const startedAt = Date.now();
   const allowedDomain = getWebsiteFetchDomain(websiteUrl);
@@ -27186,7 +27203,7 @@ Return the result in the required JSON structure. Keep each reason concise and g
   if (
     repairCandidates.length &&
     (failedTopFiveCandidates.length > 0 ||
-      hydratedProducts.length < CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED) &&
+      hydratedProducts.length < requiredVerifiedCount) &&
     (!Number.isFinite(deadlineMs) || deadlineMs - Date.now() >= 40_000)
   ) {
     try {
@@ -27215,7 +27232,7 @@ Return the result in the required JSON structure. Keep each reason concise and g
         if (
           (!isLockedTopFiveRank &&
             hydratedProducts.length >=
-              CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED) ||
+              requiredVerifiedCount) ||
           (Number.isFinite(deadlineMs) && deadlineMs - Date.now() < 20_000)
         ) {
           break;
@@ -27279,9 +27296,12 @@ Return the result in the required JSON structure. Keep each reason concise and g
     allowedDomain,
     model: PRODUCT_RESEARCH_MODEL,
     requestedProductCount: CAMPAIGN_PRIMARY_WEB_RESEARCH_TARGET,
-    requiredVerifiedProductCount: CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED,
+    requiredVerifiedProductCount: requiredVerifiedCount,
     requiredCarouselProductCount: CAROUSEL_PRODUCT_SLIDE_TARGET,
-    requiredReserveProductCount: 1,
+    requiredReserveProductCount: Math.max(
+      0,
+      requiredVerifiedCount - CAROUSEL_PRODUCT_SLIDE_TARGET
+    ),
     returnedProductCount: rawProducts.length,
     acceptedDirectUrlCount: rankedCandidates.length,
     technicallyHydratedCount: verifiedProducts.length,
@@ -27537,6 +27557,7 @@ async function finalizeCarouselFromPrimaryCampaignWebResearch({
   recentUsedItems,
   usedWebsiteImageUrlsThisRun,
   researchResult,
+  requireReserve = true,
 }) {
   const validProducts = dedupeUrlItems(
     (researchResult?.validProducts || []).filter(isValidCarouselProduct)
@@ -27545,13 +27566,17 @@ async function finalizeCarouselFromPrimaryCampaignWebResearch({
       getPrimaryCampaignResearchRank(left) -
       getPrimaryCampaignResearchRank(right)
   );
-  // v143.62 fail-closed delivery contract: five publishable products alone are
-  // not enough. We require at least one additional fully verified reserve so a
-  // last-minute replacement never forces Spreelo to use an uncertain asset.
+  // v144.22: keep the historical 5 + reserve contract on normal retailers,
+  // but protected retailers may deliver once all five actual carousel slots
+  // are exact, in-stock and image-verified. A missing sixth reserve must never
+  // turn an otherwise complete protected-retailer carousel into a research loop.
   if (
-    validProducts.length <
-    CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED
+    requireReserve &&
+    validProducts.length < CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED
   ) {
+    return null;
+  }
+  if (!requireReserve && validProducts.length < CAROUSEL_PRODUCT_SLIDE_TARGET) {
     return null;
   }
 
@@ -27569,7 +27594,7 @@ async function finalizeCarouselFromPrimaryCampaignWebResearch({
   );
   if (
     selectedProducts.length < CAROUSEL_PRODUCT_SLIDE_TARGET ||
-    reserveProducts.length < 1
+    (requireReserve && reserveProducts.length < 1)
   ) {
     return null;
   }
@@ -27636,6 +27661,7 @@ async function finalizeCarouselFromPrimaryCampaignWebResearch({
       exact_task: researchResult?.prompt || null,
       model: PRODUCT_RESEARCH_MODEL,
       primary_web_research: true,
+      reserve_required_for_delivery: requireReserve,
       authoritative_gpt_ranking_preserved: true,
       product_engine_verification_skipped: true,
       second_senior_review_skipped: true,

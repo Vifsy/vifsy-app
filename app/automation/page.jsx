@@ -8,6 +8,7 @@ import {
   CalendarDays,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   CircleHelp,
   Clapperboard,
@@ -3281,7 +3282,7 @@ function DatePickerField({
           onClick={() => setOpenPickerId(isOpen ? null : pickerId)}
         >
           <span>{formatStartDateLabel(value, timeZone, locale)}</span>
-          <strong>📅</strong>
+          <strong aria-hidden="true"><CalendarDays size={16} /></strong>
         </button>
 
         {isOpen && (
@@ -3289,18 +3290,20 @@ function DatePickerField({
             <div className="custom-calendar-header">
               <button
                 type="button"
+                aria-label="Previous month"
                 onClick={() => setVisibleMonth(moveMonth(visibleMonth, -1))}
               >
-                ‹
+                <ChevronLeft size={18} aria-hidden="true" />
               </button>
 
               <strong>{getMonthLabel(visibleMonth, locale)}</strong>
 
               <button
                 type="button"
+                aria-label="Next month"
                 onClick={() => setVisibleMonth(moveMonth(visibleMonth, 1))}
               >
-                ›
+                <ChevronRight size={18} aria-hidden="true" />
               </button>
             </div>
 

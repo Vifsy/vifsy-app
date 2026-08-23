@@ -123,7 +123,9 @@
     "test:v144.12": "node scripts/test-v144-12-exact-generation-cost-tracking.mjs",
     "test:v144.13": "node scripts/test-v144-13-campaign-identity-lock.mjs",
     "test:v144.18": "node scripts/test-v144-18-gpt-image-transparent-assets.mjs",
-    "test:v144.20": "node scripts/test-v144-20-adaptive-protected-commerce-discovery.mjs"
+    "test:v144.20": "node scripts/test-v144-20-adaptive-protected-commerce-discovery.mjs",
+    "test:v144.21": "node scripts/test-v144-21-dashboard-timezone-calendar-polish.mjs",
+    "test:v144.22": "node scripts/test-v144-22-carousel-delivery-translation-resilience.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

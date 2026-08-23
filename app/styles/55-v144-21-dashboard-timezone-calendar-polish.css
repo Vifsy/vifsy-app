@@ -1,0 +1,269 @@
+/* v144.21 — dashboard plan drill-downs, timezone usability and Content Studio calendar/readability polish. */
+
+/* -------------------------------------------------------------------------- */
+/* Home: make every plan category manageable, not only recurring schedules.   */
+/* -------------------------------------------------------------------------- */
+.home-reference-plans .home-reference-manage-link {
+  grid-column: auto;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.home-reference-plans .home-reference-manage-link svg {
+  transition: transform 160ms ease;
+}
+
+.home-reference-plans .home-reference-manage-link.open svg {
+  transform: rotate(180deg);
+}
+
+.home-reference-plan-manager {
+  position: relative;
+}
+
+.home-reference-plan-manager.scheduled-manager {
+  border-left: 3px solid #7656f5;
+}
+
+.home-reference-plan-manager.campaign-manager {
+  border-left: 3px solid #2cb46f;
+}
+
+.home-reference-recurring-status > span.scheduled {
+  background: #7656f5;
+  box-shadow: 0 0 0 4px rgba(118, 86, 245, .12);
+}
+
+.home-reference-recurring-status > span.campaign {
+  background: #2cb46f;
+  box-shadow: 0 0 0 4px rgba(44, 180, 111, .12);
+}
+
+.home-reference-recurring-actions .home-reference-open-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  border: 1px solid #d7dde6;
+  border-radius: 8px;
+  background: #fff;
+  color: #10233a;
+  padding: 7px 10px;
+  text-decoration: none;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.home-reference-recurring-actions .home-reference-open-item svg {
+  width: 13px;
+  height: 13px;
+}
+
+@media (max-width: 720px) {
+  .home-reference-plans article > .home-reference-manage-link {
+    grid-column: 2 / -1;
+    justify-content: flex-start;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Settings: timezone selector remains interactive while a save is in flight. */
+/* -------------------------------------------------------------------------- */
+html body .settings-reference-page .settings-ref-language-section.publishing-timezone select[aria-busy="true"] {
+  cursor: progress;
+  opacity: 1;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Content Studio: a calmer, more professional calendar editor.               */
+/* -------------------------------------------------------------------------- */
+html body .automation-page.plan-v70-active .custom-picker-button strong {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #66758d;
+}
+
+html body .automation-page.plan-v70-active .custom-calendar-popover {
+  width: 352px !important;
+  max-width: min(352px, calc(100vw - 32px)) !important;
+  padding: 18px !important;
+  border: 1px solid #dfe5ee !important;
+  border-radius: 18px !important;
+  background: rgba(255,255,255,.98) !important;
+  box-shadow: 0 22px 55px rgba(21, 33, 51, .16), 0 2px 8px rgba(21, 33, 51, .06) !important;
+}
+
+html body .automation-page.plan-v70-active .custom-calendar-header {
+  min-height: 42px;
+  margin: 0 0 14px !important;
+  padding: 0 0 12px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+html body .automation-page.plan-v70-active .custom-calendar-header strong {
+  color: #132137 !important;
+  font-size: 15px !important;
+  font-weight: 900 !important;
+  letter-spacing: -.01em;
+}
+
+html body .automation-page.plan-v70-active .custom-calendar-header button {
+  width: 36px !important;
+  height: 36px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  border: 1px solid #dfe5ee !important;
+  border-radius: 10px !important;
+  background: #f9fbfd !important;
+  color: #33445d !important;
+  box-shadow: none !important;
+}
+
+html body .automation-page.plan-v70-active .custom-calendar-header button:hover {
+  border-color: #ffb39e !important;
+  background: #fff5f1 !important;
+  color: #d9573a !important;
+}
+
+html body .automation-page.plan-v70-active .custom-calendar-weekdays {
+  gap: 5px !important;
+  margin-bottom: 7px !important;
+}
+
+html body .automation-page.plan-v70-active .custom-calendar-weekdays span {
+  color: #8a97a9 !important;
+  font-size: 10px !important;
+  font-weight: 850 !important;
+  letter-spacing: .025em;
+  text-transform: uppercase;
+}
+
+html body .automation-page.plan-v70-active .custom-calendar-grid {
+  gap: 5px !important;
+}
+
+html body .automation-page.plan-v70-active .custom-calendar-day {
+  min-width: 0 !important;
+  height: 38px !important;
+  padding: 0 !important;
+  border: 1px solid transparent !important;
+  border-radius: 10px !important;
+  color: #26354b !important;
+  background: #fff !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  box-shadow: none !important;
+}
+
+html body .automation-page.plan-v70-active .custom-calendar-day:hover {
+  border-color: #f2c6b9 !important;
+  background: #fff7f4 !important;
+  color: #b84e34 !important;
+}
+
+html body .automation-page.plan-v70-active .custom-calendar-day.muted {
+  color: #c1c9d4 !important;
+  background: transparent !important;
+}
+
+html body .automation-page.plan-v70-active .custom-calendar-day.today:not(.selected) {
+  border-color: #aab7c8 !important;
+  background: #f7f9fc !important;
+}
+
+html body .automation-page.plan-v70-active .custom-calendar-day.selected {
+  border-color: #ef6646 !important;
+  background: #ef6646 !important;
+  color: #fff !important;
+  box-shadow: 0 7px 16px rgba(239, 102, 70, .2) !important;
+}
+
+/* The row editor should read as a compact editing workspace, not a blank tray. */
+html body .automation-page.plan-v70-active .plan-v86-planned-row .plan-v70-row-editor {
+  padding: 14px !important;
+  border: 1px solid #dfe5ee !important;
+  border-radius: 14px !important;
+  background: linear-gradient(180deg, #fbfcfe 0%, #f7f9fc 100%) !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-row-editor:has(.custom-calendar-popover) {
+  grid-template-columns: minmax(352px, 1fr) 130px auto auto !important;
+  align-items: start !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-row-editor .custom-picker-field.compact .custom-calendar-popover {
+  width: min(352px, 100%) !important;
+  max-width: 100% !important;
+  margin-top: 10px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-row-editor .custom-picker-button,
+html body .automation-page.plan-v70-active .plan-v70-row-editor > button {
+  min-height: 42px !important;
+  border-radius: 10px !important;
+  font-size: 12.5px !important;
+}
+
+@media (max-width: 900px) {
+  html body .automation-page.plan-v70-active .plan-v70-row-editor:has(.custom-calendar-popover) {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+@media (max-width: 620px) {
+  html body .automation-page.plan-v70-active .custom-calendar-popover,
+  html body .automation-page.plan-v70-active .plan-v70-row-editor .custom-picker-field.compact .custom-calendar-popover {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 14px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-row-editor:has(.custom-calendar-popover) {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Content Studio footer: restore normal product-wide readability.            */
+/* -------------------------------------------------------------------------- */
+html body .automation-page.plan-v70-active .plan-v83-continuation-head h2,
+html body .automation-page.plan-v70-active .plan-v70-activate-copy h2 {
+  font-size: 17px !important;
+  line-height: 1.25 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v83-continuation-head p,
+html body .automation-page.plan-v70-active .plan-v70-activate-copy p {
+  font-size: 12.5px !important;
+  line-height: 1.5 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v83-continuation-head .plan-v70-inline-toggle strong,
+html body .automation-page.plan-v70-active .plan-v83-variation-copy strong,
+html body .automation-page.plan-v70-active .plan-v83-next-cycle strong {
+  font-size: 12.5px !important;
+  line-height: 1.4 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v83-variation-copy small,
+html body .automation-page.plan-v70-active .plan-v83-next-cycle span,
+html body .automation-page.plan-v70-active .plan-v70-activate-actions > span,
+html body .automation-page.plan-v70-active .plan-v74-approval-publishing-note {
+  font-size: 11.5px !important;
+  line-height: 1.5 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v107-bottom-grid > .plan-v83-continuation-card,
+html body .automation-page.plan-v70-active .plan-v107-bottom-grid > .plan-v70-activate-card {
+  padding: 17px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-activate-actions > button,
+html body .automation-page.plan-v70-active .plan-v70-success-actions > button,
+html body .automation-page.plan-v70-active .plan-v70-success-actions > a {
+  font-size: 13px !important;
+}

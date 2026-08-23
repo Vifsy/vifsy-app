@@ -8,7 +8,12 @@ import {
 } from "../../../lib/i18n/defaultLabels.js";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 30;
+
+const MAX_NAMESPACES_PER_REQUEST = 4;
+const TRANSLATION_CHUNK_SIZE = 80;
+const TRANSLATION_CONCURRENCY = 4;
+const TRANSLATION_FETCH_TIMEOUT_MS = 6500;
 
 function createSupabaseAdminClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -33,7 +38,7 @@ function parseNamespaces(value) {
     .map((namespace) => namespace.trim())
     .filter((namespace) => allowedNamespaces.has(namespace));
 
-  return Array.from(new Set(["common", ...namespaces])).slice(0, 8);
+  return Array.from(new Set(["common", ...namespaces])).slice(0, MAX_NAMESPACES_PER_REQUEST);
 }
 
 function shouldRetranslateLabel({ defaultValue, translatedValue, locale }) {
@@ -103,11 +108,40 @@ function extractJsonObject(text) {
   }
 }
 
-async function translateMissingLabels({
+function chunkLabelEntries(labels, chunkSize = TRANSLATION_CHUNK_SIZE) {
+  const entries = Object.entries(labels || {});
+  const chunks = [];
+  for (let index = 0; index < entries.length; index += chunkSize) {
+    chunks.push(Object.fromEntries(entries.slice(index, index + chunkSize)));
+  }
+  return chunks;
+}
+
+async function mapWithConcurrency(items, concurrency, worker) {
+  const results = new Array(items.length);
+  let cursor = 0;
+
+  const runners = Array.from(
+    { length: Math.min(Math.max(1, concurrency), Math.max(1, items.length)) },
+    async () => {
+      while (cursor < items.length) {
+        const index = cursor;
+        cursor += 1;
+        results[index] = await worker(items[index], index);
+      }
+    }
+  );
+
+  await Promise.all(runners);
+  return results;
+}
+
+async function translateLabelChunk({
   locale,
   languageName,
   namespace,
-  missingLabels,
+  labels,
+  chunkIndex,
 }) {
   const openAiKey = process.env.OPENAI_API_KEY;
 
@@ -115,59 +149,126 @@ async function translateMissingLabels({
     throw new Error("Missing OPENAI_API_KEY.");
   }
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${openAiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: process.env.OPENAI_UI_TRANSLATION_MODEL || "gpt-4.1-mini",
-      temperature: 0.1,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You translate SaaS user interface labels. Return only valid JSON. Preserve all JSON keys exactly. Preserve placeholders like {brandName}, {count}, {year}, {date}, {days}, and {number} exactly. Keep translations concise and natural for buttons, menus, form labels, tooltips, empty states and dashboard UI. Do not translate brand names such as Spreelo.",
-        },
-        {
-          role: "user",
-          content: JSON.stringify(
-            {
-              target_locale: locale,
-              target_language: languageName,
-              namespace,
-              labels: missingLabels,
-            },
-            null,
-            2
-          ),
-        },
-      ],
-    }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    TRANSLATION_FETCH_TIMEOUT_MS
+  );
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`OpenAI translation failed: ${errorText}`);
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${openAiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_UI_TRANSLATION_MODEL || "gpt-4.1-mini",
+        temperature: 0.1,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You translate SaaS user interface labels. Return only valid JSON. Preserve all JSON keys exactly. Preserve placeholders like {brandName}, {count}, {year}, {date}, {days}, and {number} exactly. Keep translations concise and natural for buttons, menus, form labels, tooltips, empty states and dashboard UI. Do not translate brand names such as Spreelo.",
+          },
+          {
+            role: "user",
+            content: JSON.stringify(
+              {
+                target_locale: locale,
+                target_language: languageName,
+                namespace,
+                chunk: chunkIndex + 1,
+                labels,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenAI translation failed: ${errorText}`);
+    }
+
+    const data = await response.json();
+    const content = data?.choices?.[0]?.message?.content || "";
+    const translatedLabels = extractJsonObject(content);
+
+    return Object.keys(labels).reduce((safeLabels, key) => {
+      const translatedValue = translatedLabels?.[key];
+      if (
+        translatedValue !== null &&
+        translatedValue !== undefined &&
+        String(translatedValue).trim() !== ""
+      ) {
+        safeLabels[key] = String(translatedValue);
+      }
+      return safeLabels;
+    }, {});
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error(
+        `OpenAI UI translation chunk timed out after ${TRANSLATION_FETCH_TIMEOUT_MS} ms.`
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function translateMissingLabels({
+  locale,
+  languageName,
+  namespace,
+  missingLabels,
+}) {
+  const chunks = chunkLabelEntries(missingLabels);
+  if (!chunks.length) {
+    return { translatedLabels: {}, failedKeys: [] };
   }
 
-  const data = await response.json();
-  const content = data?.choices?.[0]?.message?.content || "";
-  const translatedLabels = extractJsonObject(content);
+  const outcomes = await mapWithConcurrency(
+    chunks,
+    TRANSLATION_CONCURRENCY,
+    async (chunk, chunkIndex) => {
+      try {
+        const translated = await translateLabelChunk({
+          locale,
+          languageName,
+          namespace,
+          labels: chunk,
+          chunkIndex,
+        });
+        const failedKeys = Object.keys(chunk).filter(
+          (key) => !String(translated?.[key] || "").trim()
+        );
+        return { translated, failedKeys };
+      } catch (error) {
+        console.warn("UI translation chunk deferred", {
+          locale,
+          namespace,
+          chunkIndex: chunkIndex + 1,
+          keyCount: Object.keys(chunk).length,
+          message: error?.message || String(error),
+        });
+        return { translated: {}, failedKeys: Object.keys(chunk) };
+      }
+    }
+  );
 
-  return Object.keys(missingLabels).reduce((safeLabels, key) => {
-    const translatedValue = translatedLabels?.[key];
-
-    safeLabels[key] =
-      translatedValue === null ||
-      translatedValue === undefined ||
-      String(translatedValue).trim() === ""
-        ? missingLabels[key]
-        : String(translatedValue);
-
-    return safeLabels;
-  }, {});
+  return {
+    translatedLabels: Object.assign(
+      {},
+      ...outcomes.map((outcome) => outcome.translated || {})
+    ),
+    failedKeys: outcomes.flatMap((outcome) => outcome.failedKeys || []),
+  };
 }
 
 async function getOrCreateNamespaceLabels({ supabaseAdmin, locale, namespace }) {
@@ -232,17 +333,19 @@ async function getOrCreateNamespaceLabels({ supabaseAdmin, locale, namespace }) 
     );
   }
 
-  const translatedMissingLabels = await translateMissingLabels({
-    locale,
-    languageName,
-    namespace,
-    missingLabels,
-  });
+  const { translatedLabels: translatedMissingLabels, failedKeys } =
+    await translateMissingLabels({
+      locale,
+      languageName,
+      namespace,
+      missingLabels,
+    });
 
   const mergedLabels = {
     ...existingLabels,
     ...translatedMissingLabels,
   };
+  const translationComplete = failedKeys.length === 0;
 
   const { error: upsertError } = await supabaseAdmin
     .from("ui_translation_packs")
@@ -252,7 +355,7 @@ async function getOrCreateNamespaceLabels({ supabaseAdmin, locale, namespace }) 
         language: languageName,
         namespace,
         labels: mergedLabels,
-        status: "ready",
+        status: translationComplete ? "ready" : "updating",
         updated_at: new Date().toISOString(),
       },
       {
@@ -275,16 +378,15 @@ export async function GET(request) {
 
     const supabaseAdmin = createSupabaseAdminClient();
 
-    const labelsByNamespace = await Promise.all(
-      namespaces.map(async (namespace) => {
-        const labels = await getOrCreateNamespaceLabels({
+    const labelsByNamespace = await mapWithConcurrency(
+      namespaces,
+      2,
+      async (namespace) =>
+        getOrCreateNamespaceLabels({
           supabaseAdmin,
           locale,
           namespace,
-        });
-
-        return labels;
-      })
+        })
     );
 
     const labels = Object.assign({}, ...labelsByNamespace);

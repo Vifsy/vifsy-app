@@ -337,11 +337,40 @@ function getLocaleBase(locale) {
   return String(locale || "en").toLowerCase().split("-")[0];
 }
 
-const PUBLISHING_TIME_ZONES = [
-  "UTC", "Europe/Stockholm", "Europe/London", "Europe/Paris",
-  "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
-  "Asia/Dubai", "Asia/Kolkata", "Asia/Shanghai", "Asia/Tokyo", "Australia/Sydney",
+const PUBLISHING_TIME_ZONE_FALLBACKS = [
+  "UTC",
+  "Europe/Stockholm", "Europe/Copenhagen", "Europe/Oslo", "Europe/Helsinki", "Europe/London", "Europe/Dublin",
+  "Europe/Berlin", "Europe/Paris", "Europe/Madrid", "Europe/Rome", "Europe/Amsterdam", "Europe/Brussels",
+  "Europe/Warsaw", "Europe/Vienna", "Europe/Zurich", "Europe/Prague", "Europe/Athens", "Europe/Istanbul",
+  "America/New_York", "America/Toronto", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Vancouver",
+  "America/Mexico_City", "America/Sao_Paulo", "America/Bogota", "America/Lima", "America/Santiago", "America/Argentina/Buenos_Aires",
+  "Asia/Dubai", "Asia/Riyadh", "Asia/Kolkata", "Asia/Bangkok", "Asia/Singapore", "Asia/Kuala_Lumpur", "Asia/Jakarta",
+  "Asia/Manila", "Asia/Hong_Kong", "Asia/Shanghai", "Asia/Tokyo", "Asia/Seoul",
+  "Africa/Cairo", "Africa/Johannesburg", "Africa/Lagos", "Africa/Nairobi",
+  "Australia/Perth", "Australia/Adelaide", "Australia/Brisbane", "Australia/Sydney", "Australia/Melbourne",
+  "Pacific/Auckland", "Pacific/Honolulu",
 ];
+
+function getPublishingTimeZones() {
+  let supported = [];
+  try {
+    supported = typeof Intl.supportedValuesOf === "function"
+      ? Intl.supportedValuesOf("timeZone")
+      : [];
+  } catch {
+    supported = [];
+  }
+
+  return Array.from(new Set(["UTC", ...PUBLISHING_TIME_ZONE_FALLBACKS, ...supported]))
+    .filter(Boolean)
+    .sort((a, b) => {
+      if (a === "UTC") return -1;
+      if (b === "UTC") return 1;
+      return a.localeCompare(b);
+    });
+}
+
+const PUBLISHING_TIME_ZONES = getPublishingTimeZones();
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -564,7 +593,8 @@ export default function Settings() {
       if (!response.ok || !result?.ok) throw new Error(result?.error || "Timezone could not be saved.");
 
       setPublishingTimeZone(nextTimeZone);
-      setPublishingTimeZoneDraft(nextTimeZone);
+      // Keep a newer selection the user may have made while this request was saving.
+      setPublishingTimeZoneDraft((currentDraft) => currentDraft === nextTimeZone ? nextTimeZone : currentDraft);
       setCurrentUser((current) => current ? {
         ...current,
         user_metadata: { ...(current.user_metadata || {}), publishing_timezone: nextTimeZone },

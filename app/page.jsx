@@ -955,6 +955,30 @@ export default function Home() {
     return scheduledPosts.filter((post) => !post.automation_rule_id || !plannedRuleIds.has(post.automation_rule_id));
   }, [scheduledPosts, scheduledPlanGroups]);
 
+  // The Home reference row must count actual one-time posts, not grouped plans.
+  // A single plan can contain several rules (for example 3 planned posts), which is
+  // why the old UI could show 3 at the top but only 1 in the planner row.
+  const scheduledRuleItems = useMemo(() => {
+    return rules
+      .filter((rule) => {
+        if (rule?.schedule_type === "weekly") return false;
+        if (rule?.queue_source === "campaign") return false;
+        if (rule?.plan_state === "ended") return false;
+        return rule?.is_active === true || isFutureDate(rule?.next_run_at || rule?.run_date);
+      })
+      .sort((a, b) => new Date(a?.next_run_at || a?.run_date || a?.created_at || 0) - new Date(b?.next_run_at || b?.run_date || b?.created_at || 0));
+  }, [rules]);
+
+  const homeScheduledItems = useMemo(() => {
+    const ruleIds = new Set(scheduledRuleItems.map((rule) => rule.id));
+    return [
+      ...scheduledRuleItems.map((rule) => ({ ...rule, item_kind: "rule" })),
+      ...scheduledPosts
+        .filter((post) => !post?.automation_rule_id || !ruleIds.has(post.automation_rule_id))
+        .map((post) => ({ ...post, item_kind: "post" })),
+    ].sort((a, b) => new Date(a?.next_run_at || a?.scheduled_for || a?.run_date || a?.created_at || 0) - new Date(b?.next_run_at || b?.scheduled_for || b?.run_date || b?.created_at || 0));
+  }, [scheduledRuleItems, scheduledPosts]);
+
   const nextAutomation = upcomingRules[0] || null;
   const currentBrandName = brandProfile?.business_name || t("dashboard.currentBrand");
   const dashboardEyebrow = t("dashboard.eyebrow");
@@ -1269,9 +1293,11 @@ export default function Home() {
         publishedCount={publishedThisMonthCount}
         activeSchedulesCount={recurringSchedules.length + calendarCampaignPlans.length}
         recurringCount={recurringSchedules.length}
-        scheduledCount={scheduledPlanGroups.length + standaloneScheduledPosts.length}
+        scheduledCount={homeScheduledItems.length}
         campaignCount={calendarCampaignPlans.length}
         recurringSchedules={recurringSchedules}
+        scheduledItems={homeScheduledItems}
+        campaignSchedules={calendarCampaignPlans}
         scheduleActionLoading={scheduleActionLoading}
         onSetRecurringScheduleState={setOperationalPlanState}
         suggestedCampaign={suggestedCampaign ? {

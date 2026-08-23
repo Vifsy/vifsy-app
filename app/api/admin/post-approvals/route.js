@@ -58,6 +58,10 @@ export async function GET(request) {
   // window even though the failure email was sent correctly.
   const occurrenceSelect =
     "id, post_id, user_id, brand_profile_id, automation_rule_id, status, scheduled_for, content_type_label, content_format, campaign_title, started_at, finished_at, failure_code, failure_stage, failure_message_internal, failure_message_customer, refunded_credits, metadata";
+  // v144.22: a durable background generation can be healthy while it is in
+  // retry_pending. The normal admin queue must surface that state instead of
+  // looking empty while the customer is waiting. We intentionally keep
+  // short-lived `running` rows in the Creating view only to avoid queue noise.
   const [failedOccurrenceResult, activeOccurrenceResult] = await Promise.all([
     ["all", "failed", "queue"].includes(status)
       ? context.admin
@@ -74,7 +78,14 @@ export async function GET(request) {
           .in("status", ["running", "retry_pending"])
           .order("started_at", { ascending: false })
           .limit(200)
-      : Promise.resolve({ data: [], error: null }),
+      : status === "queue"
+        ? context.admin
+            .from("automation_occurrences")
+            .select(occurrenceSelect)
+            .eq("status", "retry_pending")
+            .order("started_at", { ascending: false })
+            .limit(200)
+        : Promise.resolve({ data: [], error: null }),
   ]);
   const occurrenceError =
     failedOccurrenceResult.error || activeOccurrenceResult.error;
