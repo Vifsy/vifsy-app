@@ -6,6 +6,11 @@ import {
 } from "../../../../lib/kling.js";
 import { normalizeVideoDurationSeconds } from "../../../../lib/videoDuration.js";
 import { createGenerationCostTracker } from "../../../../lib/generationCostTracking.js";
+import {
+  buildVideoOverlayEdit,
+  queueShotstackRender,
+  waitForShotstackRender,
+} from "../../../../lib/shotstack.js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -119,7 +124,7 @@ async function downloadKlingVideo(videoUrl) {
     redirect: "follow",
     headers: {
       Accept: "video/mp4,video/*;q=0.9,*/*;q=0.5",
-      "User-Agent": "Spreelo-Kling-Finalizer/144.07",
+      "User-Agent": "Spreelo-Kling-Finalizer/144.25",
     },
   });
 
@@ -143,8 +148,121 @@ async function downloadKlingVideo(videoUrl) {
   return Buffer.from(arrayBuffer);
 }
 
-async function finalizeReadyTask(supabase, post, task) {
-  const videoBuffer = await downloadKlingVideo(task.videoUrl);
+function getKlingAdvertisingPostprocess(post) {
+  const selection = post?.video_background_selection;
+  if (!selection || typeof selection !== "object" || Array.isArray(selection)) return null;
+  if (String(selection.mode || "") !== "kling_professional_advertising_postprocess") return null;
+  if (!selection.text_overlay_url) return null;
+  return selection;
+}
+
+async function getKlingFinalVideoSource({ supabase, post, task, costTracker }) {
+  const postprocess = getKlingAdvertisingPostprocess(post);
+  if (!postprocess) {
+    return {
+      videoUrl: task.videoUrl,
+      postprocessApplied: false,
+      postprocessRenderId: null,
+    };
+  }
+
+  const durationSeconds = normalizeVideoDurationSeconds(
+    task.durationSeconds,
+    post.video_duration_seconds,
+    6
+  );
+  let renderId = String(postprocess.shotstack_render_id || "").trim() || null;
+  let nextSelection = post.video_background_selection;
+
+  if (!renderId) {
+    const edit = buildVideoOverlayEdit({
+      videoUrl: task.videoUrl,
+      textOverlayUrl: postprocess.text_overlay_url,
+      durationSeconds,
+      overlayStartSeconds: 2.8,
+    });
+    renderId = await queueShotstackRender(edit);
+    nextSelection = {
+      ...post.video_background_selection,
+      shotstack_render_id: renderId,
+      shotstack_status: "rendering",
+      shotstack_started_at: new Date().toISOString(),
+    };
+    const { error: persistError } = await supabase
+      .from("posts")
+      .update({
+        video_background_selection: nextSelection,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", post.id)
+      .eq("video_provider", "kling");
+    if (persistError) {
+      throw new Error(
+        `Professional Kling typography render ${renderId} was queued but its id could not be saved: ${persistError.message || "unknown database error"}`
+      );
+    }
+    console.info("Kling professional advertising typography render queued", {
+      postId: post.id,
+      klingTaskId: post.kling_task_id,
+      shotstackRenderId: renderId,
+      overlayProvider: postprocess.text_overlay_provider || null,
+    });
+  }
+
+  const render = await waitForShotstackRender({
+    renderId,
+    maxAttempts: 70,
+    delayMs: 2500,
+  });
+
+  if (costTracker?.recordShotstack) {
+    try {
+      await costTracker.recordShotstack({
+        renderId,
+        billableSeconds: render.billableSeconds,
+        plan: render.plan,
+        environment: render.environment,
+      });
+    } catch (costError) {
+      console.warn("Kling typography post-process cost tracking failed without affecting finalization", {
+        postId: post.id,
+        renderId,
+        message: costError?.message || String(costError),
+      });
+    }
+  }
+
+  const completedSelection = {
+    ...nextSelection,
+    shotstack_render_id: renderId,
+    shotstack_status: "done",
+    shotstack_completed_at: new Date().toISOString(),
+  };
+  await supabase
+    .from("posts")
+    .update({
+      video_background_selection: completedSelection,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", post.id)
+    .eq("video_provider", "kling");
+
+  console.info("Kling professional advertising typography applied", {
+    postId: post.id,
+    klingTaskId: post.kling_task_id,
+    shotstackRenderId: renderId,
+    overlayProvider: postprocess.text_overlay_provider || null,
+  });
+
+  return {
+    videoUrl: render.url,
+    postprocessApplied: true,
+    postprocessRenderId: renderId,
+  };
+}
+
+async function finalizeReadyTask(supabase, post, task, finalVideoUrl = task.videoUrl) {
+  const videoBuffer = await downloadKlingVideo(finalVideoUrl);
   const storagePath = `${post.user_id}/${post.id}-kling.mp4`;
   const { error: uploadError } = await supabase.storage
     .from(POST_VIDEOS_BUCKET)
@@ -213,7 +331,7 @@ export async function GET(request) {
     const { data: posts, error } = await supabase
       .from("posts")
       .select(
-        "id, user_id, status, video_provider, video_status, video_duration_seconds, video_error, kling_generation_count, kling_task_id, kling_task_status, kling_submitted_at, kling_last_polled_at, kling_model, kling_resolution, kling_audio"
+        "id, user_id, status, video_provider, video_status, video_duration_seconds, video_error, video_background_selection, kling_generation_count, kling_task_id, kling_task_status, kling_submitted_at, kling_last_polled_at, kling_model, kling_resolution, kling_audio"
       )
       .eq("video_provider", "kling")
       .in("video_status", pendingStatuses)
@@ -289,8 +407,8 @@ export async function GET(request) {
         continue;
       }
 
+      const costTracker = createGenerationCostTracker({ supabase, postId: post.id });
       try {
-        const costTracker = createGenerationCostTracker({ supabase, postId: post.id });
         await costTracker.recordKling({
           model: post.kling_model || "kling-3.0",
           durationSeconds: normalizeVideoDurationSeconds(
@@ -313,8 +431,18 @@ export async function GET(request) {
       }
 
       try {
-        await finalizeReadyTask(supabase, post, task);
+        const finalVideo = await getKlingFinalVideoSource({
+          supabase,
+          post,
+          task,
+          costTracker,
+        });
+        await finalizeReadyTask(supabase, post, task, finalVideo.videoUrl);
         summary.completed += 1;
+        if (finalVideo.postprocessApplied) {
+          summary.professional_typography_applied =
+            Number(summary.professional_typography_applied || 0) + 1;
+        }
       } catch (finalizeError) {
         // Do not fail the Kling generation just because downloading/copying the
         // successful result had a temporary error. The same provider task can

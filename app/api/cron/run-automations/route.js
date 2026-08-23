@@ -13768,8 +13768,10 @@ async function createKlingProductReferenceFrame(sourceImageBuffer) {
 
   let productLayer = null;
   let compositionMode = "official_frame_large";
+  let cutoutAnalysis = null;
   try {
     const prepared = await prepareAnimatedProductCutout(normalizedSource);
+    cutoutAnalysis = prepared.analysis || null;
     productLayer = await sharp(prepared.cutoutBuffer)
       .resize({
         width: 900,
@@ -13805,19 +13807,42 @@ async function createKlingProductReferenceFrame(sourceImageBuffer) {
     .png({ compressionLevel: 9 })
     .toBuffer();
 
-  console.info("Kling product reference frame prepared", {
+  const edgeVisibleRatio = Number(cutoutAnalysis?.edgeVisibleRatio ?? 1);
+  const boundsAreaRatio = Number(cutoutAnalysis?.boundsAreaRatio ?? 1);
+  const fullProductInteractionSafe = Boolean(
+    compositionMode.startsWith("pixel_preserving_") &&
+      Number.isFinite(edgeVisibleRatio) &&
+      edgeVisibleRatio <= 0.035 &&
+      Number.isFinite(boundsAreaRatio) &&
+      boundsAreaRatio <= 0.92
+  );
+  const referenceSafety = {
     compositionMode,
+    interactionMode: fullProductInteractionSafe
+      ? "full_product_reference"
+      : "cropped_or_uncertain_reference",
+    fullProductInteractionSafe,
+    edgeVisibleRatio: Number.isFinite(edgeVisibleRatio) ? edgeVisibleRatio : null,
+    boundsAreaRatio: Number.isFinite(boundsAreaRatio) ? boundsAreaRatio : null,
     sourceWidth: Number(sourceMetadata.width || 0) || null,
     sourceHeight: Number(sourceMetadata.height || 0) || null,
+  };
+
+  console.info("Kling product reference frame prepared", {
+    compositionMode,
+    sourceWidth: referenceSafety.sourceWidth,
+    sourceHeight: referenceSafety.sourceHeight,
     productLayerWidth: productWidth,
     productLayerHeight: productHeight,
+    interactionMode: referenceSafety.interactionMode,
+    fullProductInteractionSafe,
     verifiedReferenceLargeFromFirstFrame: true,
     generatedProductPixels: false,
   });
-  return frame;
+  return { frameBuffer: frame, referenceSafety };
 }
 
-function getKlingProductPromptFallback({ rule, postContent }) {
+function getKlingProductPromptFallback({ rule, postContent, referenceSafety = null }) {
   const item = rule?.website_item || {};
   const title = String(item?.title || item?.item_title || "the verified product").trim();
   const description = truncateText(
@@ -13833,6 +13858,13 @@ function getKlingProductPromptFallback({ rule, postContent }) {
     500
   );
   const campaignIdentityLock = formatCampaignIdentityLockForPrompt(rule);
+  const fullProductInteractionSafe = referenceSafety?.fullProductInteractionSafe === true;
+  const interactionDirection = fullProductInteractionSafe
+    ? "The reference appears to show a sufficiently isolated/full product. The product MUST be genuinely used in the scene in the most natural product-specific way: apparel should be worn by a person while keeping the exact visible print/color/design, handheld products should be held or operated, tools should be used, appliances should be operated, and other products should participate in a believable real-world action. Do not settle for floating, spinning or merely decorating the product."
+    : "The reference is cropped or not safely isolated. Do NOT zoom out, complete the product, or reveal any unseen area. Keep exactly the same visible crop/view and create the advertising action around the visible product area instead of inventing missing product pixels.";
+  const identityMotionDirection = fullProductInteractionSafe
+    ? "Natural product-use motion is allowed, but preserve identity-defining geometry, visible design/print, colors, branding and proportions. Apparel may be worn while the exact visible design remains prominent; rigid products must not morph or gain invented hardware or surfaces."
+    : "Only the product area actually visible in the first frame is authoritative. Never extend, complete, infer, reconstruct or invent any product area beyond those visible boundaries. Keep the same crop and camera angle; do not rotate, flip, spin, turn, orbit around, tilt to reveal, pick up or reposition the product in a way that exposes a new product area.";
 
   return [
     `Create a premium, highly scroll-stopping 6-second vertical social-media advertisement for ${title}.`,
@@ -13841,21 +13873,20 @@ function getKlingProductPromptFallback({ rule, postContent }) {
     campaignIdentityLock ? campaignIdentityLock : "",
     captionContext ? `Caption context: ${captionContext}.` : "",
     "Start with the verified product reference already large and visually dominant in the first frame; never animate a small picture card expanding to fill the screen.",
-    "Create an immediate pattern interrupt in the first 0.5-1.0 second through the environment: lighting snap, particles, dramatic room transformation, product-relevant action, people or props when appropriate. The product itself stays physically stable.",
-    "Make the scene escalate quickly and deliver a clear visual payoff by the final second. Avoid a generic slow zoom, simple spin, floating product or empty studio demonstration.",
-    "The uploaded first frame is the authoritative product reference. The product itself must remain visually identical to that frame for the entire video.",
-    "Only the product area actually visible in the first frame is authoritative. Never extend, complete, infer, reconstruct or invent any product area beyond those visible boundaries. If the retailer reference is cropped, keep that same crop rather than guessing the missing product.",
-    "Do not rotate, flip, spin, turn, orbit around, tilt to reveal, pick up or reposition the product in a way that exposes a new viewing angle. Keep the product facing the same camera angle throughout.",
-    "Preserve the visible silhouette, proportions, color, material, branding, logos, printed text and packaging exactly. Do not morph or redesign the product.",
-    "People, hands, animals, props, particles, lighting and environmental action may appear only if they do not cover important product details or force a new product angle.",
-    "Camera movement may be a punchy push-in, pull-back or lateral move, but no orbit or hidden-side reveal.",
+    "Create an immediate pattern interrupt in the first 0.5-1.0 second with a real product-relevant event, human/animal/physical action or environment change. Decorative particles alone are not a concept.",
+    interactionDirection,
+    "Make the scene escalate quickly and deliver a clear visual payoff by the final second. Avoid a generic slow zoom, simple spin, floating product, empty studio demonstration or a product surrounded only by decorative effects.",
+    "The uploaded first frame is the authoritative product reference and the exact product identity must remain recognizable throughout.",
+    identityMotionDirection,
+    "Preserve visible color, materials, branding, logos, printed text/design and identity-defining details exactly. Do not morph, redesign or substitute the product.",
+    "People, hands, animals, props, lighting and environmental action should support believable product use when safe and must never obscure the identity-defining product design.",
     "Do not generate any new readable overlay text, captions, slogans, prices, labels or typography inside the video. Preserve only text that already exists physically on the verified product reference. Do not create or alter logos. No watermarks.",
     "Make the result feel native to TikTok, Instagram Reels and YouTube Shorts: immediate, surprising, sales-oriented, polished and believable rather than a simple product animation.",
   ].filter(Boolean).join(" ");
 }
 
-async function buildKlingProductVideoPrompt({ openai, rule, postContent }) {
-  const fallback = getKlingProductPromptFallback({ rule, postContent });
+async function buildKlingProductVideoPrompt({ openai, rule, postContent, referenceSafety = null }) {
+  const fallback = getKlingProductPromptFallback({ rule, postContent, referenceSafety });
   if (!openai) return fallback;
 
   const item = rule?.website_item || {};
@@ -13891,17 +13922,21 @@ Verified product description: ${productDescription || "Not provided"}
 Campaign context: ${campaignContext || "Not provided"}
 ${formatCampaignIdentityLockForPrompt(rule) || "No campaign identity lock applies."}
 Post caption context: ${truncateText(String(postContent || ""), 700)}
+Reference safety mode: ${referenceSafety?.interactionMode || "cropped_or_uncertain_reference"}
+Full-product interaction allowed: ${referenceSafety?.fullProductInteractionSafe === true ? "YES" : "NO"}
 Return JSON exactly in this shape:
 {"creative_strategy":"...","motion_prompt":"..."}.
 
 Creative goals:
 - if a CAMPAIGN IDENTITY LOCK is present, the scene must stay exclusively inside that active campaign and must not introduce another holiday/campaign/occasion
 - the verified retailer product reference is already large in frame from the first frame; do NOT create a small-card-to-full-screen expansion
-- create a pattern interrupt in the first 0.5-1.0 second using the environment, lighting, people/props, particles or a surprising product-relevant event
+- create a pattern interrupt in the first 0.5-1.0 second using a real product-relevant event, person, animal, physical action or strong environment transformation; decorative particles alone are not enough
+- the result must feel like a professionally directed short commercial, not a prettier version of a simple animated product post
+- when Full-product interaction allowed is YES, the product MUST be genuinely used in the scene in the most natural way for that exact product: apparel worn by a person, handheld items held/operated, tools used, appliances operated, sports/outdoor gear used in context, etc.
+- when Full-product interaction allowed is NO, never fabricate missing product areas just to show use; preserve the exact visible crop and create the story/action around that crop
 - escalate quickly and deliver a satisfying visual payoff by the final second
-- feel native to TikTok/Reels/Shorts and commercially persuasive, not a generic studio spin or slow zoom
-- one coherent 6-second shot; environment may transform dramatically while the product identity stays locked
-- people, hands, animals, props or effects may add interest when genuinely appropriate
+- feel native to TikTok/Reels/Shorts and commercially persuasive, not a generic studio spin, slow zoom, floating product or product-with-particles demo
+- one coherent 6-second shot; environment may transform dramatically while product identity stays locked
 
 TEXT SAFETY:
 - do not generate any new readable overlay text, captions, slogans, prices, labels or typography
@@ -13910,12 +13945,11 @@ TEXT SAFETY:
 
 NON-NEGOTIABLE PRODUCT RULES:
 - the uploaded first frame is authoritative; it may show the whole product or only the retailer-verified visible portion
-- the product must stay at the SAME visible camera angle throughout
-- only surfaces/details and product boundaries already visible in the first frame may ever be shown
-- never extend or complete a cropped product, and never reveal or invent back, sides, top, bottom, underside, interior, hidden edges or hidden labels
-- never rotate, flip, spin, turn, orbit around or tilt the product to reveal a new angle
-- preserve visible shape, proportions, colors, materials, branding, logos and printed product text exactly
-- if interaction would expose an unseen product area, keep the product stationary and put the action around it instead
+- preserve the exact visible identity-defining design, print, colors, proportions, materials, branding, logos and printed product text
+- if Full-product interaction allowed is NO: keep the SAME visible camera angle/crop throughout, show only surfaces/details already visible, never extend/complete the crop, and never rotate/orbit/tilt to reveal a new area
+- if Full-product interaction allowed is YES: natural product use and modest physical motion are allowed, but never invent a different variant/design, never show an unverified identity-defining side/detail, and keep the verified front/design visible enough to remain clearly the exact product
+- for apparel specifically, a person may wear the exact garment while the visible print/color/design stays unchanged and prominent; do not replace it with a similar garment
+- for rigid products, interaction must not morph geometry, move controls/components, alter ports/hardware, or fabricate hidden product surfaces
 `,
         },
       ],
@@ -13926,15 +13960,17 @@ NON-NEGOTIABLE PRODUCT RULES:
     const parsed = safeJsonParse(completion?.choices?.[0]?.message?.content || "");
     const creativePrompt = String(parsed?.motion_prompt || "").replace(/\s+/g, " ").trim();
     if (!creativePrompt) return fallback;
+    const fullProductInteractionSafe = referenceSafety?.fullProductInteractionSafe === true;
     const safetyTail = [
-      "CRITICAL PRODUCT LOCK: the first frame is authoritative; never extend or complete product areas that are not visible in it.",
-      "Keep the product large in frame and at exactly the same visible viewing angle for the whole clip; do not begin with or create a small image card that expands to full screen.",
-      "Show only product surfaces/details visible in the first frame; never reveal or invent any unseen side, back, top, bottom, underside, interior, hidden edge or label.",
-      "No product rotation, spin, flip, orbit, turn, morph or redesign.",
-      "Preserve visible branding, colors, proportions and printed product details exactly.",
-      "Do not generate any new readable overlay text, captions, slogans, prices, labels or typography. Preserve only text that already exists physically on the verified product reference.",
+      "CRITICAL PRODUCT LOCK: the first frame is authoritative.",
+      fullProductInteractionSafe
+        ? "Genuine product use is required. Use the exact product naturally in-scene while preserving its verified identity-defining design, print, color, branding and proportions. Apparel may be worn with its exact visible design preserved; rigid products must not morph or gain invented hardware/surfaces."
+        : "The reference is cropped or uncertain: keep exactly the same visible crop/view for the whole clip, never zoom out to complete it, and never reveal or invent any unseen side, back, top, bottom, underside, interior, hidden edge or label.",
+      "Do not begin with or create a small image card that expands to full screen.",
+      "No product morph, redesign or substitution with a similar product.",
+      "Do not generate any new readable overlay text, captions, slogans, prices, labels or typography. Spreelo adds professional typography after the video is generated. Preserve only text physically present on the verified product reference.",
       "No fake logos and no watermark.",
-      "Make the environmental action bold, surprising and sales-oriented, with an immediate first-second hook and a clear final payoff.",
+      "Make the action bold, surprising, product-specific and sales-oriented, with an immediate first-second hook and a clear final payoff. Decorative particles alone are not a concept.",
     ].join(" ");
 
     return truncateText(`${creativePrompt} ${safetyTail}`, 3000);
@@ -23193,10 +23229,15 @@ async function findProductCandidatesFromDiscoveryPages({
       if (isWebsiteRateLimitError(error)) {
         throw error;
       }
-      console.error("Could not fetch discovery page for product links", {
+      const discoveryLogPayload = {
         discoveryPageUrl: page.url,
         message: error.message,
-      });
+      };
+      if (isWebsiteSecurityBlockedError(error)) {
+        console.info("Protected retailer direct discovery fetch blocked; continuing with allowed fallback", discoveryLogPayload);
+      } else {
+        console.error("Could not fetch discovery page for product links", discoveryLogPayload);
+      }
     }
   }
 
@@ -40133,7 +40174,7 @@ scheduled_for: scheduledPublishAtIso,
 image_model_used:
   wantsImage && websitePreparedRule.image_source !== "uploaded"
     ? isKlingAiVideoRule(websitePreparedRule)
-      ? null
+      ? ANIMATED_OVERLAY_IMAGE_MODEL
       : isShotstackAnimatedVideoRule(websitePreparedRule)
       ? ANIMATED_OVERLAY_IMAGE_MODEL
       : IMAGE_MODEL
@@ -40303,7 +40344,8 @@ product_research_model_used: websitePreparedRule.uses_website_content
           }
 
           try {
-            const referenceFrameBuffer = await createKlingProductReferenceFrame(sourceImageBuffer);
+            const { frameBuffer: referenceFrameBuffer, referenceSafety } =
+              await createKlingProductReferenceFrame(sourceImageBuffer);
             const uploadedReference = await uploadGeneratedImageToStorage({
               supabase,
               imageBase64: referenceFrameBuffer.toString("base64"),
@@ -40321,13 +40363,37 @@ product_research_model_used: websitePreparedRule.uses_website_content
               throw new Error("Could not create a public Kling reference-frame URL");
             }
 
+            const klingRuleContext = {
+              ...ruleWithBrandProfile,
+              website_item: candidate.item,
+            };
+            const klingTextOverlay = await createAnimatedTextOverlay({
+              openai,
+              rule: klingRuleContext,
+              postContent: generatedContent,
+              backgroundAsset: {
+                brightness: "dark",
+                description: "premium cinematic AI product advertisement with moving real-world action",
+              },
+              dominantColor: await getProductAccentColor(sourceImageBuffer),
+              productReferenceBuffer: sourceImageBuffer,
+            });
+            const uploadedKlingTextOverlay = await uploadGeneratedImageToStorage({
+              supabase,
+              imageBase64: klingTextOverlay.textOverlayBuffer.toString("base64"),
+              userId: rule.user_id,
+              postId: post.id,
+              fileSuffix: "kling-text-overlay",
+            });
+            if (!uploadedKlingTextOverlay.imageUrl) {
+              throw new Error("Could not create the transparent Kling advertising typography URL");
+            }
+
             klingPrompt = await buildKlingProductVideoPrompt({
               openai,
-              rule: {
-                ...ruleWithBrandProfile,
-                website_item: candidate.item,
-              },
+              rule: klingRuleContext,
               postContent: generatedContent,
+              referenceSafety,
             });
 
             // This RPC is the hard cost guard. It can move a post from 0 -> 1
@@ -40380,6 +40446,16 @@ product_research_model_used: websitePreparedRule.uses_website_content
               video_duration_seconds: KLING_AI_VIDEO_DURATION_SECONDS,
               kling_prompt: klingPrompt,
               kling_reference_image_url: imageUrl,
+              video_background_selection: {
+                mode: "kling_professional_advertising_postprocess",
+                reference_safety: referenceSafety,
+                text_overlay_url: uploadedKlingTextOverlay.imageUrl,
+                text_overlay_storage_path: uploadedKlingTextOverlay.imageStoragePath,
+                text_overlay_provider: klingTextOverlay.provider,
+                text_overlay_prompt: klingTextOverlay.prompt,
+                shotstack_render_id: null,
+                shotstack_status: "waiting_for_kling",
+              },
               include_logo: false,
               logo_url: null,
               updated_at: new Date().toISOString(),

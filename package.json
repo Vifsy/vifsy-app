@@ -125,7 +125,8 @@
     "test:v144.18": "node scripts/test-v144-18-gpt-image-transparent-assets.mjs",
     "test:v144.20": "node scripts/test-v144-20-adaptive-protected-commerce-discovery.mjs",
     "test:v144.21": "node scripts/test-v144-21-dashboard-timezone-calendar-polish.mjs",
-    "test:v144.22": "node scripts/test-v144-22-carousel-delivery-translation-resilience.mjs"
+    "test:v144.22": "node scripts/test-v144-22-carousel-delivery-translation-resilience.mjs",
+    "test:v144.25": "node scripts/test-v144-25-professional-kling-advertising.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
