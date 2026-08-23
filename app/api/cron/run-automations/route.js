@@ -452,6 +452,19 @@ function isWebsiteRateLimitError(error) {
   );
 }
 
+function isWebsiteSecurityBlockedError(error) {
+  const status = Number(
+    error?.status || error?.statusCode || error?.response?.status || 0
+  );
+  const message = String(error?.message || error || "");
+  return Boolean(
+    status === 403 ||
+      /(?:website returned 403|http 403|forbidden|cloudflare|security protection|security_blocked)/i.test(
+        message
+      )
+  );
+}
+
 function normalizeWebsiteFetchDomainHostname(value) {
   return String(value || "")
     .trim()
@@ -26772,6 +26785,7 @@ async function findWebsiteProductWithWebSearch({
   maxAttempts = 3,
   deadlineMs = Number.POSITIVE_INFINITY,
   verificationCache = null,
+  allowIndexedSecurityFallback = false,
 }) {
   const attempts = ["best_match", "domain_site_search", "backup_broad"].slice(
     0,
@@ -26781,6 +26795,8 @@ async function findWebsiteProductWithWebSearch({
   const seenUrls = new Set();
   const seenImages = new Set();
   const MAX_VERIFIED_ITEMS = CAROUSEL_WEB_SEARCH_MAX_VERIFIED_ITEMS;
+  const MAX_INDEXED_SECURITY_FALLBACK_ATTEMPTS = 3;
+  let indexedSecurityFallbackAttempts = 0;
   const campaignPrompt = buildCampaignResearchText(rule);
 
   for (const attempt of attempts) {
@@ -26885,11 +26901,80 @@ async function findWebsiteProductWithWebSearch({
         }
 
         if (!websiteItem) {
-          websiteItem = await extractProductDataFromProductPage({
-            productUrl: webSearchProduct.url,
-            websiteUrl,
-            webSearchProduct,
-          });
+          try {
+            websiteItem = await extractProductDataFromProductPage({
+              productUrl: webSearchProduct.url,
+              websiteUrl,
+              webSearchProduct,
+            });
+          } catch (directProductError) {
+            if (
+              allowIndexedSecurityFallback &&
+              indexedSecurityFallbackAttempts <
+                MAX_INDEXED_SECURITY_FALLBACK_ATTEMPTS &&
+              isWebsiteSecurityBlockedError(directProductError)
+            ) {
+              indexedSecurityFallbackAttempts += 1;
+              // v144.10: when a retailer blocks Spreelo's direct crawler with
+              // HTTP 403/security protection, use the same public-search path
+              // that can still open the retailer's indexed product result.
+              // The exact-repair agent must bind title/identity + original
+              // product image to the SAME official product page. The recovered
+              // product is then treated as a locked product object, so no AI
+              // redraw or guessed product image can enter the normal pipeline.
+              const indexedRepairCandidate = {
+                ...webSearchProduct,
+                campaign_research_rank: 1,
+                campaign_research_round: 1,
+                authoritative_web_agent_selected: true,
+              };
+              const repair = await repairAuthoritativeWebAgentProductAssets({
+                supabase: null,
+                openai,
+                automationOccurrenceId: null,
+                selectedCandidates: [indexedRepairCandidate],
+                websiteUrl,
+                deadlineMs,
+                rule,
+                researchRound: 1,
+              }).catch((repairError) => {
+                console.warn("Indexed exact-product fallback could not repair security-blocked product", {
+                  ruleId: rule?.id,
+                  brandProfileId: rule?.brand_profile_id,
+                  websiteUrl,
+                  productUrl: webSearchProduct?.url || null,
+                  title: webSearchProduct?.title || null,
+                  message: repairError?.message || String(repairError),
+                });
+                return { repairedCandidates: [] };
+              });
+              const repairedCandidate = repair?.repairedCandidates?.[0] || null;
+              if (repairedCandidate) {
+                websiteItem = await hydrateAuthoritativeWebAgentProduct({
+                  candidate: repairedCandidate,
+                  websiteUrl,
+                  cachedItem: repairedCandidate,
+                });
+              }
+
+              if (websiteItem) {
+                console.log("Indexed exact-product fallback recovered security-blocked website product", {
+                  ruleId: rule?.id,
+                  brandProfileId: rule?.brand_profile_id,
+                  websiteUrl,
+                  productUrl: websiteItem?.url || null,
+                  title: websiteItem?.title || null,
+                  imageUrl: websiteItem?.image_url || null,
+                  directStatus: Number(directProductError?.status || 0) || null,
+                  source: websiteItem?.technical_identity_recovery_source || "gpt55_exact_canonical_asset_repair",
+                });
+              } else {
+                throw directProductError;
+              }
+            } else {
+              throw directProductError;
+            }
+          }
           if (verificationCache instanceof Map && cacheKey) {
             verificationCache.set(cacheKey, websiteItem || null);
           }
@@ -27483,6 +27568,10 @@ async function prepareWebsiteContentForRule({
       usedWebsiteItems: recentUsedItems,
       fitModel: productIntentScoped ? PRODUCT_RESEARCH_FAST_MODEL : PRODUCT_RESEARCH_MODEL,
       fitMinimumStrongProducts: productIntentScoped ? 1 : CAROUSEL_MIN_PRODUCT_SLIDES,
+      // v144.10: single-product posts may recover through the public search
+      // index when the retailer blocks Spreelo's direct HTML fetch with 403.
+      // All other product discovery paths keep their existing behaviour.
+      allowIndexedSecurityFallback: true,
     });
 
     if (Array.isArray(webSearchItems) && webSearchItems.length) {
