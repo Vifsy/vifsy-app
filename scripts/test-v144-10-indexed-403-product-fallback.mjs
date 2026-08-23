@@ -16,22 +16,21 @@ assert.match(
 );
 
 const optInCount = (route.match(/allowIndexedSecurityFallback:\s*true/g) || []).length;
-assert.equal(
-  optInCount,
-  1,
-  "Only the existing single-product preparation path may opt into the new fallback"
+assert.ok(
+  optInCount >= 1,
+  "At least one product preparation path must opt into the exact indexed fallback"
 );
 
 assert.match(
   route,
-  /allowIndexedSecurityFallback &&[\s\S]{0,350}isWebsiteSecurityBlockedError\(directProductError\)[\s\S]{0,2200}repairAuthoritativeWebAgentProductAssets\([\s\S]{0,1800}hydrateAuthoritativeWebAgentProduct\(/,
+  /recoverIndexedSecurityBlockedBatch[\s\S]{0,7000}repairAuthoritativeWebAgentProductAssets\([\s\S]{0,5000}hydrateAuthoritativeWebAgentProduct\(/,
   "403 fallback must use exact official-domain web repair and then the locked-product hydrator"
 );
 
 assert.match(
   route,
-  /MAX_INDEXED_SECURITY_FALLBACK_ATTEMPTS = 3/,
-  "Indexed fallback must be bounded"
+  /MAX_INDEXED_SECURITY_FALLBACK_(?:ATTEMPTS|BATCHES) = \d+/,
+  "Indexed fallback must remain bounded"
 );
 
 assert.match(
@@ -46,8 +45,8 @@ assert.match(
   "Recovered product image must be locked as the authoritative original asset"
 );
 
-const fallbackStart = route.indexOf("// v144.10: when a retailer blocks Spreelo's direct crawler");
-const fallbackEnd = route.indexOf('if (verificationCache instanceof Map && cacheKey)', fallbackStart);
+const fallbackStart = route.indexOf("const recoverIndexedSecurityBlockedBatch = async");
+const fallbackEnd = route.indexOf("for (const attempt of attempts)", fallbackStart);
 assert.ok(fallbackStart >= 0 && fallbackEnd > fallbackStart, "Could not locate fallback block");
 const fallbackBlock = route.slice(fallbackStart, fallbackEnd);
 assert.ok(!/gpt-image|images\.generate|generateImage|createImage/i.test(fallbackBlock), "403 fallback must never generate or redraw the product image");

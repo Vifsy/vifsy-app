@@ -465,6 +465,22 @@ function isWebsiteSecurityBlockedError(error) {
   );
 }
 
+// v144.11: an indexed fallback product is already structurally locked to one
+// exact official product page + its exact official main image. It still goes
+// through the existing mandatory semantic image gate before generation, but it
+// must not pay for another GPT-5.5 exact-product repair merely because that
+// semantic gate has not run yet.
+function isIndexedSecurityFallbackLockedProduct(item) {
+  return Boolean(
+    item?.indexed_security_fallback_verified === true &&
+      item?.product_identity_locked === true &&
+      item?.technical_identity_same_page_verified === true &&
+      item?.product_image_page_bound === true &&
+      item?.image_url &&
+      item?.url
+  );
+}
+
 function normalizeWebsiteFetchDomainHostname(value) {
   return String(value || "")
     .trim()
@@ -5205,7 +5221,22 @@ async function getProductEngineV2SingleProductReserves({
       ).length
     : reserves.length;
 
-  if (reserves.length < reserveTarget || strongReserveCount < reserveTarget) {
+  if (
+    isIndexedSecurityFallbackLockedProduct(selectedItem) &&
+    (reserves.length < reserveTarget || strongReserveCount < reserveTarget)
+  ) {
+    // v144.11: the retailer is already proven to block direct crawling. Reuse
+    // the exact products recovered in the one paid indexed batch instead of
+    // spending another minute retrying sitemap/catalog/product HTML that will
+    // only return 403. Reserves are optional for single-product delivery.
+    console.log("Product Engine V2 skipped direct reserve discovery for indexed 403 product", {
+      ruleId: rule?.id,
+      websiteUrl,
+      selectedProductUrl: selectedItem.url,
+      reserveCount: reserves.length,
+      reserveTarget,
+    });
+  } else if (reserves.length < reserveTarget || strongReserveCount < reserveTarget) {
     try {
       const discoveredCandidates = await discoverProductCandidatesFromWebsite({
         websiteUrl,
@@ -6662,6 +6693,14 @@ async function prepareCarouselProductsForRule({
     productPreparationCompletionDeadline -
     CAMPAIGN_FINAL_REVIEW_RESERVE_MS;
   const productVerificationCache = new Map();
+  // v144.11: all carousel fallback stages share one paid indexed-repair budget.
+  // If an early stage already recovered exact products from a 403-blocked
+  // retailer, later delivery/backup stages reuse that pool instead of starting
+  // another GPT-5.5 repair batch.
+  const indexedSecurityFallbackState = {
+    batchExecuted: false,
+    recoveredItems: [],
+  };
   let deadlineSkipLogged = false;
   const hasProductPreparationBudget = (minimumRemainingMs = 30_000) =>
     Date.now() < productPreparationDeadline - Math.max(0, minimumRemainingMs);
@@ -6738,6 +6777,149 @@ async function prepareCarouselProductsForRule({
     contentSourceScope !== "product_category" &&
     contentSourceScope !== "focus_page";
   let primaryCampaignWebResearch = null;
+
+  // v144.11: if this retailer is already known (from the shared domain fetch
+  // profile) to block Spreelo with HTTP 403, do not start the older multi-round
+  // campaign researcher first. Use the same one-batch indexed fallback shared
+  // by every product-image format. Normal retailers never enter this branch.
+  if (canUsePrimaryCampaignWebResearch) {
+    const knownDomainState = await getWebsiteDomainFetchState(websiteUrl).catch(
+      () => null
+    );
+    if (Number(knownDomainState?.lastStatus || 0) === 403) {
+      try {
+        console.log("Campaign carousel using known-403 indexed product fallback", {
+          ruleId: rule?.id,
+          brandProfileId: rule?.brand_profile_id,
+          websiteUrl,
+          targetVerifiedCount: CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED,
+        });
+
+        const indexedFallbackItems = await findWebsiteProductWithWebSearch({
+          openai,
+          brandProfile,
+          rule,
+          websiteUrl,
+          usedWebsiteItems: recentUsedItems,
+          researchModel: PRODUCT_RESEARCH_FAST_MODEL,
+          fitModel: PRODUCT_RESEARCH_FAST_MODEL,
+          fitMinimumStrongProducts: CAROUSEL_PRODUCT_SLIDE_TARGET,
+          maxAttempts: 1,
+          deadlineMs: productPreparationDeadline,
+          verificationCache: productVerificationCache,
+          allowIndexedSecurityFallback: true,
+          desiredVerifiedCount: CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED,
+          indexedSecurityRepairBatchSize: 8,
+          indexedSecurityFallbackState,
+        });
+
+        const rankedIndexedItems = dedupeWebsiteItemsByUrlTitleAndImage(
+          indexedFallbackItems || []
+        )
+          .map((item, index) => ({
+            ...item,
+            campaign_research_rank:
+              getPrimaryCampaignResearchRank(item) || index + 1,
+            campaign_research_round: 1,
+            campaign_selection_mode:
+              item?.campaign_selection_mode || "varied_categories",
+          }))
+          .sort(
+            (left, right) =>
+              getPrimaryCampaignResearchRank(left) -
+              getPrimaryCampaignResearchRank(right)
+          );
+
+        if (
+          rankedIndexedItems.length >=
+          CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED
+        ) {
+          const resolvedIndexedItems =
+            await resolveLargestProductImagesBeforeGeneration({
+              items: rankedIndexedItems,
+              ruleId: rule.id,
+              openai,
+            });
+          const reviewedIndexedItems =
+            await reviewResolvedProductImageIdentity({
+              openai,
+              items: resolvedIndexedItems.map((item) => ({
+                ...item,
+                product_image_verified_candidates: [],
+              })),
+              ruleId: rule.id,
+              failClosed: true,
+            });
+          const finalIndexedItems = reviewedIndexedItems.filter(
+            (item) =>
+              item?.image_url &&
+              item?.product_image_semantic_verified === true &&
+              item?.product_image_identity_unresolved !== true &&
+              isValidCarouselProduct(item)
+          );
+
+          if (
+            finalIndexedItems.length >=
+            CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED
+          ) {
+            const indexedCarouselResult =
+              await finalizeCarouselFromPrimaryCampaignWebResearch({
+                supabase,
+                rule,
+                summary,
+                websiteUrl,
+                contentType,
+                recentUsedItems,
+                usedWebsiteImageUrlsThisRun,
+                researchResult: {
+                  executed: true,
+                  candidates: rankedIndexedItems,
+                  verifiedProducts: finalIndexedItems,
+                  validProducts: finalIndexedItems,
+                  campaignTheme: getPrimaryCampaignWebResearchTheme(rule),
+                  allowedDomain: getWebsiteFetchDomain(websiteUrl),
+                  prompt: buildCampaignResearchText(rule),
+                  selectionMode: "varied_categories",
+                  researchRoundCount: 1,
+                  technicalPageRateLimited: false,
+                  indexedSecurityFallback: true,
+                },
+              });
+
+            if (indexedCarouselResult) {
+              console.log("Campaign carousel completed from one indexed 403 fallback batch", {
+                ruleId: rule?.id,
+                brandProfileId: rule?.brand_profile_id,
+                websiteUrl,
+                recoveredCount: rankedIndexedItems.length,
+                finalVerifiedCount: finalIndexedItems.length,
+                additionalPrimaryResearchRoundsSkipped: true,
+              });
+              return indexedCarouselResult;
+            }
+          }
+        }
+
+        console.warn("Known-403 indexed carousel fallback was insufficient; preserving existing campaign research as the final fallback", {
+          ruleId: rule?.id,
+          brandProfileId: rule?.brand_profile_id,
+          websiteUrl,
+          recoveredCount: rankedIndexedItems.length,
+        });
+      } catch (indexedCarouselError) {
+        if (isWebsiteRateLimitError(indexedCarouselError)) {
+          throw indexedCarouselError;
+        }
+        console.warn("Known-403 indexed carousel fallback failed; preserving existing campaign research", {
+          ruleId: rule?.id,
+          brandProfileId: rule?.brand_profile_id,
+          websiteUrl,
+          message:
+            indexedCarouselError?.message || String(indexedCarouselError),
+        });
+      }
+    }
+  }
 
   if (canUsePrimaryCampaignWebResearch) {
     try {
@@ -7954,6 +8136,12 @@ async function prepareCarouselProductsForRule({
         maxAttempts: 2,
         deadlineMs: productPreparationDeadline,
         verificationCache: productVerificationCache,
+        // v144.11: only activates after a real 403/security block. Normal
+        // retailer retrieval stays unchanged.
+        allowIndexedSecurityFallback: true,
+        desiredVerifiedCount: CAROUSEL_PRODUCT_SLIDE_TARGET,
+        indexedSecurityRepairBatchSize: 8,
+        indexedSecurityFallbackState,
         supabase,
         rule,
       });
@@ -8620,6 +8808,10 @@ async function prepareCarouselProductsForRule({
           : PRODUCT_RESEARCH_MODEL,
         deadlineMs: productPreparationDeadline,
         verificationCache: productVerificationCache,
+        allowIndexedSecurityFallback: true,
+        desiredVerifiedCount: CAROUSEL_PRODUCT_SLIDE_TARGET,
+        indexedSecurityRepairBatchSize: 8,
+        indexedSecurityFallbackState,
         supabase,
         rule,
       });
@@ -8998,6 +9190,13 @@ async function prepareCarouselProductsForRule({
         maxAttempts: 2,
         deadlineMs: productPreparationDeadline,
         verificationCache: productVerificationCache,
+        allowIndexedSecurityFallback: true,
+        desiredVerifiedCount: Math.max(
+          1,
+          CAROUSEL_PRODUCT_SLIDE_TARGET - selectedBeforeBackup
+        ),
+        indexedSecurityRepairBatchSize: 8,
+        indexedSecurityFallbackState,
         supabase,
         rule,
       });
@@ -14785,9 +14984,14 @@ function normalizeStoreSearchQueries(values, limit = CAMPAIGN_STORE_SEARCH_QUERY
       .slice(0, 50);
     const comparisonKey = normalizeSearchText(query);
     const words = query.split(/\s+/u).filter(Boolean);
+    // v144.11: never let relative scheduling UI labels such as
+    // "{days} days before" leak into product-search vocabulary. They are not
+    // product intent and previously produced queries like "days before fars".
+    const looksLikeSchedulingUiFragment = /\bdays?\s+before\b/iu.test(query);
 
     if (
       !query ||
+      looksLikeSchedulingUiFragment ||
       words.length < 1 ||
       words.length > 5 ||
       /^\d+$/u.test(query) ||
@@ -24774,6 +24978,7 @@ Return only the required JSON structure.`.trim();
     executed: true,
     repairedCandidates,
     elapsedMs: Date.now() - startedAt,
+    usage: response?.usage || null,
   };
 }
 
@@ -25120,11 +25325,17 @@ async function ensureLockedProductPoolForUse({
 
   const outcomes = await mapWithConcurrency(uniqueItems, 2, async (item) => {
     if (
-      item?.product_identity_locked === true &&
-      item?.product_image_semantic_verified === true &&
-      item?.image_url &&
-      item?.url
+      (
+        item?.product_identity_locked === true &&
+        item?.product_image_semantic_verified === true &&
+        item?.image_url &&
+        item?.url
+      ) || isIndexedSecurityFallbackLockedProduct(item)
     ) {
+      // v144.11 indexed fallback items are already locked to the same official
+      // product page + exact main image. The mandatory semantic image gate in
+      // the normal generation pipeline still runs afterwards, so do not pay
+      // for a duplicate exact-product repair here.
       return { ok: true, item };
     }
 
@@ -26637,6 +26848,17 @@ For campaign carousels, stop once you have enough concrete product pages for a u
   { timeout: 40_000, maxRetries: 0 }
 );
 
+  if (response?.usage) {
+    console.log("Product researcher web-search usage", {
+      ruleId: rule?.id,
+      brandProfileId: rule?.brand_profile_id,
+      websiteUrl,
+      attempt,
+      model: researchModel,
+      usage: response.usage,
+    });
+  }
+
   const content = response.output_text || "";
   const parsed = safeJsonParse(content);
 
@@ -26786,18 +27008,226 @@ async function findWebsiteProductWithWebSearch({
   deadlineMs = Number.POSITIVE_INFINITY,
   verificationCache = null,
   allowIndexedSecurityFallback = false,
+  desiredVerifiedCount = null,
+  indexedSecurityRepairBatchSize = null,
+  indexedSecurityFallbackState = null,
 }) {
+  const MAX_VERIFIED_ITEMS = CAROUSEL_WEB_SEARCH_MAX_VERIFIED_ITEMS;
+  const targetVerifiedCount = Math.max(
+    1,
+    Math.min(
+      MAX_VERIFIED_ITEMS,
+      Number(desiredVerifiedCount || MAX_VERIFIED_ITEMS) || MAX_VERIFIED_ITEMS
+    )
+  );
+  const securityRepairBatchSize = Math.max(
+    targetVerifiedCount,
+    Math.min(
+      8,
+      Number(indexedSecurityRepairBatchSize || Math.max(4, targetVerifiedCount + 3)) ||
+        Math.max(4, targetVerifiedCount + 3)
+    )
+  );
+  const knownDomainState = allowIndexedSecurityFallback
+    ? await getWebsiteDomainFetchState(websiteUrl).catch(() => null)
+    : null;
+  const knownSecurityBlocked = Number(knownDomainState?.lastStatus || 0) === 403;
   const attempts = ["best_match", "domain_site_search", "backup_broad"].slice(
     0,
-    Math.max(1, Math.min(3, Number(maxAttempts || 3)))
+    knownSecurityBlocked
+      ? 1
+      : Math.max(1, Math.min(3, Number(maxAttempts || 3)))
   );
   const verifiedItems = [];
   const seenUrls = new Set();
   const seenImages = new Set();
-  const MAX_VERIFIED_ITEMS = CAROUSEL_WEB_SEARCH_MAX_VERIFIED_ITEMS;
-  const MAX_INDEXED_SECURITY_FALLBACK_ATTEMPTS = 3;
-  let indexedSecurityFallbackAttempts = 0;
+  const sharedIndexedSecurityState =
+    indexedSecurityFallbackState &&
+    typeof indexedSecurityFallbackState === "object"
+      ? indexedSecurityFallbackState
+      : { batchExecuted: false, recoveredItems: [] };
+  const indexedSecurityRecoveredByUrl = new Map();
+  for (const recoveredItem of sharedIndexedSecurityState.recoveredItems || []) {
+    const keys = [recoveredItem?.url, recoveredItem?.product_url]
+      .map((value) =>
+        normalizeComparableValue(
+          canonicalizeWebsiteProductUrl(value, websiteUrl) || value
+        )
+      )
+      .filter(Boolean);
+    for (const key of keys) indexedSecurityRecoveredByUrl.set(key, recoveredItem);
+  }
+  const MAX_INDEXED_SECURITY_FALLBACK_BATCHES = 1;
+  let indexedSecurityFallbackBatches = sharedIndexedSecurityState.batchExecuted
+    ? 1
+    : 0;
   const campaignPrompt = buildCampaignResearchText(rule);
+
+  const getIndexedFallbackItems = () =>
+    dedupeWebsiteItemsByUrlTitleAndImage(
+      [...indexedSecurityRecoveredByUrl.values()].filter(Boolean)
+    )
+      .sort(
+        (left, right) =>
+          getPrimaryCampaignResearchRank(left) -
+          getPrimaryCampaignResearchRank(right)
+      )
+      .slice(0, securityRepairBatchSize);
+
+  const recoverIndexedSecurityBlockedBatch = async ({
+    candidateProducts,
+    directProductError,
+    attempt,
+  }) => {
+    if (!allowIndexedSecurityFallback || !isWebsiteSecurityBlockedError(directProductError)) {
+      return [];
+    }
+    if (indexedSecurityFallbackBatches >= MAX_INDEXED_SECURITY_FALLBACK_BATCHES) {
+      return getIndexedFallbackItems();
+    }
+
+    indexedSecurityFallbackBatches += 1;
+    sharedIndexedSecurityState.batchExecuted = true;
+
+    const repairInputs = dedupeUrlItems(candidateProducts || [])
+      .slice(0, securityRepairBatchSize)
+      .map((candidate, index) => ({
+        ...candidate,
+        campaign_research_rank: index + 1,
+        campaign_research_round: 1,
+        authoritative_web_agent_selected: true,
+      }));
+
+    if (!repairInputs.length) return [];
+
+    console.log("Indexed security fallback batch started", {
+      ruleId: rule?.id,
+      brandProfileId: rule?.brand_profile_id,
+      websiteUrl,
+      attempt,
+      candidateCount: repairInputs.length,
+      targetVerifiedCount,
+      maxBatchCount: MAX_INDEXED_SECURITY_FALLBACK_BATCHES,
+      knownSecurityBlocked,
+    });
+
+    const repair = await repairAuthoritativeWebAgentProductAssets({
+      supabase: null,
+      openai,
+      automationOccurrenceId: null,
+      selectedCandidates: repairInputs,
+      websiteUrl,
+      deadlineMs,
+      rule,
+      researchRound: 1,
+    }).catch((repairError) => {
+      console.warn("Indexed exact-product fallback batch could not repair security-blocked products", {
+        ruleId: rule?.id,
+        brandProfileId: rule?.brand_profile_id,
+        websiteUrl,
+        attempt,
+        candidateCount: repairInputs.length,
+        message: repairError?.message || String(repairError),
+      });
+      return { repairedCandidates: [], usage: null };
+    });
+
+    const repairInputByRank = new Map(
+      repairInputs.map((candidate) => [
+        getPrimaryCampaignResearchRank(candidate),
+        candidate,
+      ])
+    );
+    const recoveredItems = [];
+
+    for (const repairedCandidate of repair?.repairedCandidates || []) {
+      const hydrated = await hydrateAuthoritativeWebAgentProduct({
+        candidate: repairedCandidate,
+        websiteUrl,
+        cachedItem: repairedCandidate,
+      });
+      if (!hydrated?.url || !hydrated?.title || !hydrated?.image_url) continue;
+
+      const recovered = {
+        ...hydrated,
+        indexed_security_fallback_verified: true,
+        indexed_security_fallback_attempt: attempt,
+        indexed_security_fallback_batch: indexedSecurityFallbackBatches,
+      };
+      const rank = getPrimaryCampaignResearchRank(repairedCandidate);
+      const originalCandidate = repairInputByRank.get(rank) || null;
+      const recoveredKeys = [
+        originalCandidate?.url,
+        repairedCandidate?.url,
+        recovered?.url,
+      ]
+        .map((value) =>
+          normalizeComparableValue(
+            canonicalizeWebsiteProductUrl(value, websiteUrl) || value
+          )
+        )
+        .filter(Boolean);
+
+      for (const key of recoveredKeys) {
+        indexedSecurityRecoveredByUrl.set(key, recovered);
+        if (verificationCache instanceof Map) {
+          verificationCache.set(key, recovered);
+        }
+      }
+      recoveredItems.push(recovered);
+
+      console.log("Indexed exact-product fallback recovered security-blocked website product", {
+        ruleId: rule?.id,
+        brandProfileId: rule?.brand_profile_id,
+        websiteUrl,
+        productUrl: recovered?.url || null,
+        title: recovered?.title || null,
+        imageUrl: recovered?.image_url || null,
+        directStatus: Number(directProductError?.status || 0) || null,
+        source:
+          recovered?.technical_identity_recovery_source ||
+          "gpt55_exact_canonical_asset_repair",
+        batchRecovery: true,
+      });
+    }
+
+    sharedIndexedSecurityState.recoveredItems =
+      dedupeWebsiteItemsByUrlTitleAndImage([
+        ...(sharedIndexedSecurityState.recoveredItems || []),
+        ...recoveredItems,
+      ]).slice(0, securityRepairBatchSize);
+
+    console.log("Indexed security fallback batch finished", {
+      ruleId: rule?.id,
+      brandProfileId: rule?.brand_profile_id,
+      websiteUrl,
+      attempt,
+      candidateCount: repairInputs.length,
+      repairedCount: repair?.repairedCandidates?.length || 0,
+      recoveredCount: recoveredItems.length,
+      targetVerifiedCount,
+      additionalResearchAttemptsSkipped: true,
+      modelCallsForExactRepair: 1,
+      usage: repair?.usage || null,
+    });
+
+    return recoveredItems;
+  };
+
+  if (
+    allowIndexedSecurityFallback &&
+    sharedIndexedSecurityState.batchExecuted &&
+    getIndexedFallbackItems().length
+  ) {
+    console.log("Indexed security fallback reused prior batch in the same product preparation run", {
+      ruleId: rule?.id,
+      brandProfileId: rule?.brand_profile_id,
+      websiteUrl,
+      recoveredCount: getIndexedFallbackItems().length,
+      additionalModelCalls: 0,
+    });
+    return getIndexedFallbackItems();
+  }
 
   for (const attempt of attempts) {
     if (Date.now() >= deadlineMs - 45_000) {
@@ -26815,7 +27245,14 @@ async function findWebsiteProductWithWebSearch({
       rule,
       attempt,
       usedWebsiteItems,
-      researchModel,
+      // v144.11: once this domain is already known to answer Spreelo with 403,
+      // candidate discovery can use the inexpensive research model. Exact
+      // product identity + exact original image are still locked by the single
+      // GPT-5.5 authoritative repair batch below.
+      researchModel:
+        allowIndexedSecurityFallback && knownSecurityBlocked
+          ? PRODUCT_RESEARCH_FAST_MODEL
+          : researchModel,
     });
 
     const webSearchProducts = Array.isArray(searchResult?.products)
@@ -26900,6 +27337,10 @@ async function findWebsiteProductWithWebSearch({
           continue;
         }
 
+        if (!websiteItem && cacheKey && indexedSecurityRecoveredByUrl.has(cacheKey)) {
+          websiteItem = indexedSecurityRecoveredByUrl.get(cacheKey);
+        }
+
         if (!websiteItem) {
           try {
             websiteItem = await extractProductDataFromProductPage({
@@ -26910,70 +27351,33 @@ async function findWebsiteProductWithWebSearch({
           } catch (directProductError) {
             if (
               allowIndexedSecurityFallback &&
-              indexedSecurityFallbackAttempts <
-                MAX_INDEXED_SECURITY_FALLBACK_ATTEMPTS &&
               isWebsiteSecurityBlockedError(directProductError)
             ) {
-              indexedSecurityFallbackAttempts += 1;
-              // v144.10: when a retailer blocks Spreelo's direct crawler with
-              // HTTP 403/security protection, use the same public-search path
-              // that can still open the retailer's indexed product result.
-              // The exact-repair agent must bind title/identity + original
-              // product image to the SAME official product page. The recovered
-              // product is then treated as a locked product object, so no AI
-              // redraw or guessed product image can enter the normal pipeline.
-              const indexedRepairCandidate = {
-                ...webSearchProduct,
-                campaign_research_rank: 1,
-                campaign_research_round: 1,
-                authoritative_web_agent_selected: true,
-              };
-              const repair = await repairAuthoritativeWebAgentProductAssets({
-                supabase: null,
-                openai,
-                automationOccurrenceId: null,
-                selectedCandidates: [indexedRepairCandidate],
-                websiteUrl,
-                deadlineMs,
-                rule,
-                researchRound: 1,
-              }).catch((repairError) => {
-                console.warn("Indexed exact-product fallback could not repair security-blocked product", {
-                  ruleId: rule?.id,
-                  brandProfileId: rule?.brand_profile_id,
-                  websiteUrl,
-                  productUrl: webSearchProduct?.url || null,
-                  title: webSearchProduct?.title || null,
-                  message: repairError?.message || String(repairError),
-                });
-                return { repairedCandidates: [] };
+              // v144.11: one security-blocked product proves that the direct
+              // verification path is unavailable for this retailer. Repair the
+              // whole useful candidate batch in ONE GPT-5.5 call instead of
+              // paying one exact-repair call per product, then stop the extra
+              // domain_site_search / backup_broad rounds for this run.
+              const recoveredBatch = await recoverIndexedSecurityBlockedBatch({
+                candidateProducts,
+                directProductError,
+                attempt,
               });
-              const repairedCandidate = repair?.repairedCandidates?.[0] || null;
-              if (repairedCandidate) {
-                websiteItem = await hydrateAuthoritativeWebAgentProduct({
-                  candidate: repairedCandidate,
-                  websiteUrl,
-                  cachedItem: repairedCandidate,
-                });
+
+              if (recoveredBatch.length) {
+                return getIndexedFallbackItems();
               }
 
-              if (websiteItem) {
-                console.log("Indexed exact-product fallback recovered security-blocked website product", {
-                  ruleId: rule?.id,
-                  brandProfileId: rule?.brand_profile_id,
-                  websiteUrl,
-                  productUrl: websiteItem?.url || null,
-                  title: websiteItem?.title || null,
-                  imageUrl: websiteItem?.image_url || null,
-                  directStatus: Number(directProductError?.status || 0) || null,
-                  source: websiteItem?.technical_identity_recovery_source || "gpt55_exact_canonical_asset_repair",
-                });
-              } else {
-                throw directProductError;
-              }
-            } else {
-              throw directProductError;
+              console.warn("Indexed security fallback batch returned no exact products; additional paid web-research rounds were skipped", {
+                ruleId: rule?.id,
+                brandProfileId: rule?.brand_profile_id,
+                websiteUrl,
+                attempt,
+                targetVerifiedCount,
+              });
+              return [];
             }
+            throw directProductError;
           }
           if (verificationCache instanceof Map && cacheKey) {
             verificationCache.set(cacheKey, websiteItem || null);
@@ -27165,8 +27569,12 @@ async function prepareWebsiteContentForRule({
 
   const websiteUrl = getWebsiteProductSourceUrl(brandProfile, rule);
   const finalizePreparedWebsiteItem = async (item, cycleNumber = 1) => {
-    const lockedItem = item?.product_identity_locked === true &&
-      item?.product_image_semantic_verified === true && item?.image_url
+    const lockedItem =
+      (
+        item?.product_identity_locked === true &&
+        item?.product_image_semantic_verified === true &&
+        item?.image_url
+      ) || isIndexedSecurityFallbackLockedProduct(item)
       ? item
       : await resolveLockedProductUrlForUse({
           supabase,
@@ -27568,13 +27976,34 @@ async function prepareWebsiteContentForRule({
       usedWebsiteItems: recentUsedItems,
       fitModel: productIntentScoped ? PRODUCT_RESEARCH_FAST_MODEL : PRODUCT_RESEARCH_MODEL,
       fitMinimumStrongProducts: productIntentScoped ? 1 : CAROUSEL_MIN_PRODUCT_SLIDES,
-      // v144.10: single-product posts may recover through the public search
-      // index when the retailer blocks Spreelo's direct HTML fetch with 403.
-      // All other product discovery paths keep their existing behaviour.
+      // v144.11: every product-image format shares the same exact-product
+      // 403 fallback. For a single-product post one verified item is enough,
+      // but the single repair batch may also return reserves for video/image
+      // fallback without paying one GPT-5.5 request per product.
       allowIndexedSecurityFallback: true,
+      desiredVerifiedCount: 1,
+      indexedSecurityRepairBatchSize: 4,
     });
 
     if (Array.isArray(webSearchItems) && webSearchItems.length) {
+      const indexedSecurityPool = webSearchItems.filter(
+        (item) => item?.indexed_security_fallback_verified === true
+      );
+      if (indexedSecurityPool.length) {
+        // v144.11: persist the whole one-call fallback batch, not just the
+        // selected product. Product-image formats such as animated/AI video can
+        // then reuse these exact locked products as reserves without reopening
+        // the blocked retailer or paying more GPT-5.5 repair calls.
+        await upsertWebsiteProductCatalogItems({
+          supabase,
+          userId: rule.user_id,
+          brandProfileId: rule.brand_profile_id,
+          sourceUrl: websiteUrl,
+          items: indexedSecurityPool,
+          discoverySource: "indexed_security_fallback_pool",
+        });
+      }
+
       const selected = await chooseUnusedWebsiteItem({
         supabase,
         userId: rule.user_id,
