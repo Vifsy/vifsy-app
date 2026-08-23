@@ -75,6 +75,9 @@ export default function AdminDashboardPage() {
   const [translationLoading, setTranslationLoading] = useState(true);
   const [translationSaving, setTranslationSaving] = useState(false);
   const [translationMessage, setTranslationMessage] = useState("");
+  const [backgroundJobCount, setBackgroundJobCount] = useState(0);
+  const [backgroundStopping, setBackgroundStopping] = useState(false);
+  const [backgroundStopMessage, setBackgroundStopMessage] = useState("");
 
   useEffect(() => {
     loadAdminData();
@@ -87,12 +90,14 @@ export default function AdminDashboardPage() {
 
     try {
       const headers = await getAdminHeaders();
-      const [overviewResponse, translationsResponse] = await Promise.all([
+      const [overviewResponse, translationsResponse, backgroundJobsResponse] = await Promise.all([
         fetch("/api/admin/overview", { headers }),
         fetch("/api/admin/translations", { headers }),
+        fetch("/api/admin/openai-background-jobs", { headers }),
       ]);
       const overviewPayload = await overviewResponse.json().catch(() => ({}));
       const translationsPayload = await translationsResponse.json().catch(() => ({}));
+      const backgroundJobsPayload = await backgroundJobsResponse.json().catch(() => ({}));
 
       if (!overviewResponse.ok) {
         throw new Error(
@@ -104,6 +109,9 @@ export default function AdminDashboardPage() {
       setRecentAdjustments(overviewPayload?.recentAdjustments || []);
       setWarnings(overviewPayload?.warnings || []);
       setInsights(overviewPayload?.insights || { periodDays: 30, topCustomersByCredits: [], topCustomersByPosts: [], topBrands: [], topFormats: [], platforms: [], totals: {} });
+      setBackgroundJobCount(
+        backgroundJobsResponse.ok ? Number(backgroundJobsPayload?.counts?.total || 0) : 0
+      );
 
       if (translationsResponse.ok) {
         setTranslationLocales(
@@ -187,6 +195,37 @@ export default function AdminDashboardPage() {
     }
   }
 
+  async function stopOpenAIBackgroundJobs() {
+    const confirmed = window.confirm(
+      "Stoppa alla pågående OpenAI-bakgrundsjobb som Spreelo spårar? Berörda jobb får 15 minuters cooldown innan de kan försöka igen."
+    );
+    if (!confirmed) return;
+
+    setBackgroundStopping(true);
+    setBackgroundStopMessage("");
+    try {
+      const headers = await getAdminHeaders();
+      const response = await fetch("/api/admin/openai-background-jobs", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ confirm: true }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || "Kunde inte stoppa OpenAI-bakgrundsjobben.");
+      }
+      const stopped = Number(payload?.campaignCancelled || 0) + Number(payload?.brandCancelled || 0);
+      setBackgroundJobCount(0);
+      setBackgroundStopMessage(
+        `Nödstopp klart. ${stopped} pågående OpenAI-jobb avbröts. Berörda jobb väntar till ${formatDateTime(payload?.cooldownUntil)} innan nytt försök.`
+      );
+    } catch (stopError) {
+      setBackgroundStopMessage(stopError?.message || "Kunde inte stoppa OpenAI-bakgrundsjobben.");
+    } finally {
+      setBackgroundStopping(false);
+    }
+  }
+
   const requestedLocaleCount = useMemo(
     () =>
       Object.values(translationStatuses).filter((packs) =>
@@ -246,6 +285,31 @@ export default function AdminDashboardPage() {
               <span>{t("admin.partialOverviewText")}</span>
               <small>{t("admin.partialOverviewDetails", { count: warnings.length })}</small>
             </div>
+          </div>
+        ) : null}
+
+        {!loading && (backgroundJobCount > 0 || backgroundStopMessage) ? (
+          <div className="admin-alert warning admin-alert-with-action">
+            <AlertTriangle size={19} aria-hidden="true" />
+            <div>
+              <strong>OpenAI-bakgrundsjobb</strong>
+              <span>
+                {backgroundJobCount > 0
+                  ? `${backgroundJobCount} spårade background-jobb är aktiva eller väntar.`
+                  : backgroundStopMessage || "Inga spårade background-jobb är aktiva."}
+              </span>
+              {backgroundStopMessage && backgroundJobCount > 0 ? <small>{backgroundStopMessage}</small> : null}
+            </div>
+            {backgroundJobCount > 0 ? (
+              <button type="button" onClick={stopOpenAIBackgroundJobs} disabled={backgroundStopping}>
+                {backgroundStopping ? (
+                  <LoaderCircle className="admin-spin" size={15} aria-hidden="true" />
+                ) : (
+                  <AlertTriangle size={15} aria-hidden="true" />
+                )}
+                {backgroundStopping ? "Stoppar…" : "Stoppa pågående jobb"}
+              </button>
+            ) : null}
           </div>
         ) : null}
 

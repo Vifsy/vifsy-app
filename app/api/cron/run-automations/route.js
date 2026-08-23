@@ -53,6 +53,11 @@ import {
 } from "../../../../lib/imageBackgroundSelection.js";
 import { createPlanPreviewToken } from "../../../../lib/planPreviewToken.js";
 import {
+  cancelCampaignResearchJobsForOccurrence,
+  cancelOtherActiveCampaignResearchJobs,
+  cleanupTerminalCampaignResearchJobs,
+} from "../../../../lib/openaiBackgroundJobs.js";
+import {
   buildProductContentContract,
   classifyCommercePage,
   dedupeProductCandidateQueueRows,
@@ -12048,7 +12053,7 @@ async function claimAutomationOccurrenceOnce({
   return data || { claimed: false, occurrence_id: null, status: "unknown" };
 }
 
-async function completeAutomationOccurrence({ supabase, occurrenceId, postId, metadata = {} }) {
+async function completeAutomationOccurrence({ supabase, openai = null, occurrenceId, postId, metadata = {} }) {
   if (!occurrenceId) return null;
   const { data, error } = await supabase.rpc("complete_automation_occurrence", {
     p_occurrence_id: occurrenceId,
@@ -12063,6 +12068,16 @@ async function completeAutomationOccurrence({ supabase, occurrenceId, postId, me
     });
     return null;
   }
+
+  if (openai) {
+    await cancelCampaignResearchJobsForOccurrence({
+      supabase,
+      openai,
+      occurrenceId,
+      reason: "occurrence_completed",
+    });
+  }
+
   return data;
 }
 
@@ -12521,12 +12536,16 @@ async function finalizeStaleAutomationOccurrences({ supabase, resendApiKey, now 
   const staleBefore = new Date(
     now.getTime() - AUTOMATION_STALE_RUNTIME_MS
   ).toISOString();
+  // v144.24: a retry keeps the original started_at for audit history, while
+  // the claim/defer state machine refreshes updated_at on every real resume.
+  // Using started_at here caused a newly resumed occurrence to be killed by a
+  // different worker as "stale" while it was actively doing product research.
   const { data: staleOccurrences, error } = await supabase
     .from("automation_occurrences")
-    .select("id, automation_rule_id, run_log_id, started_at")
+    .select("id, automation_rule_id, run_log_id, started_at, updated_at")
     .eq("status", "running")
-    .lt("started_at", staleBefore)
-    .order("started_at", { ascending: true })
+    .lt("updated_at", staleBefore)
+    .order("updated_at", { ascending: true })
     .limit(25);
 
   if (error) {
@@ -12556,6 +12575,7 @@ async function finalizeStaleAutomationOccurrences({ supabase, resendApiKey, now 
       scheduledFor: rule.generation_occurrence_scheduled_for || rule.next_run_at || occurrence.started_at,
       metadata: {
         stale_started_at: occurrence.started_at,
+        stale_last_activity_at: occurrence.updated_at || occurrence.started_at,
         stale_finalized_at: now.toISOString(),
         stale_runtime_ms: AUTOMATION_STALE_RUNTIME_MS,
       },
@@ -12578,6 +12598,7 @@ async function finalizeStaleAutomationOccurrences({ supabase, resendApiKey, now 
           automatic_retry_scheduled: false,
           terminal_failure: true,
           stale_runtime_ms: AUTOMATION_STALE_RUNTIME_MS,
+          stale_last_activity_at: occurrence.updated_at || occurrence.started_at,
         },
       });
       finalized += 1;
@@ -25771,6 +25792,10 @@ Return only the required JSON structure.`.trim();
         },
       ],
       tool_choice: "required",
+      // v144.23: web_search is the only paid built-in tool in this repair.
+      // Keep the exact-product repair useful, but never let one difficult
+      // protected retailer trigger an open-ended number of tool calls.
+      max_tool_calls: 12,
       instructions,
       ...getReasoningOptionsForModel(PRODUCT_RESEARCH_MODEL),
       max_output_tokens: 4500,
@@ -26429,7 +26454,13 @@ async function ensureLockedProductPoolForUse({
   rule = null,
   ruleId = "carousel-product-resolution",
 }) {
-  const uniqueItems = dedupeWebsiteItemsByUrlTitleAndImage(items || []).filter((item) => item?.url);
+  // v144.24: authoritative campaign research items are allowed to omit a
+  // marketing description. The generic website-item deduper normalizes through
+  // normalizeWebsiteItem(), which requires description and therefore dropped
+  // already locked + image-verified carousel products before this final guard.
+  // This guard only needs a unique direct product URL; identity/image safety is
+  // checked below and again in the normal semantic image pipeline.
+  const uniqueItems = dedupeUrlItems(items || []).filter((item) => item?.url);
   if (!uniqueItems.length) return { lockedItems: [], rejectedItems: [] };
 
   const outcomes = await mapWithConcurrency(uniqueItems, 2, async (item) => {
@@ -26649,6 +26680,17 @@ async function getDurableCampaignResearchResponse({
     });
   } else {
     try {
+      // v144.23: one occurrence may never own multiple live OpenAI background
+      // responses at the same time. If an earlier durable slot was orphaned by
+      // a timeout/race, cancel it before creating another paid response.
+      await cancelOtherActiveCampaignResearchJobs({
+        supabase,
+        openai,
+        occurrenceId: automationOccurrenceId,
+        keepJobId: job.id,
+        reason: `superseded_before_round_${researchRound}`,
+      });
+
       response = await openai.responses.create(
         {
           ...requestBody,
@@ -26881,6 +26923,10 @@ Return the result in the required JSON structure. Keep each reason concise and g
         },
       ],
       tool_choice: "required",
+      // v144.23 cost ceiling: ten ranked products do not justify unlimited
+      // built-in web searches. This hard cap bounds the paid research work in
+      // every durable campaign response.
+      max_tool_calls: 16,
       instructions: webAgentInstructions,
       ...getReasoningOptionsForModel(PRODUCT_RESEARCH_MODEL),
       max_output_tokens: 5000,
@@ -28238,9 +28284,19 @@ async function findWebsiteProductWithWebSearch({
   const campaignPrompt = buildCampaignResearchText(rule);
 
   const getIndexedFallbackItems = () =>
-    dedupeWebsiteItemsByUrlTitleAndImage(
+    // v144.24: indexed GPT-5.5 repair objects intentionally focus on exact
+    // product identity/stock/image and may not carry a generic marketing
+    // description. The generic website-item deduper requires description and
+    // was therefore turning a successful recoveredCount (1-5) into an empty
+    // return array. Dedupe by canonical product URL instead.
+    dedupeUrlItems(
       [...indexedSecurityRecoveredByUrl.values()].filter(
-        (item) => item && isProductConfirmedPurchasable(item)
+        (item) =>
+          item &&
+          item?.url &&
+          item?.title &&
+          item?.image_url &&
+          isProductConfirmedPurchasable(item)
       )
     )
       .sort(
@@ -28404,7 +28460,7 @@ async function findWebsiteProductWithWebSearch({
     }
 
     sharedIndexedSecurityState.recoveredItems =
-      dedupeWebsiteItemsByUrlTitleAndImage([
+      dedupeUrlItems([
         ...(sharedIndexedSecurityState.recoveredItems || []),
         ...recoveredItems,
       ]).slice(0, securityRepairBatchSize);
@@ -29365,6 +29421,81 @@ async function prepareWebsiteContentForRule({
         });
       }
 
+      // v144.24: on a protected retailer the indexed-repair path has already
+      // opened the current official product in GPT-5.5 web research, bound the
+      // exact product page to its exact main image, and required explicit
+      // in_stock evidence. Do not throw that authoritative result away because
+      // a second local fuzzy campaign-score heuristic cannot match generic plan
+      // words/dates. The upstream search itself is scoped to this exact rule and
+      // the repair prompt requires any availability replacement to remain a
+      // strong fit for the campaign/product intent.
+      const protectedAuthoritativePool = websiteAccessProtected
+        ? dedupeUrlItems(
+            webSearchItems.filter(
+              (item) =>
+                isIndexedSecurityFallbackLockedProduct(item) &&
+                isProductEligibleForPromotion(item) &&
+                !isCampaignFitRejectedForRule(item, rule)
+            )
+          ).sort(
+            (left, right) =>
+              scoreWebsiteItemForRule(right, rule) -
+              scoreWebsiteItemForRule(left, rule)
+          )
+        : [];
+
+      if (protectedAuthoritativePool.length) {
+        const protectedSelection = await chooseUnusedWebsiteItem({
+          supabase,
+          userId: rule.user_id,
+          brandProfileId: rule.brand_profile_id,
+          sourceUrl: websiteUrl,
+          contentType,
+          items: protectedAuthoritativePool,
+          rule,
+          usedWebsiteImageUrlsThisRun,
+          recentUsedItems,
+          // A fresh, exact, in-stock product is preferable to a customer-facing
+          // failure when the protected store exposes only products used in a
+          // previous cycle. Normal retailers keep the existing no-reuse path.
+          allowReuseWhenExhausted: true,
+        });
+
+        if (protectedSelection?.item) {
+          await upsertWebsiteProductCatalogItems({
+            supabase,
+            userId: rule.user_id,
+            brandProfileId: rule.brand_profile_id,
+            sourceUrl: websiteUrl,
+            items: [protectedSelection.item],
+            discoverySource: "protected_indexed_authoritative_selected",
+          });
+
+          console.log("Protected website product selected from authoritative indexed in-stock repair", {
+            ruleId: rule.id,
+            brandProfileId: rule.brand_profile_id,
+            websiteUrl,
+            productUrl: protectedSelection.item.url,
+            title: protectedSelection.item.title,
+            verifiedPoolCount: protectedAuthoritativePool.length,
+            reusedBecauseExhausted: Boolean(protectedSelection.reusedBecauseExhausted),
+            stockVerifiedAt: getProductStockVerificationTimestamp(protectedSelection.item),
+            stockSource: protectedSelection.item.stock_verification_source || null,
+          });
+
+          if (protectedSelection.startedNewCycle) {
+            summary.website_items_reused_cycle += 1;
+          }
+          summary.website_items_found += 1;
+          summary.website_content_success += 1;
+          summary.website_web_search_success += 1;
+          return finalizePreparedWebsiteItem(
+            protectedSelection.item,
+            protectedSelection.cycleNumber
+          );
+        }
+      }
+
       const selected = await chooseUnusedWebsiteItem({
         supabase,
         userId: rule.user_id,
@@ -29562,7 +29693,7 @@ async function prepareWebsiteContentForRule({
     websiteAccessState ||
     (await getWebsiteDomainFetchState(websiteUrl).catch(() => null));
   if (websiteAccessProtected || isWebsiteAccessProtectedState(finalWebsiteAccessState)) {
-    console.warn("Protected retailer product research exhausted this occurrence; scheduling bounded retry instead of terminal customer failure", {
+    console.warn("Protected retailer product research exhausted this occurrence; requesting bounded retry instead of publishing an unverified product", {
       ruleId: rule.id,
       brandProfileId: rule.brand_profile_id,
       websiteUrl,
@@ -38714,6 +38845,23 @@ async function runAutomationCron(request, options = {}) {
       resendApiKey,
       now,
     });
+
+    // v144.23: worker-1 owns the cheap lifecycle sweep. It only cancels
+    // tracked background responses whose occurrence is already terminal or
+    // whose automation rule has been paused, so normal in-flight research is
+    // never interrupted. Running it after stale-occurrence finalization also
+    // stops responses belonging to occurrences that became terminal this run.
+    if (workerName === "worker-1" || workerName === "manual-worker") {
+      const backgroundCleanup = await cleanupTerminalCampaignResearchJobs({
+        supabase,
+        openai,
+        limit: 40,
+      });
+      summary.openai_background_cleanup_scanned = backgroundCleanup.scanned;
+      summary.openai_background_cleanup_matched = backgroundCleanup.matched;
+      summary.openai_background_cleanup_cancelled = backgroundCleanup.cancelled;
+      summary.openai_background_cleanup_failed = backgroundCleanup.failed;
+    }
     const usedWebsiteImageUrlsThisRun = new Set();
     let animatedVideoRendersThisRun = 0;
 
@@ -38828,6 +38976,14 @@ async function runAutomationCron(request, options = {}) {
           scheduledFor: scheduledPublishAtIso,
           metadata: extraSummary,
         });
+
+        await cancelCampaignResearchJobsForOccurrence({
+          supabase,
+          openai,
+          occurrenceId: automationOccurrenceId,
+          reason: "occurrence_failed_terminal",
+        });
+
         await finishRunLog(
           "failed",
           String(errorOrMessage?.message || errorOrMessage || "Automation failed"),
@@ -38914,8 +39070,25 @@ async function runAutomationCron(request, options = {}) {
             retryOptions?.maxRetries || TRANSIENT_AUTOMATION_MAX_RETRIES,
         });
         if (result.exhausted) {
+          console.error("Transient automation retry budget exhausted", {
+            occurrenceId: automationOccurrenceId,
+            ruleId: rule?.id || null,
+            stage,
+            retryCount: result.retryCount,
+            protectedProductResearchRetry:
+              isProtectedProductResearchRetryError(errorOrMessage),
+          });
           return { ...result, terminal: true };
         }
+        console.info("Transient automation retry scheduled", {
+          occurrenceId: automationOccurrenceId,
+          ruleId: rule?.id || null,
+          stage,
+          retryAt: result.retryAt,
+          retryCount: result.retryCount,
+          protectedProductResearchRetry:
+            isProtectedProductResearchRetryError(errorOrMessage),
+        });
         await finishRunLog(
           "skipped",
           String(errorOrMessage?.message || errorOrMessage || "Temporary automation failure"),
@@ -39093,6 +39266,14 @@ async function runAutomationCron(request, options = {}) {
           automationOccurrenceResumedAfterRetry;
 
         if (!automationOccurrenceClaimed) {
+          if (["completed", "failed_terminal"].includes(String(occurrenceClaim?.status || ""))) {
+            await cancelCampaignResearchJobsForOccurrence({
+              supabase,
+              openai,
+              occurrenceId: automationOccurrenceId,
+              reason: "duplicate_claim_terminal_occurrence",
+            });
+          }
           await finishRunLog(
             "skipped",
             "This scheduled occurrence already used its one automatic generation attempt.",
@@ -39312,6 +39493,7 @@ async function runAutomationCron(request, options = {}) {
           automationCurrentStage = "occurrence_complete";
         await completeAutomationOccurrence({
             supabase,
+            openai,
             occurrenceId: automationOccurrenceId,
             postId: existingCompleteDraft.id,
             metadata: { recovered_existing_completed_draft: true },
@@ -41148,6 +41330,7 @@ product_research_model_used: websitePreparedRule.uses_website_content
 
         await completeAutomationOccurrence({
           supabase,
+          openai,
           occurrenceId: automationOccurrenceId,
           postId: post.id,
           metadata: {
@@ -41239,9 +41422,18 @@ product_research_model_used: websitePreparedRule.uses_website_content
               : {}
           );
           if (transientResult.terminal) {
-            await failCurrentOccurrence(error, failureStage, {
+            const terminalTransientError = protectedProductResearchRetry
+              ? Object.assign(
+                  new Error(
+                    "Spreelo could not obtain enough fresh verified product evidence from the protected retailer after the bounded automatic retries. The occurrence has stopped and needs admin review; it will not claim that another retry is scheduled."
+                  ),
+                  { code: "PROTECTED_PRODUCT_RESEARCH_RETRY_EXHAUSTED" }
+                )
+              : error;
+            await failCurrentOccurrence(terminalTransientError, failureStage, {
               transient_retry_exhausted: true,
               retry_count: transientResult.retryCount,
+              original_error_code: error?.code || null,
             });
             summary.errors += 1;
           } else {

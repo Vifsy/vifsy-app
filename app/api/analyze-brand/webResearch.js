@@ -87,6 +87,9 @@ export async function submitBlockedWebsiteResearch({
         },
       ],
       tool_choice: "required",
+      // v144.23: keep background brand research bounded too. Web search is the
+      // only paid built-in tool in this request.
+      max_tool_calls: 18,
       instructions: `You are Spreelo's careful business-research agent. The customer's website blocks automated page requests, so use web search to research only the official domain ${allowedDomain}. Build a factual evidence dossier for a later brand-analysis model. Do not write social media posts and do not invent facts. Prefer official home, about, product, service, category, contact, delivery, store, booking and campaign pages. Distinguish facts found on official pages from cautious inferences. Include exact official URLs next to important evidence. ${compactRetryInstruction}`,
       input: `Research this business using public pages from the official domain only.
 
