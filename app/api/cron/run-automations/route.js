@@ -234,6 +234,22 @@ const WEBSITE_RATE_LIMIT_MAX_RETRIES = 2;
 // should normally prevent this path from being needed at all.
 const TRANSIENT_AUTOMATION_MAX_RETRIES = 2;
 const TRANSIENT_AUTOMATION_RETRY_DELAY_MS = 90_000;
+// v144.20: protected retailers (403 / anti-bot / challenge pages) get a few
+// more bounded occurrence-level research retries. We still fail closed rather
+// than publishing an unverified or stale product.
+const PROTECTED_PRODUCT_RESEARCH_MAX_RETRIES = 4;
+const PROTECTED_PRODUCT_RESEARCH_RETRY_DELAY_MS = 3 * 60 * 1000;
+// Availability is volatile. Product identity and the exact main image may be
+// cached much longer, but a protected-retailer "in stock" decision must have
+// been re-checked recently before the locked item may bypass fresh research.
+const PROTECTED_PRODUCT_STOCK_FRESH_MS = Math.max(
+  15 * 60 * 1000,
+  Math.min(
+    6 * 60 * 60 * 1000,
+    Number(process.env.PROTECTED_PRODUCT_STOCK_FRESH_MS || 2 * 60 * 60 * 1000) ||
+      2 * 60 * 60 * 1000
+  )
+);
 const WEBSITE_VERIFICATION_SOFT_DEADLINE_MS = 225_000;
 const CAROUSEL_PREPARATION_SOFT_DEADLINE_MS = Math.max(
   180_000,
@@ -309,11 +325,11 @@ const CAMPAIGN_PRIMARY_WEB_RESEARCH_TIMEOUT_MS = Math.max(
   )
 );
 const CAMPAIGN_PRIMARY_ASSET_REPAIR_TIMEOUT_MS = Math.max(
-  25_000,
+  45_000,
   Math.min(
-    45_000,
-    Number(process.env.CAMPAIGN_PRIMARY_ASSET_REPAIR_TIMEOUT_MS || 35_000) ||
-      35_000
+    120_000,
+    Number(process.env.CAMPAIGN_PRIMARY_ASSET_REPAIR_TIMEOUT_MS || 90_000) ||
+      90_000
   )
 );
 const CAMPAIGN_PRIMARY_POST_RESEARCH_RESERVE_MS = 20_000;
@@ -453,6 +469,14 @@ function isWebsiteRateLimitError(error) {
   );
 }
 
+function isWebsiteAccessProtectedStatus(status) {
+  return [401, 403, 406, 423, 451].includes(Number(status || 0));
+}
+
+function isWebsiteAccessProtectedState(state) {
+  return isWebsiteAccessProtectedStatus(state?.lastStatus);
+}
+
 function isWebsiteSecurityBlockedError(error) {
   const status = Number(
     error?.status || error?.statusCode || error?.response?.status || 0
@@ -460,9 +484,52 @@ function isWebsiteSecurityBlockedError(error) {
   const message = String(error?.message || error || "");
   return Boolean(
     status === 403 ||
-      /(?:website returned 403|http 403|forbidden|cloudflare|security protection|security_blocked)/i.test(
+      isWebsiteAccessProtectedStatus(status) ||
+      /(?:website returned 403|http 403|forbidden|access denied|cloudflare|security protection|security_blocked|bot protection|anti[- ]?bot|captcha|challenge page|akamai|imperva|datadome)/i.test(
         message
       )
+  );
+}
+
+class ProtectedProductResearchRetryError extends Error {
+  constructor(message, { url = "", domain = "", cause = null } = {}) {
+    super(message);
+    this.name = "ProtectedProductResearchRetryError";
+    this.code = "PROTECTED_PRODUCT_RESEARCH_RETRY";
+    this.url = url;
+    this.domain = domain || getWebsiteFetchDomain(url);
+    this.cause = cause || null;
+    this.protectedProductResearch = true;
+  }
+}
+
+function isProtectedProductResearchRetryError(error) {
+  return Boolean(
+    error?.code === "PROTECTED_PRODUCT_RESEARCH_RETRY" ||
+      error?.protectedProductResearch === true
+  );
+}
+
+function getProductStockVerificationTimestamp(item) {
+  return String(
+    item?.stock_verified_at ||
+      item?.verification_metadata?.stock_verified_at ||
+      item?.last_verified_at ||
+      ""
+  ).trim();
+}
+
+function isFreshProductStockVerification(
+  item,
+  maxAgeMs = PROTECTED_PRODUCT_STOCK_FRESH_MS
+) {
+  if (!isProductConfirmedPurchasable(item)) return false;
+  const raw = getProductStockVerificationTimestamp(item);
+  const verifiedAt = raw ? new Date(raw).getTime() : NaN;
+  return Boolean(
+    Number.isFinite(verifiedAt) &&
+      verifiedAt <= Date.now() + 5 * 60 * 1000 &&
+      Date.now() - verifiedAt <= Math.max(0, Number(maxAgeMs || 0))
   );
 }
 
@@ -478,7 +545,20 @@ function isIndexedSecurityFallbackLockedProduct(item) {
       item?.technical_identity_same_page_verified === true &&
       item?.product_image_page_bound === true &&
       item?.image_url &&
-      item?.url
+      item?.url &&
+      isFreshProductStockVerification(item)
+  );
+}
+
+function isAuthoritativePublicCommerceFeedLockedProduct(item) {
+  return Boolean(
+    item?.authoritative_public_commerce_feed === true &&
+      item?.product_identity_locked === true &&
+      item?.technical_identity_same_page_verified === true &&
+      item?.product_image_page_bound === true &&
+      item?.image_url &&
+      item?.url &&
+      isFreshProductStockVerification(item)
   );
 }
 
@@ -1555,6 +1635,7 @@ function normalizeCarouselProductLabelAnalysis(value) {
     height: Math.max(0, Math.min(1000, Number(rawBox.height || 0))),
   };
   const confidence = Math.max(0, Math.min(1, Number(value?.confidence || 0)));
+  const cutoutRecommended = value?.cutout_recommended === true;
 
   if (
     !["dark", "light"].includes(textTone) ||
@@ -1568,23 +1649,24 @@ function normalizeCarouselProductLabelAnalysis(value) {
   if (placement === "none" || layout === "none") {
     return {
       placement: null,
-      layout: "compact_card",
+      layout: "text_only",
       textTone,
       confidence,
       productBox,
+      cutoutRecommended,
       needsFallbackPlacement: true,
     };
   }
 
   if (
     !CAROUSEL_PRODUCT_LABEL_PLACEMENTS[placement] ||
-    !["text_only", "compact_card"].includes(layout)
+    layout !== "text_only"
   ) return null;
 
-  // v143.56: keep the premium glass-card identity consistent on every
-  // ecommerce carousel slide. AI still chooses the safest placement and text
-  // tone, but it no longer decides whether the branded glass card disappears.
-  return { placement, layout: "compact_card", textTone, confidence, productBox };
+  // v144.18: the placement model only chooses where typography can safely live.
+  // The visible label itself is generated as transparent GPT-Image-2 typography,
+  // never as a glass card/panel.
+  return { placement, layout: "text_only", textTone, confidence, productBox, cutoutRecommended };
 }
 
 async function analyzeCarouselProductLabelPlacements({ openai, items, ruleId }) {
@@ -1596,7 +1678,7 @@ async function analyzeCarouselProductLabelPlacements({ openai, items, ruleId }) 
   const content = [
     {
       type: "input_text",
-      text: "Analyze all supplied ecommerce images in this single request. For each image, locate the marketed product named in the title and choose the safest predefined area for Spreelo's compact translucent product card without covering or touching the marketed product. People and animals are allowed and must not cause rejection, but do not place the card over faces or other visually important human or animal areas. The visual layout is always compact_card; your job is to choose placement and readable text tone. Available areas are top_left, top_right, middle_left, middle_right, bottom_left, and bottom_right. Choose none only when the product is unclear or confidence is below 0.70; Spreelo will then use its own least-obstructive fallback so every product still receives a label. Coordinates are integers from 0 to 1000 relative to the full source image. Return exactly one result for every ID.",
+      text: "Analyze all supplied ecommerce images in this single request. For each image, locate the marketed product named in the title and choose the safest predefined area for a compact transparent typography treatment without covering or touching the marketed product. People and animals are allowed and must not cause rejection, but do not place typography over faces or other visually important human or animal areas. There must be no card, panel, badge or opaque text background; your job is only to choose placement and readable text tone. Also return cutout_recommended=true only when the exact sold product is clearly separable from surrounding graphics/background and isolating it would improve a product-led design without destroying meaningful lifestyle/in-use context. Return false for worn/held/in-use products, important lifestyle scenes, ambiguous multi-product scenes, or whenever isolating only the sold product is uncertain. Available areas are top_left, top_right, middle_left, middle_right, bottom_left, and bottom_right. Choose none only when the product is unclear or confidence is below 0.70; Spreelo will then use its own least-obstructive fallback so every product still receives text. Coordinates are integers from 0 to 1000 relative to the full source image. Return exactly one result for every ID.",
     },
   ];
   for (const candidate of candidates) {
@@ -1648,12 +1730,13 @@ async function analyzeCarouselProductLabelPlacements({ openai, items, ruleId }) 
                       },
                       layout: {
                         type: "string",
-                        enum: ["text_only", "compact_card", "none"],
+                        enum: ["text_only", "none"],
                       },
                       text_tone: { type: "string", enum: ["dark", "light"] },
+                      cutout_recommended: { type: "boolean" },
                       confidence: { type: "number", minimum: 0, maximum: 1 },
                     },
-                    required: ["id", "product_bbox", "placement", "layout", "text_tone", "confidence"],
+                    required: ["id", "product_bbox", "placement", "layout", "text_tone", "cutout_recommended", "confidence"],
                   },
                 },
               },
@@ -1888,7 +1971,7 @@ async function deriveLocalPackshotLabelAnalysis(sourceBuffer, { includeLogo = fa
   return {
     analysis: {
       placement: best.placement,
-      layout: "compact_card",
+      layout: "text_only",
       textTone: best.mean < 120 ? "light" : "dark",
       confidence: 0.82,
       productBox: null,
@@ -1915,11 +1998,7 @@ function buildCarouselProductLabelSvg({ title, brand = "", descriptor = "", eyeb
 
   const isLight = analysis.textTone === "light";
   const textColor = isLight ? "#ffffff" : "#111827";
-  const cardColor = isLight ? "#111827" : "#ffffff";
-  const card = analysis.layout === "compact_card"
-    ? `<defs><filter id="labelShadow" x="-20%" y="-30%" width="140%" height="170%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.18"/></filter></defs><rect x="${labelBox.x}" y="${labelBox.y}" width="${labelBox.width}" height="${labelBox.height}" rx="26" fill="${cardColor}" fill-opacity="0.78" stroke="${isLight ? "#ffffff" : "#dbe4ef"}" stroke-opacity="0.42" filter="url(#labelShadow)"/>`
-    : "";
-  const horizontalPadding = analysis.layout === "compact_card" ? 26 : 6;
+  const horizontalPadding = 6;
   const isRtl = typography.profile.direction === "rtl";
   const textX = isRtl
     ? labelBox.x + labelBox.width - horizontalPadding
@@ -1930,9 +2009,7 @@ function buildCarouselProductLabelSvg({ title, brand = "", descriptor = "", eyeb
       Math.max(0, (titleAreaHeight - renderedTextHeight) / 2) +
       typography.fontSize
   );
-  const outline = analysis.layout === "text_only"
-    ? `stroke="${isLight ? "#000000" : "#ffffff"}" stroke-opacity="0.34" stroke-width="7" paint-order="stroke"`
-    : `stroke="${textColor}" stroke-width="0.7" paint-order="stroke"`;
+  const outline = `stroke="${isLight ? "#000000" : "#ffffff"}" stroke-opacity="0.34" stroke-width="7" paint-order="stroke"`;
   const productLetterSpacing = typography.profile.script === "global" ? "-0.7" : "0";
   const spans = lines
     .map((line, index) => `<tspan x="${textX}" dy="${index === 0 ? 0 : typography.lineHeight}">${escapeProductSvg(line)}</tspan>`)
@@ -1948,15 +2025,240 @@ function buildCarouselProductLabelSvg({ title, brand = "", descriptor = "", eyeb
     ? `<text x="${textX}" y="${labelBox.y + labelBox.height - 16}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="15" font-weight="650" letter-spacing="0" fill="${textColor}" fill-opacity="0.82" text-anchor="${isRtl ? "end" : "start"}">${escapeProductSvg(descriptorText)}</text>`
     : "";
   return {
-    svg: `<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg">${card}${eyebrowMarkup}${brandMarkup}<text x="${textX}" y="${textY}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="${typography.fontSize}" font-weight="950" letter-spacing="${productLetterSpacing}" fill="${textColor}" direction="${typography.profile.direction}" unicode-bidi="plaintext" text-anchor="${isRtl ? "end" : "start"}" ${outline}>${spans}</text>${descriptorMarkup}</svg>`,
+    svg: `<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg">${eyebrowMarkup}${brandMarkup}<text x="${textX}" y="${textY}" font-family="${escapeProductSvg(typography.profile.family)}, Noto Sans, sans-serif" font-size="${typography.fontSize}" font-weight="950" letter-spacing="${productLetterSpacing}" fill="${textColor}" direction="${typography.profile.direction}" unicode-bidi="plaintext" text-anchor="${isRtl ? "end" : "start"}" ${outline}>${spans}</text>${descriptorMarkup}</svg>`,
     typography,
+  };
+}
+
+
+function getTransparentTypographyPlacementGuidance(placement) {
+  const box = CAROUSEL_PRODUCT_LABEL_PLACEMENTS[placement];
+  if (!box) return "Keep the typography in the safest open area and away from the marketed product.";
+  const left = Math.round((box.x / 1080) * 100);
+  const top = Math.round((box.y / 1080) * 100);
+  const right = Math.round(((box.x + box.width) / 1080) * 100);
+  const bottom = Math.round(((box.y + box.height) / 1080) * 100);
+  return `Keep the complete typography treatment inside approximately x=${left}%–${right}% and y=${top}%–${bottom}% of the canvas. Do not let any letter or decoration leave that area.`;
+}
+
+function buildTransparentProductTypographyPrompt({
+  rule,
+  productTitle,
+  productBrand = "",
+  productDescriptor = "",
+  placement,
+  textTone = "dark",
+  languageHint = "",
+}) {
+  const eyebrow = getProductLabelEyebrow(rule);
+  const brand = String(productBrand || "").trim();
+  const title = String(productTitle || "").trim();
+  const descriptor = String(productDescriptor || "").trim();
+  const campaignContext = truncateText(
+    [
+      rule?.campaign_name,
+      rule?.campaign_phase,
+      rule?.content_type_label,
+      rule?.prompt,
+    ].filter(Boolean).join(" | "),
+    520
+  );
+  const exactTextLines = [
+    eyebrow ? `- Optional campaign eyebrow, exact spelling: "${eyebrow}"` : "- No campaign eyebrow is required.",
+    brand ? `- Product brand, exact spelling: "${brand}"` : "- No separate product brand is required.",
+    `- Main product name, exact spelling and all words preserved: "${title}"`,
+    descriptor ? `- Optional descriptor, exact spelling: "${descriptor}"` : "- No descriptor is required.",
+  ].join("\n");
+  const contrastDirection = textTone === "light"
+    ? "The earlier placement analysis suggested a darker source area, but the supplied reference image is authoritative: choose lettering that has strong real contrast against the CURRENT pixels in the reserved area."
+    : "The earlier placement analysis suggested a lighter/medium source area, but the supplied reference image is authoritative: choose lettering that has strong real contrast against the CURRENT pixels in the reserved area.";
+
+  return `
+Create ONLY a finished transparent typography overlay for the supplied ecommerce product image.
+The supplied image is visual context only. Do not reproduce, redraw, alter or include the product image in the output.
+
+Output contract:
+- Square transparent RGBA canvas.
+- Every pixel that is not part of the typography or a very small typography-supporting accent must be fully transparent.
+- No card, panel, badge, sticker, label background, banner, rectangle, capsule, opaque plate, paper block or colored field behind the text.
+- No photographic background, scene, product, person, prop, logo mark, mockup, watermark or fake interface.
+- A subtle text shadow, outline, highlight, underline, tiny linework or restrained decorative flourish is allowed only when it belongs directly to the typography and improves readability.
+- Do not create large decorative shapes. Transparency is the visual style.
+
+Exact visible text:
+${exactTextLines}
+- Use only the supplied text above. Do not invent slogans, features, prices, discounts, claims, calls to action or extra words.
+- Do not translate, rename, abbreviate, omit or replace product-name words.
+- Balanced capitalization and line breaks are allowed, but spelling must remain exact.
+- The main product name must be immediately readable on a phone.
+
+Placement:
+- ${getTransparentTypographyPlacementGuidance(placement)}
+- Keep generous breathing room around the text and away from the product, faces, hands and visually important objects.
+- Do not cover the marketed product.
+
+Art direction:
+- Match the supplied image's visual language, palette, mood and product category so the typography feels art-directed for this exact post rather than pasted on from a template.
+- Choose the most suitable premium typography: refined serif, modern geometric sans, condensed display, editorial type, tasteful expressive lettering, or another professional treatment that fits the image.
+- Do not use a generic Canva-style label treatment.
+- ${contrastDirection}
+- Content language context: ${languageHint || rule?.language || rule?.brand_profile?.content_language || "same language as the product text"}.
+- Campaign/context: ${campaignContext || "No additional campaign context"}.
+
+Return only the transparent typography asset. The original product image will be composited underneath later.
+`.trim();
+}
+
+async function normalizeTransparentProductTypographyOverlay(
+  generatedBuffer,
+  { width = 1080, height = 1080, placement = null } = {}
+) {
+  const normalized = await sharp(generatedBuffer)
+    .rotate()
+    .resize({ width, height, fit: "fill", kernel: sharp.kernel.lanczos3 })
+    .ensureAlpha()
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  const { data, info } = await sharp(normalized)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const pixelCount = Math.max(1, info.width * info.height);
+  let visible = 0;
+  let strong = 0;
+  let outsideVisible = 0;
+  const box = CAROUSEL_PRODUCT_LABEL_PLACEMENTS[placement] || null;
+  const padding = 54;
+  const allowed = box
+    ? {
+        left: Math.max(0, box.x - padding),
+        top: Math.max(0, box.y - padding),
+        right: Math.min(width, box.x + box.width + padding),
+        bottom: Math.min(height, box.y + box.height + padding),
+      }
+    : null;
+
+  for (let y = 0; y < info.height; y += 1) {
+    for (let x = 0; x < info.width; x += 1) {
+      const alpha = data[(y * info.width + x) * info.channels + 3];
+      if (alpha < 28) continue;
+      visible += 1;
+      if (alpha >= 150) strong += 1;
+      if (
+        allowed &&
+        (x < allowed.left || x >= allowed.right || y < allowed.top || y >= allowed.bottom)
+      ) {
+        outsideVisible += 1;
+      }
+    }
+  }
+
+  const visibleRatio = visible / pixelCount;
+  const strongRatio = strong / pixelCount;
+  const outsideRatio = outsideVisible / Math.max(1, visible);
+  if (visibleRatio < 0.002 || strongRatio < 0.0008) {
+    throw new Error("GPT Image transparent typography was visually empty");
+  }
+  if (visibleRatio > 0.29) {
+    throw new Error("GPT Image transparent typography contained too much opaque area");
+  }
+  if (allowed && outsideRatio > 0.08) {
+    throw new Error("GPT Image transparent typography left its reserved safe area");
+  }
+
+  const corner = Math.max(12, Math.round(Math.min(width, height) * 0.035));
+  const cornerRegions = [
+    { left: 0, top: 0 },
+    { left: width - corner, top: 0 },
+    { left: 0, top: height - corner },
+    { left: width - corner, top: height - corner },
+  ];
+  let cornerVisible = 0;
+  for (const region of cornerRegions) {
+    for (let y = region.top; y < region.top + corner; y += 1) {
+      for (let x = region.left; x < region.left + corner; x += 1) {
+        if (data[(y * info.width + x) * info.channels + 3] >= 28) cornerVisible += 1;
+      }
+    }
+  }
+  if (cornerVisible / Math.max(1, corner * corner * 4) > 0.035) {
+    throw new Error("GPT Image transparent typography did not keep the canvas background transparent");
+  }
+
+  return {
+    overlayBuffer: normalized,
+    analysis: {
+      visibleRatio: Number(visibleRatio.toFixed(4)),
+      strongRatio: Number(strongRatio.toFixed(4)),
+      outsideSafeAreaRatio: Number(outsideRatio.toFixed(4)),
+    },
+  };
+}
+
+async function createTransparentProductTypographyOverlay({
+  openai,
+  rule,
+  referenceBuffer,
+  productTitle,
+  productBrand = "",
+  productDescriptor = "",
+  placement,
+  textTone = "dark",
+  languageHint = "",
+}) {
+  if (!openai || !referenceBuffer?.length || !String(productTitle || "").trim()) {
+    throw new Error("GPT Image transparent typography prerequisites were unavailable");
+  }
+  const reference = await sharp(referenceBuffer)
+    .rotate()
+    .resize({ width: 1024, height: 1024, fit: "fill" })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  const referenceFile = await toFile(reference, "product-layout-reference.png", {
+    type: "image/png",
+  });
+  const prompt = buildTransparentProductTypographyPrompt({
+    rule,
+    productTitle,
+    productBrand,
+    productDescriptor,
+    placement,
+    textTone,
+    languageHint,
+  });
+  const response = await openai.images.edit(
+    {
+      model: IMAGE_MODEL,
+      image: referenceFile,
+      prompt,
+      size: "1024x1024",
+      quality: "medium",
+      background: "transparent",
+      output_format: "png",
+    },
+    { timeout: 55_000, maxRetries: 0 }
+  );
+  const imageBase64 = response?.data?.[0]?.b64_json;
+  if (!imageBase64) {
+    throw new Error("GPT Image returned no transparent typography image data");
+  }
+  const normalized = await normalizeTransparentProductTypographyOverlay(
+    Buffer.from(imageBase64, "base64"),
+    { width: 1080, height: 1080, placement }
+  );
+  return {
+    ...normalized,
+    prompt,
+    provider: "gpt-image-2-transparent-typography",
   };
 }
 
 export async function renderCarouselProductSlideImage({
   sourceImageUrl,
+  openai = null,
   supabase = null,
   rule = null,
+  websiteItem = null,
   backgroundSelectionContext = null,
   productTitle = "",
   productBrand = "",
@@ -1998,11 +2300,42 @@ export async function renderCarouselProductSlideImage({
         });
       } catch (cutoutError) {
         cutoutBuffer = null;
-        console.info("Clean product image kept on its original background", {
+        console.info("Clean product image kept on its original background unless AI isolation is recommended", {
           ruleId: rule?.id || null,
           sourceImageUrl,
           reason: cutoutError?.message || "Transparency check failed",
+          aiCutoutRecommended: productLabelAnalysis?.cutoutRecommended === true,
         });
+      }
+
+      if (
+        !cutoutBuffer &&
+        openai &&
+        websiteItem &&
+        productLabelAnalysis?.cutoutRecommended === true
+      ) {
+        try {
+          const aiCutout = await createGptImageProductTransparentCutout({
+            openai,
+            websiteItem,
+            sourceImageBuffer: sourceBuffer,
+            ruleId: rule?.id || null,
+          });
+          cutoutBuffer = aiCutout.cutoutBuffer;
+          console.info("Static product image upgraded to verified GPT Image transparent cutout", {
+            ruleId: rule?.id || null,
+            sourceImageUrl,
+            productTitle: websiteItem?.title || productTitle || null,
+            cutoutMode: aiCutout.analysis?.mode || null,
+          });
+        } catch (error) {
+          console.warn("Static GPT Image product isolation was not trusted; preserving original image", {
+            ruleId: rule?.id || null,
+            sourceImageUrl,
+            productTitle: websiteItem?.title || productTitle || null,
+            message: error?.message || String(error),
+          });
+        }
       }
 
       if (cutoutBuffer) {
@@ -2088,7 +2421,7 @@ export async function renderCarouselProductSlideImage({
             if (localPlacement) {
               appliedLabelAnalysis = {
                 placement: localPlacement,
-                layout: "compact_card",
+                layout: "text_only",
                 textTone: "dark",
                 confidence: 1,
                 productBox: null,
@@ -2097,13 +2430,13 @@ export async function renderCarouselProductSlideImage({
             } else {
               appliedLabelAnalysis = {
                 placement: chooseLeastObstructiveProductLabelPlacement(productCanvasBox, { includeLogo }),
-                layout: "compact_card",
+                layout: "text_only",
                 textTone: "dark",
                 confidence: 0.7,
                 productBox: null,
                 allowControlledOverlap: true,
               };
-              productLabelSource = "cutout_glass_fallback";
+              productLabelSource = "cutout_text_fallback";
             }
           }
         }
@@ -2132,19 +2465,19 @@ export async function renderCarouselProductSlideImage({
               22
             );
           if (preferredAllowed) {
-            appliedLabelAnalysis = { ...productLabelAnalysis, layout: "compact_card" };
+            appliedLabelAnalysis = { ...productLabelAnalysis, layout: "text_only" };
             productLabelSource = "ai_placement";
           } else {
             const safePlacement = chooseNonOverlappingProductLabelPlacement(productCanvasBox, { includeLogo });
             appliedLabelAnalysis = {
               ...productLabelAnalysis,
               placement: safePlacement || chooseLeastObstructiveProductLabelPlacement(productCanvasBox, { includeLogo }),
-              layout: "compact_card",
+              layout: "text_only",
               allowControlledOverlap: !safePlacement,
             };
             productLabelSource = safePlacement
-              ? "ai_bbox_safe_glass_fallback"
-              : "ai_bbox_glass_fallback";
+              ? "ai_bbox_safe_text_fallback"
+              : "ai_bbox_text_fallback";
           }
         } else if (productTitle) {
           const localPlacement = await deriveLocalPackshotLabelAnalysis(sourceBuffer, { includeLogo });
@@ -2156,69 +2489,112 @@ export async function renderCarouselProductSlideImage({
             productCanvasBox = { x: 300, y: 180, width: 480, height: 720 };
             appliedLabelAnalysis = {
               placement: chooseLeastObstructiveProductLabelPlacement(productCanvasBox, { includeLogo }),
-              layout: "compact_card",
+              layout: "text_only",
               textTone: "dark",
               confidence: 0.6,
               productBox: null,
               allowControlledOverlap: true,
             };
-            productLabelSource = "universal_glass_fallback";
+            productLabelSource = "universal_text_fallback";
           }
         }
       }
 
       if (productTitle && appliedLabelAnalysis && productCanvasBox) {
-        // v143.56: carousel labels are part of the visual identity, not an
-        // optional decoration. Force the glass-card layout and recover from a
-        // late geometry rejection by trying another safe corner before using
-        // the least-obstructive controlled-overlap position.
-        appliedLabelAnalysis = { ...appliedLabelAnalysis, layout: "compact_card" };
-        let labelRender = buildCarouselProductLabelSvg({
-          title: productTitle,
-          brand: productBrand,
-          descriptor: productDescriptor,
-          eyebrow: getProductLabelEyebrow(rule),
-          analysis: appliedLabelAnalysis,
-          productCanvasBox,
-          languageHint,
-        });
+        // v144.18: use GPT-Image-2 for the visible typography layer whenever
+        // there is a separate product-text overlay. The source/product image is
+        // supplied only as visual context and the returned overlay must be RGBA
+        // transparency with no card, badge, panel or opaque text background.
+        appliedLabelAnalysis = { ...appliedLabelAnalysis, layout: "text_only" };
+        let gptTypographyApplied = false;
 
-        if (!labelRender?.svg) {
-          const recoveryPlacement = chooseNonOverlappingProductLabelPlacement(productCanvasBox, { includeLogo });
-          const recoveryAnalysis = {
-            ...appliedLabelAnalysis,
-            placement: recoveryPlacement || chooseLeastObstructiveProductLabelPlacement(productCanvasBox, { includeLogo }),
-            layout: "compact_card",
-            allowControlledOverlap: !recoveryPlacement,
-          };
-          labelRender = buildCarouselProductLabelSvg({
+        if (openai) {
+          try {
+            const referenceBuffer = await baseCanvas
+              .clone()
+              .ensureAlpha()
+              .composite(composites)
+              .png()
+              .toBuffer();
+            const generatedTypography = await createTransparentProductTypographyOverlay({
+              openai,
+              rule,
+              referenceBuffer,
+              productTitle,
+              productBrand,
+              productDescriptor,
+              placement: appliedLabelAnalysis.placement,
+              textTone: appliedLabelAnalysis.textTone || "dark",
+              languageHint,
+            });
+            composites.push({ input: generatedTypography.overlayBuffer, top: 0, left: 0 });
+            productLabelApplied = true;
+            productLabelSource = generatedTypography.provider;
+            productLabelReason = "applied";
+            appliedTypography = null;
+            gptTypographyApplied = true;
+            console.info("GPT Image transparent product typography applied", {
+              ruleId: rule?.id || null,
+              productTitle,
+              placement: appliedLabelAnalysis.placement,
+              ...generatedTypography.analysis,
+            });
+          } catch (error) {
+            console.warn("GPT Image transparent product typography unavailable; using text-only emergency fallback", {
+              ruleId: rule?.id || null,
+              productTitle,
+              placement: appliedLabelAnalysis.placement,
+              message: error?.message || String(error),
+            });
+          }
+        }
+
+        if (!gptTypographyApplied) {
+          let labelRender = buildCarouselProductLabelSvg({
             title: productTitle,
             brand: productBrand,
             descriptor: productDescriptor,
             eyebrow: getProductLabelEyebrow(rule),
-            analysis: recoveryAnalysis,
+            analysis: appliedLabelAnalysis,
             productCanvasBox,
             languageHint,
           });
-          if (labelRender?.svg) {
-            appliedLabelAnalysis = recoveryAnalysis;
-            productLabelSource = recoveryPlacement
-              ? "render_safe_glass_fallback"
-              : "render_least_obstructive_glass_fallback";
-          }
-        }
 
-        if (labelRender?.svg) {
-          composites.push({ input: Buffer.from(labelRender.svg), top: 0, left: 0 });
-          productLabelApplied = true;
-          productLabelReason = productLabelSource.includes("fallback") && productLabelAnalysisStatus === "timed_out"
-            ? "analysis_timeout_local_fallback"
-            : productLabelSource.includes("render_")
-              ? "placement_recovered"
-              : "applied";
-          appliedTypography = labelRender.typography;
-        } else {
-          productLabelReason = "label_render_unavailable";
+          if (!labelRender?.svg) {
+            const recoveryPlacement = chooseNonOverlappingProductLabelPlacement(productCanvasBox, { includeLogo });
+            const recoveryAnalysis = {
+              ...appliedLabelAnalysis,
+              placement: recoveryPlacement || chooseLeastObstructiveProductLabelPlacement(productCanvasBox, { includeLogo }),
+              layout: "text_only",
+              allowControlledOverlap: !recoveryPlacement,
+            };
+            labelRender = buildCarouselProductLabelSvg({
+              title: productTitle,
+              brand: productBrand,
+              descriptor: productDescriptor,
+              eyebrow: getProductLabelEyebrow(rule),
+              analysis: recoveryAnalysis,
+              productCanvasBox,
+              languageHint,
+            });
+            if (labelRender?.svg) {
+              appliedLabelAnalysis = recoveryAnalysis;
+            }
+          }
+
+          if (labelRender?.svg) {
+            composites.push({ input: Buffer.from(labelRender.svg), top: 0, left: 0 });
+            productLabelApplied = true;
+            productLabelSource = "local_text_only_emergency_fallback";
+            productLabelReason = productLabelAnalysisStatus === "timed_out"
+              ? "analysis_timeout_local_fallback"
+              : openai
+                ? "gpt_typography_fallback"
+                : "openai_unavailable_local_fallback";
+            appliedTypography = labelRender.typography;
+          } else {
+            productLabelReason = "label_render_unavailable";
+          }
         }
       }
     } catch (error) {
@@ -6701,6 +7077,7 @@ async function prepareCarouselProductsForRule({
   // another GPT-5.5 repair batch.
   const indexedSecurityFallbackState = {
     batchExecuted: false,
+    batchCount: 0,
     recoveredItems: [],
   };
   let deadlineSkipLogged = false;
@@ -6731,6 +7108,12 @@ async function prepareCarouselProductsForRule({
     throw new Error("Website carousel requires a website URL in Brand profile");
   }
 
+  const websiteAccessState = await getWebsiteDomainFetchState(websiteUrl).catch(
+    () => null
+  );
+  const websiteAccessProtected =
+    isWebsiteAccessProtectedState(websiteAccessState);
+
   let catalogItems = filterWebsiteCatalogItemsForRule(
     await getWebsiteProductCatalogItems({
       supabase,
@@ -6759,6 +7142,55 @@ async function prepareCarouselProductsForRule({
     ]);
   }
 
+  if (websiteAccessProtected) {
+    const beforeFreshFilter = catalogItems.length;
+    catalogItems = catalogItems.filter((item) =>
+      isFreshProductStockVerification(item)
+    );
+
+    const publicFeedItems = filterWebsiteCatalogItemsForRule(
+      await discoverPublicCommerceFeedCandidates({
+        websiteUrl,
+        campaignPrompt: buildCampaignResearchText(rule),
+      }),
+      rule
+    ).map((item) => ({
+      ...item,
+      selection_priority: Math.max(Number(item?.selection_priority || 0), 360),
+      campaign_fit_source:
+        item?.campaign_fit_source || "protected_public_commerce_feed",
+      campaign_fit_score:
+        Number(item?.campaign_fit_score || 0) +
+        scoreCampaignFitForRule(item, rule) +
+        45,
+    }));
+
+    if (publicFeedItems.length) {
+      catalogItems = dedupeWebsiteItemsByUrlTitleAndImage([
+        ...publicFeedItems,
+        ...catalogItems,
+      ]);
+      await upsertWebsiteProductCatalogItems({
+        supabase,
+        userId: rule.user_id,
+        brandProfileId: rule.brand_profile_id,
+        sourceUrl: websiteUrl,
+        items: publicFeedItems,
+        discoverySource: "protected_public_commerce_feed",
+      });
+    }
+
+    console.log("Protected retailer carousel catalog prepared from fresh stock and public feeds", {
+      ruleId: rule.id,
+      brandProfileId: rule.brand_profile_id,
+      websiteUrl,
+      priorCatalogCount: beforeFreshFilter,
+      freshCatalogCount: catalogItems.length,
+      publicFeedCount: publicFeedItems.length,
+      freshnessMs: PROTECTED_PRODUCT_STOCK_FRESH_MS,
+    });
+  }
+
   const recentUsedItems = await getRecentUsedWebsiteItems({
     supabase,
     userId: rule.user_id,
@@ -6785,10 +7217,10 @@ async function prepareCarouselProductsForRule({
   // campaign researcher first. Use the same one-batch indexed fallback shared
   // by every product-image format. Normal retailers never enter this branch.
   if (canUsePrimaryCampaignWebResearch) {
-    const knownDomainState = await getWebsiteDomainFetchState(websiteUrl).catch(
-      () => null
-    );
-    if (Number(knownDomainState?.lastStatus || 0) === 403) {
+    const knownDomainState =
+      websiteAccessState ||
+      (await getWebsiteDomainFetchState(websiteUrl).catch(() => null));
+    if (websiteAccessProtected || isWebsiteAccessProtectedState(knownDomainState)) {
       try {
         console.log("Campaign carousel using known-403 indexed product fallback", {
           ruleId: rule?.id,
@@ -7612,6 +8044,7 @@ async function prepareCarouselProductsForRule({
     if (
       storeMapAgentAttempted ||
       !STORE_MAP_PRODUCT_AGENT_ENABLED ||
+      websiteAccessProtected ||
       campaignWebsiteRateLimited ||
       hasLockedCampaignSearchPool ||
       !hasProductPreparationBudget(90_000)
@@ -7676,6 +8109,13 @@ async function prepareCarouselProductsForRule({
     selectionPriority = 75,
     scoreBonus = 0,
   } = {}) {
+    if (websiteAccessProtected) {
+      console.log("Protected retailer skipped direct campaign store-search pool; indexed/public-source discovery remains active", {
+        ruleId: rule.id,
+        websiteUrl,
+      });
+      return false;
+    }
     if (campaignWebsiteRateLimited) {
       return false;
     }
@@ -8215,6 +8655,7 @@ async function prepareCarouselProductsForRule({
   if (
     !storeMapAgentAttempted &&
     STORE_MAP_PRODUCT_AGENT_ENABLED &&
+    !websiteAccessProtected &&
     !campaignWebsiteRateLimited &&
     !hasLockedCampaignSearchPool &&
     hasProductPreparationBudget(90_000)
@@ -9446,6 +9887,17 @@ async function prepareCarouselProductsForRule({
         ...storeMapAgentResult.products,
       ]).filter(isValidCarouselProduct).length;
     const failureMessage = `Product Engine V2 exhausted store search and the remaining catalog fallbacks. The carousel requires at least ${minimumDeliverableProductCount} verified products with usable images. ${technicallyVerifiedProductCount} products were technically verified and ${selectedProducts.length} remained available for delivery.`;
+
+    if (websiteAccessProtected) {
+      const retryError = new ProtectedProductResearchRetryError(
+        "The protected retailer did not expose enough fresh in-stock products for a safe carousel in this attempt. Spreelo will retry the same occurrence with public commerce feeds and current indexed assortment research instead of publishing stale or unverified products.",
+        { url: websiteUrl }
+      );
+      retryError.partialProducts = selectedProducts;
+      retryError.verifiedProductCount = selectedProducts.length;
+      retryError.targetProductCount = minimumDeliverableProductCount;
+      throw retryError;
+    }
 
     await recordProductEngineV2Run({
       rule,
@@ -11420,6 +11872,7 @@ function classifyAutomationCreationFailure(errorOrMessage, stage = "unhandled") 
 
 
 function isTransientAutomationError(errorOrMessage) {
+  if (isProtectedProductResearchRetryError(errorOrMessage)) return true;
   const message = String(errorOrMessage?.message || errorOrMessage || "").toLowerCase();
   const code = String(errorOrMessage?.code || "").toLowerCase();
   const status = Number(
@@ -11813,6 +12266,8 @@ async function deferAutomationOccurrenceForTransientFailure({
   errorOrMessage,
   stage,
   metadata = {},
+  retryAfterMs = TRANSIENT_AUTOMATION_RETRY_DELAY_MS,
+  maxRetries = TRANSIENT_AUTOMATION_MAX_RETRIES,
 }) {
   const message = String(
     errorOrMessage?.message || errorOrMessage || "Temporary automation failure"
@@ -11821,11 +12276,11 @@ async function deferAutomationOccurrenceForTransientFailure({
     "defer_automation_occurrence_for_transient_failure",
     {
       p_occurrence_id: occurrenceId,
-      p_retry_after_ms: TRANSIENT_AUTOMATION_RETRY_DELAY_MS,
+      p_retry_after_ms: Math.max(15_000, Number(retryAfterMs || TRANSIENT_AUTOMATION_RETRY_DELAY_MS)),
       p_internal_message: message,
       p_failure_stage: stage || null,
       p_metadata: metadata || {},
-      p_max_retries: TRANSIENT_AUTOMATION_MAX_RETRIES,
+      p_max_retries: Math.max(1, Number(maxRetries || TRANSIENT_AUTOMATION_MAX_RETRIES)),
     }
   );
 
@@ -11840,7 +12295,7 @@ async function deferAutomationOccurrenceForTransientFailure({
     exhausted: Boolean(data?.exhausted),
     status: data?.status || "retry_pending",
     retryAt: data?.retry_at || null,
-    retryAfterMs: Number(data?.retry_after_ms || TRANSIENT_AUTOMATION_RETRY_DELAY_MS),
+    retryAfterMs: Number(data?.retry_after_ms || retryAfterMs || TRANSIENT_AUTOMATION_RETRY_DELAY_MS),
     retryCount: Number(data?.retry_count || 0),
   };
 }
@@ -14119,6 +14574,34 @@ function normalizeWebsiteCatalogItem(row) {
     ecommerce_proof_found: Boolean(row.ecommerce_proof_found),
     product_confidence: Number(row.verification_score || 0),
     last_verified_at: row.last_verified_at || null,
+    stock_verified_at:
+      row.verification_metadata?.stock_verified_at ||
+      row.last_verified_at ||
+      null,
+    stock_verification_source:
+      row.verification_metadata?.stock_verification_source || null,
+    stock_verification_evidence:
+      row.verification_metadata?.stock_verification_evidence || "",
+    authoritative_public_commerce_feed:
+      row.verification_metadata?.authoritative_public_commerce_feed === true,
+    indexed_security_fallback_verified:
+      row.verification_metadata?.indexed_security_fallback_verified === true,
+    product_identity_locked:
+      row.verification_metadata?.product_identity_locked === true,
+    technical_identity_same_page_verified:
+      row.verification_metadata?.technical_identity_same_page_verified === true,
+    product_image_page_bound:
+      row.verification_metadata?.product_image_page_bound === true,
+    product_image_page_bound_source:
+      row.verification_metadata?.product_image_page_bound_source || null,
+    product_image_source_page_url:
+      row.verification_metadata?.product_image_source_page_url || null,
+    locked_product_availability:
+      row.verification_metadata?.locked_product_availability || row.availability || "",
+    locked_product_availability_evidence:
+      row.verification_metadata?.locked_product_availability_evidence ||
+      row.verification_metadata?.stock_verification_evidence ||
+      "",
     verification_metadata: row.verification_metadata || {},
     reason: row.verification_metadata?.reason || "",
     campaign_fit_source:
@@ -14452,6 +14935,44 @@ async function upsertWebsiteProductCatalogItems({
           campaign_final_reviewed:
             rawItem?.campaign_final_reviewed === true,
           verification_level: rawItem?.verification_level || "deep_product_page",
+          stock_verified_at:
+            rawItem?.stock_verified_at ||
+            (isProductConfirmedPurchasable(rawItem)
+              ? rawItem?.last_verified_at || nowIso
+              : null),
+          stock_verification_source:
+            rawItem?.stock_verification_source ||
+            (isProductConfirmedPurchasable(rawItem)
+              ? rawItem?.indexed_security_fallback_verified === true
+                ? "indexed_authoritative_research"
+                : "official_product_page"
+              : null),
+          stock_verification_evidence:
+            rawItem?.stock_verification_evidence ||
+            rawItem?.locked_product_availability_evidence ||
+            rawItem?.availability_evidence ||
+            "",
+          authoritative_public_commerce_feed:
+            rawItem?.authoritative_public_commerce_feed === true,
+          indexed_security_fallback_verified:
+            rawItem?.indexed_security_fallback_verified === true,
+          product_identity_locked:
+            rawItem?.product_identity_locked === true,
+          technical_identity_same_page_verified:
+            rawItem?.technical_identity_same_page_verified === true,
+          product_image_page_bound:
+            rawItem?.product_image_page_bound === true,
+          product_image_page_bound_source:
+            rawItem?.product_image_page_bound_source || null,
+          product_image_source_page_url:
+            rawItem?.product_image_source_page_url || rawItem?.url || null,
+          locked_product_availability:
+            rawItem?.locked_product_availability || rawItem?.availability || null,
+          locked_product_availability_evidence:
+            rawItem?.locked_product_availability_evidence ||
+            rawItem?.stock_verification_evidence ||
+            rawItem?.availability_evidence ||
+            null,
           store_map_node_url: rawItem?.store_map_node_url || null,
           store_map_node_title: rawItem?.store_map_node_title || null,
           store_map_node_type: rawItem?.store_map_node_type || null,
@@ -20630,9 +21151,11 @@ function isProductKnownUnavailableForPromotion(item) {
 }
 
 function isProductConfirmedPurchasable(item) {
-  return ["in_stock", "available", "preorder", "backorder"].includes(
-    getProductPromotionAvailability(item)
-  );
+  // v144.19: physical product posts must use products that are explicitly
+  // in stock now. A preorder, backorder, generic "available" state or an
+  // add-to-cart control without stock evidence is not enough. This prevents
+  // discontinued / zero-stock indexed products from being promoted.
+  return getProductPromotionAvailability(item) === "in_stock";
 }
 
 function hasDirectProductPurchaseAction(html) {
@@ -20659,10 +21182,9 @@ function inferCurrentProductAvailability({ product, html, fallback = "unknown" }
 
 function isProductEligibleForPromotion(item) {
   if (isProductKnownUnavailableForPromotion(item)) return false;
-  return Boolean(
-    isProductConfirmedPurchasable(item) ||
-      item?.purchase_action_detected === true
-  );
+  // v144.19: purchase buttons alone are not stock proof. Some retailers keep
+  // "add to cart" visible for order items with zero current stock.
+  return isProductConfirmedPurchasable(item);
 }
 
 function findExactPageJsonLdProduct(html, pageUrl) {
@@ -23688,11 +24210,18 @@ async function discoverShopifyProductsJson({ websiteUrl, campaignPrompt }) {
           product?.image?.src ||
           product?.images?.[0]?.src ||
           null;
-        const firstVariant = Array.isArray(product?.variants)
-          ? product.variants[0]
-          : null;
+        const variants = Array.isArray(product?.variants)
+          ? product.variants
+          : [];
+        const firstVariant = variants[0] || null;
         const price = normalizeVerifiedPriceValue(
           firstVariant?.price ? String(firstVariant.price) : ""
+        );
+        const explicitInStock = variants.some(
+          (variant) =>
+            variant?.available === true ||
+            (Number.isFinite(Number(variant?.inventory_quantity)) &&
+              Number(variant?.inventory_quantity) > 0)
         );
 
         if (!productUrl || !title || isLikelyNonProductUrl(productUrl, websiteUrl)) {
@@ -23705,6 +24234,29 @@ async function discoverShopifyProductsJson({ websiteUrl, campaignPrompt }) {
           price,
           image_url: imageUrl && isHttpUrl(imageUrl) ? imageUrl : null,
           description: String(product?.body_html || product?.body || ""),
+          availability: explicitInStock ? "in_stock" : "unknown",
+          availability_status: explicitInStock ? "in_stock" : "unknown",
+          availability_evidence: explicitInStock
+            ? "Current public Shopify product feed reports an available/inventory-positive variant."
+            : "",
+          stock_verified_at: explicitInStock ? new Date().toISOString() : null,
+          stock_verification_source: explicitInStock
+            ? "public_shopify_products_feed"
+            : null,
+          stock_verification_evidence: explicitInStock
+            ? "Current public Shopify product feed reports an available/inventory-positive variant."
+            : "",
+          authoritative_public_commerce_feed: explicitInStock,
+          product_identity_locked: explicitInStock && Boolean(imageUrl),
+          technical_identity_same_page_verified: explicitInStock && Boolean(imageUrl),
+          product_image_page_bound: explicitInStock && Boolean(imageUrl),
+          product_image_page_bound_source: explicitInStock
+            ? "public_shopify_products_feed"
+            : null,
+          product_image_source_page_url: productUrl,
+          ecommerce_proof_found: true,
+          concrete_product_verified: true,
+          product_confidence: explicitInStock && imageUrl ? 100 : 70,
           reason: "Product found from Shopify products feed",
           score: scorePossibleProductLink({ url: productUrl, text: title, campaignPrompt }),
         });
@@ -23721,6 +24273,135 @@ async function discoverShopifyProductsJson({ websiteUrl, campaignPrompt }) {
   return dedupeUrlItems(discovered)
     .sort((a, b) => Number(b.score || 0) - Number(a.score || 0))
     .slice(0, 80);
+}
+
+async function discoverWooCommerceStoreApiProducts({
+  websiteUrl,
+  campaignPrompt,
+  maxPages = 2,
+}) {
+  const origin = getWebsiteOrigin(websiteUrl);
+  if (!origin) return [];
+
+  const discovered = [];
+  for (let page = 1; page <= Math.max(1, Math.min(3, Number(maxPages || 2))); page += 1) {
+    const apiUrl = `${origin}/wp-json/wc/store/v1/products?per_page=100&page=${page}`;
+    try {
+      const safeApiUrl = await assertPublicHttpUrl(apiUrl);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), WEBSITE_FETCH_TIMEOUT_MS);
+      const response = await fetch(safeApiUrl, {
+        headers: {
+          "user-agent": "SpreeloBot/1.0 (+https://spreelo.com)",
+          accept: "application/json,text/plain,*/*",
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (!response.ok) break;
+
+      const products = await response.json();
+      if (!Array.isArray(products) || !products.length) break;
+
+      for (const product of products) {
+        const title = String(product?.name || "").trim();
+        const productUrl = String(product?.permalink || "").trim();
+        const imageUrl = String(product?.images?.[0]?.src || "").trim() || null;
+        const explicitInStock =
+          product?.is_in_stock === true ||
+          String(product?.stock_status || "").toLowerCase() === "instock";
+        if (
+          !title ||
+          !productUrl ||
+          !isHttpUrl(productUrl) ||
+          !isSameOrSubdomainUrl(productUrl, websiteUrl) ||
+          isLikelyNonProductUrl(productUrl, websiteUrl)
+        ) {
+          continue;
+        }
+
+        discovered.push({
+          title,
+          url: productUrl,
+          price: "",
+          image_url: imageUrl && isHttpUrl(imageUrl) ? imageUrl : null,
+          description: String(product?.short_description || product?.description || ""),
+          availability: explicitInStock ? "in_stock" : "unknown",
+          availability_status: explicitInStock ? "in_stock" : "unknown",
+          availability_evidence: explicitInStock
+            ? "Current public WooCommerce Store API reports the product as in stock."
+            : "",
+          stock_verified_at: explicitInStock ? new Date().toISOString() : null,
+          stock_verification_source: explicitInStock
+            ? "public_woocommerce_store_api"
+            : null,
+          stock_verification_evidence: explicitInStock
+            ? "Current public WooCommerce Store API reports the product as in stock."
+            : "",
+          authoritative_public_commerce_feed: explicitInStock,
+          product_identity_locked: explicitInStock && Boolean(imageUrl),
+          technical_identity_same_page_verified: explicitInStock && Boolean(imageUrl),
+          product_image_page_bound: explicitInStock && Boolean(imageUrl),
+          product_image_page_bound_source: explicitInStock
+            ? "public_woocommerce_store_api"
+            : null,
+          product_image_source_page_url: productUrl,
+          ecommerce_proof_found: true,
+          concrete_product_verified: true,
+          product_confidence: explicitInStock && imageUrl ? 100 : 70,
+          commerce_platform: "woocommerce",
+          reason: "Product found from public WooCommerce Store API",
+          score: scorePossibleProductLink({
+            url: productUrl,
+            text: title,
+            campaignPrompt,
+          }),
+        });
+      }
+    } catch (error) {
+      console.log("WooCommerce Store API discovery unavailable", {
+        websiteUrl,
+        message: error?.message || String(error),
+      });
+      break;
+    }
+  }
+
+  return dedupeUrlItems(discovered)
+    .sort((a, b) => Number(b.score || 0) - Number(a.score || 0))
+    .slice(0, 120);
+}
+
+async function discoverPublicCommerceFeedCandidates({
+  websiteUrl,
+  campaignPrompt,
+}) {
+  const [shopifyResult, wooResult] = await Promise.allSettled([
+    discoverShopifyProductsJson({ websiteUrl, campaignPrompt }),
+    discoverWooCommerceStoreApiProducts({ websiteUrl, campaignPrompt }),
+  ]);
+  const candidates = [
+    ...(shopifyResult.status === "fulfilled" ? shopifyResult.value : []),
+    ...(wooResult.status === "fulfilled" ? wooResult.value : []),
+  ].filter(
+    (item) =>
+      item?.authoritative_public_commerce_feed === true &&
+      isProductConfirmedPurchasable(item) &&
+      item?.title &&
+      item?.url &&
+      item?.image_url
+  );
+
+  if (candidates.length) {
+    console.log("Protected/public commerce feed discovery found current in-stock products", {
+      websiteUrl,
+      candidateCount: candidates.length,
+      sources: Array.from(
+        new Set(candidates.map((item) => item?.stock_verification_source).filter(Boolean))
+      ),
+    });
+  }
+  return dedupeUrlItems(candidates).slice(0, 160);
 }
 
 async function discoverShopifyCollectionJson({ websiteUrl, campaignPrompt }) {
@@ -23915,6 +24596,23 @@ async function discoverProductCandidatesFromWebsite({
       websiteUrl,
       message: error.message,
     });
+  }
+
+  if (!sourceHtml) {
+    const publicFeedCandidates = await discoverPublicCommerceFeedCandidates({
+      websiteUrl,
+      campaignPrompt,
+    });
+    candidates.push(...publicFeedCandidates);
+    if (publicFeedCandidates.some((item) => item?.commerce_platform === "woocommerce")) {
+      detectedPlatform = "woocommerce";
+    } else if (
+      publicFeedCandidates.some((item) =>
+        String(item?.stock_verification_source || "").includes("shopify")
+      )
+    ) {
+      detectedPlatform = "shopify";
+    }
   }
 
   const sitemapCandidates = await discoverProductsFromSitemaps({
@@ -24116,7 +24814,25 @@ async function verifyDiscoveredWebsiteProductCandidates({
     );
     let websiteItem = null;
 
-    if (verificationCache instanceof Map && candidateCacheKey && verificationCache.has(candidateCacheKey)) {
+    if (isAuthoritativePublicCommerceFeedLockedProduct(candidate)) {
+      websiteItem = {
+        ...candidate,
+        page_type: "product",
+        page_type_confidence: 100,
+        product_confidence: Math.max(100, Number(candidate?.product_confidence || 0)),
+        concrete_product_verified: true,
+        ecommerce_proof_found: true,
+        verification_level: "authoritative_public_commerce_feed",
+        last_verified_at:
+          candidate?.last_verified_at ||
+          candidate?.stock_verified_at ||
+          new Date().toISOString(),
+      };
+      inspectedCount += 1;
+      if (verificationCache instanceof Map && candidateCacheKey) {
+        verificationCache.set(candidateCacheKey, websiteItem);
+      }
+    } else if (verificationCache instanceof Map && candidateCacheKey && verificationCache.has(candidateCacheKey)) {
       const cachedValue = verificationCache.get(candidateCacheKey);
       cacheHitCount += 1;
       inspectedCount += 1;
@@ -24231,7 +24947,10 @@ async function verifyDiscoveredWebsiteProductCandidates({
     }
 
     consecutiveAmbiguousProductPages = 0;
-    if (!websiteItem?.verification_cache_hit) {
+    if (
+      !websiteItem?.verification_cache_hit &&
+      websiteItem?.verification_level !== "authoritative_public_commerce_feed"
+    ) {
       inspectedCount += 1;
     }
     if (!websiteItem?.url || !websiteItem?.title) {
@@ -24976,7 +25695,7 @@ async function repairAuthoritativeWebAgentProductAssets({
   }
 
   const instructions = `
-You are a technical product-identity and asset repair agent. The senior marketer has already selected and ranked the products. Do not replace, rerank or reinterpret them.
+You are a technical product-identity and asset repair agent. The senior marketer has already selected and ranked product candidates. Preserve an exact selected identity when it is still explicitly in stock; when the in-stock replacement rule below applies, replace it with a current in-stock product rather than preserving a stale or non-stock identity.
 
 For every supplied product:
 - Search only ${allowedDomain} using exact product-title searches plus every supplied stable identity hint/SKU.
@@ -24984,8 +25703,8 @@ For every supplied product:
 - A stale URL may come from an older commerce platform or search index. Prefer the retailer's current canonical URL structure.
 - Open the current official result immediately before returning it. Confirm that it loads as a live product page rather than a 404, redirect loop, search result, category or cached snippet.
 - Treat the MAIN PRODUCT block on the opened product detail page as one indivisible object. Read current_title, product_identifier/SKU, brand, category, color, current_price and the main image from that same main-product block.
-- Also read current purchase availability from that same official main-product page. Verify whether the product can actually be purchased or ordered NOW. availability_status must be exactly one of in_stock, available, preorder, backorder, out_of_stock, discontinued or unknown. Use unknown only when the opened official product page genuinely does not establish purchase availability. Never infer availability from an old search snippet.
-- Return availability_evidence as a concise description of the current official purchase control/status you observed, for example add-to-cart/orderable, preorder, sold out or discontinued.
+- Also read current stock availability from that same official main-product page. For a physical/e-commerce product, Spreelo may promote it only when the CURRENT official page explicitly proves it is IN STOCK NOW. availability_status must still be exactly one of in_stock, available, preorder, backorder, out_of_stock, discontinued or unknown, but only in_stock is eligible for promotion. Generic "available", preorder, backorder, made-to-order, beställningsvara/order item, zero-stock with an add-to-cart button, out_of_stock, discontinued and unknown are NOT eligible. Never infer stock from an old search snippet.
+- Return availability_evidence as concise CURRENT official evidence, including the explicit in-stock wording and stock quantity when shown. An add-to-cart/order button by itself is not stock evidence.
 - Return the best direct product-image file URL that is visibly attached to the MAIN PRODUCT on that exact opened product detail page.
 - The image, current_title and product facts must come from the same opened current_url and the same main-product block. Never borrow an image or text from recommendations, related products, search-result cards, colour swatches, "more from the brand" sections or image-search thumbnails.
 - Set image_source_page_url to the exact product detail page where the returned image is attached to the main product, and set image_is_main_product_asset=true only when you verified that relationship.
@@ -24997,13 +25716,13 @@ For every supplied product:
 - Return main_product_evidence as a concise description of the main-product block that jointly proves the title and image belong together.
 - Keep identity_evidence concise and state the exact title, SKU/product number or other official evidence that proves the match.
 ${allowPurchasableReplacements ? `
-PURCHASABLE REPLACEMENT RULE — DELIVERY SAFE:
-- First inspect the exact selected candidate. If it is currently in_stock, available, preorder or backorder, keep that exact identity and set replacement_for_unavailable=false.
-- If and only if the exact selected candidate is explicitly out_of_stock or discontinued on its current official page, do not return that dead product. Search ${allowedDomain} in the SAME request for a different CURRENT product that is actually purchasable/orderable now and is a strong fit for the supplied product_family and campaign/product intent.
+IN-STOCK REPLACEMENT RULE — DELIVERY SAFE:
+- First inspect the exact selected candidate. Keep that exact identity ONLY if the CURRENT official page explicitly proves availability_status=in_stock. Set replacement_for_unavailable=false in that case.
+- If the selected candidate is anything other than in_stock — including available without stock proof, preorder, backorder, beställningsvara/order item, zero stock, out_of_stock, discontinued or unknown — do NOT return it as the promoted product. In the SAME request, search ${allowedDomain} for a different CURRENT product that is explicitly in_stock now and is a strong fit for the supplied product_family and campaign/product intent.
+- Availability is more important than an exact obsolete model/spec match. If the campaign language points to an older model that is no longer in the current assortment, choose the closest relevant CURRENT in-stock product rather than an old indexed page.
 - A replacement must be opened on its own current official product page and must satisfy the same strict same-page title/image/product binding rules.
-- Set selected_candidate_availability_status to the unavailable status you observed on the originally selected candidate, set replacement_for_unavailable=true and explain the substitution briefly in replacement_reason.
-- Never substitute merely because availability is unknown. If the selected candidate's availability cannot be established, return it with availability_status=unknown and replacement_for_unavailable=false; the caller will decide whether to use it.
-- Prefer a less-perfect but clearly relevant purchasable product over an unavailable product. Do not return an unavailable replacement.` : `
+- Set selected_candidate_availability_status to the status you observed (or unknown if the old page cannot be established), set replacement_for_unavailable=true and explain the substitution briefly in replacement_reason.
+- Prefer a somewhat broader but clearly relevant CURRENT in-stock product over an exact-match product that is not proven in stock. Never return a replacement unless availability_status=in_stock.` : `
 - Never substitute a different product identity. Set replacement_for_unavailable=false and replacement_reason to an empty string.`}
 
 Campaign/product intent context for replacement relevance:
@@ -25216,10 +25935,8 @@ Return only the required JSON structure.`.trim();
     const safePurchasableReplacement = Boolean(
       allowPurchasableReplacements &&
         replacementForUnavailable &&
-        ["out_of_stock", "discontinued"].includes(
-          selectedCandidateAvailabilityStatus
-        ) &&
-        isProductConfirmedPurchasable({ availability_status: availabilityStatus })
+        selectedCandidateAvailabilityStatus !== "in_stock" &&
+        availabilityStatus === "in_stock"
     );
     if (
       !currentUrl ||
@@ -25233,7 +25950,8 @@ Return only the required JSON structure.`.trim();
       repairedProduct?.image_is_main_product_asset !== true ||
       !sameOpenedProductPage ||
       !String(repairedProduct?.identity_evidence || "").trim() ||
-      (!exactIdentityRecovered && !safePurchasableReplacement)
+      ((!exactIdentityRecovered || availabilityStatus !== "in_stock") &&
+        !safePurchasableReplacement)
     ) {
       console.warn("Authoritative product asset repair rejected an unbound or mismatched recovery", {
         ruleId: rule?.id,
@@ -25301,6 +26019,9 @@ Return only the required JSON structure.`.trim();
       locked_product_price: String(repairedProduct?.current_price || "").trim(),
       locked_product_availability: availabilityStatus,
       locked_product_availability_evidence: availabilityEvidence,
+      stock_verified_at: new Date().toISOString(),
+      stock_verification_source: "gpt55_current_official_research",
+      stock_verification_evidence: availabilityEvidence,
       locked_product_primary_image_url: imageUrl,
       locked_product_image_urls: [imageUrl],
       locked_product_image_alt_text: String(
@@ -25544,6 +26265,13 @@ async function hydrateAuthoritativeWebAgentProduct({
     campaign_primary_web_researched: true,
     campaign_final_reviewed: true,
     last_verified_at: new Date().toISOString(),
+    stock_verified_at: new Date().toISOString(),
+    stock_verification_source:
+      lockedProduct.source === "gpt55_main_product_block"
+        ? "gpt55_current_official_research"
+        : "official_product_page",
+    stock_verification_evidence:
+      String(candidate?.locked_product_availability_evidence || candidate?.availability_evidence || "").trim(),
   };
 }
 
@@ -25695,7 +26423,9 @@ async function ensureLockedProductPoolForUse({
         item?.product_image_semantic_verified === true &&
         item?.image_url &&
         item?.url
-      ) || isIndexedSecurityFallbackLockedProduct(item)
+      ) ||
+      isIndexedSecurityFallbackLockedProduct(item) ||
+      isAuthoritativePublicCommerceFeedLockedProduct(item)
     ) {
       // v144.11 indexed fallback items are already locked to the same official
       // product page + exact main image. The mandatory semantic image gate in
@@ -27072,11 +27802,35 @@ Reuse rule:
 
 Research mode:
 ${
-  isDomainSearchAttempt
+  attempt === "stock_first"
+    ? `
+This is an AVAILABILITY-FIRST current-assortment attempt.
+
+The retailer may have many old indexed product pages. Do NOT start from an exact old model/spec phrase and then try to rescue it. Start from CURRENT category/listing/search pages and identify products that the official site currently shows as IN STOCK.
+- Search the retailer's current assortment/category/listing pages first.
+- Prefer pages/results that expose current stock, web stock, inventory quantity or an explicit local-language equivalent of "in stock".
+- Return only product pages whose CURRENT official page explicitly proves in_stock.
+- Ignore old indexed products even when they are a closer text match to the campaign.
+- If the campaign mentions an obsolete model/spec, select the closest relevant current in-stock successor/product family instead.
+- Campaign relevance is secondary to current stock proof in this attempt.
+`.trim()
+    : attempt === "stock_broad"
+      ? `
+This is the FINAL BROAD IN-STOCK DELIVERY attempt.
+
+Earlier current-assortment research did not produce a safely verified product. Search the retailer's CURRENT assortment broadly and return real products that are explicitly IN STOCK NOW.
+- Stock proof is mandatory. Use current category/listing pages and current product pages, not old search-index matches.
+- Relax overly specific campaign model/spec terms when they point to obsolete products.
+- Stay within the same broad product category or buyer need when possible, but a current in-stock product with a sensible brand/campaign angle is better than an obsolete exact text match.
+- Return several current in-stock candidates so the caller has reserves.
+- Never return preorder, backorder, beställningsvara/order item, zero-stock, discontinued, out-of-stock or unknown-stock products.
+`.trim()
+    : isDomainSearchAttempt
     ? `
 This is a domain-restricted web search attempt.
 
 The normal store/catalog search did not return enough usable products. Search the public web inside the customer's domain like a human researcher would.
+For a security-protected retailer, treat this as another CURRENT-ASSORTMENT / IN-STOCK attempt: prefer current category/listing pages and recently indexed official product pages with explicit positive stock evidence. Do not resurrect an obsolete exact model merely because its old page ranks well.
 Use domain-restricted queries such as:
 - site:${websiteHost} ${searchHintTerms.slice(0, 6).join(" ")}
 - site:${websiteHost} ${productSearchQueries.slice(0, 4).join(" OR ") || rule?.name || "products"}
@@ -27142,9 +27896,10 @@ Search strategy:
 
 Product quality rules:
 - Return only real product pages from the allowed customer domain.
-- For physical/e-commerce products, the CURRENT official product page must show that the exact product can actually be purchased or ordered now. Open the final product page before returning it and verify a current purchase control or explicit orderable/in-stock/preorder/backorder status.
-- Never return a product that the official page marks as discontinued, utgått, sold out, out of stock, unavailable or no longer orderable. Old indexed product pages are not eligible just because they still exist in search results.
-- If availability cannot be verified on the current official page, skip that candidate and find another product instead.
+- For physical/e-commerce products, the CURRENT official product page must explicitly show that the exact product is IN STOCK NOW. Open the final product page before returning it and verify explicit current stock evidence such as "In stock" / "I lager" and, when available, the current stock quantity.
+- Do not treat an add-to-cart button, generic "available", preorder, backorder, beställningsvara/order item or zero-stock orderability as in-stock proof.
+- Never return a product that is discontinued, utgått, sold out, out of stock, unavailable, preorder/backorder only, order-only with zero current stock, no longer orderable, or whose stock cannot be verified. Old indexed product pages are not eligible just because they still exist in search results.
+- If explicit in-stock status cannot be verified on the current official page, skip that candidate and find another product instead.
 - A product page must be about one specific product that a customer can buy, book, order, rent, request a quote for or contact the business about.
 - Do not return the homepage.
 - Do not return brand pages.
@@ -27198,7 +27953,7 @@ JSON shape:
       "title": "Exact product title",
       "url": "Full product page URL",
       "price": "Visible price if clearly found, otherwise empty string",
-      "availability_status": "in_stock, available, preorder or backorder",
+      "availability_status": "in_stock",
       "availability_evidence": "Short evidence from the current official page that the product can be purchased or ordered now",
       "reason": "Short reason why this product fits the campaign, buyer and recipient"
     }
@@ -27289,8 +28044,8 @@ For campaign carousels, stop once you have enough concrete product pages for a u
     const availabilityStatus = normalizeProductAvailabilityStatus(
       product?.availability_status
     );
-    if (isProductKnownUnavailableForPromotion({ availability_status: availabilityStatus })) {
-      console.log("Product researcher skipped product explicitly marked unavailable", {
+    if (availabilityStatus !== "in_stock") {
+      console.log("Product researcher skipped product without explicit current in-stock proof", {
         ruleId: rule?.id,
         websiteUrl,
         productUrl,
@@ -27419,13 +28174,13 @@ async function findWebsiteProductWithWebSearch({
   const knownDomainState = allowIndexedSecurityFallback
     ? await getWebsiteDomainFetchState(websiteUrl).catch(() => null)
     : null;
-  const knownSecurityBlocked = Number(knownDomainState?.lastStatus || 0) === 403;
-  const attempts = ["best_match", "domain_site_search", "backup_broad"].slice(
-    0,
-    knownSecurityBlocked
-      ? 1
-      : Math.max(1, Math.min(3, Number(maxAttempts || 3)))
-  );
+  const knownSecurityBlocked = isWebsiteAccessProtectedState(knownDomainState);
+  const attempts = knownSecurityBlocked
+    ? ["stock_first", "stock_broad", "domain_site_search"]
+    : ["best_match", "stock_first", "backup_broad"].slice(
+        0,
+        Math.max(1, Math.min(3, Number(maxAttempts || 3)))
+      );
   const verifiedItems = [];
   const seenUrls = new Set();
   const seenImages = new Set();
@@ -27433,7 +28188,7 @@ async function findWebsiteProductWithWebSearch({
     indexedSecurityFallbackState &&
     typeof indexedSecurityFallbackState === "object"
       ? indexedSecurityFallbackState
-      : { batchExecuted: false, recoveredItems: [] };
+      : { batchExecuted: false, batchCount: 0, recoveredItems: [] };
   const indexedSecurityRecoveredByUrl = new Map();
   for (const recoveredItem of sharedIndexedSecurityState.recoveredItems || []) {
     const keys = [recoveredItem?.url, recoveredItem?.product_url]
@@ -27445,10 +28200,14 @@ async function findWebsiteProductWithWebSearch({
       .filter(Boolean);
     for (const key of keys) indexedSecurityRecoveredByUrl.set(key, recoveredItem);
   }
-  const MAX_INDEXED_SECURITY_FALLBACK_BATCHES = 1;
-  let indexedSecurityFallbackBatches = sharedIndexedSecurityState.batchExecuted
-    ? 1
-    : 0;
+  const MAX_INDEXED_SECURITY_FALLBACK_BATCHES = knownSecurityBlocked ? 3 : 1;
+  let indexedSecurityFallbackBatches = Math.max(
+    0,
+    Number(
+      sharedIndexedSecurityState.batchCount ??
+        (sharedIndexedSecurityState.batchExecuted ? 1 : 0)
+    ) || 0
+  );
   const availabilityRejectedCandidates = [];
   const campaignPrompt = buildCampaignResearchText(rule);
 
@@ -27479,6 +28238,7 @@ async function findWebsiteProductWithWebSearch({
 
     indexedSecurityFallbackBatches += 1;
     sharedIndexedSecurityState.batchExecuted = true;
+    sharedIndexedSecurityState.batchCount = indexedSecurityFallbackBatches;
 
     const repairInputs = dedupeUrlItems(candidateProducts || [])
       .slice(0, securityRepairBatchSize)
@@ -27546,7 +28306,7 @@ async function findWebsiteProductWithWebSearch({
           url: hydrated?.url || repairedCandidate?.url || "",
           availability: getProductPromotionAvailability(hydrated),
         });
-        console.info("Indexed security fallback rejected product that is not currently purchasable", {
+        console.info("Indexed security fallback rejected product that is not currently purchasable because it is not explicitly in stock", {
           ruleId: rule?.id,
           brandProfileId: rule?.brand_profile_id,
           websiteUrl,
@@ -27567,6 +28327,18 @@ async function findWebsiteProductWithWebSearch({
         indexed_security_fallback_verified: true,
         indexed_security_fallback_attempt: attempt,
         indexed_security_fallback_batch: indexedSecurityFallbackBatches,
+        stock_verified_at:
+          hydrated?.stock_verified_at ||
+          hydrated?.last_verified_at ||
+          new Date().toISOString(),
+        stock_verification_source:
+          hydrated?.stock_verification_source ||
+          "indexed_authoritative_research",
+        stock_verification_evidence:
+          hydrated?.stock_verification_evidence ||
+          hydrated?.locked_product_availability_evidence ||
+          hydrated?.availability_evidence ||
+          "",
       };
       const rank = getPrimaryCampaignResearchRank(repairedCandidate);
       const originalCandidate = repairInputByRank.get(rank) || null;
@@ -27621,7 +28393,8 @@ async function findWebsiteProductWithWebSearch({
       recoveredCount: recoveredItems.length,
       availabilityRejectedCount: availabilityRejectedCandidates.length,
       targetVerifiedCount,
-      additionalResearchAttemptsSkipped: true,
+      additionalResearchAttemptsAvailable:
+        indexedSecurityFallbackBatches < MAX_INDEXED_SECURITY_FALLBACK_BATCHES,
       modelCallsForExactRepair: 1,
       usage: repair?.usage || null,
     });
@@ -27783,15 +28556,17 @@ async function findWebsiteProductWithWebSearch({
                 return getIndexedFallbackItems();
               }
 
-              console.warn("Indexed security fallback batch returned no confirmed purchasable product; additional paid web-research rounds were skipped", {
+              console.warn("Indexed security fallback batch returned no confirmed in-stock product; trying another bounded current-assortment research pass", {
                 ruleId: rule?.id,
                 brandProfileId: rule?.brand_profile_id,
                 websiteUrl,
                 attempt,
                 targetVerifiedCount,
                 rejectedUnavailableCount: availabilityRejectedCandidates.length,
+                remainingSecurityFallbackBatches:
+                  Math.max(0, MAX_INDEXED_SECURITY_FALLBACK_BATCHES - indexedSecurityFallbackBatches),
               });
-              return [];
+              break;
             }
             throw directProductError;
           }
@@ -27821,6 +28596,22 @@ async function findWebsiteProductWithWebSearch({
 
         if (isProductKnownUnavailableForPromotion(websiteItem)) {
           console.info("Product researcher rejected currently unavailable product", {
+            ruleId: rule?.id,
+            productUrl: websiteItem.url,
+            title: websiteItem.title,
+            availability: getProductPromotionAvailability(websiteItem),
+            attempt,
+          });
+          availabilityRejectedCandidates.push({
+            title: websiteItem.title,
+            url: websiteItem.url,
+            availability: getProductPromotionAvailability(websiteItem),
+          });
+          continue;
+        }
+
+        if (!isProductConfirmedPurchasable(websiteItem)) {
+          console.info("Product researcher rejected product without explicit current in-stock proof", {
             ruleId: rule?.id,
             productUrl: websiteItem.url,
             title: websiteItem.title,
@@ -28006,7 +28797,9 @@ async function prepareWebsiteContentForRule({
         item?.product_identity_locked === true &&
         item?.product_image_semantic_verified === true &&
         item?.image_url
-      ) || isIndexedSecurityFallbackLockedProduct(item)
+      ) ||
+      isIndexedSecurityFallbackLockedProduct(item) ||
+      isAuthoritativePublicCommerceFeedLockedProduct(item)
       ? item
       : await resolveLockedProductUrlForUse({
           supabase,
@@ -28033,16 +28826,50 @@ async function prepareWebsiteContentForRule({
     throw new Error("This automation requires a website URL in Brand profile");
   }
 
+  const websiteAccessState = await getWebsiteDomainFetchState(websiteUrl).catch(
+    () => null
+  );
+  const websiteAccessProtected =
+    isWebsiteAccessProtectedState(websiteAccessState);
+
   if (contentSourceScope === "exact_product") {
-    const exactProduct = await resolveLockedProductUrlForUse({
-      supabase,
-      openai,
-      productUrl: websiteUrl,
-      websiteUrl,
-      titleHint: rule.content_source_title || "",
-      rule,
-      ruleId: rule?.id || "exact-product",
-    });
+    let exactProduct = null;
+    try {
+      exactProduct = await resolveLockedProductUrlForUse({
+        supabase,
+        openai,
+        productUrl: websiteUrl,
+        websiteUrl,
+        titleHint: rule.content_source_title || "",
+        rule,
+        ruleId: rule?.id || "exact-product",
+      });
+    } catch (error) {
+      if (isWebsiteRateLimitError(error)) throw error;
+      const protectedState =
+        websiteAccessState ||
+        (await getWebsiteDomainFetchState(websiteUrl).catch(() => null));
+      if (
+        websiteAccessProtected ||
+        isWebsiteAccessProtectedState(protectedState) ||
+        isWebsiteSecurityBlockedError(error)
+      ) {
+        throw new ProtectedProductResearchRetryError(
+          "The exact customer-selected product is on a protected website and could not be safely re-verified in this attempt. Spreelo will retry the same exact product; it will not substitute another item.",
+          { url: websiteUrl, cause: error }
+        );
+      }
+      throw error;
+    }
+
+    if (
+      isProductContentTypeRule(rule) &&
+      !isProductConfirmedPurchasable(exactProduct)
+    ) {
+      throw new Error(
+        "The customer-selected exact product could be identified safely, but it is not explicitly confirmed in stock now. Spreelo will not promote an out-of-stock, preorder, backorder or unknown-stock product."
+      );
+    }
 
     await upsertWebsiteProductCatalogItems({
       supabase,
@@ -28117,6 +28944,12 @@ async function prepareWebsiteContentForRule({
         websiteUrl,
         "The customer-selected website category is still in a rate-limit cooldown."
       );
+      if (websiteAccessProtected) {
+        throw new ProtectedProductResearchRetryError(
+          "The customer-selected category is on a protected website and Spreelo could not verify a current in-stock product in this attempt. The same occurrence will retry automatically without searching outside the selected category.",
+          { url: websiteUrl }
+        );
+      }
       throw new Error(
         "No verified product could be selected from the customer-selected category or page. Spreelo will not search outside it."
       );
@@ -28164,9 +28997,57 @@ async function prepareWebsiteContentForRule({
     ]);
   }
 
+  if (websiteAccessProtected) {
+    const beforeFreshFilter = catalogItems.length;
+    catalogItems = catalogItems.filter((item) =>
+      isFreshProductStockVerification(item)
+    );
+    console.log("Protected retailer catalog filtered to fresh in-stock verification", {
+      ruleId: rule.id,
+      brandProfileId: rule.brand_profile_id,
+      websiteUrl,
+      beforeCount: beforeFreshFilter,
+      freshCount: catalogItems.length,
+      freshnessMs: PROTECTED_PRODUCT_STOCK_FRESH_MS,
+    });
+
+    const publicFeedItems = filterWebsiteCatalogItemsForRule(
+      await discoverPublicCommerceFeedCandidates({
+        websiteUrl,
+        campaignPrompt: buildCampaignResearchText(rule),
+      }),
+      rule
+    ).map((item) => ({
+      ...item,
+      selection_priority: Math.max(Number(item?.selection_priority || 0), 360),
+      campaign_fit_source:
+        item?.campaign_fit_source || "protected_public_commerce_feed",
+      campaign_fit_score:
+        Number(item?.campaign_fit_score || 0) +
+        scoreCampaignFitForRule(item, rule) +
+        45,
+    }));
+
+    if (publicFeedItems.length) {
+      catalogItems = dedupeWebsiteItemsByUrlTitleAndImage([
+        ...publicFeedItems,
+        ...catalogItems,
+      ]);
+      await upsertWebsiteProductCatalogItems({
+        supabase,
+        userId: rule.user_id,
+        brandProfileId: rule.brand_profile_id,
+        sourceUrl: websiteUrl,
+        items: publicFeedItems,
+        discoverySource: "protected_public_commerce_feed",
+      });
+    }
+  }
+
   let storeMapSingleProductResult = null;
   if (
     STORE_MAP_PRODUCT_AGENT_ENABLED &&
+    !websiteAccessProtected &&
     (productIntentScoped || isProductContentTypeRule(rule))
   ) {
     try {
@@ -28303,6 +29184,28 @@ async function prepareWebsiteContentForRule({
     return finalizePreparedWebsiteItem(catalogSelection.item, catalogSelection.cycleNumber);
   }
 
+  if (
+    catalogSelection?.item &&
+    productIntentScoped &&
+    websiteAccessProtected &&
+    isAuthoritativePublicCommerceFeedLockedProduct(catalogSelection.item) &&
+    isAcceptableWebsiteTextProductSelection(catalogSelection.item, rule)
+  ) {
+    console.log("Protected website product selected from fresh authoritative public commerce feed before indexed research", {
+      ruleId: rule.id,
+      brandProfileId: rule.brand_profile_id,
+      websiteUrl,
+      productUrl: catalogSelection.item.url,
+      title: catalogSelection.item.title,
+      stockVerifiedAt: getProductStockVerificationTimestamp(catalogSelection.item),
+      stockSource: catalogSelection.item.stock_verification_source || null,
+    });
+
+    summary.website_items_found += 1;
+    summary.website_content_success += 1;
+    return finalizePreparedWebsiteItem(catalogSelection.item, catalogSelection.cycleNumber);
+  }
+
   if (catalogSelection?.item && productIntentScoped) {
     console.log("Website text product-intent rule found a catalog match, but will still run focused product research before final selection", {
       ruleId: rule.id,
@@ -28316,7 +29219,7 @@ async function prepareWebsiteContentForRule({
   }
 
   try {
-    if (productIntentScoped) {
+    if (productIntentScoped && !websiteAccessProtected) {
       try {
         const storeSearchCandidates = await discoverProductCandidatesFromStoreSearch({
           websiteUrl,
@@ -28628,6 +29531,22 @@ async function prepareWebsiteContentForRule({
     websiteUrl,
     "The website temporarily rate limited product verification."
   );
+
+  const finalWebsiteAccessState =
+    websiteAccessState ||
+    (await getWebsiteDomainFetchState(websiteUrl).catch(() => null));
+  if (websiteAccessProtected || isWebsiteAccessProtectedState(finalWebsiteAccessState)) {
+    console.warn("Protected retailer product research exhausted this occurrence; scheduling bounded retry instead of terminal customer failure", {
+      ruleId: rule.id,
+      brandProfileId: rule.brand_profile_id,
+      websiteUrl,
+      domain: getWebsiteFetchDomain(websiteUrl),
+    });
+    throw new ProtectedProductResearchRetryError(
+      "The protected retailer did not expose enough fresh in-stock product evidence in this attempt. Spreelo will automatically retry the same occurrence using public commerce feeds, indexed current-assortment research and fresh stock verification.",
+      { url: websiteUrl }
+    );
+  }
 
   console.error("No verified website product found. Refusing to create a website-product post without a real verified website item.", {
     ruleId: rule.id,
@@ -29681,8 +30600,10 @@ async function saveCarouselSlidesForPost({
         );
         const renderedProductSlide = await renderCarouselProductSlideImage({
           sourceImageUrl: sourceSlideImageUrl,
+          openai,
           supabase,
           rule,
+          websiteItem: slideProduct,
           backgroundSelectionContext,
           productTitle: productLabelPresentation.title,
           productBrand: productLabelPresentation.brand,
@@ -30936,7 +31857,7 @@ async function prepareAnimatedProductSafePanel(sourceImageBuffer) {
   };
 }
 
-async function reviewAnimatedProductChromaIdentity({
+async function reviewAnimatedProductTransparentIdentity({
   openai,
   websiteItem,
   sourceImageBuffer,
@@ -30964,7 +31885,7 @@ async function reviewAnimatedProductChromaIdentity({
                 type: "input_text",
                 text:
                   `Compare two images of the exact ecommerce product named \"${productTitle}\". ` +
-                  "Image 1 is the authoritative verified retailer image. Image 2 is an AI edit whose ONLY allowed change is replacing the background with a flat technical chroma color. Ignore the background entirely. Reject Image 2 if the marketed product itself changed in product type, silhouette, number of included items, visible color/variant, logo, printed text/design, distinctive hardware, proportions or other identity-defining detail. Minor resizing, centering and lighting normalization are allowed. If uncertain, reject. Return only the requested JSON.",
+                  "Image 1 is the authoritative verified retailer image. Image 2 is an AI edit whose ONLY allowed change is isolating the marketed product onto real alpha transparency. Ignore the removed background, people, props, promotional graphics and text that were not physically part of the product. Reject Image 2 if the marketed product itself changed in product type, silhouette, number of included items, visible color/variant, logo, printed text/design, distinctive hardware, proportions or other identity-defining detail. Minor resizing and centering are allowed. If uncertain, reject. Return only the requested JSON.",
               },
               { type: "input_text", text: "IMAGE 1 — authoritative verified source" },
               { type: "input_image", image_url: sourceDataUrl, detail: "high" },
@@ -30977,7 +31898,7 @@ async function reviewAnimatedProductChromaIdentity({
         text: {
           format: {
             type: "json_schema",
-            name: "animated_product_chroma_identity",
+            name: "animated_product_transparent_identity",
             strict: true,
             schema: {
               type: "object",
@@ -31070,17 +31991,16 @@ async function chooseAnimatedProductChromaKey(sourceImageBuffer) {
   return ranked[0] || candidates[0];
 }
 
-async function createAnimatedProductChromaCutoutFallback({
+async function createGptImageProductTransparentCutout({
   openai,
   websiteItem,
   sourceImageBuffer,
   ruleId = null,
 }) {
   if (!openai) {
-    throw new Error("OpenAI is unavailable for animated product chroma fallback");
+    throw new Error("OpenAI is unavailable for GPT Image product transparent cutout");
   }
 
-  const chromaKey = await chooseAnimatedProductChromaKey(sourceImageBuffer);
   const normalizedReference = await sharp(sourceImageBuffer)
     .rotate()
     .resize({
@@ -31099,24 +32019,38 @@ async function createAnimatedProductChromaCutoutFallback({
   const productTitle = String(
     websiteItem?.title || websiteItem?.item_title || "the supplied product"
   ).trim();
+  const productDescription = truncateText(
+    String(websiteItem?.description || websiteItem?.item_description || "").trim(),
+    700
+  );
   const prompt = `
-Edit the supplied verified ecommerce product image for technical background removal only.
+The supplied image comes from the verified ecommerce page for this exact product:
+"${productTitle}"
+${productDescription ? `Product-page context: ${productDescription}` : ""}
 
-Product identity:
-- Exact product: "${productTitle}".
-- Preserve the product itself exactly as shown in the source image.
+Understand the image first, then isolate ONLY the physical product that most likely corresponds to the product being sold above.
+
+Product identity rules:
+- Preserve the marketed product exactly as visibly shown in the source image.
+- Preserve its exact visible silhouette, proportions, number of included pieces/items, color/variant, logos, printed words, graphics, stitching, hardware and identity-defining details.
 - Do not redesign, redraw, restyle, recolor, retouch, beautify or reinterpret the product.
-- Preserve its exact visible silhouette, proportions, number of pieces/items, color/variant, logos, printed words, graphics, stitching, hardware and other identifying details.
-- Do not invent any hidden side, underside or product detail that is not visible in the source.
-- Do not add a person, hand, prop, packaging, shadow, reflection, pedestal or second product.
+- Do not invent hidden sides, undersides, backs or product details that are not visible in the source.
+- If multiple objects are shown, keep only the object or set of objects that together most likely constitute the exact sold product named above (for example a true pair, kit or bundle when the listing itself is for that set). Do not keep nearby props merely because they are visually associated with it.
 
-Technical output:
-- Remove only the original photographic/background environment around the product.
-- Center the unchanged visible product with comfortable space on all sides. Do not crop it.
-- Fill every background pixel edge-to-edge with the exact flat technical chroma color ${chromaKey.name} ${chromaKey.hex}.
-- The chroma background must be perfectly uniform: no gradient, texture, vignette, noise, light falloff or shadow.
-- Do not use ${chromaKey.forbidden} on or around the product unless that color already exists on the real source product and is essential to its exact identity.
-- Output a clean square product reference only. No text outside the real product, no border and no watermark.
+Remove everything that is not physically part of that product, including:
+- photographic or designed background;
+- promotional text, prices, discount graphics, badges, frames and decorative graphics;
+- people, faces, hands and bodies;
+- props, plants, furniture, food, scenery, shadows, reflections and pedestals;
+- packaging or accessories unless they are clearly part of the exact sold product itself;
+- other products or unrelated objects.
+
+Technical output contract:
+- Return the isolated visible product on a fully transparent RGBA background.
+- Every background pixel must be truly transparent alpha, not white, checkerboard, chroma green/magenta/cyan or a simulated transparency pattern.
+- Keep comfortable transparent space around the complete visible product and do not crop it.
+- Do not add any new text outside text/logos physically printed on the real product.
+- No border, card, panel, watermark, shadow or reflection.
 `.trim();
 
   const response = await openai.images.edit(
@@ -31126,19 +32060,19 @@ Technical output:
       prompt,
       size: "1024x1024",
       quality: "medium",
-      background: "opaque",
+      background: "transparent",
       output_format: "png",
     },
     { timeout: 55_000, maxRetries: 0 }
   );
   const imageBase64 = response?.data?.[0]?.b64_json;
   if (!imageBase64) {
-    throw new Error("OpenAI animated product chroma fallback returned empty image data");
+    throw new Error("OpenAI product transparent cutout returned empty image data");
   }
 
   const generatedImageBuffer = Buffer.from(imageBase64, "base64");
   const prepared = await prepareAnimatedProductCutout(generatedImageBuffer);
-  const identity = await reviewAnimatedProductChromaIdentity({
+  const identity = await reviewAnimatedProductTransparentIdentity({
     openai,
     websiteItem,
     sourceImageBuffer: normalizedReference,
@@ -31146,15 +32080,14 @@ Technical output:
   });
   if (!identity.accepted) {
     throw new Error(
-      `AI chroma product identity was not trusted (${identity.reason || "identity mismatch"})`
+      `AI transparent product identity was not trusted (${identity.reason || "identity mismatch"})`
     );
   }
 
-  console.info("Animated product AI chroma fallback accepted", {
+  console.info("GPT Image product transparent cutout accepted", {
     ruleId,
     productUrl: websiteItem?.url || null,
     productTitle: websiteItem?.title || null,
-    chromaKey: chromaKey.hex,
     identityConfidence: identity.confidence,
     identityReason: identity.reason,
     cutoutAnalysis: prepared.analysis,
@@ -31162,10 +32095,9 @@ Technical output:
 
   return {
     cutoutBuffer: prepared.cutoutBuffer,
-    score: 190 + Number(prepared.score || 0) * 0.05,
+    score: 200 + Number(prepared.score || 0) * 0.05,
     analysis: {
-      mode: "ai_chroma_cutout",
-      chromaKey: chromaKey.hex,
+      mode: "gpt_image_2_transparent_cutout",
       identityConfidence: identity.confidence,
       identityReason: identity.reason,
       cutout: prepared.analysis,
@@ -31214,7 +32146,7 @@ async function selectAnimatedProductImage(
 
   if (!prepared && openai) {
     try {
-      prepared = await createAnimatedProductChromaCutoutFallback({
+      prepared = await createGptImageProductTransparentCutout({
         openai,
         websiteItem,
         sourceImageBuffer,
@@ -31222,7 +32154,7 @@ async function selectAnimatedProductImage(
       });
     } catch (error) {
       aiCutoutError = error;
-      console.info("Animated product AI cutout fallback unavailable; preserving original in safe panel", {
+      console.info("Animated product transparent AI cutout fallback unavailable; preserving original in safe panel", {
         ruleId,
         productUrl: websiteItem?.url || null,
         productTitle: websiteItem?.title || null,
@@ -31513,13 +32445,12 @@ function buildAnimatedTextPanelPrompt({
     websiteItem,
     websiteItem?.title || rule?.content_type_label || "Featured product"
   );
-  const rawTitle = truncateText(
+  const mainTitle = truncateText(
     sanitizeProductTitleForCard(
       presentation?.title || websiteItem?.title || rule?.content_type_label || "Featured product"
     ) || "Featured product",
     110
   );
-  const mainTitle = rawTitle;
   const productBrand = truncateText(String(presentation?.brand || "").trim(), 54);
   const secondaryLineContent = truncateText(String(presentation?.descriptor || "").trim(), 72);
   const effectiveBackgroundBrightness = String(
@@ -31541,77 +32472,59 @@ function buildAnimatedTextPanelPrompt({
     850
   );
   const referenceGuidance = hasBackgroundReference && hasProductReference
-    ? `- Reference image 1 is the actual moving-video poster. Use its palette, brightness and visual mood as design context only.\n- Reference image 2 is the actual product cutout. Use its color, category and visual character as design context only.`
+    ? `- Reference image 1 is the actual moving-video poster. Use its palette, brightness and mood as design context only.\n- Reference image 2 is the actual isolated product. Use its category, color and character as design context only.`
     : hasProductReference
-      ? "- Reference image 1 is the actual product cutout. Use its color, category and visual character as design context only."
+      ? "- Reference image 1 is the actual isolated product. Use its category, color and character as design context only."
       : hasBackgroundReference
-        ? "- Reference image 1 is the actual moving-video poster. Use its palette, brightness and visual mood as design context only."
-        : "- No visual reference image is available; use the written visual context below.";
+        ? "- Reference image 1 is the actual moving-video poster. Use its palette, brightness and mood as design context only."
+        : "- No visual reference is available; use the written visual context below.";
+  const contrastDirection = effectiveBackgroundBrightness === "dark"
+    ? "Favor bright premium lettering with enough weight and a subtle shadow/outline when needed."
+    : effectiveBackgroundBrightness === "light"
+      ? "Favor dark premium lettering with enough weight and a subtle shadow/outline when needed."
+      : "Choose high-contrast lettering that will remain readable over a moving background.";
 
   return `
-Create only one finished horizontal typography card for a premium product Reel.
-The returned image itself is the final visible card. Spreelo will keep every pixel of it and place it below a real product that zooms gently over a moving video background.
+Create ONLY a transparent typography asset for a premium 9:16 product Reel.
+This is not the final video and not a card. Spreelo will place this transparent text layer over the real moving video and below/around the real product.
 
 Visual references:
 ${referenceGuidance}
-- Do not reproduce either reference image, and do not place the product or the background scene inside the card.
+- Never reproduce either reference image in the output.
 
-Canvas and permanent card:
-- Wide horizontal ${ANIMATED_TEXT_PANEL_SOURCE_WIDTH} x ${ANIMATED_TEXT_PANEL_SOURCE_HEIGHT} composition.
-- Fill the complete canvas edge to edge with one intentional opaque card background that visually harmonizes with the supplied product and moving background.
-- Choose the card color intelligently: it may be a warm or cool neutral, a restrained complementary color, or a deep premium tone. It does not have to be white.
-- A subtle paper, print or tonal texture is allowed when it improves the design, but the card must stay calm and highly legible.
-- The complete background is an intentional part of the finished card. It will not be removed.
-- Do not use transparency, chroma key, green screen, cyan screen, magenta screen, a room, a wall, a floor, a product photo or a background scene.
-- Do not create a second card, inset mockup, photo frame or fake interface inside the canvas.
+Transparent output contract:
+- Wide horizontal ${ANIMATED_TEXT_PANEL_SOURCE_WIDTH} x ${ANIMATED_TEXT_PANEL_SOURCE_HEIGHT} RGBA canvas.
+- Every pixel outside the typography and tiny typography-supporting accents must be fully transparent alpha.
+- No card, panel, badge, sticker, banner, rectangle, capsule, paper block, colored plate or opaque background of any kind.
+- No product image, person, photo, scene, logo mark, button, watermark, mockup or fake interface.
+- Do not simulate transparency with white, checkerboard or chroma colors.
+- A subtle text shadow, outline, highlight, underline, tiny linework or restrained flourish is allowed only when attached to the typography and useful for readability.
 
-Product identity content:
-${productBrand ? `- Product brand eyebrow, with exact spelling: "${productBrand}"` : "- No product brand was available, so do not invent one."}
-- Main product/model name, with exact spelling and all words preserved: "${mainTitle}"
-${secondaryLineContent
-  ? `- Use exactly one clearly readable descriptor line containing: "${secondaryLineContent}"`
-  : `- If a descriptor is unavailable, do not invent product specifications; the card may contain only the brand (when supplied) and main product/model name.`}
-- Do not write a product price, currency symbol, currency code or monetary amount anywhere on the card.
-- Treat separators from the source title as metadata separators, not as characters that must be printed.
-- Never begin or end a line with a hyphen, dash, bullet, colon or other separator. Never print an isolated separator.
-- You may choose capitalization and balanced line breaks, but do not rename, translate, omit, replace or invent a product-name word.
-- Keep the main name dominant in one or two balanced lines.
-- Use only the supplied product identity text: a compact brand eyebrow when provided, the large main model/name, and at most one descriptor line.
-- Do not add slogans, captions, fine print, promotional claims or decorative pseudo-text beyond those supplied identity fields.
+Exact visible text:
+${productBrand ? `- Product brand eyebrow, exact spelling: "${productBrand}"` : "- No product brand eyebrow is required."}
+- Main product/model name, exact spelling and all words preserved: "${mainTitle}"
+${secondaryLineContent ? `- Optional descriptor line, exact spelling: "${secondaryLineContent}"` : "- No descriptor line is required."}
+- Use only the supplied identity text. Do not add slogans, captions, claims, prices, discounts, calls to action, microcopy or decorative fake words.
+- Do not translate, rename, abbreviate, omit or replace product-name words.
+- Balanced capitalization and line breaks are allowed, but spelling must remain exact.
 
-Mobile Reel readability requirements:
-- This design will be viewed primarily as a Facebook or Instagram Reel on a phone. Every word must remain immediately readable at small screen size.
-- The main headline must occupy roughly 50 to 65 percent of the usable card height and be the unmistakable focal point.
-- Render the main headline at the visual equivalent of approximately 112 to 168 px high on this ${ANIMATED_TEXT_PANEL_SOURCE_WIDTH} x ${ANIMATED_TEXT_PANEL_SOURCE_HEIGHT} canvas. If it needs two lines, keep both lines large and balanced.
-- When a descriptor line is used, render it at least 64 px high with normal readable spacing.
-- When the product brand is supplied, render it as a clearly readable premium eyebrow at least 58 px high.
-- Never render any text smaller than 58 px. No microcopy, tiny capitals, widely letter-spaced fine print or hairline lettering.
-- If all supplied words do not fit at these readable sizes, simplify decoration and line breaks instead of shrinking the text.
+Mobile readability:
+- The main product name is the visual focus and must be immediately readable on a phone.
+- Use one or two strong balanced lines when possible.
+- Keep generous transparent outer margins so no letter is clipped.
+- Avoid tiny text, thin hairlines, pixel fonts, fake glyphs or overdecorated lettering.
 
-Visual context:
+Art direction:
+- Match the actual product, moving-video palette and campaign/theme so the typography feels specifically art-directed for this post.
+- Choose the most suitable premium treatment: editorial serif, modern geometric sans, condensed display, refined expressive lettering or another professional style that genuinely fits.
+- Do not look like a generic template or Canva label.
+- ${contrastDirection}
 - Product dominant color: ${productColorHex}
-- Moving video background: ${backgroundDescription || "a premium neutral background"}
-- Product, caption and campaign context: ${themeContext || "No additional theme context"}
+- Moving video context: ${backgroundDescription || "premium neutral motion background"}
+- Product/campaign context: ${themeContext || "No additional theme context"}
+- Content language: ${contentLanguage}
 
-Creative direction:
-- Create a genuinely unique premium typography treatment tailored to the actual product, actual video palette and campaign theme.
-- Infer the visual language intelligently. Premium fashion may use editorial type, a humorous statement product may use a bold poster treatment, and a seasonal product may use one restrained thematic accent.
-- Choose the most suitable typography for this exact product: tall condensed display, refined serif, modern geometric sans, tasteful expressive display lettering, or a carefully balanced font pairing.
-- Vary the composition between posts when appropriate: centered editorial, asymmetric magazine layout, refined stacked poster or another professional arrangement that suits the references.
-- The product name must be the clear visual focus and feel deliberately composed rather than inserted into a fixed template.
-- Keep every letter comfortably inside generous outer margins. No letter may touch or be clipped by an edge.
-- Choose text colors with strong contrast against the card. Light lettering is allowed only on a clearly dark card; dark lettering is required on a light card.
-- Never use white or near-white lettering on a white, cream or pale card.
-- Use the product color as inspiration or a restrained accent when it remains clearly legible with the card and moving background.
-- Make the card feel exclusive and art-directed rather than like a plain colored rectangle.
-- Add one or two non-text premium devices that fit the product: for example elegant editorial linework, a tasteful border, foil-like accent, embossed or debossed shape, subtle fabric or paper texture, restrained abstract geometry, a refined print pattern or a small thematic ornament.
-- Decoration may be visually expressive, but it must frame and support the large text rather than compete with it.
-- Never simulate decoration with unreadable letters, glyphs, symbols or fake words.
-- The word "T-shirt" must clearly read with a real capital T and unambiguous letterforms.
-- If a product brand was supplied above, include exactly that brand name as the small identity eyebrow; do not substitute the retailer or the customer's company name.
-- No product image, logo mark, button, watermark, mockup, packaging, frame around another scene or fake clickable element.
-- No pixel font, bitmap font, arcade style, block lettering made from squares, jagged outline or colored fringe.
-- Render clean smooth high-resolution letter edges suitable for a professional Scandinavian fashion advertisement.
+Return only the transparent typography artwork.
 `.trim();
 }
 
@@ -31892,9 +32805,15 @@ async function createProfessionalFallbackAnimatedTextOverlay({
   dominantColor,
 }) {
   const websiteItem = rule?.website_item || {};
-  const title = sanitizeProductTitleForCard(
+  const presentation = getCarouselProductLabelPresentation(
+    websiteItem,
     websiteItem?.title || rule?.content_type_label || "Featured product"
+  );
+  const title = sanitizeProductTitleForCard(
+    presentation?.title || websiteItem?.title || rule?.content_type_label || "Featured product"
   ) || "Featured product";
+  const brandLine = String(presentation?.brand || "").trim();
+  const descriptorLine = String(presentation?.descriptor || "").trim();
   const titleLines = splitAnimatedOverlayTitle(title);
   const style = getPremiumFallbackTextStyle({
     rule,
@@ -31902,45 +32821,43 @@ async function createProfessionalFallbackAnimatedTextOverlay({
     backgroundAsset,
     backgroundBrightness,
   });
-  const maxCharacters = Math.max(
-    1,
-    ...titleLines.map((line) => Array.from(line).length)
-  );
+  const maxCharacters = Math.max(1, ...titleLines.map((line) => Array.from(line).length));
   const baseFontSize = titleLines.length >= 3 ? 46 : titleLines.length === 2 ? 60 : 76;
   const fittedFontSize = Math.floor(
     (ANIMATED_TEXT_PANEL_WIDTH - 112) / Math.max(1, maxCharacters * 0.58)
   );
   const titleFontSize = Math.max(36, Math.min(baseFontSize, fittedFontSize));
   const titleLineHeight = Math.round(titleFontSize * 1.06);
+  const optionalTop = brandLine ? 46 : 0;
+  const optionalBottom = descriptorLine ? 42 : 0;
   const textBlockHeight = titleLines.length * titleLineHeight;
+  const usableTop = ANIMATED_TEXT_PANEL_TOP + optionalTop;
+  const usableHeight = ANIMATED_TEXT_PANEL_HEIGHT - optionalTop - optionalBottom;
   const firstBaseline = Math.round(
-    ANIMATED_TEXT_PANEL_TOP +
-      (ANIMATED_TEXT_PANEL_HEIGHT - textBlockHeight) / 2 +
-      titleFontSize * 0.82
+    usableTop + (usableHeight - textBlockHeight) / 2 + titleFontSize * 0.82
   );
   const titleMarkup = titleLines
-    .map((line, index) => {
-      return `<text x="540" y="${firstBaseline + index * titleLineHeight}" text-anchor="middle" font-family="${style.font}" font-size="${titleFontSize}" font-style="${style.fontStyle}" font-weight="${style.weight}" letter-spacing="1.5" fill="${style.mainColor}">${escapeSvgText(line)}</text>`;
-    })
+    .map((line, index) => `<text x="540" y="${firstBaseline + index * titleLineHeight}" text-anchor="middle" font-family="${style.font}" font-size="${titleFontSize}" font-style="${style.fontStyle}" font-weight="${style.weight}" letter-spacing="1.2" fill="${style.mainColor}" stroke="${style.shadowColor}" stroke-width="3" paint-order="stroke">${escapeSvgText(line)}</text>`)
     .join("");
   const brandMarkup = brandLine
-    ? `<text x="540" y="${ANIMATED_TEXT_PANEL_TOP + 58}" text-anchor="middle" font-family="Trebuchet MS, sans-serif" font-size="27" font-weight="800" letter-spacing="4" fill="${style.accentColor}">${escapeSvgText(brandLine.toUpperCase())}</text>`
+    ? `<text x="540" y="${ANIMATED_TEXT_PANEL_TOP + 42}" text-anchor="middle" font-family="Trebuchet MS, sans-serif" font-size="24" font-weight="800" letter-spacing="3" fill="${style.accentColor}">${escapeSvgText(brandLine.toUpperCase())}</text>`
     : "";
   const descriptorMarkup = descriptorLine
-    ? `<text x="540" y="${ANIMATED_TEXT_PANEL_TOP + ANIMATED_TEXT_PANEL_HEIGHT - 44}" text-anchor="middle" font-family="Trebuchet MS, sans-serif" font-size="26" font-weight="700" letter-spacing="1" fill="${style.mainColor}" opacity="0.78">${escapeSvgText(descriptorLine)}</text>`
+    ? `<text x="540" y="${ANIMATED_TEXT_PANEL_TOP + ANIMATED_TEXT_PANEL_HEIGHT - 22}" text-anchor="middle" font-family="Trebuchet MS, sans-serif" font-size="23" font-weight="700" letter-spacing="0.6" fill="${style.mainColor}" opacity="0.86">${escapeSvgText(descriptorLine)}</text>`
     : "";
   const svg = `
     <svg width="1080" height="1920" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <filter id="panelShadow" x="-30%" y="-40%" width="160%" height="190%">
-          <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#0f172a" flood-opacity="0.22"/>
+        <filter id="textShadow" x="-30%" y="-40%" width="160%" height="190%">
+          <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#000000" flood-opacity="0.20"/>
         </filter>
       </defs>
-      <rect x="${ANIMATED_TEXT_PANEL_LEFT}" y="${ANIMATED_TEXT_PANEL_TOP}" width="${ANIMATED_TEXT_PANEL_WIDTH}" height="${ANIMATED_TEXT_PANEL_HEIGHT}" rx="28" fill="#f8f6f1" filter="url(#panelShadow)"/>
-      ${brandMarkup}
-      ${titleMarkup}
-      ${descriptorMarkup}
-      <line x1="390" y1="${ANIMATED_TEXT_PANEL_TOP + ANIMATED_TEXT_PANEL_HEIGHT - 21}" x2="690" y2="${ANIMATED_TEXT_PANEL_TOP + ANIMATED_TEXT_PANEL_HEIGHT - 21}" stroke="${style.accentColor}" stroke-width="3" stroke-linecap="round" opacity="0.72"/>
+      <g filter="url(#textShadow)">
+        ${brandMarkup}
+        ${titleMarkup}
+        ${descriptorMarkup}
+        <line x1="420" y1="${ANIMATED_TEXT_PANEL_TOP + ANIMATED_TEXT_PANEL_HEIGHT - 6}" x2="660" y2="${ANIMATED_TEXT_PANEL_TOP + ANIMATED_TEXT_PANEL_HEIGHT - 6}" stroke="${style.accentColor}" stroke-width="3" stroke-linecap="round" opacity="0.74"/>
+      </g>
     </svg>
   `;
 
@@ -32489,78 +33406,64 @@ async function normalizeGeneratedAnimatedTextOverlay(generatedBuffer, chromaKey)
 }
 
 async function normalizeGeneratedAnimatedTextPanel(generatedBuffer) {
-  const normalizedPanel = await sharp(generatedBuffer)
+  const normalized = await sharp(generatedBuffer)
     .rotate()
     .resize({
       width: ANIMATED_TEXT_PANEL_SOURCE_WIDTH,
       height: ANIMATED_TEXT_PANEL_SOURCE_HEIGHT,
       fit: "contain",
-      background: { r: 248, g: 246, b: 241, alpha: 1 },
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
       kernel: sharp.kernel.lanczos3,
     })
-    .removeAlpha()
-    .png()
+    .ensureAlpha()
+    .png({ compressionLevel: 9 })
     .toBuffer();
-  const { data, info } = await sharp(normalizedPanel)
+  const { data, info } = await sharp(normalized)
+    .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
-  let darkPixels = 0;
-  let lightNeutralPixels = 0;
-
-  for (let pixel = 0; pixel < info.width * info.height; pixel += 1) {
-    const index = pixel * info.channels;
-    const r = data[index];
-    const g = data[index + 1];
-    const b = data[index + 2];
-    const luminance = r * 0.2126 + g * 0.7152 + b * 0.0722;
-    const channelSpread = Math.max(r, g, b) - Math.min(r, g, b);
-
-    if (luminance <= 182) darkPixels += 1;
-    if (luminance >= 205 && channelSpread <= 38) lightNeutralPixels += 1;
-  }
-
   const pixelCount = Math.max(1, info.width * info.height);
-  const darkRatio = darkPixels / pixelCount;
-  const lightNeutralRatio = lightNeutralPixels / pixelCount;
-  const panelStats = await sharp(normalizedPanel).stats();
-  const tonalStdDev = panelStats.channels
-    .slice(0, 3)
-    .reduce((total, channel) => total + Number(channel.stdev || 0), 0) / 3;
+  let visible = 0;
+  let strong = 0;
+  let edgeVisible = 0;
+  const edge = Math.max(12, Math.round(Math.min(info.width, info.height) * 0.045));
 
-  if (tonalStdDev < 2) {
-    throw new Error("Generated premium text panel was visually blank");
+  for (let y = 0; y < info.height; y += 1) {
+    for (let x = 0; x < info.width; x += 1) {
+      const alpha = data[(y * info.width + x) * info.channels + 3];
+      if (alpha < 28) continue;
+      visible += 1;
+      if (alpha >= 150) strong += 1;
+      if (x < edge || x >= info.width - edge || y < edge || y >= info.height - edge) {
+        edgeVisible += 1;
+      }
+    }
   }
 
-  const resizedPanel = await sharp(normalizedPanel)
+  const visibleRatio = visible / pixelCount;
+  const strongRatio = strong / pixelCount;
+  const edgeRatio = edgeVisible / Math.max(1, visible);
+  if (visibleRatio < 0.018 || strongRatio < 0.006) {
+    throw new Error("Generated transparent Reel typography was visually blank");
+  }
+  if (visibleRatio > 0.38) {
+    throw new Error("Generated Reel typography contained an opaque card or excessive background area");
+  }
+  if (edgeRatio > 0.14) {
+    throw new Error("Generated Reel typography touched the outer canvas edges");
+  }
+
+  const resizedTypography = await sharp(normalized)
     .resize({
       width: ANIMATED_TEXT_PANEL_WIDTH,
       height: ANIMATED_TEXT_PANEL_HEIGHT,
       fit: "contain",
-      background: { r: 248, g: 246, b: 241, alpha: 1 },
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
       kernel: sharp.kernel.lanczos3,
     })
     .ensureAlpha()
-    .png()
+    .png({ compressionLevel: 9 })
     .toBuffer();
-  const panelMask = Buffer.from(`
-    <svg width="${ANIMATED_TEXT_PANEL_WIDTH}" height="${ANIMATED_TEXT_PANEL_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
-      <rect width="${ANIMATED_TEXT_PANEL_WIDTH}" height="${ANIMATED_TEXT_PANEL_HEIGHT}" rx="28" fill="#ffffff"/>
-    </svg>
-  `);
-  const roundedPanel = await sharp(resizedPanel)
-    .composite([{ input: panelMask, blend: "dest-in" }])
-    .png()
-    .toBuffer();
-  const panelFrame = Buffer.from(`
-    <svg width="1080" height="1920" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <filter id="panelShadow" x="-30%" y="-40%" width="160%" height="190%">
-          <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#0f172a" flood-opacity="0.22"/>
-        </filter>
-      </defs>
-      <rect x="${ANIMATED_TEXT_PANEL_LEFT}" y="${ANIMATED_TEXT_PANEL_TOP}" width="${ANIMATED_TEXT_PANEL_WIDTH}" height="${ANIMATED_TEXT_PANEL_HEIGHT}" rx="28" fill="#f8f6f1" filter="url(#panelShadow)"/>
-    </svg>
-  `);
   const textOverlayBuffer = await sharp({
     create: {
       width: 1080,
@@ -32570,22 +33473,21 @@ async function normalizeGeneratedAnimatedTextPanel(generatedBuffer) {
     },
   })
     .composite([
-      { input: panelFrame, left: 0, top: 0 },
       {
-        input: roundedPanel,
+        input: resizedTypography,
         left: ANIMATED_TEXT_PANEL_LEFT,
         top: ANIMATED_TEXT_PANEL_TOP,
       },
     ])
-    .png()
+    .png({ compressionLevel: 9 })
     .toBuffer();
 
   return {
     textOverlayBuffer,
     analysis: {
-      darkRatio: Number(darkRatio.toFixed(4)),
-      lightNeutralRatio: Number(lightNeutralRatio.toFixed(4)),
-      tonalStdDev: Number(tonalStdDev.toFixed(2)),
+      visibleRatio: Number(visibleRatio.toFixed(4)),
+      strongRatio: Number(strongRatio.toFixed(4)),
+      edgeVisibleRatio: Number(edgeRatio.toFixed(4)),
     },
   };
 }
@@ -32651,7 +33553,7 @@ async function createAnimatedTextOverlay({
     }
 
     if (referenceFiles.length === 0) {
-      throw new Error("No visual reference was available for the premium text panel");
+      throw new Error("No visual reference was available for transparent Reel typography");
     }
 
     const response = await openai.images.edit({
@@ -32660,20 +33562,20 @@ async function createAnimatedTextOverlay({
       prompt,
       size: `${ANIMATED_TEXT_PANEL_SOURCE_WIDTH}x${ANIMATED_TEXT_PANEL_SOURCE_HEIGHT}`,
       quality: "medium",
-      background: "opaque",
+      background: "transparent",
       output_format: "png",
     });
     const imageBase64 = response?.data?.[0]?.b64_json;
 
     if (!imageBase64) {
-      throw new Error("OpenAI returned no premium text panel image data");
+      throw new Error("OpenAI returned no transparent Reel typography image data");
     }
 
     const normalizedPanel = await normalizeGeneratedAnimatedTextPanel(
       Buffer.from(imageBase64, "base64")
     );
 
-    console.info("OpenAI context-aware animated text panel created", {
+    console.info("OpenAI context-aware transparent Reel typography created", {
       ruleId: rule?.id || null,
       model: ANIMATED_OVERLAY_IMAGE_MODEL,
       referenceCount: referenceFiles.length,
@@ -32683,10 +33585,10 @@ async function createAnimatedTextOverlay({
     return {
       textOverlayBuffer: normalizedPanel.textOverlayBuffer,
       prompt,
-      provider: "openai_premium_context_panel",
+      provider: "gpt-image-2-transparent-typography",
     };
   } catch (error) {
-    console.warn("Single OpenAI context-aware text panel was unusable; using emergency fallback", {
+    console.warn("GPT Image transparent Reel typography was unusable; using emergency text-only fallback", {
       ruleId: rule?.id || null,
       message: error?.message,
     });
@@ -32699,7 +33601,7 @@ async function createAnimatedTextOverlay({
         dominantColor,
       }),
       prompt,
-      provider: "fallback_premium_type_panel",
+      provider: "fallback_text_only_typography",
     };
   }
 }
@@ -37971,7 +38873,8 @@ async function runAutomationCron(request, options = {}) {
       const deferCurrentOccurrenceForTransientFailure = async (
         errorOrMessage,
         stage,
-        extraSummary = {}
+        extraSummary = {},
+        retryOptions = {}
       ) => {
         const result = await deferAutomationOccurrenceForTransientFailure({
           supabase,
@@ -37979,6 +38882,10 @@ async function runAutomationCron(request, options = {}) {
           errorOrMessage,
           stage,
           metadata: extraSummary,
+          retryAfterMs:
+            retryOptions?.retryAfterMs || TRANSIENT_AUTOMATION_RETRY_DELAY_MS,
+          maxRetries:
+            retryOptions?.maxRetries || TRANSIENT_AUTOMATION_MAX_RETRIES,
         });
         if (result.exhausted) {
           return { ...result, terminal: true };
@@ -39363,7 +40270,7 @@ product_research_model_used: websitePreparedRule.uses_website_content
           }
         } else if (wantsImage && isShotstackAnimatedVideoRule(ruleWithBrandProfile)) {
           finalImagePrompt =
-            "9:16 animated product Reel using an automatically selected uploaded MP4 background, the unchanged original website product, a separate OpenAI text overlay and Shotstack HTML5 zoom motion.";
+            "9:16 animated product Reel using an automatically selected uploaded MP4 background, the unchanged verified website product, GPT-Image-2 transparent typography and Shotstack HTML5 zoom motion.";
 
           animatedVideoFinalError = null;
           // The product image has already been resolved and verified before the
@@ -39634,7 +40541,7 @@ product_research_model_used: websitePreparedRule.uses_website_content
         } else if (wantsImage && websiteItem?.image_url && useWebsiteImage) {
           imageUrl = websiteItem.image_url;
           finalImagePrompt =
-            "Website product image with an adaptive campaign eyebrow, accent line and verified product name placed in the least obstructive safe area.";
+            "Website product image with GPT-Image-2 transparent typography matched to the visual style and placed in the least obstructive safe area; no text card or opaque label background.";
 
           try {
             const trustedProductTitle = getTrustedProductCardTitle(websiteItem);
@@ -39655,8 +40562,10 @@ product_research_model_used: websitePreparedRule.uses_website_content
             });
             const { imageBase64 } = await renderCarouselProductSlideImage({
               sourceImageUrl: websiteItem.image_url,
+              openai,
               supabase,
               rule,
+              websiteItem,
               productTitle: singleProductPresentation.title,
               productBrand: singleProductPresentation.brand,
               productDescriptor: singleProductPresentation.descriptor,
@@ -40282,10 +41191,26 @@ product_research_model_used: websitePreparedRule.uses_website_content
           automationOccurrenceId &&
           isTransientAutomationError(error)
         ) {
+          const protectedProductResearchRetry =
+            isProtectedProductResearchRetryError(error);
           const transientResult = await deferCurrentOccurrenceForTransientFailure(
             error,
             failureStage,
-            { transient_error: true, original_error_code: error?.code || null }
+            {
+              transient_error: true,
+              original_error_code: error?.code || null,
+              protected_product_research_retry: protectedProductResearchRetry,
+              protected_domain:
+                protectedProductResearchRetry
+                  ? error?.domain || getWebsiteFetchDomain(error?.url || "")
+                  : null,
+            },
+            protectedProductResearchRetry
+              ? {
+                  retryAfterMs: PROTECTED_PRODUCT_RESEARCH_RETRY_DELAY_MS,
+                  maxRetries: PROTECTED_PRODUCT_RESEARCH_MAX_RETRIES,
+                }
+              : {}
           );
           if (transientResult.terminal) {
             await failCurrentOccurrence(error, failureStage, {

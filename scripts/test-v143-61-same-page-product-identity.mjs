@@ -63,7 +63,7 @@ assert.match(
 );
 assert.match(
   route,
-  /sameOpenedProductPage[\s\S]{0,700}image_is_main_product_asset !== true/,
+  /(?:sameOpenedProductPage[\s\S]{0,900}image_is_main_product_asset !== true|image_is_main_product_asset !== true[\s\S]{0,900}!sameOpenedProductPage)/,
   "exact recovery must fail closed unless the image belongs to the returned product page"
 );
 assert.match(

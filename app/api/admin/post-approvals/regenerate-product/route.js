@@ -350,8 +350,10 @@ export async function POST(request) {
       const presentation = getCarouselProductLabelPresentation(lockedProduct, lockedProduct.title);
       const rendered = await renderCarouselProductSlideImage({
         sourceImageUrl: lockedProduct.image_url,
+        openai,
         supabase: context.admin,
         rule: enhancedRule,
+        websiteItem: lockedProduct,
         productTitle: presentation.title,
         productBrand: presentation.brand,
         productDescriptor: presentation.descriptor,
@@ -367,8 +369,8 @@ export async function POST(request) {
       imageUrl = uploaded.imageUrl;
       imageStoragePath = uploaded.imageStoragePath;
       imagePrompt = useManualOverride
-        ? "Admin-supplied product image rendered with Spreelo product label."
-        : "Verified product-page image rendered with Spreelo product identity label.";
+        ? "Admin-supplied product image rendered with GPT-Image-2 transparent Spreelo typography."
+        : "Verified product-page image rendered with GPT-Image-2 transparent product typography.";
       tiktokCleanImageUrl = imageUrl;
       tiktokCleanImageStoragePath = imageStoragePath;
       const logoResult = await applyLogoOverlayIfNeeded({

@@ -223,8 +223,10 @@ export async function POST(request) {
     const presentation = getCarouselProductLabelPresentation(product, product.title);
     const rendered = await renderCarouselProductSlideImage({
       sourceImageUrl: product.image_url,
+      openai,
       supabase: context.admin,
       rule: enhancedRule,
+      websiteItem: product,
       productTitle: presentation.title,
       productBrand: presentation.brand,
       productDescriptor: presentation.descriptor,

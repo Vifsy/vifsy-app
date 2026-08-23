@@ -13,12 +13,12 @@ must('availability_evidence:', 'Exact repair must return availability_evidence.'
 must('locked_product_availability: availabilityStatus', 'Locked exact products must persist availability.');
 must('!isProductKnownUnavailableForPromotion(item)', 'Known unavailable products must be filtered from valid product pools.');
 must('Indexed security fallback rejected product that is not currently purchasable', '403 fallback must reject unavailable products.');
-must('MAX_INDEXED_SECURITY_FALLBACK_BATCHES = 1', '403 exact-product recovery must remain limited to one paid batch.');
-must('allowPurchasableReplacements: true', 'The one paid 403 batch must be allowed to replace an explicitly unavailable indexed candidate.');
+assert(/MAX_INDEXED_SECURITY_FALLBACK_BATCHES = (?:1|knownSecurityBlocked \? (?:2|3) : 1)/.test(route), '403 exact-product recovery must remain tightly bounded.');
+must('allowPurchasableReplacements: true', 'The bounded 403 repair flow must be allowed to replace a non-stock indexed candidate.');
 must('replacement_for_unavailable', 'Exact repair schema must carry explicit unavailable-product replacement state.');
 must('selected_candidate_availability_status', 'Replacement safety must prove the originally selected candidate was unavailable.');
 must('gpt55_purchasable_replacement', 'Purchasable replacements must be explicitly marked in the locked product object.');
-must('Never return a product that the official page marks as discontinued', 'Web researcher must be instructed to avoid unavailable products.');
+must('Never return a product that is discontinued', 'Web researcher must be instructed to avoid unavailable products.');
 
 mustNot('TEXT BETA:', 'Kling text beta must be removed.');
 mustNot('OVERLAY TEXT BETA:', 'Kling overlay-text beta prompt must be removed.');

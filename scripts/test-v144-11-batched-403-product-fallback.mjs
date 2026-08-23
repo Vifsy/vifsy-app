@@ -11,8 +11,8 @@ assert.match(
 
 assert.match(
   route,
-  /MAX_INDEXED_SECURITY_FALLBACK_BATCHES = 1/,
-  "403 exact-product repair must be limited to one paid batch per web-research run"
+  /MAX_INDEXED_SECURITY_FALLBACK_BATCHES = knownSecurityBlocked \? (?:2|3) : 1/,
+  "Protected-site exact-product repair must remain tightly bounded while allowing current-assortment reserve passes"
 );
 
 assert.match(
@@ -29,14 +29,14 @@ assert.doesNotMatch(
 
 assert.match(
   route,
-  /isWebsiteSecurityBlockedError\(directProductError\)[\s\S]{0,1800}recoverIndexedSecurityBlockedBatch\([\s\S]{0,1800}return getIndexedFallbackItems\(\)/,
-  "First real 403 must switch to the one-batch fallback and stop the extra attempts"
+  /isWebsiteSecurityBlockedError\(directProductError\)[\s\S]{0,2200}recoverIndexedSecurityBlockedBatch\([\s\S]{0,2200}(?:return getIndexedFallbackItems\(\)|trying another bounded current-assortment research pass)/,
+  "A real 403 must switch to the bounded indexed fallback and either recover immediately or continue to the second stock-first pass"
 );
 
 assert.match(
   route,
-  /const attempts = \["best_match", "domain_site_search", "backup_broad"\][\s\S]{0,500}knownSecurityBlocked[\s\S]{0,300}\? 1/,
-  "Known 403 domains must not start three web-research attempts"
+  /knownSecurityBlocked[\s\S]{0,180}\? \["stock_first", "stock_broad"(?:, "domain_site_search")?\]/,
+  "Known protected domains must use the bounded stock-first research sequence"
 );
 
 const optInCount = (route.match(/allowIndexedSecurityFallback:\s*true/g) || []).length;
@@ -65,8 +65,8 @@ assert.match(
 
 assert.match(
   route,
-  /const indexedSecurityFallbackState = \{[\s\S]{0,300}batchExecuted: false[\s\S]{0,300}recoveredItems: \[\]/,
-  "Carousel preparation must share one 403 fallback state across all discovery stages"
+  /const indexedSecurityFallbackState = \{[\s\S]{0,300}batchExecuted: false[\s\S]{0,300}batchCount: 0[\s\S]{0,300}recoveredItems: \[\]/,
+  "Carousel preparation must share the bounded 403 fallback count and recovered pool across all discovery stages"
 );
 
 assert.match(

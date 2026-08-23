@@ -29,7 +29,7 @@ assert.match(
 
 assert.match(
   route,
-  /MAX_INDEXED_SECURITY_FALLBACK_(?:ATTEMPTS|BATCHES) = \d+/,
+  /MAX_INDEXED_SECURITY_FALLBACK_(?:ATTEMPTS|BATCHES) = (?:\d+|knownSecurityBlocked \? (?:2|3) : 1)/,
   "Indexed fallback must remain bounded"
 );
 
@@ -41,7 +41,7 @@ assert.match(
 
 assert.match(
   route,
-  /product_identity_locked:\s*true[\s\S]{0,800}locked_product_primary_image_url:\s*imageUrl/,
+  /product_identity_locked:\s*true[\s\S]{0,1600}locked_product_primary_image_url:\s*imageUrl/,
   "Recovered product image must be locked as the authoritative original asset"
 );
 

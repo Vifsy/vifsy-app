@@ -65,7 +65,7 @@ assert.match(
 );
 assert.match(
   route,
-  /product_identity_locked:\s*true[\s\S]{0,900}locked_product_primary_image_url:\s*imageUrl/,
+  /product_identity_locked:\s*true[\s\S]{0,1800}locked_product_primary_image_url:\s*imageUrl/,
   "Exact original product-image lock must remain in place"
 );
 assert.match(
