@@ -22070,8 +22070,8 @@ function extractProductUrlCandidatesFromText({
   const origin = getWebsiteOrigin(websiteUrl);
   const host = getHostnameWithoutWww(websiteUrl);
   const patterns = [
-    /https?:\\/\\/[^"'<>\\s]+/gi,
-    /["']((?:\\/[^"'<>\\s]+){1,})["']/g,
+    /https?:\/\/[^"'<>\s]+/gi,
+    /["']((?:\/[^"'<>\s]+){1,})["']/g,
   ];
 
   for (const pattern of patterns) {
@@ -22079,7 +22079,7 @@ function extractProductUrlCandidatesFromText({
     while ((match = pattern.exec(source)) !== null) {
       const raw = String(match[1] || match[0] || "")
         .replace(/\\u002F/g, "/")
-        .replace(/\\\\\//g, "/")
+        .replace(/\\\//g, "/")
         .replace(/&amp;/g, "&")
         .trim();
 
