@@ -27,6 +27,9 @@ const POST_IMAGES_BUCKET = "post-images";
 const KLING_TYPOGRAPHY_MODEL = "gpt-image-2";
 const DEFAULT_MAX_PENDING_HOURS = 6;
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
+const KLING_FINALIZATION_LEASE_MS = 6 * 60 * 1000;
+const KLING_PROVIDER_PENDING_STATUSES = ["submitting", "submitted", "created", "queued", "pending", "processing", "rendering"];
+
 
 function truncate(value, maxLength = 1200) {
   const text = String(value || "").trim();
@@ -59,6 +62,86 @@ function createSupabaseAdmin() {
   return createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+}
+
+function getCachedKlingSource(post) {
+  const selection = post?.video_background_selection;
+  if (!selection || typeof selection !== "object" || Array.isArray(selection)) return null;
+  const videoUrl = String(selection.kling_source_url || "").trim();
+  if (!videoUrl) return null;
+  return {
+    status: String(post?.kling_task_status || selection.kling_source_status || "succeeded"),
+    videoUrl,
+    durationSeconds: normalizeVideoDurationSeconds(
+      selection.kling_source_duration_seconds,
+      post?.video_duration_seconds,
+      6
+    ),
+    cached: true,
+  };
+}
+
+function finalizationLeaseIsFresh(post, nowMs = Date.now()) {
+  if (String(post?.video_status || "") !== "finalizing") return false;
+  const claimedAt = new Date(post?.kling_last_polled_at || 0).getTime();
+  return Number.isFinite(claimedAt) && claimedAt > 0 && nowMs - claimedAt < KLING_FINALIZATION_LEASE_MS;
+}
+
+async function claimKlingFinalization(supabase, post) {
+  if (finalizationLeaseIsFresh(post)) return false;
+  const nowIso = new Date().toISOString();
+  let query = supabase
+    .from("posts")
+    .update({
+      video_status: "finalizing",
+      kling_last_polled_at: nowIso,
+      updated_at: nowIso,
+    })
+    .eq("id", post.id)
+    .eq("video_provider", "kling")
+    .eq("kling_task_id", post.kling_task_id);
+
+  if (post.updated_at == null) query = query.is("updated_at", null);
+  else query = query.eq("updated_at", post.updated_at);
+
+  const { data, error } = await query.select("id").maybeSingle();
+  if (error) throw new Error(`Could not claim Kling finalization lease: ${error.message}`);
+  return Boolean(data?.id);
+}
+
+async function persistKlingSourceCache(supabase, post, task) {
+  const existing =
+    post?.video_background_selection &&
+    typeof post.video_background_selection === "object" &&
+    !Array.isArray(post.video_background_selection)
+      ? post.video_background_selection
+      : {};
+  if (String(existing.kling_source_url || "").trim()) return existing;
+
+  const nextSelection = {
+    ...existing,
+    kling_source_url: task.videoUrl,
+    kling_source_status: String(task.status || "succeeded"),
+    kling_source_duration_seconds: normalizeVideoDurationSeconds(
+      task.durationSeconds,
+      post.video_duration_seconds,
+      6
+    ),
+    kling_source_cached_at: new Date().toISOString(),
+  };
+  const { error } = await supabase
+    .from("posts")
+    .update({
+      video_background_selection: nextSelection,
+      kling_task_status: String(task.status || "succeeded").toLowerCase(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", post.id)
+    .eq("video_provider", "kling")
+    .eq("kling_task_id", post.kling_task_id);
+  if (error) throw new Error(`Could not cache completed Kling source: ${error.message}`);
+  post.video_background_selection = nextSelection;
+  return nextSelection;
 }
 
 async function setReviewCaseFailure(supabase, postId, stage, message) {
@@ -531,16 +614,18 @@ export async function GET(request) {
     failed: 0,
     timed_out: 0,
     poll_errors: 0,
+    locked: 0,
+    provider_cache_hits: 0,
   };
 
   try {
     const supabase = createSupabaseAdmin();
     const maxPendingHours = getMaxPendingHours();
-    const pendingStatuses = ["submitting", "submitted", "created", "queued", "pending", "processing", "rendering"];
+    const pendingStatuses = [...KLING_PROVIDER_PENDING_STATUSES, "finalizing", "finalization_retry"];
     const { data: posts, error } = await supabase
       .from("posts")
       .select(
-        "id, user_id, status, video_provider, video_status, video_duration_seconds, video_error, video_background_selection, kling_generation_count, kling_task_id, kling_task_status, kling_submitted_at, kling_last_polled_at, kling_model, kling_resolution, kling_audio"
+        "id, user_id, status, video_provider, video_status, video_duration_seconds, video_error, video_background_selection, kling_generation_count, kling_task_id, kling_task_status, kling_submitted_at, kling_last_polled_at, kling_model, kling_resolution, kling_audio, updated_at"
       )
       .eq("video_provider", "kling")
       .in("video_status", pendingStatuses)
@@ -552,6 +637,17 @@ export async function GET(request) {
 
     for (const post of posts || []) {
       summary.checked += 1;
+
+      // A cron invocation can run longer than the one-minute schedule. Claim the
+      // row atomically using updated_at as a compare-and-swap token so the next
+      // invocation cannot process the same post concurrently. A crashed claim is
+      // recoverable after the six-minute lease window without any schema change.
+      const claimed = await claimKlingFinalization(supabase, post);
+      if (!claimed) {
+        summary.locked += 1;
+        continue;
+      }
+
       const now = new Date();
       const submittedAtMs = new Date(post.kling_submitted_at || 0).getTime();
       const ageHours = Number.isFinite(submittedAtMs)
@@ -566,9 +662,13 @@ export async function GET(request) {
         continue;
       }
 
-      let task;
-      try {
-        // Polling this existing task is safe and does not create or bill a new generation.
+      let task = getCachedKlingSource(post);
+      if (task) {
+        summary.provider_cache_hits += 1;
+      } else try {
+        // Poll only until Kling has returned the successful source once. The
+        // source URL is then cached on the post, so post-processing retries never
+        // keep hitting Kling for an already-completed task.
         task = await getKlingImageToVideoTask(post.kling_task_id);
       } catch (pollError) {
         console.warn("Kling task polling failed; existing task will be polled again", {
@@ -577,6 +677,9 @@ export async function GET(request) {
           message: pollError?.message || String(pollError),
         });
         await supabase.from("posts").update({
+          video_status: KLING_PROVIDER_PENDING_STATUSES.includes(String(post.kling_task_status || "").toLowerCase())
+            ? String(post.kling_task_status).toLowerCase()
+            : "processing",
           kling_last_polled_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }).eq("id", post.id);
@@ -590,9 +693,11 @@ export async function GET(request) {
         kling_task_status: providerStatus,
         kling_last_polled_at: nowIso,
         video_status:
-          ["submitted", "created", "queued", "pending", "processing", "rendering"].includes(providerStatus)
+          KLING_PROVIDER_PENDING_STATUSES.includes(providerStatus)
             ? providerStatus
-            : post.video_status,
+            : isKlingTaskSuccessful(providerStatus)
+              ? "finalizing"
+              : post.video_status,
         updated_at: nowIso,
       }).eq("id", post.id);
 
@@ -614,6 +719,10 @@ export async function GET(request) {
         await markKlingPostFailed(supabase, post, "kling_video_result", message);
         summary.failed += 1;
         continue;
+      }
+
+      if (!task.cached) {
+        await persistKlingSourceCache(supabase, post, task);
       }
 
       const costTracker = createGenerationCostTracker({ supabase, postId: post.id });
@@ -656,15 +765,16 @@ export async function GET(request) {
             Number(summary.professional_typography_applied || 0) + 1;
         }
       } catch (finalizeError) {
-        // Do not fail the Kling generation just because downloading/copying the
-        // successful result had a temporary error. The same provider task can
-        // be finalized again next minute without generating or billing a new video.
+        // Do not fail the paid Kling generation just because local post-processing
+        // had a temporary error. The successful Kling source was cached before
+        // post-processing, so retries do not keep polling the provider.
         console.warn("Kling video finalization failed; existing result will be retried", {
           postId: post.id,
           taskId: post.kling_task_id,
           message: finalizeError?.message || String(finalizeError),
         });
         await supabase.from("posts").update({
+          video_status: "finalization_retry",
           video_error: truncate(
             `Kling video is ready but Spreelo has not copied it yet: ${finalizeError?.message || "finalization error"}`,
             1600
@@ -678,7 +788,7 @@ export async function GET(request) {
 
     return Response.json({
       ok: true,
-      mode: "kling_existing_task_finalizer_no_generation_retry",
+      mode: "kling_cached_source_single_finalizer_no_generation_retry",
       max_pending_hours: maxPendingHours,
       summary,
     });

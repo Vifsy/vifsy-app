@@ -127,7 +127,9 @@
     "test:v144.21": "node scripts/test-v144-21-dashboard-timezone-calendar-polish.mjs",
     "test:v144.22": "node scripts/test-v144-22-carousel-delivery-translation-resilience.mjs",
     "test:v144.25": "node scripts/test-v144-25-professional-kling-advertising.mjs",
-    "test:v144.26": "node scripts/test-v144-26-global-ui-pinterest-video-plan-count.mjs"
+    "test:v144.26": "node scripts/test-v144-26-global-ui-pinterest-video-plan-count.mjs",
+    "test:v144.30": "node scripts/test-v144-30-reliable-kling-global-i18n.mjs",
+    "test:v144.31": "node scripts/test-v144-31-kling-finalizer-single-flight.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
