@@ -21523,6 +21523,33 @@ function extractLockedProductObjectFromHtml({ html, pageUrl, websiteUrl }) {
   }
 
   const product = findExactPageJsonLdProduct(html, canonicalUrl);
+  const productSchemaFound = Boolean(product?.name || product?.offers || product?.image);
+  const ecommerceProofFound = hasEcommerceProofText(html);
+  const pageClassification = classifyCommercePage({
+    html,
+    url: canonicalUrl,
+    productSchemaFound,
+    ecommerceProofFound,
+  });
+  const purchaseActionDetected = hasDirectProductPurchaseAction(html);
+
+  // v144.39: use the shared commerce classifier as the universal final page
+  // proof. This covers schema-less/custom/headless storefronts and nested URL
+  // structures without retailer-specific exceptions, while still rejecting
+  // search/category/campaign/article/API/listing pages before any image is bound.
+  const hasPageBoundProductProof = Boolean(
+    pageClassification.pageType === "product" &&
+      Number(pageClassification.confidence || 0) >= 78
+  );
+  const exactProductPageVerified = Boolean(
+    hasPageBoundProductProof &&
+      (
+        productSchemaFound ||
+        purchaseActionDetected ||
+        isLikelyProductDetailUrl(canonicalUrl) ||
+        Number(pageClassification.confidence || 0) >= 88
+      )
+  );
   const structuredImages = product
     ? getProductImagesFromJsonLd(product, canonicalUrl)
     : [];
@@ -21531,7 +21558,8 @@ function extractLockedProductObjectFromHtml({ html, pageUrl, websiteUrl }) {
   const canUsePageMetadataImage = Boolean(
     product ||
       /\bproduct\b/i.test(getMetaContent(html, ["og:type"])) ||
-      isLikelyProductDetailUrl(canonicalUrl)
+      isLikelyProductDetailUrl(canonicalUrl) ||
+      hasPageBoundProductProof
   );
   const imageUrls = [...structuredImages];
   if (
@@ -21553,6 +21581,28 @@ function extractLockedProductObjectFromHtml({ html, pageUrl, websiteUrl }) {
     String(getMetaContent(html, ["og:title", "twitter:title"]) || "").trim() ||
     String(extractPageTitle(html) || "").trim();
   const title = sanitizeProductTitleForCard(rawTitle) || rawTitle;
+
+  // v144.38: Product Engine V2 may already have proven an exact Quickbutik
+  // product from this same page via its main gallery even when the page lacks
+  // one canonical JSON-LD Product object or product-shaped OG metadata. Reuse
+  // that same exact-page gallery evidence instead of contradicting the earlier
+  // verification and terminally failing the occurrence. The later semantic
+  // image gate still verifies that the chosen pixels depict this exact product.
+  if (!imageUrls.length && exactProductPageVerified) {
+    const exactPageGalleryImage = extractBestProductImageFromHtml(
+      html,
+      canonicalUrl,
+      title
+    );
+    if (
+      exactPageGalleryImage &&
+      isHttpUrl(exactPageGalleryImage) &&
+      !isBadProductImageUrl(exactPageGalleryImage)
+    ) {
+      imageUrls.push(exactPageGalleryImage);
+    }
+  }
+
   const primaryImageUrl = imageUrls[0] || "";
   if (!title || !primaryImageUrl) return null;
 
@@ -21576,7 +21626,12 @@ function extractLockedProductObjectFromHtml({ html, pageUrl, websiteUrl }) {
   });
   const source = structuredImages.length
     ? "json_ld_main_product_object"
-    : "page_level_product_metadata";
+    : ogImage && imageUrls.some((value) =>
+        (canonicalProductImageAssetKey(value) || value) ===
+        (canonicalProductImageAssetKey(ogImage) || ogImage)
+      )
+      ? "page_level_product_metadata"
+      : "exact_product_page_gallery";
 
   return {
     title,
@@ -21587,6 +21642,8 @@ function extractLockedProductObjectFromHtml({ html, pageUrl, websiteUrl }) {
     color,
     description,
     availability,
+    purchaseActionDetected,
+    exactProductPageVerified,
     primaryImageUrl,
     imageUrls: imageUrls.slice(0, 12),
     source,
@@ -25477,8 +25534,8 @@ For every supplied product:
 - A stale URL may come from an older commerce platform or search index. Prefer the retailer's current canonical URL structure.
 - Open the current official result immediately before returning it. Confirm that it loads as a live product page rather than a 404, redirect loop, search result, category or cached snippet.
 - Treat the MAIN PRODUCT block on the opened product detail page as one indivisible object. Read current_title, product_identifier/SKU, brand, category, color and the main image from that same main-product block. Do not search for or return a product price.
-- Also read current stock availability from that same official main-product page. For a physical/e-commerce product, Spreelo may promote it only when the CURRENT official page explicitly proves it is IN STOCK NOW. availability_status must still be exactly one of in_stock, available, preorder, backorder, out_of_stock, discontinued or unknown, but only in_stock is eligible for promotion. Generic "available", preorder, backorder, made-to-order, beställningsvara/order item, zero-stock with an add-to-cart button, out_of_stock, discontinued and unknown are NOT eligible. Never infer stock from an old search snippet.
-- Return availability_evidence as concise CURRENT official evidence, including the explicit in-stock wording and stock quantity when shown. An add-to-cart/order button by itself is not stock evidence.
+- Also read current availability from that same official main-product page. availability_status must be exactly one of in_stock, available, preorder, backorder, out_of_stock, discontinued or unknown. Prefer in_stock when the page explicitly says so. Use available only when the CURRENT exact product page has an active purchase action and does not expose an out-of-stock, discontinued, preorder-only or backorder-only signal.
+- Return purchase_action_detected=true only when you actually observed an active buy/add-to-cart/order action on that exact current product page. Return availability_evidence as concise CURRENT official evidence. Never infer availability from an old search snippet.
 - Return the best direct product-image file URL that is visibly attached to the MAIN PRODUCT on that exact opened product detail page.
 - The image, current_title and product facts must come from the same opened current_url and the same main-product block. Never borrow an image or text from recommendations, related products, search-result cards, colour swatches, "more from the brand" sections or image-search thumbnails.
 - Set image_source_page_url to the exact product detail page where the returned image is attached to the main product, and set image_is_main_product_asset=true only when you verified that relationship.
@@ -25491,12 +25548,12 @@ For every supplied product:
 - Keep identity_evidence concise and state the exact title, SKU/product number or other official evidence that proves the match.
 ${allowPurchasableReplacements ? `
 IN-STOCK REPLACEMENT RULE — DELIVERY SAFE:
-- First inspect the exact selected candidate. Keep that exact identity ONLY if the CURRENT official page explicitly proves availability_status=in_stock. Set replacement_for_unavailable=false in that case.
-- If the selected candidate is anything other than in_stock — including available without stock proof, preorder, backorder, beställningsvara/order item, zero stock, out_of_stock, discontinued or unknown — do NOT return it as the promoted product. In the SAME request, search ${allowedDomain} for a different CURRENT product that is explicitly in_stock now and is a strong fit for the supplied product_family and campaign/product intent.
+- First inspect the exact selected candidate. Keep that exact identity when the CURRENT official page proves it is purchasable now: either availability_status=in_stock, or availability_status=available together with purchase_action_detected=true and no negative availability signal. Set replacement_for_unavailable=false in that case.
+- If the selected candidate is preorder, backorder, out_of_stock, discontinued, unknown, or otherwise not currently purchasable, do NOT return it as the promoted product. In the SAME request, search ${allowedDomain} for a different CURRENT product that is purchasable now and is a strong fit for the supplied product_family and campaign/product intent.
 - Availability is more important than an exact obsolete model/spec match. If the campaign language points to an older model that is no longer in the current assortment, choose the closest relevant CURRENT in-stock product rather than an old indexed page.
 - A replacement must be opened on its own current official product page and must satisfy the same strict same-page title/image/product binding rules.
 - Set selected_candidate_availability_status to the status you observed (or unknown if the old page cannot be established), set replacement_for_unavailable=true and explain the substitution briefly in replacement_reason.
-- Prefer a somewhat broader but clearly relevant CURRENT in-stock product over an exact-match product that is not proven in stock. Never return a replacement unless availability_status=in_stock.` : `
+- Prefer a somewhat broader but clearly relevant CURRENT purchasable product over an exact-match product that is unavailable. Never return a replacement unless it is either explicitly in_stock, or available with purchase_action_detected=true and no negative availability signal.` : `
 - Never substitute a different product identity. Set replacement_for_unavailable=false and replacement_reason to an empty string.`}
 
 Campaign/product intent context for replacement relevance:
@@ -25572,6 +25629,7 @@ Return only the required JSON structure.`.trim();
                       ],
                     },
                     availability_evidence: { type: "string" },
+                    purchase_action_detected: { type: "boolean" },
                     selected_candidate_availability_status: {
                       type: "string",
                       enum: [
@@ -25608,6 +25666,7 @@ Return only the required JSON structure.`.trim();
                     "image_is_main_product_asset",
                     "availability_status",
                     "availability_evidence",
+                    "purchase_action_detected",
                     "selected_candidate_availability_status",
                     "replacement_for_unavailable",
                     "replacement_reason",
@@ -25686,6 +25745,11 @@ Return only the required JSON structure.`.trim();
     const availabilityEvidence = String(
       repairedProduct?.availability_evidence || ""
     ).trim();
+    const purchaseActionDetected = repairedProduct?.purchase_action_detected === true;
+    const repairedProductConfirmedPurchasable = Boolean(
+      availabilityStatus === "in_stock" ||
+        (availabilityStatus === "available" && purchaseActionDetected)
+    );
     const selectedCandidateAvailabilityStatus = normalizeProductAvailabilityStatus(
       repairedProduct?.selected_candidate_availability_status
     );
@@ -25708,11 +25772,16 @@ Return only the required JSON structure.`.trim();
       selectedCandidate,
       recoveredProduct: repairedProduct,
     });
+    const selectedCandidateConfirmedPurchasable = Boolean(
+      selectedCandidateAvailabilityStatus === "in_stock" ||
+        (selectedCandidateAvailabilityStatus === "available" &&
+          selectedCandidate?.purchase_action_detected === true)
+    );
     const safePurchasableReplacement = Boolean(
       allowPurchasableReplacements &&
         replacementForUnavailable &&
-        selectedCandidateAvailabilityStatus !== "in_stock" &&
-        availabilityStatus === "in_stock"
+        !selectedCandidateConfirmedPurchasable &&
+        repairedProductConfirmedPurchasable
     );
     if (
       !currentUrl ||
@@ -25726,7 +25795,7 @@ Return only the required JSON structure.`.trim();
       repairedProduct?.image_is_main_product_asset !== true ||
       !sameOpenedProductPage ||
       !String(repairedProduct?.identity_evidence || "").trim() ||
-      ((!exactIdentityRecovered || availabilityStatus !== "in_stock") &&
+      ((!exactIdentityRecovered || !repairedProductConfirmedPurchasable) &&
         !safePurchasableReplacement)
     ) {
       console.warn("Authoritative product asset repair rejected an unbound or mismatched recovery", {
@@ -25768,6 +25837,7 @@ Return only the required JSON structure.`.trim();
       product_color: String(repairedProduct?.color || "").trim(),
       availability: availabilityStatus,
       availability_status: availabilityStatus,
+      purchase_action_detected: purchaseActionDetected,
       availability_evidence: availabilityEvidence,
       selected_candidate_availability_status: selectedCandidateAvailabilityStatus,
       availability_replacement_for_unavailable: safePurchasableReplacement,
@@ -26022,6 +26092,9 @@ async function hydrateAuthoritativeWebAgentProduct({
     locked_product_color: lockedProduct.color || "",
     availability: normalizeProductAvailabilityStatus(lockedProduct.availability),
     availability_status: normalizeProductAvailabilityStatus(lockedProduct.availability),
+    purchase_action_detected: Boolean(
+      lockedProduct.purchaseActionDetected || hasDirectProductPurchaseAction(html)
+    ),
     locked_product_availability: normalizeProductAvailabilityStatus(lockedProduct.availability),
     locked_product_primary_image_url: normalized.image_url,
     locked_product_image_urls: lockedProduct.imageUrls,
@@ -26059,6 +26132,7 @@ export async function resolveLockedProductUrlForUse({
   titleHint = "",
   rule = null,
   ruleId = "manual-product-resolution",
+  allowAiRepair = true,
 }) {
   const canonicalUrl =
     canonicalizeWebsiteProductUrl(productUrl, websiteUrl || productUrl) ||
@@ -26114,7 +26188,7 @@ export async function resolveLockedProductUrlForUse({
     }
   }
 
-  if (!hydrated && openai && supabase) {
+  if (!hydrated && allowAiRepair && openai && supabase) {
     const repair = await repairAuthoritativeWebAgentProductAssets({
       supabase,
       openai,
@@ -26163,9 +26237,55 @@ export async function resolveLockedProductUrlForUse({
     ruleId: rule?.id || ruleId,
     openai,
   });
+
+  if (!resolvedImage?.image_url || resolvedImage?.product_image_identity_verified !== true) {
+    throw new Error("The product page was found, but Spreelo could not bind a usable main product image safely.");
+  }
+
+  // v144.39: a freshly fetched official product page that produced a locked
+  // same-page product object and whose exact image asset passed the deterministic
+  // resolver does not need a second AI vision comparison. That duplicate gate
+  // added latency/cost and could false-negative an already proven product.
+  // Legacy/unbound candidates still use the semantic AI safety gate below.
+  const deterministicSamePageLockVerified = Boolean(
+    resolvedImage?.product_identity_locked === true &&
+      resolvedImage?.product_image_page_bound === true &&
+      resolvedImage?.technical_identity_same_page_verified === true &&
+      resolvedImage?.product_image_identity_verified === true &&
+      resolvedImage?.product_image_identity_unresolved !== true &&
+      String(resolvedImage?.product_image_source_page_url || "").trim() &&
+      normalizeComparableValue(
+        canonicalizeWebsiteProductUrl(
+          resolvedImage.product_image_source_page_url,
+          resolvedImage.url
+        ) || resolvedImage.product_image_source_page_url
+      ) ===
+        normalizeComparableValue(
+          canonicalizeWebsiteProductUrl(resolvedImage.url, resolvedImage.url) ||
+            resolvedImage.url
+        )
+  );
+
+  if (deterministicSamePageLockVerified) {
+    console.info("Product image semantic AI gate skipped for deterministic same-page locked asset", {
+      ruleId: rule?.id || ruleId,
+      productUrl: resolvedImage.url || null,
+      productTitle: resolvedImage.title || null,
+      imageUrl: resolvedImage.image_url || null,
+      identityMethod: resolvedImage.product_image_identity_method || null,
+      lockedSource: resolvedImage.locked_product_source || null,
+    });
+    return {
+      ...resolvedImage,
+      product_image_semantic_verified: true,
+      product_image_semantic_confidence: 1,
+      product_image_semantic_reason: "deterministic_same_page_locked_asset",
+    };
+  }
+
   const [verified] = await reviewResolvedProductImageIdentity({
     openai,
-    items: resolvedImage ? [resolvedImage] : [],
+    items: [resolvedImage],
     ruleId: rule?.id || ruleId,
     failClosed: true,
   });
@@ -27695,10 +27815,10 @@ Search strategy:
 
 Product quality rules:
 - Return only real product pages from the allowed customer domain.
-- For physical/e-commerce products, the CURRENT official product page must explicitly show that the exact product is IN STOCK NOW. Open the final product page before returning it and verify explicit current stock evidence such as "In stock" / "I lager" and, when available, the current stock quantity.
-- Do not treat an add-to-cart button, generic "available", preorder, backorder, beställningsvara/order item or zero-stock orderability as in-stock proof.
-- Never return a product that is discontinued, utgått, sold out, out of stock, unavailable, preorder/backorder only, order-only with zero current stock, no longer orderable, or whose stock cannot be verified. Old indexed product pages are not eligible just because they still exist in search results.
-- If explicit in-stock status cannot be verified on the current official page, skip that candidate and find another product instead.
+- For physical/e-commerce products, open the CURRENT official product page before returning it and verify that it can be purchased now. Prefer explicit "In stock" / "I lager" evidence when the platform exposes it.
+- Some platforms do not expose literal stock text. In that case availability_status may be "available" only when the CURRENT official product page has an active purchase action and does not show any out-of-stock, discontinued, preorder-only or backorder-only signal.
+- Never return a product that is discontinued, utgått, sold out, out of stock, unavailable, preorder/backorder only, order-only with a clear zero-stock signal, or no longer orderable. Old indexed product pages are not eligible just because they still exist in search results.
+- The app will reopen and technically verify the returned product page before use, so do not discard a current buyable product merely because its platform omits literal stock wording.
 - A product page must be about one specific product that a customer can buy, book, order, rent, request a quote for or contact the business about.
 - Do not return the homepage.
 - Do not return brand pages.
@@ -27841,8 +27961,8 @@ For campaign carousels, stop once you have enough concrete product pages for a u
     const availabilityStatus = normalizeProductAvailabilityStatus(
       product?.availability_status
     );
-    if (availabilityStatus !== "in_stock") {
-      console.log("Product researcher skipped product without explicit current in-stock proof", {
+    if (!["in_stock", "available"].includes(availabilityStatus)) {
+      console.log("Product researcher skipped product without current purchasability evidence", {
         ruleId: rule?.id,
         websiteUrl,
         productUrl,
@@ -28593,7 +28713,11 @@ async function prepareWebsiteContentForRule({
   });
 
   const websiteUrl = getWebsiteProductSourceUrl(brandProfile, rule);
-  const finalizePreparedWebsiteItem = async (item, cycleNumber = 1) => {
+  const finalizePreparedWebsiteItem = async (
+    item,
+    cycleNumber = 1,
+    { allowAiRepair = true } = {}
+  ) => {
     const lockedItem =
       (
         item?.product_identity_locked === true &&
@@ -28611,6 +28735,7 @@ async function prepareWebsiteContentForRule({
           titleHint: item?.title || item?.item_title || rule?.content_source_title || "",
           rule,
           ruleId: rule?.id || "single-product",
+          allowAiRepair,
         });
     return {
       websiteItem: lockedItem,
@@ -28929,26 +29054,78 @@ async function prepareWebsiteContentForRule({
       allowReuseWhenExhausted: false,
     });
 
-    if (
-      storeMapSelection?.item &&
-      isAcceptableWebsiteTextProductSelection(storeMapSelection.item, rule)
-    ) {
-      console.log("Website product selected by Store Map Product Agent", {
+    const primaryStoreMapItem = storeMapSelection?.item || null;
+    const orderedStoreMapCandidates = [
+      primaryStoreMapItem,
+      ...storeMapSingleProductResult.products.filter(
+        (item) =>
+          item &&
+          (!primaryStoreMapItem ||
+            !areSameWebsiteItem(item, primaryStoreMapItem, websiteUrl))
+      ),
+    ].filter(
+      (item) =>
+        item &&
+        isAcceptableWebsiteTextProductSelection(item, rule)
+    );
+
+    const lockFailures = [];
+    for (const [candidateIndex, candidate] of orderedStoreMapCandidates.entries()) {
+      try {
+        // Store Map has just technically verified these exact pages. Do not pay
+        // GPT-5.5 to rediscover the same current product. Lock deterministically
+        // from the exact page; if one candidate has unusable markup, try the
+        // next already-verified product instead of terminally failing the post.
+        const prepared = await finalizePreparedWebsiteItem(
+          candidate,
+          candidateIndex === 0 ? storeMapSelection?.cycleNumber || 1 : 1,
+          { allowAiRepair: false }
+        );
+
+        console.log("Website product selected by Store Map Product Agent", {
+          ruleId: rule.id,
+          brandProfileId: rule.brand_profile_id,
+          websiteUrl,
+          productUrl: prepared?.websiteItem?.url || candidate.url,
+          title: prepared?.websiteItem?.title || candidate.title,
+          verifiedProductCount: storeMapSingleProductResult.products.length,
+          lockCandidateIndex: candidateIndex,
+          priorLockFailureCount: lockFailures.length,
+          selectedShelves: storeMapSingleProductResult.selectedShelves
+            .slice(0, 6)
+            .map((shelf) => ({ title: shelf.title || null, url: shelf.url })),
+        });
+
+        summary.website_items_found += 1;
+        summary.website_content_success += 1;
+        return prepared;
+      } catch (error) {
+        if (isWebsiteRateLimitError(error)) throw error;
+        lockFailures.push({
+          productUrl: candidate?.url || null,
+          title: candidate?.title || null,
+          message: error?.message || String(error),
+        });
+        console.warn("Store Map verified product could not be locked; trying next verified product", {
+          ruleId: rule.id,
+          brandProfileId: rule.brand_profile_id,
+          candidateIndex,
+          verifiedProductCount: storeMapSingleProductResult.products.length,
+          productUrl: candidate?.url || null,
+          title: candidate?.title || null,
+          message: error?.message || String(error),
+        });
+      }
+    }
+
+    if (lockFailures.length) {
+      console.warn("Store Map verified product pool exhausted during exact-page locking; continuing with remaining product fallbacks", {
         ruleId: rule.id,
         brandProfileId: rule.brand_profile_id,
         websiteUrl,
-        productUrl: storeMapSelection.item.url,
-        title: storeMapSelection.item.title,
+        attemptedCount: lockFailures.length,
         verifiedProductCount: storeMapSingleProductResult.products.length,
-        selectedShelves: storeMapSingleProductResult.selectedShelves
-          .slice(0, 6)
-          .map((shelf) => ({ title: shelf.title || null, url: shelf.url })),
       });
-
-      summary.website_items_found += 1;
-      summary.website_content_success += 1;
-
-      return finalizePreparedWebsiteItem(storeMapSelection.item, storeMapSelection.cycleNumber);
     }
   }
 

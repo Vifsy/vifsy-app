@@ -131,7 +131,8 @@
     "test:v144.30": "node scripts/test-v144-30-reliable-kling-global-i18n.mjs",
     "test:v144.31": "node scripts/test-v144-31-kling-finalizer-single-flight.mjs",
     "test:v144.32": "node scripts/test-v144-32-visible-one-time-i18n.mjs",
-    "test:v144.34": "node scripts/test-v144-34-no-product-prices-quickbutik.mjs"
+    "test:v144.34": "node scripts/test-v144-34-no-product-prices-quickbutik.mjs",
+    "test:v144.39": "node scripts/test-v144-39-universal-reliable-product-lock.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

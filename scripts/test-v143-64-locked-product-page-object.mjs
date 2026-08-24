@@ -100,11 +100,11 @@ const summarySource = route.slice(summaryStart, summaryEnd);
 const summarizePinterestPinMedia = new Function(`${summarySource}; return summarizePinterestPinMedia;`)();
 assert.deepEqual(
   summarizePinterestPinMedia({ media: { media_type: "multiple_images", items: [{}, {}, {}, {}, {}] } }),
-  { mediaType: "multiple_images", imageCount: 5 }
+  { mediaType: "multiple_images", imageCount: 5, creativeType: "", isVideo: false }
 );
 assert.deepEqual(
   summarizePinterestPinMedia({ media: { media_type: "image" } }),
-  { mediaType: "image", imageCount: 1 }
+  { mediaType: "image", imageCount: 1, creativeType: "", isVideo: false }
 );
 
 console.log("v143.64 locked product-page object + Pinterest verification tests passed.");
