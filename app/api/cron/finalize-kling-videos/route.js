@@ -171,6 +171,20 @@ async function getKlingFinalVideoSource({ supabase, post, task, costTracker }) {
     post.video_duration_seconds,
     6
   );
+  const trimStartSeconds = Math.max(
+    0,
+    Math.min(
+      Math.max(0.2, durationSeconds - 1.2),
+      Number(postprocess.scene_trim_start_seconds ?? 0.7) || 0.7
+    )
+  );
+  const overlayStartSeconds = Math.max(
+    0.6,
+    Math.min(
+      Math.max(0.8, durationSeconds - trimStartSeconds - 0.8),
+      Number(postprocess.overlay_start_seconds ?? 2.0) || 2.0
+    )
+  );
   let renderId = String(postprocess.shotstack_render_id || "").trim() || null;
   let nextSelection = post.video_background_selection;
 
@@ -179,11 +193,14 @@ async function getKlingFinalVideoSource({ supabase, post, task, costTracker }) {
       videoUrl: task.videoUrl,
       textOverlayUrl: postprocess.text_overlay_url,
       durationSeconds,
-      overlayStartSeconds: 2.8,
+      overlayStartSeconds,
+      trimStartSeconds,
     });
     renderId = await queueShotstackRender(edit);
     nextSelection = {
       ...post.video_background_selection,
+      scene_trim_start_seconds: trimStartSeconds,
+      overlay_start_seconds: overlayStartSeconds,
       shotstack_render_id: renderId,
       shotstack_status: "rendering",
       shotstack_started_at: new Date().toISOString(),

@@ -180,6 +180,14 @@ const KLING_AI_VIDEO_DURATION_SECONDS = Math.max(
   3,
   Math.min(15, Number(process.env.KLING_VIDEO_DURATION_SECONDS || 6) || 6)
 );
+const KLING_NATURAL_SCENE_TRIM_SECONDS = Math.max(
+  0,
+  Math.min(1.5, Number(process.env.KLING_NATURAL_SCENE_TRIM_SECONDS || 0.7) || 0.7)
+);
+const KLING_TEXT_OVERLAY_START_SECONDS = Math.max(
+  0.6,
+  Math.min(4, Number(process.env.KLING_TEXT_OVERLAY_START_SECONDS || 2.0) || 2.0)
+);
 const ANIMATED_TEXT_PANEL_SOURCE_WIDTH = 1408;
 const ANIMATED_TEXT_PANEL_SOURCE_HEIGHT = 480;
 const ANIMATED_TEXT_PANEL_LEFT = 128;
@@ -14106,6 +14114,7 @@ Creative goals:
 - if a CAMPAIGN IDENTITY LOCK is present, the scene must stay exclusively inside that active campaign and must not introduce another holiday/campaign/occasion
 - frame 0 is already the beginning of the finished commercial: keep the believable real-world environment from the supplied first frame and do NOT create any plain-color/studio intro, backdrop reveal or transition from setup screen into lifestyle scene
 - the verified retailer product reference is already large in frame from the first frame; do NOT create a small-card-to-full-screen expansion
+- do not linger on a static, staged or composited opening frame; begin believable in-scene motion/action immediately and be fully inside the real commercial world within the first 0.2-0.3 second
 - create a pattern interrupt in the first 0.5-1.0 second using a real product-relevant event, person, animal, physical action or purposeful camera/action beat inside that real environment; decorative particles alone are not enough
 - the result must feel like a professionally directed short commercial, not a prettier version of a simple animated product post
 - when Full-product interaction allowed is YES, the product MUST be genuinely used in the scene in the most natural way for that exact product: apparel worn by a person, handheld items held/operated, tools used, appliances operated, sports/outdoor gear used in context, etc.
@@ -14144,6 +14153,7 @@ NON-NEGOTIABLE PRODUCT RULES:
         : "The reference is cropped or uncertain: keep exactly the same visible crop/view for the whole clip, never zoom out to complete it, and never reveal or invent any unseen side, back, top, bottom, underside, interior, hidden edge or label.",
       "The first visible frame must already look like a finished real-world commercial scene. Continue the supplied natural environment immediately; no solid-color, monochrome, gradient, abstract or empty studio intro and no backdrop-to-lifestyle transition.",
       "Do not begin with or create a small image card that expands to full screen.",
+      "Do not linger on a static, staged or composited opening frame. The clip must feel already in-progress from the first instant and be fully inside believable scene action within the first 0.2-0.3 second.",
       "No product morph, redesign or substitution with a similar product.",
       "Do not generate any new readable overlay text, captions, slogans, prices, labels or typography. Spreelo adds professional typography after the video is generated. Preserve only text physically present on the verified product reference.",
       "No fake logos and no watermark.",
@@ -40835,6 +40845,8 @@ product_research_model_used: websitePreparedRule.uses_website_content
                 text_overlay_storage_path: uploadedKlingTextOverlay.imageStoragePath,
                 text_overlay_provider: klingTextOverlay.provider,
                 text_overlay_prompt: klingTextOverlay.prompt,
+                scene_trim_start_seconds: KLING_NATURAL_SCENE_TRIM_SECONDS,
+                overlay_start_seconds: KLING_TEXT_OVERLAY_START_SECONDS,
                 shotstack_render_id: null,
                 shotstack_status: "waiting_for_kling",
               },
