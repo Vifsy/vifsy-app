@@ -34993,15 +34993,24 @@ async function reviewResolvedProductImageIdentity({
   const resolvedItems = Array.isArray(items) ? items.filter(Boolean) : [];
   if (!resolvedItems.length) return [];
 
-  if (
-    resolvedItems.every(
-      (item) =>
+  // v144.40: never let an unresolved reserve image invalidate a product image
+  // that has already completed the exact semantic gate. The old all-or-nothing
+  // batch path could turn a proven primary product into a failure when any
+  // reserve/CDN image made the OpenAI image request fail.
+  const finalVerifiedIndexes = new Set(
+    resolvedItems
+      .map((item, itemIndex) =>
         item?.image_url &&
         item?.product_image_identity_verified === true &&
         item?.product_image_identity_unresolved !== true &&
         item?.product_image_semantic_verified === true
-    )
-  ) {
+          ? itemIndex
+          : null
+      )
+      .filter((itemIndex) => itemIndex !== null)
+  );
+
+  if (finalVerifiedIndexes.size === resolvedItems.length) {
     console.info("Product image semantic identity gate reused final verified pool", {
       ruleId,
       productCount: resolvedItems.length,
@@ -35011,22 +35020,31 @@ async function reviewResolvedProductImageIdentity({
 
   if (!openai) {
     if (failClosed) {
-      return resolvedItems.map((item) => ({
-        ...item,
-        image_url: null,
-        product_image_identity_verified: false,
-        product_image_identity_unresolved: true,
-        product_image_semantic_verified: false,
-        product_image_semantic_reason: "semantic_verifier_unavailable",
-      }));
+      return resolvedItems.map((item, itemIndex) => {
+        if (finalVerifiedIndexes.has(itemIndex)) return item;
+        return {
+          ...item,
+          image_url: null,
+          product_image_identity_verified: false,
+          product_image_identity_unresolved: true,
+          product_image_semantic_verified: false,
+          product_image_semantic_reason: "semantic_verifier_unavailable",
+        };
+      });
     }
     return resolvedItems;
   }
 
   const imageOptions = [];
   for (let itemIndex = 0; itemIndex < resolvedItems.length; itemIndex += 1) {
+    if (finalVerifiedIndexes.has(itemIndex)) continue;
     const item = resolvedItems[itemIndex];
     const seenUrls = new Set();
+    // The technical resolver has already selected the largest same-asset image.
+    // Sending all CDN variants to vision is redundant and lets one negotiated
+    // AVIF/invalid derivative poison the entire batch. Review only that selected
+    // image; if it fails semantic identity, reject this item rather than trying
+    // to "repair" identity with another asset.
     const candidates = [
       {
         url: item?.image_url,
@@ -35035,7 +35053,6 @@ async function reviewResolvedProductImageIdentity({
         height: item?.product_image_height,
         identityMethod: item?.product_image_identity_method,
       },
-      ...(item?.product_image_verified_candidates || []),
     ];
 
     for (const candidate of candidates) {
@@ -35072,14 +35089,70 @@ async function reviewResolvedProductImageIdentity({
   }
 
   if (!imageOptions.length) {
-    return resolvedItems.map((item) => ({
-      ...item,
-      image_url: null,
-      product_image_identity_verified: false,
-      product_image_identity_unresolved: true,
-      product_image_semantic_verified: false,
-      product_image_semantic_reason: "no_semantic_image_candidates",
-    }));
+    return resolvedItems.map((item, itemIndex) => {
+      if (finalVerifiedIndexes.has(itemIndex)) return item;
+      return {
+        ...item,
+        image_url: null,
+        product_image_identity_verified: false,
+        product_image_identity_unresolved: true,
+        product_image_semantic_verified: false,
+        product_image_semantic_reason: "no_semantic_image_candidates",
+      };
+    });
+  }
+
+  // Convert remote CDN responses to an explicit PNG data URL before sending
+  // them to OpenAI. Some CDNs (including auto=format URLs) negotiate AVIF/HEIF
+  // to OpenAI even when the URL ends in .jpg/.webp. The Responses API then
+  // rejects the whole request as "invalid image". Local normalization removes
+  // that provider/content-negotiation ambiguity.
+  const visionImageOptions = (
+    await mapWithConcurrency(imageOptions, 3, async (option) => {
+      try {
+        const downloaded = await fetchPublicImageForResolution(option.url);
+        const normalizedBuffer = await getSharpRuntime()(downloaded.buffer, {
+          limitInputPixels: 80_000_000,
+        })
+          .rotate()
+          .resize({
+            width: 1600,
+            height: 1600,
+            fit: "inside",
+            withoutEnlargement: true,
+          })
+          .png({ compressionLevel: 9 })
+          .toBuffer();
+        return {
+          ...option,
+          visionUrl: `data:image/png;base64,${normalizedBuffer.toString("base64")}`,
+        };
+      } catch (error) {
+        console.warn("Product image semantic option normalization failed", {
+          ruleId,
+          productUrl: option.productUrl || null,
+          imageUrl: option.url || null,
+          message: error?.message || String(error),
+        });
+        return null;
+      }
+    })
+  ).filter(Boolean);
+
+  if (!visionImageOptions.length) {
+    return resolvedItems.map((item, itemIndex) => {
+      if (finalVerifiedIndexes.has(itemIndex)) return item;
+      if (!failClosed) return item;
+      const { product_image_verified_candidates, ...cleanItem } = item;
+      return {
+        ...cleanItem,
+        image_url: null,
+        product_image_identity_verified: false,
+        product_image_identity_unresolved: true,
+        product_image_semantic_verified: false,
+        product_image_semantic_reason: "semantic_image_normalization_failed",
+      };
+    });
   }
 
   const content = [
@@ -35096,7 +35169,7 @@ async function reviewResolvedProductImageIdentity({
     },
   ];
 
-  for (const option of imageOptions) {
+  for (const option of visionImageOptions) {
     content.push({
       type: "input_text",
       text:
@@ -35111,7 +35184,7 @@ async function reviewResolvedProductImageIdentity({
     });
     content.push({
       type: "input_image",
-      image_url: option.url,
+      image_url: option.visionUrl,
       // Exact product identity is a safety-critical decision. Low-detail
       // thumbnails can miss model text and even confuse product categories.
       detail: "high",
@@ -35179,7 +35252,11 @@ async function reviewResolvedProductImageIdentity({
     );
 
     return resolvedItems.map((item, itemIndex) => {
-      const options = imageOptions.filter(
+      if (finalVerifiedIndexes.has(itemIndex)) {
+        return item;
+      }
+
+      const options = visionImageOptions.filter(
         (option) => option.itemIndex === itemIndex
       );
       const reviewedOptions = options
@@ -35286,14 +35363,16 @@ async function reviewResolvedProductImageIdentity({
   } catch (error) {
     console.warn("Product image semantic identity gate unavailable", {
       ruleId,
-      imageOptionCount: imageOptions.length,
+      imageOptionCount: visionImageOptions.length,
+      preservedVerifiedCount: finalVerifiedIndexes.size,
       failClosed,
       message: error?.message || String(error),
     });
 
     if (!failClosed) return resolvedItems;
 
-    return resolvedItems.map((item) => {
+    return resolvedItems.map((item, itemIndex) => {
+      if (finalVerifiedIndexes.has(itemIndex)) return item;
       const { product_image_verified_candidates, ...cleanItem } = item;
       return {
         ...cleanItem,
@@ -40176,12 +40255,43 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
             ruleId: rule.id,
             openai,
           });
-          const resolvedItems = await reviewResolvedProductImageIdentity({
-            openai,
-            items: technicallyResolvedItems,
-            ruleId: rule.id,
-            failClosed: true,
-          });
+
+          // v144.40: single-product posts must never be blocked by a reserve
+          // product's semantic-image failure. The primary exact product is
+          // reviewed independently; reserves are best-effort and are only kept
+          // if they also finish semantic verification successfully.
+          let resolvedItems;
+          if (isCarouselRule(websitePreparedRule)) {
+            resolvedItems = await reviewResolvedProductImageIdentity({
+              openai,
+              items: technicallyResolvedItems,
+              ruleId: rule.id,
+              failClosed: true,
+            });
+          } else {
+            const technicallyResolvedPrimary = technicallyResolvedItems.slice(
+              0,
+              primaryCount
+            );
+            const technicallyResolvedReserves = technicallyResolvedItems.slice(
+              primaryCount
+            );
+            const resolvedPrimary = await reviewResolvedProductImageIdentity({
+              openai,
+              items: technicallyResolvedPrimary,
+              ruleId: rule.id,
+              failClosed: true,
+            });
+            const resolvedReserves = technicallyResolvedReserves.length
+              ? await reviewResolvedProductImageIdentity({
+                  openai,
+                  items: technicallyResolvedReserves,
+                  ruleId: rule.id,
+                  failClosed: false,
+                })
+              : [];
+            resolvedItems = [...resolvedPrimary, ...resolvedReserves];
+          }
 
           if (isCarouselRule(websitePreparedRule)) {
             const resolvedPrimaryItems = resolvedItems.slice(0, primaryCount);
