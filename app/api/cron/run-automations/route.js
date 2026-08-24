@@ -14322,7 +14322,17 @@ function normalizeWebsiteItem(item, websiteUrl) {
     return null;
   }
 
+  // Preserve verification/identity/campaign metadata across normalization. Product
+  // pricing stays removed globally: any metadata key whose name is price-related
+  // is deliberately discarded here as an additional safety boundary.
+  const safeMetadata = Object.fromEntries(
+    Object.entries(item || {}).filter(([key]) =>
+      !/(?:^|_)(?:price|pricing)(?:_|$)/i.test(String(key || ""))
+    )
+  );
+
   return {
+    ...safeMetadata,
     title,
     description: truncateText(description, 900),
     type,
@@ -21399,11 +21409,24 @@ function isProductKnownUnavailableForPromotion(item) {
 }
 
 function isProductConfirmedPurchasable(item) {
-  // v144.19: physical product posts must use products that are explicitly
-  // in stock now. A preorder, backorder, generic "available" state or an
-  // add-to-cart control without stock evidence is not enough. This prevents
-  // discontinued / zero-stock indexed products from being promoted.
-  return getProductPromotionAvailability(item) === "in_stock";
+  const availability = getProductPromotionAvailability(item);
+  if (availability === "in_stock") {
+    return true;
+  }
+
+  // Some commerce platforms (including Quickbutik stores) do not expose a
+  // literal "in stock" string or structured stock quantity. A freshly opened
+  // official product detail page with a real purchase action is sufficient
+  // current purchasability proof as long as the page did not expose an
+  // out-of-stock/discontinued signal. inferCurrentProductAvailability() checks
+  // those negative signals before returning "available".
+  return Boolean(
+    availability === "available" &&
+      item?.product_page_verified === true &&
+      item?.concrete_product_verified === true &&
+      item?.purchase_action_detected === true &&
+      !isProductKnownUnavailableForPromotion(item)
+  );
 }
 
 function hasDirectProductPurchaseAction(html) {
@@ -21978,6 +22001,122 @@ const PRODUCT_PATH_PATTERNS_FOR_RUNTIME = [
   /\/[^/?#]+\/[^/?#]+_\d{6,}\/\d{6,}(?:\/|$)/i,
   /\/[^/?#]+-[a-z0-9]*\d[a-z0-9]{4,}-[a-z0-9]*\d[a-z0-9]{1,}\.html(?:\/|$)/i,
 ];
+
+
+function getProductUrlFromJsonLd(product, pageUrl) {
+  const offers = Array.isArray(product?.offers)
+    ? product.offers
+    : product?.offers
+      ? [product.offers]
+      : [];
+  const rawUrl =
+    product?.url ||
+    offers.find((offer) => offer?.url)?.url ||
+    product?.mainEntityOfPage?.['@id'] ||
+    product?.mainEntityOfPage?.url ||
+    "";
+
+  const resolvedUrl = rawUrl ? resolveUrl(String(rawUrl), pageUrl) : null;
+  return resolvedUrl && isHttpUrl(resolvedUrl) ? resolvedUrl : null;
+}
+
+function extractJsonLdProductCandidatesFromHtml({
+  html,
+  pageUrl,
+  websiteUrl,
+  campaignPrompt,
+}) {
+  const objects = extractJsonLdObjects(html);
+  const candidates = [];
+
+  for (const object of objects) {
+    if (!normalizeJsonLdType(object?.['@type']).some((type) => type.includes('product'))) {
+      continue;
+    }
+
+    const title = String(object?.name || "").trim();
+    const url = getProductUrlFromJsonLd(object, pageUrl) || pageUrl;
+    const imageUrl = getProductImageFromJsonLd(object, pageUrl);
+    const description = String(object?.description || "").trim();
+
+    if (!title || !url || !isSameOrSubdomainUrl(url, websiteUrl)) {
+      continue;
+    }
+    if (isLikelyBadDiscoveryPageUrl(url, websiteUrl)) {
+      continue;
+    }
+
+    candidates.push({
+      title,
+      url,
+      image_url: imageUrl,
+      description,
+      reason: `Product found in structured data on ${pageUrl}`,
+      score: 40 + scorePossibleProductLink({ url, text: title, campaignPrompt }),
+    });
+  }
+
+  return dedupeUrlItems(candidates);
+}
+
+function extractProductUrlCandidatesFromText({
+  text,
+  pageUrl,
+  websiteUrl,
+  campaignPrompt,
+}) {
+  const candidates = [];
+  const source = String(text || "");
+  const origin = getWebsiteOrigin(websiteUrl);
+  const host = getHostnameWithoutWww(websiteUrl);
+  const patterns = [
+    /https?:\\/\\/[^"'<>\\s]+/gi,
+    /["']((?:\\/[^"'<>\\s]+){1,})["']/g,
+  ];
+
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(source)) !== null) {
+      const raw = String(match[1] || match[0] || "")
+        .replace(/\\u002F/g, "/")
+        .replace(/\\\\\//g, "/")
+        .replace(/&amp;/g, "&")
+        .trim();
+
+      if (!raw || raw.length > 700) continue;
+
+      const resolvedUrl = raw.startsWith("http")
+        ? raw
+        : resolveUrl(raw, origin || pageUrl);
+      if (!resolvedUrl || !isHttpUrl(resolvedUrl)) continue;
+      if (!isSameOrSubdomainUrl(resolvedUrl, websiteUrl)) continue;
+      if (isLikelyNonProductUrl(resolvedUrl, websiteUrl)) continue;
+
+      const lower = resolvedUrl.toLowerCase();
+      const looksItemLike =
+        lower.includes("/p/") ||
+        /\\/[^/?#]+-p\\d{3,}/i.test(lower) ||
+        /\\/[^/?#]+\\d{5,}/i.test(lower);
+
+      if (!looksItemLike && host && !lower.includes(host)) continue;
+
+      candidates.push({
+        title: "",
+        url: resolvedUrl.split("#")[0],
+        reason: `Item-like URL found in embedded page data on ${pageUrl}`,
+        score:
+          (looksItemLike ? 28 : 6) +
+          scorePossibleProductLink({
+            url: resolvedUrl,
+            text: "",
+            campaignPrompt,
+          }),
+      });
+    }
+  }
+
+  return dedupeUrlItems(candidates);
+}
 
 function extractFocusedCategoryExpansionUrls({ html, pageUrl, categoryUrl }) {
   const urls = [];
