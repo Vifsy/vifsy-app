@@ -22095,8 +22095,8 @@ function extractProductUrlCandidatesFromText({
       const lower = resolvedUrl.toLowerCase();
       const looksItemLike =
         lower.includes("/p/") ||
-        /\\/[^/?#]+-p\\d{3,}/i.test(lower) ||
-        /\\/[^/?#]+\\d{5,}/i.test(lower);
+        /\/[^/?#]+-p\d{3,}/i.test(lower) ||
+        /\/[^/?#]+\d{5,}/i.test(lower);
 
       if (!looksItemLike && host && !lower.includes(host)) continue;
 
