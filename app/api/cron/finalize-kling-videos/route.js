@@ -30,6 +30,7 @@ export const maxDuration = 300;
 const POST_VIDEOS_BUCKET = "post-videos";
 const POST_IMAGES_BUCKET = "post-images";
 const KLING_TYPOGRAPHY_MODEL = "gpt-image-2";
+const KLING_PRODUCT_IDENTITY_AUDIT_MODEL = "gpt-4.1-mini";
 const DEFAULT_MAX_PENDING_HOURS = 6;
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const KLING_FINALIZATION_LEASE_MS = 6 * 60 * 1000;
@@ -261,10 +262,229 @@ async function downloadKlingVideo(videoUrl) {
   return Buffer.from(arrayBuffer);
 }
 
-// Product identity and visible-surface safety are enforced before the paid Kling
-// generation is submitted. Finished-video AI auditing was intentionally removed
-// from the delivery path: it added another vision call, extra frame sampling and
-// could falsely reject an otherwise usable paid video.
+async function fetchKlingVerifiedProductReferenceDataUrl(url) {
+  if (!url) throw new Error("Verified product reference URL is missing");
+  const response = await fetch(url, {
+    method: "GET",
+    redirect: "follow",
+    headers: {
+      Accept: "image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8,*/*;q=0.5",
+      "User-Agent": "Spreelo-Kling-Identity-Audit/144.42",
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`Verified product reference fetch failed (${response.status})`);
+  }
+  const source = Buffer.from(await response.arrayBuffer());
+  if (!source.length) throw new Error("Verified product reference was empty");
+
+  // Normalize retailer/CDN formats before the vision request. This avoids a
+  // URL/content-type mismatch turning a product-integrity check into a false
+  // provider error.
+  const normalized = await sharp(source)
+    .rotate()
+    .resize({ width: 1024, height: 1024, fit: "inside", withoutEnlargement: true })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  return `data:image/png;base64,${normalized.toString("base64")}`;
+}
+
+function getKlingDeliveredAuditFractions(selection, durationSeconds) {
+  const duration = Math.max(2, Number(durationSeconds || 0) || 6);
+  const trimStart = Math.max(
+    0,
+    Math.min(duration - 0.4, Number(selection?.scene_trim_start_seconds || 0) || 0)
+  );
+  const deliveredDuration = Math.max(0.4, duration - trimStart);
+  return [0.08, 0.30, 0.52, 0.74, 0.94].map((deliveredFraction) => {
+    const time = trimStart + deliveredDuration * deliveredFraction;
+    return Math.max(0.01, Math.min(0.99, time / duration));
+  });
+}
+
+function getOpenAiTextOutput(response) {
+  const direct = String(response?.output_text || "").trim();
+  if (direct) return direct;
+  return (response?.output || [])
+    .flatMap((item) => item?.content || [])
+    .map((item) => String(item?.text || ""))
+    .join("")
+    .trim();
+}
+
+async function validateFinishedKlingProductIdentity({ openai, supabase, post, task }) {
+  const selection = post?.video_background_selection;
+  if (!selection || typeof selection !== "object" || Array.isArray(selection)) {
+    throw new Error("Kling finished-video product identity metadata is missing");
+  }
+
+  const existing = selection?.product_video_validation;
+  if (existing?.status === "passed") {
+    return { passed: true, cached: true, validation: existing };
+  }
+
+  const productImageUrl = String(selection?.verified_product_image_url || "").trim();
+  const productTitle = String(selection?.verified_product_title || "verified product").trim();
+  const viewLock = selection?.reference_safety?.verifiedViewLock || null;
+  if (!productImageUrl || !viewLock) {
+    throw new Error("Kling finished-video product identity prerequisites are missing");
+  }
+
+  const durationSeconds = normalizeVideoDurationSeconds(
+    task.durationSeconds,
+    post.video_duration_seconds,
+    6
+  );
+  const fractions = getKlingDeliveredAuditFractions(selection, durationSeconds);
+  const [referenceDataUrl, frames] = await Promise.all([
+    fetchKlingVerifiedProductReferenceDataUrl(productImageUrl),
+    sampleRemoteVideoFrames({
+      videoUrl: task.videoUrl,
+      durationSeconds,
+      fractions,
+    }),
+  ]);
+  if (!frames?.length) {
+    throw new Error("Kling finished-video product identity audit produced no sampled frames");
+  }
+
+  const content = [
+    {
+      type: "input_text",
+      text:
+        `Audit the finished Kling product video for the ecommerce product "${productTitle}". ` +
+        "The first image is the ONLY authoritative retailer product reference. The following images are sampled from the part of the Kling video that will actually be delivered after any setup trim. " +
+        `Verified view lock: ${String(viewLock?.verifiedView || "same source view only")}. ` +
+        `${String(viewLock?.visibleSurfaceSummary || "Only source-visible surfaces are verified.")} ` +
+        `${String(viewLock?.motionConstraint || "Never expose an unseen product surface.")} ` +
+        "The environment, hands, people, camera, lighting and props may change. The PRODUCT DESIGN may not. Compare visible identity details whenever the product is visible. " +
+        "For rigid products, explicitly compare the number, position, shape and size of visible buttons, switches, controls, openings, seams, joints and distinctive hardware; compare material boundaries, surface finish/texture, color blocking, silhouette/proportions, logos and printed design. " +
+        "Reject if any frame visibly adds a button/control/detail, removes or relocates one, changes material or color regions, changes the visible geometry, substitutes a similar product, or exposes an unverified product side/surface. " +
+        "Do NOT fail merely because a real detail is temporarily occluded by a hand, motion blur, perspective, glare or is too small to judge. Fail only for a visible contradiction/addition/redesign, or an unverified surface exposure. " +
+        "A plausible invented detail is still a failure. Return strict JSON only.",
+    },
+    { type: "input_text", text: "AUTHORITATIVE RETAILER PRODUCT REFERENCE" },
+    { type: "input_image", image_url: referenceDataUrl, detail: "high" },
+  ];
+  for (const frame of frames) {
+    content.push({
+      type: "input_text",
+      text: `DELIVERED VIDEO FRAME at ${Number(frame.time).toFixed(2)} seconds`,
+    });
+    content.push({
+      type: "input_image",
+      image_url: `data:image/jpeg;base64,${frame.buffer.toString("base64")}`,
+      detail: "high",
+    });
+  }
+
+  const response = await openai.responses.create(
+    {
+      model: KLING_PRODUCT_IDENTITY_AUDIT_MODEL,
+      input: [{ role: "user", content }],
+      max_output_tokens: 650,
+      text: {
+        format: {
+          type: "json_schema",
+          name: "kling_finished_product_identity_audit",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              same_product_all_auditable_frames: { type: "boolean" },
+              verified_view_preserved: { type: "boolean" },
+              unverified_surface_exposed: { type: "boolean" },
+              visible_controls_hardware_preserved: { type: "boolean" },
+              visible_material_color_design_preserved: { type: "boolean" },
+              invented_or_moved_identity_detail: { type: "boolean" },
+              confidence: { type: "number", minimum: 0, maximum: 1 },
+              reason: { type: "string" },
+            },
+            required: [
+              "same_product_all_auditable_frames",
+              "verified_view_preserved",
+              "unverified_surface_exposed",
+              "visible_controls_hardware_preserved",
+              "visible_material_color_design_preserved",
+              "invented_or_moved_identity_detail",
+              "confidence",
+              "reason",
+            ],
+          },
+        },
+      },
+    },
+    { timeout: 28_000, maxRetries: 0 }
+  );
+
+  let parsed = null;
+  try {
+    parsed = JSON.parse(getOpenAiTextOutput(response));
+  } catch {
+    parsed = null;
+  }
+  if (!parsed) {
+    throw new Error("Kling finished-video product identity audit returned invalid JSON");
+  }
+
+  const confidence = Number(parsed?.confidence || 0);
+  const passed = Boolean(
+    parsed?.same_product_all_auditable_frames === true &&
+      parsed?.verified_view_preserved === true &&
+      parsed?.unverified_surface_exposed !== true &&
+      parsed?.visible_controls_hardware_preserved === true &&
+      parsed?.visible_material_color_design_preserved === true &&
+      parsed?.invented_or_moved_identity_detail !== true &&
+      confidence >= 0.9
+  );
+  const validation = {
+    status: passed ? "passed" : "failed",
+    checked_at: new Date().toISOString(),
+    model: KLING_PRODUCT_IDENTITY_AUDIT_MODEL,
+    sampled_frames: frames.map((frame) => Number(frame.time.toFixed(2))),
+    confidence,
+    same_product_all_auditable_frames: parsed?.same_product_all_auditable_frames === true,
+    verified_view_preserved: parsed?.verified_view_preserved === true,
+    unverified_surface_exposed: parsed?.unverified_surface_exposed === true,
+    visible_controls_hardware_preserved: parsed?.visible_controls_hardware_preserved === true,
+    visible_material_color_design_preserved: parsed?.visible_material_color_design_preserved === true,
+    invented_or_moved_identity_detail: parsed?.invented_or_moved_identity_detail === true,
+    reason: String(parsed?.reason || (passed ? "verified" : "product_identity_mismatch")).trim(),
+  };
+  const nextSelection = { ...selection, product_video_validation: validation };
+  const { error } = await supabase
+    .from("posts")
+    .update({ video_background_selection: nextSelection, updated_at: new Date().toISOString() })
+    .eq("id", post.id)
+    .eq("video_provider", "kling");
+  if (error) {
+    throw new Error(`Could not persist Kling finished-video identity audit: ${error.message}`);
+  }
+  post.video_background_selection = nextSelection;
+
+  console.info("Kling finished-video product identity audit completed", {
+    postId: post.id,
+    taskId: post.kling_task_id,
+    productTitle,
+    passed,
+    confidence,
+    sampledFrames: validation.sampled_frames,
+    controlsHardwarePreserved: validation.visible_controls_hardware_preserved,
+    materialColorDesignPreserved: validation.visible_material_color_design_preserved,
+    inventedOrMovedIdentityDetail: validation.invented_or_moved_identity_detail,
+    unverifiedSurfaceExposed: validation.unverified_surface_exposed,
+    reason: truncate(validation.reason, 700),
+  });
+
+  return { passed, cached: false, validation };
+}
+
+// v144.42: product identity is constrained before the paid Kling generation and
+// audited once on the finished paid result before customer delivery. This audit
+// never submits another Kling generation. A provider/audit outage retries only
+// local finalization from the cached Kling source; a confirmed redesign fails
+// closed rather than showing a customer the wrong product.
 
 async function uploadKlingTypographyOverlay({ supabase, post, buffer }) {
   const storagePath = `${post.user_id}/${post.id}-kling-text-overlay.png`;
@@ -899,6 +1119,7 @@ export async function GET(request) {
     locked: 0,
     provider_cache_hits: 0,
     deferred: 0,
+    product_identity_rejected: 0,
   };
 
   try {
@@ -1042,6 +1263,27 @@ export async function GET(request) {
       }
 
       try {
+        const productIdentity = await validateFinishedKlingProductIdentity({
+          openai,
+          supabase,
+          post,
+          task,
+        });
+        if (!productIdentity.passed) {
+          const reason =
+            productIdentity?.validation?.reason ||
+            "The finished Kling video visibly changed the verified product design.";
+          await markKlingPostFailed(
+            supabase,
+            post,
+            "kling_finished_product_identity",
+            `Kling video rejected before delivery because the verified product changed: ${reason}`
+          );
+          summary.failed += 1;
+          summary.product_identity_rejected += 1;
+          continue;
+        }
+
         const finalVideo = await getKlingFinalVideoSource({
           openai,
           supabase,
@@ -1079,7 +1321,7 @@ export async function GET(request) {
 
     return Response.json({
       ok: true,
-      mode: "kling_cached_source_single_finalizer_backoff_with_deterministic_typography_fallback",
+      mode: "kling_cached_source_identity_audit_single_finalizer_with_transparent_typography",
       max_pending_hours: maxPendingHours,
       summary,
     });

@@ -10328,7 +10328,7 @@ ${isAnimatedVideoRule(rule)
   : ""}
 
 ${isKlingAiVideoRule(rule)
-  ? `AI product video overlay-copy rule:\n- The FIRST non-empty line of the caption must be a short standalone advertising headline in the selected post language, normally 3-6 words.\n- It must fit this exact verified product and the actual content angle/campaign, while remaining factual and avoiding unverified claims.\n- Do not put an emoji, hashtag, price, URL or trailing punctuation-only decoration on that first line.\n- Spreelo will reuse that exact first line as the transparent video headline, so make it polished and self-contained.\n- After that first line, continue with the normal social caption.`
+  ? `AI product video overlay-copy rule:\n- The FIRST non-empty line of the caption must be a short standalone advertising headline in the selected post language, normally 3-6 words.\n- It must be semantically complete and make full sense when shown entirely by itself, without a logo, business name, second line or surrounding caption.\n- Never write an unfinished phrase that expects another word, name or clause to follow. Keep the headline naturally short enough that Spreelo never needs to cut words from it.\n- It must fit this exact verified product and the actual content angle/campaign, while remaining factual and avoiding unverified claims.\n- Do not put an emoji, hashtag, price, URL or trailing punctuation-only decoration on that first line.\n- Spreelo will reuse that exact complete first line as the transparent video headline. It will not truncate a longer headline into a fragment.\n- After that first line, continue with the normal social caption.`
   : ""}
 
 ${focusedPageContextText}
@@ -13659,6 +13659,7 @@ async function analyzeKlingVerifiedViewLock({ openai, websiteItem, sourceImageBu
                 "Your job is NOT to infer how hidden parts probably look. Identify only which camera-facing side/view and product surfaces are actually verified by visible pixels. " +
                 "For apparel, distinguish front/back/side when possible based on the visible garment construction and print placement. A back-only retailer image verifies the back only; a later video must never show the front. " +
                 "For rigid products, footwear, packaging and other objects, describe the exact visible view (for example front, left side, three-quarter front-left, top detail) and explicitly forbid any rotation that would expose an unseen surface. " +
+                "Treat every visible identity-defining feature as immutable: number/position/shape of buttons, switches, openings, seams, joints, material boundaries, color blocking, surface finish, logos, printed details and distinctive geometry. Mention these concrete visible details in visible_surface_summary when they can be observed. " +
                 "Return strict JSON only. If uncertain, choose the stricter same-view constraint.",
             },
             { type: "input_image", image_url: imageUrl, detail: "high" },
@@ -13785,7 +13786,7 @@ async function reviewKlingOpeningSceneIdentity({
                     ? "Natural in-use deformation is allowed (for example apparel worn by a person), but visible color, print/design, logo/wording, distinctive geometry, materials and identity-defining details must still match. "
                     : "The source is cropped or uncertain. Image 2 must not invent or expose new identity-defining product surfaces/details outside what Image 1 verifies; it may only place the same visible portion into a believable context. ") +
                   ` ${verifiedViewLock ? getKlingVerifiedViewInstruction({ verifiedViewLock }) : "Only product surfaces visible in Image 1 are verified; reject any newly exposed side or surface."} ` +
-                  "Reject if Image 2 exposes any product side/surface that Image 1 does not visibly verify, even if that hidden side looks plausible. Reject if the AI changed the visible variant, print, wording, logo, silhouette/geometry, key hardware, product type, or substituted a similar product. If uncertain, reject. Return only the requested JSON.",
+                  "Reject if Image 2 exposes any product side/surface that Image 1 does not visibly verify, even if that hidden side looks plausible. Reject if the AI changed the visible variant, print, wording, logo, silhouette/geometry, product type, number/position/shape of buttons or controls, openings, seams, joints, material boundaries, color blocking, surface finish, distinctive hardware, or substituted a similar product. A newly invented control/detail is always an identity failure. If uncertain, reject. Return only the requested JSON.",
               },
               { type: "input_text", text: "IMAGE 1 — authoritative retailer product" },
               { type: "input_image", image_url: sourceDataUrl, detail: "high" },
@@ -13902,6 +13903,7 @@ NON-NEGOTIABLE OPENING RULES:
 - NO visual state where the product is simply centered against a background waiting for the video to begin.
 - The scene must be suitable for immediate natural motion by Kling from the first instant.
 - Preserve the exact verified product identity: visible color/variant, print/design, wording/logo, proportions, materials and distinctive details.
+- Treat every visible design feature as immutable: do not add, remove, relocate, resize or reshape buttons, switches, controls, openings, seams, joints or hardware; do not change material boundaries, surface finish, texture or color blocking.
 - Do not substitute a similar product and do not invent another variant.
 - Do not add marketing typography, captions, prices, claims, logos or watermarks. Preserve only text physically printed on the real product.
 - People, hands, environment and props may be newly created when useful, but they must support the exact product rather than obscure it.
@@ -14087,7 +14089,7 @@ function getKlingProductPromptFallback({ rule, postContent, referenceSafety = nu
     ? "The reference appears to show a sufficiently isolated/full product. The product MUST be genuinely used in the scene in the most natural product-specific way: apparel should be worn by a person while keeping the exact visible print/color/design, handheld products should be held or operated, tools should be used, appliances should be operated, and other products should participate in a believable real-world action. Do not settle for floating, spinning or merely decorating the product."
     : "The reference is cropped or not safely isolated. Do NOT zoom out, complete the product, or reveal any unseen area. Keep exactly the same visible crop/view and create the advertising action around the visible product area instead of inventing missing product pixels.";
   const identityMotionDirection = fullProductInteractionSafe
-    ? "Natural product-use motion is allowed, but preserve identity-defining geometry, visible design/print, colors, branding and proportions. Apparel may be worn while the exact visible design remains prominent; rigid products must not morph or gain invented hardware or surfaces."
+    ? "Natural product-use motion is allowed, but preserve identity-defining geometry, visible design/print, colors, branding and proportions. For rigid products, the number, position, shape and size of visible buttons/controls/openings, material boundaries, color blocking and surface finish are immutable. If an action would require redrawing or redesigning the object, keep the product itself visually rigid and move the hand, camera or environment instead. Apparel may be worn while the exact visible design remains prominent; rigid products must not morph or gain invented hardware or surfaces."
     : "Only the product area actually visible in the first frame is authoritative. Never extend, complete, infer, reconstruct or invent any product area beyond those visible boundaries. Keep the same crop and camera angle; do not rotate, flip, spin, turn, orbit around, tilt to reveal, pick up or reposition the product in a way that exposes a new product area.";
 
   return [
@@ -14104,7 +14106,7 @@ function getKlingProductPromptFallback({ rule, postContent, referenceSafety = nu
     "Make the scene escalate quickly and deliver a clear visual payoff by the final second while staying visually continuous and physically coherent. Avoid a generic slow zoom, simple spin, floating product, empty studio demonstration, backdrop reveal, environment teleport or a product surrounded only by decorative effects.",
     "The uploaded first frame is the authoritative product reference and the exact product identity must remain recognizable throughout.",
     identityMotionDirection,
-    "Preserve visible color, materials, branding, logos, printed text/design and identity-defining details exactly. Do not morph, redesign or substitute the product.",
+    "Preserve visible color, materials, branding, logos, printed text/design and identity-defining details exactly. Visible buttons/controls/openings, their number and positions, material boundaries, color blocking and surface finish must stay exactly as in the authoritative first frame. Do not morph, redesign or substitute the product.",
     "People, hands, animals, props, lighting and environmental action should support believable product use when safe and must never obscure the identity-defining product design.",
     "Do not generate any new readable overlay text, captions, slogans, prices, labels or typography inside the video. Preserve only text that already exists physically on the verified product reference. Do not create or alter logos. No watermarks.",
     "Make the result feel native to TikTok, Instagram Reels and YouTube Shorts: immediate, surprising, sales-oriented, polished and believable rather than a simple product animation.",
@@ -14180,6 +14182,8 @@ NON-NEGOTIABLE PRODUCT RULES:
 - if Full-product interaction allowed is YES: natural product use and modest physical motion are allowed, but NEVER reveal a side/surface that is absent from the retailer image. Keep the same verified camera-facing orientation for the entire clip
 - for apparel specifically, a person may wear the exact garment while the visible print/color/design stays unchanged and prominent. If the retailer image verifies only the BACK, the wearer must stay back-facing/three-quarter-back and must never turn far enough for the front to become visible. If only the FRONT is verified, the reverse applies. Do not replace it with a similar garment
 - for rigid products, interaction must not morph geometry, move controls/components, alter ports/hardware, or fabricate hidden product surfaces
+- every visible control/detail is immutable: never add, remove, relocate, resize or reshape buttons, switches, controls, openings, seams, joints or hardware; preserve material boundaries, surface finish, texture and color blocking exactly
+- if the desired action would require the model to redraw or redesign the product, reduce product motion and move the hand/person, camera, props or environment instead
 `,
         },
       ],
@@ -14200,7 +14204,7 @@ NON-NEGOTIABLE PRODUCT RULES:
       "The first visible frame must already look like a finished real-world commercial scene. Continue the supplied natural environment immediately; no solid-color, monochrome, gradient, abstract or empty studio intro and no backdrop-to-lifestyle transition.",
       "Do not begin with or create a small image card that expands to full screen.",
       "Do not linger on a static, staged or composited opening frame. The clip must feel already in-progress from the first instant and be fully inside believable scene action within the first 0.2-0.3 second.",
-      "No product morph, redesign or substitution with a similar product.",
+      "No product morph, redesign or substitution with a similar product. Never add/remove/move visible buttons, controls, openings, seams or hardware, and never change visible material boundaries, surface finish or color blocking. If necessary, reduce product motion rather than redraw the product.",
       "Do not generate any new readable overlay text, captions, slogans, prices, labels or typography. Spreelo adds professional typography after the video is generated. Preserve only text physically present on the verified product reference.",
       "No fake logos and no watermark.",
       "Make the action bold, surprising, product-specific and sales-oriented, with an immediate first-second hook and a clear final payoff inside one physically coherent real-world commercial environment. Decorative particles alone are not a concept.",
@@ -33542,33 +33546,53 @@ async function normalizeGeneratedAnimatedTextPanel(generatedBuffer) {
 }
 
 function cleanKlingOverlayTextLine(value, maxWords = 7, maxChars = 58) {
-  const withoutUrls = String(value || "")
+  const cleaned = String(value || "")
     .replace(/https?:\/\/\S+/gi, " ")
     .replace(/www\.\S+/gi, " ")
     .replace(/#[\p{L}\p{N}_-]+/gu, " ")
     .replace(/[\p{Extended_Pictographic}\uFE0F]/gu, " ")
     .replace(/^[\s\-–—:|•·]+|[\s\-–—:|•·]+$/g, " ")
     .replace(/\s+/g, " ")
+    .replace(/[.,;:!?]+$/g, "")
     .trim();
-  if (!withoutUrls) return "";
-  const words = withoutUrls.split(/\s+/).filter(Boolean).slice(0, maxWords);
-  return truncateText(words.join(" "), maxChars).replace(/[.,;:!?]+$/g, "").trim();
+  if (!cleaned) return "";
+
+  // v144.42: never create a broken advertising phrase by slicing words or
+  // characters from generated copy. The text model is instructed to produce a
+  // naturally short, semantically complete headline. If it violates the size
+  // contract, reject that line and use an independently complete fallback
+  // instead of displaying a grammatically incomplete fragment.
+  const wordCount = cleaned.split(/\s+/).filter(Boolean).length;
+  const charCount = Array.from(cleaned).length;
+  if (wordCount > maxWords || charCount > maxChars) return "";
+  return cleaned;
 }
 
 function buildKlingAdvertisingOverlayCopy({ postContent, websiteItem }) {
-  const lines = String(postContent || "")
+  const firstCaptionLine = String(postContent || "")
     .split(/\n+/)
-    .map((line) => cleanKlingOverlayTextLine(line))
-    .filter(Boolean);
-  let headline = lines[0] || "";
+    .map((line) => String(line || "").trim())
+    .find(Boolean) || "";
+  let headline = cleanKlingOverlayTextLine(firstCaptionLine, 7, 58);
   const productTitle = sanitizeProductTitleForCard(
     websiteItem?.title || websiteItem?.item_title || ""
   );
-  if (!headline) headline = cleanKlingOverlayTextLine(productTitle, 7, 58);
+  if (!headline) {
+    // Product labels are independently meaningful and therefore a safer
+    // multilingual fallback than truncating generated marketing prose.
+    headline = cleanKlingOverlayTextLine(productTitle, 10, 72);
+  }
   const presentation = getCarouselProductLabelPresentation(
     websiteItem || {},
     productTitle || headline || "Featured product"
   );
+  if (!headline) {
+    headline = cleanKlingOverlayTextLine(
+      String(presentation?.title || "").trim(),
+      10,
+      72
+    );
+  }
   const descriptorCandidate =
     String(presentation?.descriptor || "").trim() ||
     String(presentation?.title || productTitle || "").trim();
