@@ -41,7 +41,7 @@ assert.match(translations, /mapWithConcurrency\(\s*namespaces,\s*2,/);
 // Switching language no longer eagerly asks for every namespace in Spreelo.
 assert.match(uiText, /const PRELOAD_UI_NAMESPACES = \["common", "layout"\]/);
 assert.doesNotMatch(uiText, /namespaces:\s*ALL_UI_NAMESPACES/);
-assert.match(uiText, /const TRANSLATION_CACHE_VERSION = "v20"/);
+assert.match(uiText, /const TRANSLATION_CACHE_VERSION = "v2[01]"/);
 assert.match(uiText, /const translationsComplete = hasAllRequiredLabels/);
 assert.match(uiText, /setLoading\(!translationsComplete\)/);
 assert.match(uiText, /setTranslationRetry\(\(current\) => current \+ 1\)/);

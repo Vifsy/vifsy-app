@@ -59,6 +59,7 @@ import AppLayout from "../../components/AppLayout";
 import PlanLimitModal from "../../components/PlanLimitModal";
 import { supabase } from "../../lib/supabaseClient";
 import { useUiText } from "../../lib/i18n/useUiText";
+import { SUPPORTED_UI_LOCALES } from "../../lib/i18n/defaultLabels";
 import { normalizeSingleContentLanguage } from "../../lib/contentLanguage";
 import { getCreditCostForContent } from "../../lib/credits";
 import { getConfiguredContentCreditCost } from "../../lib/contentEconomics";
@@ -1118,14 +1119,68 @@ function getVisibleContentTypes(websiteProductModeAvailable) {
   });
 }
 
-function getSlotDestinationPlatformKeys(slot, selectedPlatforms = []) {
+function getRuntimeContentTypeDestinationPlatforms({
+  contentTypeId,
+  contentFormat = "",
+  selectedPlatforms = [],
+  platformCapabilities = {},
+}) {
+  const selected = normalizeSpreeloPlatformList(selectedPlatforms);
+  let destinations = getContentTypeDestinationPlatforms({
+    contentTypeId,
+    contentFormat,
+    selectedPlatforms: selected,
+  });
+
+  if (
+    String(contentFormat || "").toLowerCase() === "animated_video" &&
+    platformCapabilities?.pinterestVideo === false
+  ) {
+    destinations = destinations.filter((platform) => platform !== "pinterest");
+  }
+
+  return destinations;
+}
+
+function getRuntimeContentTypeCoverageScore({
+  contentTypeId,
+  contentFormat = "",
+  selectedPlatforms = [],
+  platformCapabilities = {},
+}) {
+  const selected = normalizeSpreeloPlatformList(selectedPlatforms);
+  if (!selected.length) return 0;
+
+  const destinations = getRuntimeContentTypeDestinationPlatforms({
+    contentTypeId,
+    contentFormat,
+    selectedPlatforms: selected,
+    platformCapabilities,
+  });
+  const destinationSet = new Set(destinations);
+
+  return selected.reduce((score, platform) => {
+    if (!destinationSet.has(platform)) return score;
+    // Preserve the existing compatibility ranking while applying runtime
+    // capability gates such as Pinterest Sandbox's lack of video Pins.
+    const nativeScore = getContentTypeCoverageScore({
+      contentTypeId,
+      contentFormat,
+      selectedPlatforms: [platform],
+    });
+    return score + nativeScore;
+  }, 0);
+}
+
+function getSlotDestinationPlatformKeys(slot, selectedPlatforms = [], platformCapabilities = {}) {
   const selected = normalizeSpreeloPlatformList(selectedPlatforms);
   if (!selected.length) return [];
 
-  return getContentTypeDestinationPlatforms({
+  return getRuntimeContentTypeDestinationPlatforms({
     contentTypeId: slot?.contentTypeId,
     contentFormat: slot?.contentFormat,
     selectedPlatforms: selected,
+    platformCapabilities,
   });
 }
 
@@ -1150,6 +1205,7 @@ function reconcileSlotsForPlatformSelection({
   selectedPlatforms = [],
   websiteProductModeAvailable = true,
   ensureChannelCoverage = true,
+  platformCapabilities = {},
 }) {
   const selected = normalizeSpreeloPlatformList(selectedPlatforms);
   if (!selected.length) {
@@ -1164,7 +1220,7 @@ function reconcileSlotsForPlatformSelection({
   const usedTypeIds = new Set();
 
   const decorateSlot = (slot) => {
-    const destinations = getSlotDestinationPlatformKeys(slot, selected);
+    const destinations = getSlotDestinationPlatformKeys(slot, selected, platformCapabilities);
     return {
       ...slot,
       destinationPlatforms: destinations,
@@ -1180,16 +1236,17 @@ function reconcileSlotsForPlatformSelection({
   // after a channel change. Existing compatible ideas are preserved.
   let reconciled = currentSlots.map((originalSlot) => {
     let slot = originalSlot;
-    let destinations = getSlotDestinationPlatformKeys(slot, selected);
+    let destinations = getSlotDestinationPlatformKeys(slot, selected, platformCapabilities);
 
     if (!destinations.length) {
       const rankedCandidates = candidates
         .map((type) => ({
           type,
-          coverage: getContentTypeCoverageScore({
+          coverage: getRuntimeContentTypeCoverageScore({
             contentTypeId: type.id,
             contentFormat: type.contentFormat || "single_image",
             selectedPlatforms: selected,
+            platformCapabilities,
           }),
           duplicatePenalty: usedTypeIds.has(type.id) ? 2 : 0,
           productAffinity:
@@ -1263,10 +1320,11 @@ function reconcileSlotsForPlatformSelection({
       for (const target of replaceableSlots) {
         const rankedCandidates = candidates
           .map((type) => {
-            const destinations = getContentTypeDestinationPlatforms({
+            const destinations = getRuntimeContentTypeDestinationPlatforms({
               contentTypeId: type.id,
               contentFormat: type.contentFormat || "single_image",
               selectedPlatforms: selected,
+              platformCapabilities,
             });
             const coversRequired = destinations.includes(requiredPlatform);
             const productAffinity =
@@ -1274,10 +1332,11 @@ function reconcileSlotsForPlatformSelection({
             const duplicatePenalty = reconciled.some(
               (slot, index) => index !== target.index && slot?.contentTypeId === type.id
             ) ? 2 : 0;
-            const coverage = getContentTypeCoverageScore({
+            const coverage = getRuntimeContentTypeCoverageScore({
               contentTypeId: type.id,
               contentFormat: type.contentFormat || "single_image",
               selectedPlatforms: selected,
+              platformCapabilities,
             });
 
             return {
@@ -1341,16 +1400,18 @@ function buildAdaptiveWeeklyVariants({
   slotIndex,
   websiteProductModeAvailable,
   selectedPlatforms = [],
+  platformCapabilities = {},
 }) {
   if (!slot || !goalId) return [];
 
   const targetPlatforms = normalizeSpreeloPlatformList(selectedPlatforms);
   const fitsTargetPlatforms = (type) => {
     if (!targetPlatforms.length || !type) return true;
-    const destinations = getContentTypeDestinationPlatforms({
+    const destinations = getRuntimeContentTypeDestinationPlatforms({
       contentTypeId: type.id,
       contentFormat: type.contentFormat || "single_image",
       selectedPlatforms: targetPlatforms,
+      platformCapabilities,
     });
     return targetPlatforms.every((platform) => destinations.includes(platform));
   };
@@ -1626,6 +1687,13 @@ function getIntlLocaleFromUiLocale(locale) {
     uk: "uk-UA",
     ru: "ru-RU",
     bg: "bg-BG",
+    vi: "vi-VN",
+    cs: "cs-CZ",
+    ro: "ro-RO",
+    hu: "hu-HU",
+    el: "el-GR",
+    ms: "ms-MY",
+    fil: "fil-PH",
   };
 
   return localeMap[normalizedLocale] || normalizedLocale || "en-US";
@@ -2538,6 +2606,7 @@ function createRecommendedSlots(options = {}) {
     currentSlots: recommendedSlots,
     selectedPlatforms: options.platformKeys || [],
     websiteProductModeAvailable,
+    platformCapabilities: options.platformCapabilities || {},
   });
 }
 
@@ -2603,6 +2672,7 @@ function getNormalizedDynamicPlanningSteps({
       goalId,
       index,
       websiteProductModeAvailable,
+      platformCapabilities: runtimePlatformCapabilities,
     });
     const normalizedFallback = normalizeDynamicPlanningStep(
       {
@@ -2745,6 +2815,7 @@ function createDynamicRecommendedSlots(options = {}) {
     currentSlots: dynamicSlots,
     selectedPlatforms: options.platformKeys || [],
     websiteProductModeAvailable,
+    platformCapabilities: options.platformCapabilities || {},
   });
 }
 
@@ -2858,10 +2929,10 @@ function getInitialNextRunAtIso({
   return null;
 }
 
-function formatDateTime(value, timeZone = DEFAULT_TIME_ZONE) {
-  if (!value) return "Not set";
+function formatDateTime(value, timeZone = DEFAULT_TIME_ZONE, locale = undefined) {
+  if (!value) return "—";
 
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(locale || undefined, {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone,
@@ -3257,6 +3328,8 @@ function DatePickerField({
   compact = false,
   weekdayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
   locale = "en",
+  previousMonthLabel = "Previous month",
+  nextMonthLabel = "Next month",
 }) {
   const [visibleMonth, setVisibleMonth] = useState(() =>
     getMonthStartDateString(value)
@@ -3290,7 +3363,7 @@ function DatePickerField({
             <div className="custom-calendar-header">
               <button
                 type="button"
-                aria-label="Previous month"
+                aria-label={previousMonthLabel}
                 onClick={() => setVisibleMonth(moveMonth(visibleMonth, -1))}
               >
                 <ChevronLeft size={18} aria-hidden="true" />
@@ -3300,7 +3373,7 @@ function DatePickerField({
 
               <button
                 type="button"
-                aria-label="Next month"
+                aria-label={nextMonthLabel}
                 onClick={() => setVisibleMonth(moveMonth(visibleMonth, 1))}
               >
                 <ChevronRight size={18} aria-hidden="true" />
@@ -3850,7 +3923,7 @@ function formatCampaignProductTermGuidance(campaign, postPlanItem = {}) {
     .join("\n");
 }
 
-function getCampaignDateLabel(campaign) {
+function getCampaignDateLabel(campaign, flexibleLabel = "Flexible date") {
   if (campaign?.event_date) {
     return campaign.event_date;
   }
@@ -3863,7 +3936,7 @@ function getCampaignDateLabel(campaign) {
     return campaign.start_date;
   }
 
-  return "Flexible date";
+  return flexibleLabel;
 }
 
 function buildFallbackCampaignPlan(count) {
@@ -5729,9 +5802,13 @@ export default function AutomationPage() {
     }
 
     const rawDescription = String(type?.description || "").trim();
-    if (rawDescription) return rawDescription;
+    if (rawDescription && String(locale || "en").toLowerCase() === "en") return rawDescription;
 
-    return fallback || t("automation.customPostExplanation");
+    const translatedFallback = t("automation.customPostExplanation");
+    if (translatedFallback && !String(translatedFallback).startsWith("automation.")) {
+      return translatedFallback;
+    }
+    return String(locale || "en").toLowerCase() === "en" ? fallback : "";
   }
 
   function getSafeText(key, fallback = "") {
@@ -5739,7 +5816,13 @@ export default function AutomationPage() {
     if (value && !String(value).startsWith("automation.")) {
       return value;
     }
-    return fallback;
+    // Never leak the English source/config text into a non-English workspace.
+    // Missing translations stay blank while useUiText retries the locale pack.
+    return String(locale || "en").toLowerCase() === "en" ? fallback : "";
+  }
+
+  function preferLocalizedUiText(key, fallback = "") {
+    return getSafeText(key, fallback);
   }
 
   function getSlotContentExplanation(slot) {
@@ -5884,26 +5967,15 @@ export default function AutomationPage() {
   }
 
   function getAutoPostLanguageLabel() {
-    const normalizedLocale = String(locale || "en").toLowerCase();
-    const localeLanguageMap = {
-      sv: "Svenska",
-      da: "Dansk",
-      no: "Norsk",
-      de: "Deutsch",
-      es: "Español",
-      fr: "Français",
-      it: "Italiano",
-      nl: "Nederlands",
-      pt: "Português",
-      fi: "Suomi",
-      pl: "Polski",
-      ar: "العربية",
-      ja: "日本語",
-      zh: "中文",
-      en: "English",
-    };
+    const normalizedLocale = String(locale || "en").trim().toLowerCase().split("-")[0];
+    const localeEntry = SUPPORTED_UI_LOCALES.find(
+      (item) => String(item.locale || "").toLowerCase() === normalizedLocale
+    );
 
-    return localeLanguageMap[normalizedLocale] || "English";
+    // The Auto option follows the current workspace language. Using the canonical
+    // locale catalog prevents newer UI languages from silently falling back to
+    // the word "English" in the Content Studio.
+    return localeEntry?.nativeName || localeEntry?.language || "English";
   }
 
   function getLanguageDisplayLabel(value) {
@@ -5925,6 +5997,13 @@ export default function AutomationPage() {
 
   function translateScheduleType(value) {
     return value === "weekly" ? t("automation.weekly") : t("automation.once");
+  }
+
+  function translateCustomerStageLabel(value) {
+    if (value === "cold") return t("automation.customerStage.cold");
+    if (value === "warm") return t("automation.customerStage.warm");
+    if (value === "ready_to_buy") return t("automation.customerStage.readyToBuy");
+    return t("automation.customerStage.default");
   }
   function translatePreviewCardLabel(cardId) {
     return t(`automation.previewCard.${cardId}.label`);
@@ -6117,6 +6196,10 @@ const [slots, setSlots] = useState([]);
 const [platformDropdownOpen, setPlatformDropdownOpen] = useState(false);
 const [connectedPlatforms, setConnectedPlatforms] = useState([]);
 const [loadingConnectedPlatforms, setLoadingConnectedPlatforms] = useState(false);
+const [runtimePlatformCapabilities, setRuntimePlatformCapabilities] = useState({
+  pinterestVideo: false,
+  pinterestApiEnvironment: "unknown",
+});
 const connectedPlatformOptions = getConnectedPlatformOptions(connectedPlatforms);
 const selectedPlatformKeys = getSelectedPlatformKeys(platform, connectedPlatformOptions);
 const selectedPlatformOptions = selectedPlatformKeys
@@ -6124,6 +6207,26 @@ const selectedPlatformOptions = selectedPlatformKeys
   .filter(Boolean);
 const giveawayInstagramOnly =
   selectedPlatformKeys.length === 1 && selectedPlatformKeys[0] === "instagram";
+
+useEffect(() => {
+  let cancelled = false;
+
+  fetch("/api/pinterest/capabilities", { cache: "no-store" })
+    .then((response) => response.json().then((data) => ({ response, data })))
+    .then(({ response, data }) => {
+      if (cancelled || !response.ok) return;
+      setRuntimePlatformCapabilities({
+        pinterestVideo: data?.video_pins === true,
+        pinterestApiEnvironment: String(data?.api_environment || "unknown"),
+      });
+    })
+    .catch(() => {
+      // Fail closed for Pinterest video. Image Pins remain unaffected.
+    });
+
+  return () => { cancelled = true; };
+}, []);
+
   const [tone, setTone] = useState("Friendly");
   const [language, setLanguage] = useState("Auto");
 const baseLanguageOptions = [
@@ -6325,6 +6428,7 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
         selectedPlatforms: activeKeys,
         websiteProductModeAvailable,
         ensureChannelCoverage: planCreationMode === "auto" || planCreationMode === "campaign",
+        platformCapabilities: runtimePlatformCapabilities,
       });
     });
   }, [
@@ -6333,6 +6437,7 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
     editingRuleId,
     Boolean(savedPlanSummary),
     planCreationMode,
+    runtimePlatformCapabilities.pinterestVideo,
   ]);
 
   const displayedAutoPlanPostCountOptions = useMemo(
@@ -6359,8 +6464,8 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
             ...config,
             id: formatId,
             kind: "offer_campaign",
-            label: config.display_label || t("automation.formatCard.offer_campaign.label"),
-            description: config.description || t("automation.formatCard.offer_campaign.description"),
+            label: preferLocalizedUiText("automation.formatCard.offer_campaign.label", config.display_label || ""),
+            description: preferLocalizedUiText("automation.formatCard.offer_campaign.description", config.description || ""),
             howItWorks: t("automation.formatCard.offer_campaign.howItWorks"),
             benefit: t("automation.formatCard.offer_campaign.benefit"),
           };
@@ -6371,8 +6476,8 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
             ...config,
             id: formatId,
             kind: "giveaway",
-            label: config.display_label || t("automation.formatCard.giveaway.label"),
-            description: config.description || t("automation.formatCard.giveaway.description"),
+            label: preferLocalizedUiText("automation.formatCard.giveaway.label", config.display_label || ""),
+            description: preferLocalizedUiText("automation.formatCard.giveaway.description", config.description || ""),
             howItWorks: t("automation.formatCard.giveaway.howItWorks"),
             benefit: t("automation.formatCard.giveaway.benefit"),
           };
@@ -6383,8 +6488,8 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
             ...config,
             id: formatId,
             kind: "focus_source",
-            label: config.display_label || t("automation.formatCard.focus_source.label"),
-            description: config.description || t("automation.formatCard.focus_source.description"),
+            label: preferLocalizedUiText("automation.formatCard.focus_source.label", config.display_label || ""),
+            description: preferLocalizedUiText("automation.formatCard.focus_source.description", config.description || ""),
             howItWorks: t("automation.formatCard.focus_source.howItWorks"),
             benefit: t("automation.formatCard.focus_source.benefit"),
           };
@@ -6401,13 +6506,13 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
           id: formatId,
           kind: "content_type",
           type,
-          label: config.display_label || translateContentTypeShortLabel(type),
-          description: config.description || getSafeText(
+          label: translateContentTypeShortLabel(type) || (String(locale || "en").toLowerCase() === "en" ? config.display_label : ""),
+          description: getSafeText(
             isCleanProductPost
               ? "automation.formatCard.website_item.descriptionV127"
               : `automation.formatCard.${formatId}.description`,
             getFormatCardDescription(type, config.description || "")
-          ),
+          ) || (String(locale || "en").toLowerCase() === "en" ? config.description : ""),
           howItWorks: t(
             isCleanProductPost
               ? "automation.formatCard.website_item.howItWorksV127"
@@ -6459,7 +6564,7 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
 
   function getCurrentSlotCreditLabel(slot) {
     const credits = getCurrentCreditCost(slot);
-    return `${credits} ${credits === 1 ? "credit" : "credits"}`;
+    return t("automation.creditCount", { count: credits });
   }
 
   const hasInitialGoalPlan = Boolean(autoPlanGoal && slots.length > 0);
@@ -6474,6 +6579,8 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
             goalId: autoPlanGoal || "stay_visible",
             slotIndex,
             websiteProductModeAvailable,
+            selectedPlatforms: selectedPlatformKeys,
+            platformCapabilities: runtimePlatformCapabilities,
           })
         : [];
       const nextVariant = variants.length > 1 ? variants[1] : null;
@@ -6492,6 +6599,8 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
     varyWeeklyContentTypes,
     autoPlanGoal,
     websiteProductModeAvailable,
+    selectedPlatformSignature,
+    runtimePlatformCapabilities.pinterestVideo,
     getCurrentCreditCost,
   ]);
 
@@ -7743,7 +7852,7 @@ async function loadCampaignOpportunityIntoPlanner({
   setCampaignOpportunity(campaign);
   setPlanCreationMode("campaign");
   setScheduleType("once");
-  setPlanName(campaign.title || "Campaign plan");
+  setPlanName(campaign.title || t("automation.planMode.campaign"));
   setLanguage(campaign.language ? normalizeSingleContentLanguage(campaign.language, "English") : "Auto");
   setPostType("Campaign");
   setTone("Friendly");
@@ -8359,6 +8468,7 @@ timeZone: selectedTimeZone,
       currentSlots: nextSlots,
       selectedPlatforms: selectedPlatformKeys,
       websiteProductModeAvailable,
+      platformCapabilities: runtimePlatformCapabilities,
     });
   });
 }
@@ -8383,7 +8493,7 @@ function scrollToPlannerSchedule() {
   const newSlot = createSlotFromContentType(
     manualType || {
       id: "manual_prompt",
-      label: "Custom post",
+      label: t("automation.customPostShortLabel"),
       prompt: "",
       imagePrompt: "",
       usesWebsiteContent: false,
@@ -8405,18 +8515,21 @@ function scrollToPlannerSchedule() {
     manualImageMode: "ai",
     imageSource: "ai",
     contentTypeId: "manual_prompt",
-    contentTypeLabel: "Custom post",
+    contentTypeLabel: t("automation.customPostShortLabel"),
     usesWebsiteContent: false,
   };
 
-  setSlots((currentSlots) =>
-    reconcileSlotsForPlatformSelection({
+  setSlots((currentSlots) => {
+    const nextSlots = reconcileSlotsForPlatformSelection({
       currentSlots: [...currentSlots, preparedSlot],
       selectedPlatforms: selectedPlatformKeys,
       websiteProductModeAvailable,
       ensureChannelCoverage: false,
-    })
-  );
+      platformCapabilities: runtimePlatformCapabilities,
+    });
+    setAutoPlanPostCount(nextSlots.length);
+    return nextSlots;
+  });
   setExpandedInstructionSlotIds((currentIds) => [
     ...currentIds,
     preparedSlot.id,
@@ -8507,6 +8620,7 @@ function addSlot() {
         selectedPlatforms: selectedPlatformKeys,
         websiteProductModeAvailable,
         ensureChannelCoverage: planCreationMode === "auto",
+        platformCapabilities: runtimePlatformCapabilities,
       });
     });
 
@@ -8523,20 +8637,26 @@ function addSlot() {
     const slotToCopy = slots.find((slot) => slot.id === slotId);
     if (!slotToCopy) return;
 
-    setSlots((currentSlots) => [
-      ...currentSlots,
-      {
-        ...slotToCopy,
-        id: makeSlotId(),
-        originalUploadedImageStoragePath: "",
-        uploadedImageStoragePath: slotToCopy.uploadedImageFile
-          ? slotToCopy.uploadedImageStoragePath
-          : "",
-        uploadedImagePreviewUrl: slotToCopy.uploadedImageFile
-          ? URL.createObjectURL(slotToCopy.uploadedImageFile)
-          : slotToCopy.uploadedImagePreviewUrl,
-      },
-    ]);
+    setSlots((currentSlots) => {
+      const nextSlots = [
+        ...currentSlots,
+        {
+          ...slotToCopy,
+          id: makeSlotId(),
+          originalUploadedImageStoragePath: "",
+          uploadedImageStoragePath: slotToCopy.uploadedImageFile
+            ? slotToCopy.uploadedImageStoragePath
+            : "",
+          uploadedImagePreviewUrl: slotToCopy.uploadedImageFile
+            ? URL.createObjectURL(slotToCopy.uploadedImageFile)
+            : slotToCopy.uploadedImagePreviewUrl,
+        },
+      ];
+      if (planCreationMode !== "campaign") {
+        setAutoPlanPostCount(nextSlots.length);
+      }
+      return nextSlots;
+    });
   }
 
   function removeSlot(slotId) {
@@ -8552,9 +8672,13 @@ function addSlot() {
     URL.revokeObjectURL(slotToRemove.uploadedImagePreviewUrl);
   }
 
-  setSlots((currentSlots) =>
-    currentSlots.filter((slot) => slot.id !== slotId)
-  );
+  setSlots((currentSlots) => {
+    const nextSlots = currentSlots.filter((slot) => slot.id !== slotId);
+    if (planCreationMode !== "campaign") {
+      setAutoPlanPostCount(Math.max(1, nextSlots.length));
+    }
+    return nextSlots;
+  });
 
   if (planCreationMode === "select" && slotIndex >= 0) {
     setSelectedContentTypeIds((currentTypeIds) =>
@@ -8588,6 +8712,7 @@ function applyPlatformSelection(nextPlatformKeys) {
         selectedPlatforms: normalizedKeys,
         websiteProductModeAvailable,
         ensureChannelCoverage: planCreationMode === "auto" || planCreationMode === "campaign",
+        platformCapabilities: runtimePlatformCapabilities,
       });
       setSelectedContentTypeIds(
         reconciled.map((slot) => slot.contentTypeId).filter(Boolean)
@@ -8601,7 +8726,7 @@ function getSlotPlatformOptions(slot) {
   const explicitDestinations = normalizeSpreeloPlatformList(slot?.destinationPlatforms || []);
   const destinationKeys = explicitDestinations.length
     ? explicitDestinations.filter((key) => selectedPlatformKeys.includes(key))
-    : getSlotDestinationPlatformKeys(slot, selectedPlatformKeys);
+    : getSlotDestinationPlatformKeys(slot, selectedPlatformKeys, runtimePlatformCapabilities);
 
   return destinationKeys
     .map((key) => connectedPlatformOptions.find((item) => item.value === key) || {
@@ -8628,6 +8753,7 @@ async function applyDynamicAutoPlan({ goalId, postCount }) {
     postCount: safePostCount,
     websiteProductModeAvailable,
     platformKeys: activePlatformKeys,
+    platformCapabilities: runtimePlatformCapabilities,
   });
 
   const platformSignature = activePlatformKeys.join("-") || "no-platform";
@@ -8648,6 +8774,7 @@ async function applyDynamicAutoPlan({ goalId, postCount }) {
         postCount: safePostCount,
         websiteProductModeAvailable,
         platformKeys: activePlatformKeys,
+        platformCapabilities: runtimePlatformCapabilities,
       });
       if (cachedSlots.length === safePostCount) instantSlots = cachedSlots;
     } catch {
@@ -8710,6 +8837,7 @@ async function applyDynamicAutoPlan({ goalId, postCount }) {
       postCount: safePostCount,
       websiteProductModeAvailable,
       platformKeys: activePlatformKeys,
+      platformCapabilities: runtimePlatformCapabilities,
     });
 
     if (dynamicSlots.length === safePostCount && cacheKey && typeof window !== "undefined") {
@@ -8993,13 +9121,12 @@ function toggleContentType(typeId) {
     setConfirmingBulkDelete(false);
     setConfirmingSingleDeleteId(null);
     setMessage(
-      `${ruleIds.length} automation rule${
-        ruleIds.length === 1 ? "" : "s"
-      } deleted.${
-        releasedCredits > 0
-          ? ` ${releasedCredits} reserved credit${releasedCredits === 1 ? " was" : "s were"} returned.`
-          : ""
-      }`
+      releasedCredits > 0
+        ? t("automation.deleteRulesSuccessWithCredits", {
+            count: ruleIds.length,
+            credits: releasedCredits,
+          })
+        : t("automation.deleteRulesSuccess", { count: ruleIds.length })
     );
 
     setDeletingRules(false);
@@ -9649,6 +9776,7 @@ ${slot.campaignSummary}`
                   slotIndex,
                   websiteProductModeAvailable,
                   selectedPlatforms: slotDestinationKeys,
+                  platformCapabilities: runtimePlatformCapabilities,
                 }),
               }
             : null
@@ -9781,8 +9909,11 @@ ${slot.campaignSummary}`
         scheduleType: row.schedule_type,
         postsPerWeek: row.schedule_type === "weekly" ? 1 : null,
         firstPostLabel: row.next_run_at
-          ? formatDateTime(row.next_run_at, selectedTimeZone)
-          : `${formatStartDateLabel(row.run_date, selectedTimeZone)} at ${normalizeTime(row.publish_time)}`,
+          ? formatDateTime(row.next_run_at, selectedTimeZone, locale)
+          : t("automation.dateAtTime", {
+              date: formatStartDateLabel(row.run_date, selectedTimeZone, locale),
+              time: normalizeTime(row.publish_time),
+            }),
         credits: row.credit_cost || 1,
         method: t("automation.contentPlan"),
       });
@@ -9886,13 +10017,13 @@ ${slot.campaignSummary}`
         )[0];
 
       const firstPostLabel = nextRunDates[0]
-        ? formatDateTime(nextRunDates[0], selectedTimeZone)
+        ? formatDateTime(nextRunDates[0], selectedTimeZone, locale)
         : firstSlot
-        ? `${formatStartDateLabel(
-            firstSlot.startDate,
-            selectedTimeZone
-          )} at ${normalizeTime(firstSlot.publishTime)}`
-        : "Not set";
+        ? t("automation.dateAtTime", {
+            date: formatStartDateLabel(firstSlot.startDate, selectedTimeZone, locale),
+            time: normalizeTime(firstSlot.publishTime),
+          })
+        : t("automation.notSet");
 
       setMessage("");
 
@@ -9910,7 +10041,7 @@ ${slot.campaignSummary}`
         postsPerWeek: scheduleType === "weekly" ? rows.length : null,
         firstPostLabel,
         credits: plannedCredits,
-        method: formatPlanMode(planCreationMode),
+        method: translatePlanMode(planCreationMode),
         channels: actualPlanChannelsLabel,
       });
 
@@ -10308,8 +10439,8 @@ function blockFormatCardClickAfterDrag(event) {
                     <div className="plan-v90-setting-head">
                       <span className="plan-v90-setting-icon"><CalendarDays size={20} aria-hidden="true" /></span>
                       <div className="plan-v90-setting-copy">
-                        <span className="plan-v90-setting-title">{t("automation.postsPerWeek")}</span>
-                        <small>{plannerSectionCopy.frequencyHelp}</small>
+                        <span className="plan-v90-setting-title">{scheduleType === "weekly" ? t("automation.postsPerWeek") : t("automation.postCountTitle")}</span>
+                        <small>{scheduleType === "weekly" ? plannerSectionCopy.frequencyHelp : t("automation.redesign.postCountCardHelp")}</small>
                       </div>
                     </div>
                     <select
@@ -10320,7 +10451,7 @@ function blockFormatCardClickAfterDrag(event) {
                     >
                       {displayedAutoPlanPostCountOptions.map((count) => (
                         <option value={count} key={count}>
-                          {t("automation.redesign.postsPerWeekValue", { count })}
+                          {scheduleType === "weekly" ? t("automation.redesign.postsPerWeekValue", { count }) : t("automation.redesign.postCountValue", { count })}
                         </option>
                       ))}
                     </select>
@@ -10345,6 +10476,8 @@ function blockFormatCardClickAfterDrag(event) {
                         compact
                         weekdayLabels={weekdayLabels}
                         locale={locale}
+                        previousMonthLabel={t("automation.previousMonth")}
+                        nextMonthLabel={t("automation.nextMonth")}
                       />
                     </div>
                   </div>
@@ -10640,6 +10773,8 @@ function blockFormatCardClickAfterDrag(event) {
                           compact
                           weekdayLabels={weekdayLabels}
                           locale={locale}
+                    previousMonthLabel={t("automation.previousMonth")}
+                    nextMonthLabel={t("automation.nextMonth")}
                           ariaLabel={t("automation.offerPlan.startLabel")}
                         />
                       </div>
@@ -10655,6 +10790,8 @@ function blockFormatCardClickAfterDrag(event) {
                           compact
                           weekdayLabels={weekdayLabels}
                           locale={locale}
+                    previousMonthLabel={t("automation.previousMonth")}
+                    nextMonthLabel={t("automation.nextMonth")}
                           ariaLabel={t("automation.offerPlan.endLabel")}
                         />
                       </div>
@@ -10720,6 +10857,8 @@ function blockFormatCardClickAfterDrag(event) {
                         compact
                         weekdayLabels={weekdayLabels}
                         locale={locale}
+                    previousMonthLabel={t("automation.previousMonth")}
+                    nextMonthLabel={t("automation.nextMonth")}
                         ariaLabel={t("automation.giveaway.endDateLabel")}
                       />
                     </div>
@@ -10943,6 +11082,8 @@ function blockFormatCardClickAfterDrag(event) {
                                 compact
                                 weekdayLabels={weekdayLabels}
                                 locale={locale}
+                    previousMonthLabel={t("automation.previousMonth")}
+                    nextMonthLabel={t("automation.nextMonth")}
                               />
                               <TimePickerField
                                 value={slot.publishTime}
@@ -11184,6 +11325,8 @@ function blockFormatCardClickAfterDrag(event) {
                                 compact
                                 weekdayLabels={weekdayLabels}
                                 locale={locale}
+                    previousMonthLabel={t("automation.previousMonth")}
+                    nextMonthLabel={t("automation.nextMonth")}
                               />
                             ) : (
                               <>
@@ -11360,7 +11503,7 @@ function blockFormatCardClickAfterDrag(event) {
 
       <div className="campaign-mode-meta">
       <span>{t("automation.campaignDate")}</span>
-      <strong>{getCampaignDateLabel(campaignOpportunity)}</strong>
+      <strong>{getCampaignDateLabel(campaignOpportunity, t("automation.flexibleDate"))}</strong>
 
       <span>{t("automation.recommendedPlan")}</span>
       <strong>
@@ -11385,11 +11528,11 @@ function blockFormatCardClickAfterDrag(event) {
     <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }}>
       <div>
         <p style={{ margin: "0 0 4px", fontSize: "12px", fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "#92400e" }}>
-          Campaign debug
+          {t("automation.debug.campaignLabel")}
         </p>
-        <h3 style={{ margin: 0, fontSize: "18px" }}>Calendar → AI Content Studio</h3>
+        <h3 style={{ margin: 0, fontSize: "18px" }}>{t("automation.calendarHandoffTitle")}</h3>
         <p style={{ margin: "6px 0 0", fontSize: "13px", color: "#475569" }}>
-          Send a screenshot of this panel if the campaign still opens in standard mode or shows zero posts.
+          {t("automation.debug.campaignHelp")}
         </p>
       </div>
       <strong style={{ color: campaignDebugInfo.finalSlotCount > 0 ? "#047857" : "#b45309" }}>
@@ -11557,6 +11700,8 @@ function blockFormatCardClickAfterDrag(event) {
                     compact
                     weekdayLabels={weekdayLabels}
                     locale={locale}
+                    previousMonthLabel={t("automation.previousMonth")}
+                    nextMonthLabel={t("automation.nextMonth")}
                   />
 
                   <TimePickerField
@@ -11884,7 +12029,7 @@ function blockFormatCardClickAfterDrag(event) {
                       className={`strategy-stage-dot ${getCustomerStageDotClass(
                         slot.customerStage
                       )}`}
-                      title={getCustomerStageLabel(slot.customerStage)}
+                      title={translateCustomerStageLabel(slot.customerStage)}
                     />
                   )}
 
@@ -11917,7 +12062,7 @@ function blockFormatCardClickAfterDrag(event) {
                       i
                       <span className="strategy-info-popover simple-strategy-info-popover">
                         <span className="strategy-info-note">
-                          {slot.strategyNotes}
+                          {getSlotContentExplanation(slot)}
                         </span>
                       </span>
                     </button>
@@ -11962,6 +12107,8 @@ function blockFormatCardClickAfterDrag(event) {
                     compact
                     weekdayLabels={weekdayLabels}
                     locale={locale}
+                    previousMonthLabel={t("automation.previousMonth")}
+                    nextMonthLabel={t("automation.nextMonth")}
                   />
                 )}
               </div>
@@ -12667,7 +12814,7 @@ function blockFormatCardClickAfterDrag(event) {
                             </p>
                             <small>
                               {t("automation.nextRun")}: {" "}
-                              {formatDateTime(rule.next_run_at, ruleTimeZone)}
+                              {formatDateTime(rule.next_run_at, ruleTimeZone, locale)}
                             </small>
                           </div>
 

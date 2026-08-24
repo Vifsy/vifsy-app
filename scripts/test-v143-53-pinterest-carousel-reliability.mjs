@@ -16,7 +16,7 @@ check('Pinterest timeout/S3 ingestion is transient', worker.includes('_upload_pi
 check('Pinterest retry reconciliation lists board Pins', worker.includes('/boards/${encodeURIComponent(String(boardId))}/pins'));
 check('Pinterest reconciliation matches unique post UTM id', worker.includes('url.searchParams.get("utm_content") === expected'));
 check('Pinterest timeout reconciles before retry', worker.includes('Pinterest timeout reconciled successfully'));
-check('Pinterest retries transient failures without terminal attempt cap', worker.includes('transientPinterestFailure || publishAttempt < MAX_PUBLISH_ATTEMPTS'));
+check('Pinterest/TikTok transient retries bypass the ordinary terminal attempt cap', worker.includes('transientPinterestFailure || transientTikTokFailure || publishAttempt < MAX_PUBLISH_ATTEMPTS'));
 check('Pinterest transient retry is bounded to hourly backoff', worker.includes('PINTEREST_TRANSIENT_RETRY_MAX_MINUTES'));
 check('Published targets are persisted immediately', worker.includes('persistPublishedTarget'));
 check('Already published destinations are skipped on retry', worker.includes('desiredTargets.filter((target) => !publishedTargetSet.has(target))'));

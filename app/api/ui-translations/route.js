@@ -6,6 +6,7 @@ import {
   getUiLanguageName,
   normalizeUiLocale,
 } from "../../../lib/i18n/defaultLabels.js";
+import { validateGeneratedUiTranslation } from "../../../lib/i18n/translationValidation.js";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -201,12 +202,22 @@ async function translateLabelChunk({
 
     return Object.keys(labels).reduce((safeLabels, key) => {
       const translatedValue = translatedLabels?.[key];
-      if (
-        translatedValue !== null &&
-        translatedValue !== undefined &&
-        String(translatedValue).trim() !== ""
-      ) {
+      const validation = validateGeneratedUiTranslation({
+        sourceText: labels[key],
+        translatedText: translatedValue,
+        locale,
+      });
+
+      if (validation.valid) {
         safeLabels[key] = String(translatedValue);
+      } else {
+        console.warn("UI translation label deferred", {
+          locale,
+          namespace,
+          chunkIndex: chunkIndex + 1,
+          key,
+          reason: validation.reason,
+        });
       }
       return safeLabels;
     }, {});

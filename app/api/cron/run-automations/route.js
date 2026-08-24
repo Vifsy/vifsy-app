@@ -13729,42 +13729,205 @@ function isShotstackAnimatedVideoRule(rule) {
   return isAnimatedVideoRule(rule) && !isKlingAiVideoRule(rule);
 }
 
-async function createKlingProductReferenceFrame(sourceImageBuffer) {
+function getKlingNaturalBackgroundSignal(asset = {}) {
+  const text = [
+    asset?.name,
+    asset?.family,
+    asset?.season,
+    ...(Array.isArray(asset?.moods) ? asset.moods : []),
+    ...(Array.isArray(asset?.industries) ? asset.industries : []),
+    ...(Array.isArray(asset?.campaigns) ? asset.campaigns : []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  let score = 0;
+  if (/\b(lifestyle|interior|room|home|office|workspace|desk|window|street|urban|outdoor|nature|forest|garden|beach|kitchen|workshop|gym|store|shop|cafe|restaurant|travel|fashion|sport|technology|real|photographic|cinematic|natural)\b/i.test(text)) score += 120;
+  if (/\b(indoor|daylight|sunlight|apartment|house|terrace|park|trail|workplace|retail|living)\b/i.test(text)) score += 60;
+  if (/\b(abstract|gradient|particle|particles|bokeh|neon|graphic|geometric|texture|smoke|light streak|light_streak|studio|solid|plain backdrop|loop)\b/i.test(text)) score -= 220;
+  if (asset?.is_fallback) score -= 20;
+  return score;
+}
+
+async function generateKlingNaturalEnvironmentPlate({ openai, rule }) {
+  if (!openai) return null;
+  const item = rule?.website_item || {};
+  const brand = rule?.brand_profile || {};
+  const productTitle = truncateText(String(item?.title || item?.item_title || "product"), 140);
+  const productDescription = truncateText(
+    String(item?.description || item?.body || item?.reason || "").replace(/\s+/g, " ").trim(),
+    420
+  );
+  const industry = truncateText(String(brand?.industry || "").trim(), 100);
+  const prompt = `
+Create a photorealistic vertical advertising environment plate for a short premium product commercial.
+Product context: ${productTitle}.
+${productDescription ? `Verified context: ${productDescription}.` : ""}
+${industry ? `Business industry: ${industry}.` : ""}
+
+The image must look like a real location photographed for a commercial: a believable lifestyle interior, workplace, shop, outdoor location or other physically appropriate real-world setting for this exact product category. Use natural depth, realistic surfaces, practical lighting and environmental detail. Leave the central subject area compositionally usable for a verified product reference that will be composited later.
+
+NON-NEGOTIABLE:
+- NO solid-color, monochrome, gradient, abstract, particle, bokeh-only, graphic or empty studio backdrop.
+- NO seamless photo studio paper/background.
+- NO text, logos, labels, watermarks, UI or signage that could be read as a claim.
+- Do not depict the advertised product itself or a substitute product.
+- Avoid a centered hero object; this is an environment plate only.
+- The result must already feel like frame one of a real social-media commercial, not a setup screen.
+`.trim();
+
+  const response = await openai.images.generate({
+    model: IMAGE_MODEL,
+    prompt,
+    size: "1024x1536",
+    quality: "medium",
+  });
+  const imageBase64 = response?.data?.[0]?.b64_json;
+  if (!imageBase64) return null;
+  return {
+    buffer: Buffer.from(imageBase64, "base64"),
+    source: "gpt_image_2_natural_environment_fallback",
+    assetId: null,
+    assetName: null,
+    family: "generated_real_world_environment",
+    brightness: "medium",
+  };
+}
+
+async function selectKlingNaturalStartBackground({ openai, supabase, rule, sourceImageBuffer }) {
+  const dominantColor = await getProductAccentColor(sourceImageBuffer);
+  const profile = buildVideoBackgroundProfile({
+    rule,
+    dominantColor,
+    productBrightness: getAnimatedProductBrightness(dominantColor),
+  });
+
+  const [videoResult, imageResult] = await Promise.all([
+    supabase
+      .from("video_background_assets")
+      .select("id, name, public_url, poster_url, family, moods, industries, campaigns, colors, brightness, energy, season, text_safe, logo_safe, crop_safe_916, active, is_fallback, priority")
+      .eq("active", true)
+      .eq("crop_safe_916", true),
+    supabase
+      .from("image_background_assets")
+      .select("id, name, public_url, family, moods, industries, campaigns, colors, brightness, season, text_safe, label_safe, crop_safe_1x1, active, is_fallback, priority")
+      .eq("active", true)
+      .eq("crop_safe_1x1", true),
+  ]);
+
+  if (videoResult?.error) {
+    console.warn("Kling natural-start video background library could not be loaded", {
+      message: videoResult.error.message,
+    });
+  }
+  if (imageResult?.error) {
+    console.warn("Kling natural-start image background library could not be loaded", {
+      message: imageResult.error.message,
+    });
+  }
+
+  const candidates = [];
+  for (const asset of videoResult?.data || []) {
+    if (!asset?.poster_url) continue;
+    const naturalSignal = getKlingNaturalBackgroundSignal(asset);
+    if (naturalSignal < 40) continue;
+    const selected = chooseVideoBackground({ assets: [asset], profile, recentUsage: [] });
+    candidates.push({
+      asset,
+      url: asset.poster_url,
+      source: "video_background_poster",
+      score: Number(selected?.score || 0) + naturalSignal,
+      naturalSignal,
+    });
+  }
+  for (const asset of imageResult?.data || []) {
+    if (!asset?.public_url) continue;
+    const naturalSignal = getKlingNaturalBackgroundSignal(asset);
+    if (naturalSignal < 40) continue;
+    const selected = chooseImageBackground({ assets: [asset], profile });
+    candidates.push({
+      asset,
+      url: asset.public_url,
+      source: "image_background_asset",
+      score: Number(selected?.score || 0) + naturalSignal,
+      naturalSignal,
+    });
+  }
+
+  candidates.sort((left, right) => right.score - left.score);
+  for (const candidate of candidates.slice(0, 6)) {
+    try {
+      const buffer = await fetchImageBufferForOverlay(candidate.url);
+      if (!buffer?.length) continue;
+      console.info("Kling natural real-world start background selected", {
+        assetId: candidate.asset?.id || null,
+        assetName: candidate.asset?.name || null,
+        family: candidate.asset?.family || null,
+        source: candidate.source,
+        score: candidate.score,
+        naturalSignal: candidate.naturalSignal,
+      });
+      return {
+        buffer,
+        source: candidate.source,
+        assetId: candidate.asset?.id || null,
+        assetName: candidate.asset?.name || null,
+        family: candidate.asset?.family || null,
+        brightness: candidate.asset?.brightness || "medium",
+      };
+    } catch (error) {
+      console.warn("Kling natural-start background candidate could not be fetched", {
+        assetId: candidate.asset?.id || null,
+        source: candidate.source,
+        message: error?.message || String(error),
+      });
+    }
+  }
+
+  try {
+    const generated = await generateKlingNaturalEnvironmentPlate({ openai, rule });
+    if (generated?.buffer?.length) {
+      console.info("Kling natural real-world start background generated as library fallback", {
+        source: generated.source,
+      });
+      return generated;
+    }
+  } catch (error) {
+    console.warn("Kling natural-start GPT background fallback failed", {
+      message: error?.message || String(error),
+    });
+  }
+
+  throw new Error(
+    "Kling AI video could not prepare a believable real-world first-frame environment. Spreelo refused to fall back to the old flat studio intro."
+  );
+}
+
+async function createKlingProductReferenceFrame(sourceImageBuffer, { naturalBackground = null } = {}) {
   if (!sourceImageBuffer?.length) {
     throw new Error("Kling AI video needs a verified product image buffer");
   }
 
-  // v144.16: start from the already verified retailer image and make that
-  // authoritative visible reference large from frame one. Never require or
-  // infer a whole-product view here: if the retailer image is cropped, those
-  // same visible product boundaries remain authoritative. A local
-  // pixel-preserving cutout is preferred; otherwise the unchanged official
-  // frame is shown large over a blurred copy. No product pixels are AI-redrawn.
+  // v144.26: Kling image-to-video treats this asset as the literal first frame.
+  // A synthetic flat/gradient studio plate therefore leaked into every video
+  // before Kling transitioned into a lifestyle scene. Start on a real-world
+  // environment plate instead while keeping every product pixel deterministic.
   const normalizedSource = await sharp(sourceImageBuffer)
     .rotate()
     .png({ compressionLevel: 9 })
     .toBuffer();
   const sourceMetadata = await sharp(normalizedSource).metadata();
-  // Use a neutral generated backdrop rather than a blurred duplicate of the
-  // retailer image. That keeps Kling from interpreting a second ghosted copy
-  // of the product as another physical object.
-  const background = Buffer.from(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920">
-      <defs>
-        <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#111827"/>
-          <stop offset="0.52" stop-color="#1f2937"/>
-          <stop offset="1" stop-color="#0b1020"/>
-        </linearGradient>
-        <radialGradient id="glow" cx="50%" cy="43%" r="55%">
-          <stop offset="0" stop-color="#ffffff" stop-opacity="0.16"/>
-          <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
-        </radialGradient>
-      </defs>
-      <rect width="1080" height="1920" fill="url(#bg)"/>
-      <rect width="1080" height="1920" fill="url(#glow)"/>
-    </svg>
-  `);
+  if (!naturalBackground?.buffer?.length) {
+    throw new Error(
+      "Kling AI video requires a believable real-world first-frame environment; flat/studio fallback is disabled."
+    );
+  }
+  const background = await sharp(naturalBackground.buffer)
+    .rotate()
+    .resize({ width: 1080, height: 1920, fit: "cover" })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
 
   let productLayer = null;
   let compositionMode = "official_frame_large";
@@ -13826,6 +13989,12 @@ async function createKlingProductReferenceFrame(sourceImageBuffer) {
     boundsAreaRatio: Number.isFinite(boundsAreaRatio) ? boundsAreaRatio : null,
     sourceWidth: Number(sourceMetadata.width || 0) || null,
     sourceHeight: Number(sourceMetadata.height || 0) || null,
+    startBackgroundSource: naturalBackground?.source || null,
+    startBackgroundAssetId: naturalBackground?.assetId || null,
+    startBackgroundAssetName: naturalBackground?.assetName || null,
+    startBackgroundFamily: naturalBackground?.family || null,
+    startBackgroundBrightness: naturalBackground?.brightness || "medium",
+    naturalEnvironmentFromFirstFrame: true,
   };
 
   console.info("Kling product reference frame prepared", {
@@ -13837,6 +14006,10 @@ async function createKlingProductReferenceFrame(sourceImageBuffer) {
     interactionMode: referenceSafety.interactionMode,
     fullProductInteractionSafe,
     verifiedReferenceLargeFromFirstFrame: true,
+    naturalEnvironmentFromFirstFrame: true,
+    startBackgroundSource: referenceSafety.startBackgroundSource,
+    startBackgroundAssetId: referenceSafety.startBackgroundAssetId,
+    startBackgroundFamily: referenceSafety.startBackgroundFamily,
     generatedProductPixels: false,
   });
   return { frameBuffer: frame, referenceSafety };
@@ -13872,10 +14045,11 @@ function getKlingProductPromptFallback({ rule, postContent, referenceSafety = nu
     campaignContext ? `Campaign context: ${campaignContext}.` : "",
     campaignIdentityLock ? campaignIdentityLock : "",
     captionContext ? `Caption context: ${captionContext}.` : "",
-    "Start with the verified product reference already large and visually dominant in the first frame; never animate a small picture card expanding to fill the screen.",
-    "Create an immediate pattern interrupt in the first 0.5-1.0 second with a real product-relevant event, human/animal/physical action or environment change. Decorative particles alone are not a concept.",
+    "Frame 0 must already feel like a real commercial filmed in a believable real-world environment. Continue the natural environment visible in the supplied first frame; never begin on a plain, monochrome, gradient, abstract or empty studio backdrop and then transition into the real scene.",
+    "Start with the verified product reference already large and visually dominant in that natural environment; never animate a small picture card expanding to fill the screen.",
+    "Create an immediate pattern interrupt in the first 0.5-1.0 second with a real product-relevant event, human/animal/physical action or purposeful camera/action beat inside the same believable environment. Decorative particles alone are not a concept.",
     interactionDirection,
-    "Make the scene escalate quickly and deliver a clear visual payoff by the final second. Avoid a generic slow zoom, simple spin, floating product, empty studio demonstration or a product surrounded only by decorative effects.",
+    "Make the scene escalate quickly and deliver a clear visual payoff by the final second while staying visually continuous and physically coherent. Avoid a generic slow zoom, simple spin, floating product, empty studio demonstration, backdrop reveal, environment teleport or a product surrounded only by decorative effects.",
     "The uploaded first frame is the authoritative product reference and the exact product identity must remain recognizable throughout.",
     identityMotionDirection,
     "Preserve visible color, materials, branding, logos, printed text/design and identity-defining details exactly. Do not morph, redesign or substitute the product.",
@@ -13909,7 +14083,7 @@ async function buildKlingProductVideoPrompt({ openai, rule, postContent, referen
         {
           role: "system",
           content:
-            "You are Spreelo's short-form product video director. Return strict JSON only. Design one highly attention-grabbing, sales-oriented but physically plausible 6-second concept. Product identity safety is more important than spectacle.",
+            "You are Spreelo's short-form product video director. Return strict JSON only. Design one highly attention-grabbing, sales-oriented but physically plausible 6-second concept that begins inside a believable real-world environment from frame zero. Product identity safety is more important than spectacle.",
         },
         {
           role: "user",
@@ -13924,19 +14098,21 @@ ${formatCampaignIdentityLockForPrompt(rule) || "No campaign identity lock applie
 Post caption context: ${truncateText(String(postContent || ""), 700)}
 Reference safety mode: ${referenceSafety?.interactionMode || "cropped_or_uncertain_reference"}
 Full-product interaction allowed: ${referenceSafety?.fullProductInteractionSafe === true ? "YES" : "NO"}
+Natural first-frame environment source: ${referenceSafety?.startBackgroundSource || "real-world environment plate"}
 Return JSON exactly in this shape:
 {"creative_strategy":"...","motion_prompt":"..."}.
 
 Creative goals:
 - if a CAMPAIGN IDENTITY LOCK is present, the scene must stay exclusively inside that active campaign and must not introduce another holiday/campaign/occasion
+- frame 0 is already the beginning of the finished commercial: keep the believable real-world environment from the supplied first frame and do NOT create any plain-color/studio intro, backdrop reveal or transition from setup screen into lifestyle scene
 - the verified retailer product reference is already large in frame from the first frame; do NOT create a small-card-to-full-screen expansion
-- create a pattern interrupt in the first 0.5-1.0 second using a real product-relevant event, person, animal, physical action or strong environment transformation; decorative particles alone are not enough
+- create a pattern interrupt in the first 0.5-1.0 second using a real product-relevant event, person, animal, physical action or purposeful camera/action beat inside that real environment; decorative particles alone are not enough
 - the result must feel like a professionally directed short commercial, not a prettier version of a simple animated product post
 - when Full-product interaction allowed is YES, the product MUST be genuinely used in the scene in the most natural way for that exact product: apparel worn by a person, handheld items held/operated, tools used, appliances operated, sports/outdoor gear used in context, etc.
 - when Full-product interaction allowed is NO, never fabricate missing product areas just to show use; preserve the exact visible crop and create the story/action around that crop
 - escalate quickly and deliver a satisfying visual payoff by the final second
 - feel native to TikTok/Reels/Shorts and commercially persuasive, not a generic studio spin, slow zoom, floating product or product-with-particles demo
-- one coherent 6-second shot; environment may transform dramatically while product identity stays locked
+- one coherent 6-second commercial world with continuous physical space and natural lighting; camera framing/action may evolve, but do not teleport from a studio/graphic backdrop into a different lifestyle location
 
 TEXT SAFETY:
 - do not generate any new readable overlay text, captions, slogans, prices, labels or typography
@@ -13966,11 +14142,12 @@ NON-NEGOTIABLE PRODUCT RULES:
       fullProductInteractionSafe
         ? "Genuine product use is required. Use the exact product naturally in-scene while preserving its verified identity-defining design, print, color, branding and proportions. Apparel may be worn with its exact visible design preserved; rigid products must not morph or gain invented hardware/surfaces."
         : "The reference is cropped or uncertain: keep exactly the same visible crop/view for the whole clip, never zoom out to complete it, and never reveal or invent any unseen side, back, top, bottom, underside, interior, hidden edge or label.",
+      "The first visible frame must already look like a finished real-world commercial scene. Continue the supplied natural environment immediately; no solid-color, monochrome, gradient, abstract or empty studio intro and no backdrop-to-lifestyle transition.",
       "Do not begin with or create a small image card that expands to full screen.",
       "No product morph, redesign or substitution with a similar product.",
       "Do not generate any new readable overlay text, captions, slogans, prices, labels or typography. Spreelo adds professional typography after the video is generated. Preserve only text physically present on the verified product reference.",
       "No fake logos and no watermark.",
-      "Make the action bold, surprising, product-specific and sales-oriented, with an immediate first-second hook and a clear final payoff. Decorative particles alone are not a concept.",
+      "Make the action bold, surprising, product-specific and sales-oriented, with an immediate first-second hook and a clear final payoff inside one physically coherent real-world commercial environment. Decorative particles alone are not a concept.",
     ].join(" ");
 
     return truncateText(`${creativePrompt} ${safetyTail}`, 3000);
@@ -36827,6 +37004,7 @@ function pinterestPublishError(response, data, fallback) {
 }
 
 function isPinterestTransientPublishError(error) {
+  if (error?.pinterestTransient === true) return true;
   const status = Number(error?.status || 0);
   const message = String(error?.message || "").toLowerCase();
   return Boolean(
@@ -36930,10 +37108,115 @@ async function persistPublishedTarget({
   }
 }
 
+async function registerPinterestVideoUpload(accessToken) {
+  const response = await fetch(`${getPinterestApiBaseUrl()}/media`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ media_type: "video" }),
+    cache: "no-store",
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data?.media_id || !data?.upload_url) {
+    const error = pinterestPublishError(response, data, "Pinterest video upload could not be registered");
+    error.pinterestPhase = "media_register";
+    throw error;
+  }
+  return data;
+}
+
+async function uploadPinterestVideoFile({ uploadUrl, uploadParameters, videoUrl }) {
+  await assertPublicHttpUrl(videoUrl);
+  let sourceResponse;
+  try {
+    sourceResponse = await fetch(videoUrl, { cache: "no-store" });
+  } catch (cause) {
+    const error = new Error(`Could not download the rendered video for Pinterest: ${cause?.message || "network error"}`);
+    error.pinterestPhase = "media_upload";
+    error.pinterestTransient = true;
+    throw error;
+  }
+  if (!sourceResponse.ok) {
+    const error = new Error(`Could not download the rendered video for Pinterest (${sourceResponse.status})`);
+    error.status = sourceResponse.status;
+    error.pinterestPhase = "media_upload";
+    throw error;
+  }
+
+  const contentType = String(sourceResponse.headers.get("content-type") || "video/mp4")
+    .split(";")[0]
+    .trim() || "video/mp4";
+  const bytes = await sourceResponse.arrayBuffer();
+  const form = new FormData();
+  Object.entries(uploadParameters || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) form.append(key, String(value));
+  });
+  form.append("file", new Blob([bytes], { type: contentType }), "spreelo-video.mp4");
+
+  let uploadResponse;
+  try {
+    uploadResponse = await fetch(uploadUrl, { method: "POST", body: form, cache: "no-store" });
+  } catch (cause) {
+    const error = new Error(`Pinterest video upload failed: ${cause?.message || "network error"}`);
+    error.pinterestPhase = "media_upload";
+    error.pinterestTransient = true;
+    throw error;
+  }
+  if (!uploadResponse.ok && uploadResponse.status !== 204) {
+    const responseText = await uploadResponse.text().catch(() => "");
+    const error = new Error(`Pinterest video upload failed (${uploadResponse.status})${responseText ? `: ${responseText.slice(0, 240)}` : ""}`);
+    error.status = uploadResponse.status;
+    error.pinterestPhase = "media_upload";
+    throw error;
+  }
+}
+
+async function waitForPinterestVideoUpload({ accessToken, mediaId, postId }) {
+  let lastStatus = "";
+  for (let attempt = 1; attempt <= 8; attempt += 1) {
+    const response = await fetch(`${getPinterestApiBaseUrl()}/media/${encodeURIComponent(String(mediaId))}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = pinterestPublishError(response, data, "Could not verify Pinterest video upload");
+      error.pinterestPhase = "media_processing";
+      throw error;
+    }
+    lastStatus = String(data?.status || "").trim().toLowerCase();
+    if (lastStatus === "succeeded") {
+      console.info("Pinterest video media upload ready", { postId: postId || null, mediaId: String(mediaId), attempt });
+      return data;
+    }
+    if (["failed", "failure", "error"].includes(lastStatus)) {
+      const error = new Error(`Pinterest rejected the uploaded video media (${lastStatus})`);
+      error.pinterestPhase = "media_processing";
+      throw error;
+    }
+    if (attempt < 8) await sleep(Math.min(1500 * attempt, 5000));
+  }
+  const error = new Error(`Pinterest video media is still processing (${lastStatus || "unknown"})`);
+  error.pinterestPhase = "media_processing";
+  error.pinterestTransient = true;
+  throw error;
+}
+
+async function preparePinterestVideoMedia({ accessToken, videoUrl, postId }) {
+  const registered = await registerPinterestVideoUpload(accessToken);
+  await uploadPinterestVideoFile({ uploadUrl: registered.upload_url, uploadParameters: registered.upload_parameters, videoUrl });
+  await waitForPinterestVideoUpload({ accessToken, mediaId: registered.media_id, postId });
+  return String(registered.media_id);
+}
+
 async function publishPostToPinterest({
   accessToken,
   boardId,
   imageUrls,
+  videoUrl = '',
+  coverImageUrl = '',
   content,
   destinationUrl = '',
   postId = '',
@@ -36948,13 +37231,27 @@ async function publishPostToPinterest({
     throw new Error("Pinterest board is missing for this brand");
   }
 
-  if (!uniqueImageUrls.length) {
-    throw new Error("Pinterest post is missing a publishable image");
+  const normalizedVideoUrl = String(videoUrl || "").trim();
+  const normalizedCoverImageUrl = String(coverImageUrl || uniqueImageUrls[0] || "").trim();
+
+  if (!normalizedVideoUrl && !uniqueImageUrls.length) {
+    throw new Error("Pinterest post is missing publishable media");
+  }
+  if (normalizedVideoUrl && !normalizedCoverImageUrl) {
+    throw new Error("Pinterest video Pin is missing a required cover image");
   }
 
   const copy = buildPinterestPinCopy(content, destinationUrl, postId);
-  const mediaSource =
-    uniqueImageUrls.length >= 2
+  let mediaSource;
+  if (normalizedVideoUrl) {
+    const mediaId = await preparePinterestVideoMedia({ accessToken, videoUrl: normalizedVideoUrl, postId });
+    mediaSource = {
+      source_type: "video_id",
+      media_id: mediaId,
+      cover_image_url: normalizedCoverImageUrl,
+    };
+  } else {
+    mediaSource = uniqueImageUrls.length >= 2
       ? {
           source_type: "multiple_image_urls",
           // Pinterest supports title/description/link on every image in a
@@ -36975,6 +37272,7 @@ async function publishPostToPinterest({
           source_type: "image_url",
           url: uniqueImageUrls[0],
         };
+  }
 
   const body = {
     board_id: String(boardId),
@@ -37000,18 +37298,20 @@ async function publishPostToPinterest({
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok || !data?.id) {
-    throw pinterestPublishError(
+    const error = pinterestPublishError(
       response,
       data,
       "Pinterest Pin publishing failed"
     );
+    error.pinterestPhase = "create_pin";
+    throw error;
   }
 
   console.log("Pinterest Pin payload accepted", {
     postId: postId || null,
     pinId: String(data.id),
-    mediaType: uniqueImageUrls.length >= 2 ? "multiple_images" : "image",
-    imageCount: uniqueImageUrls.length,
+    mediaType: normalizedVideoUrl ? "video" : uniqueImageUrls.length >= 2 ? "multiple_images" : "image",
+    imageCount: normalizedVideoUrl ? 0 : uniqueImageUrls.length,
     hasDestination: Boolean(copy.link),
     perImageDestinations: uniqueImageUrls.length >= 2 && copy.link ? uniqueImageUrls.length : 0,
   });
@@ -37028,7 +37328,9 @@ function summarizePinterestPinMedia(pin) {
     : mediaType === "image"
       ? 1
       : 0;
-  return { mediaType, imageCount };
+  const creativeType = String(pin?.creative_type || "").trim().toLowerCase();
+  const isVideo = mediaType === "video" || creativeType === "video";
+  return { mediaType, imageCount, creativeType, isVideo };
 }
 
 async function getPinterestPinById({ accessToken, pinId }) {
@@ -37054,19 +37356,23 @@ async function verifyPinterestPublishedMedia({
   accessToken,
   pinId,
   expectedImageCount,
+  expectedMediaKind = "image",
   postId,
 }) {
   const expected = Math.max(1, Number(expectedImageCount || 1));
+  const expectsVideo = String(expectedMediaKind || "image").toLowerCase() === "video";
   let lastPin = null;
-  let lastSummary = { mediaType: "", imageCount: 0 };
+  let lastSummary = { mediaType: "", imageCount: 0, creativeType: "", isVideo: false };
 
   // Pinterest can need a short moment to populate media metadata immediately
   // after creation. Read the Pin back before Spreelo marks the target done.
-  for (let attempt = 1; attempt <= 4; attempt += 1) {
+  for (let attempt = 1; attempt <= 6; attempt += 1) {
     try {
       lastPin = await getPinterestPinById({ accessToken, pinId });
       lastSummary = summarizePinterestPinMedia(lastPin);
-      const valid = expected >= 2
+      const valid = expectsVideo
+        ? lastSummary.isVideo
+        : expected >= 2
         ? lastSummary.mediaType === "multiple_images" &&
           lastSummary.imageCount === expected
         : lastSummary.mediaType === "image" && lastSummary.imageCount === 1;
@@ -37074,7 +37380,8 @@ async function verifyPinterestPublishedMedia({
         console.info("Pinterest published media verified", {
           postId: postId || null,
           pinId: String(pinId),
-          expectedImageCount: expected,
+          expectedImageCount: expectsVideo ? 0 : expected,
+          expectedMediaKind: expectsVideo ? "video" : "image",
           mediaType: lastSummary.mediaType,
           imageCount: lastSummary.imageCount,
           attempt,
@@ -37083,17 +37390,20 @@ async function verifyPinterestPublishedMedia({
       }
     } catch (error) {
       if (isPinterestAuthError(error)) throw error;
-      if (attempt >= 4) throw error;
+      if (attempt >= 6) throw error;
     }
-    if (attempt < 4) await sleep(1500 * attempt);
+    if (attempt < 6) await sleep(Math.min(1500 * attempt, 5000));
   }
 
   const error = new Error(
-    expected >= 2
+    expectsVideo
+      ? `Pinterest returned Pin ${pinId}, but Spreelo could not verify the video media yet (received ${lastSummary.mediaType || lastSummary.creativeType || "unknown"}). The post was not marked published.`
+      : expected >= 2
       ? `Pinterest returned Pin ${pinId}, but Spreelo could not verify the ${expected}-image carousel (received ${lastSummary.mediaType || "unknown"} with ${lastSummary.imageCount} image(s)). The post was not marked published.`
       : `Pinterest returned Pin ${pinId}, but Spreelo could not verify the single-image media. The post was not marked published.`
   );
   error.pinterestMediaVerificationFailed = true;
+  error.pinterestTransient = true;
   error.pinId = String(pinId);
   error.expectedImageCount = expected;
   error.actualMediaType = lastSummary.mediaType || null;
@@ -38166,12 +38476,7 @@ async function publishApprovedSocialPosts({
           throw new Error("No connected Pinterest board found for this brand");
         }
 
-        if (normalizedFormat === "animated_video") {
-          throw new Error(
-            "Pinterest video publishing is not enabled in this release"
-          );
-        }
-
+        const pinterestIsVideo = normalizedFormat === "animated_video";
         let pinterestImageUrls = [];
         let pinterestCarouselSlides = [];
         if (normalizedFormat === "carousel") {
@@ -38197,8 +38502,15 @@ async function publishApprovedSocialPosts({
               "Carousel post is missing at least 2 render-ready slide images for Pinterest publishing"
             );
           }
-        } else {
+        } else if (!pinterestIsVideo) {
           pinterestImageUrls = [post.image_url].filter(Boolean);
+        }
+
+        const pinterestVideoUrl = pinterestIsVideo ? String(post.video_url || "").trim() : "";
+        const pinterestCoverImageUrl = pinterestIsVideo ? String(post.image_url || "").trim() : "";
+        if (pinterestIsVideo && !pinterestCoverImageUrl) {
+          summary.pinterest_publish_skipped_no_image += 1;
+          throw new Error("Pinterest video publishing requires a cover image URL");
         }
 
         let pinterestDestination = resolvePinterestDestination({
@@ -38230,6 +38542,8 @@ async function publishApprovedSocialPosts({
           postId: post.id,
           normalizedFormat,
           imageCount: pinterestImageUrls.length,
+          video: pinterestIsVideo,
+          hasCoverImage: pinterestIsVideo ? Boolean(pinterestCoverImageUrl) : false,
           productOnlyCarousel: normalizedFormat === "carousel",
           outroIncluded: false,
         });
@@ -38251,8 +38565,29 @@ async function publishApprovedSocialPosts({
           isPinterestTransientPublishError({ message: post.last_publish_error || "" });
 
         if (shouldReconcileBeforeCreate) {
+          if (pinterestProcessingReceipt?.pin_id) {
+            try {
+              pinterestResult = await getPinterestPinById({
+                accessToken: healthyPinterest.accessToken,
+                pinId: pinterestProcessingReceipt.pin_id,
+              });
+              console.info("Pinterest pending Pin recovered by persisted id", {
+                postId: post.id,
+                pinId: String(pinterestProcessingReceipt.pin_id),
+                publishAttempt,
+              });
+            } catch (receiptLookupError) {
+              if (isPinterestAuthError(receiptLookupError)) throw receiptLookupError;
+              console.warn("Pinterest persisted Pin lookup unavailable", {
+                postId: post.id,
+                pinId: String(pinterestProcessingReceipt.pin_id),
+                message: receiptLookupError.message,
+              });
+            }
+          }
+
           try {
-            const existingPin = await findExistingPinterestPinForPost({
+            const existingPin = pinterestResult || await findExistingPinterestPinForPost({
               accessToken: healthyPinterest.accessToken,
               boardId: pinterestConnectionForPost.page_id,
               postId: post.id,
@@ -38290,6 +38625,8 @@ async function publishApprovedSocialPosts({
               accessToken: healthyPinterest.accessToken,
               boardId: pinterestConnectionForPost.page_id,
               imageUrls: pinterestImageUrls,
+              videoUrl: pinterestVideoUrl,
+              coverImageUrl: pinterestCoverImageUrl,
               content: post.content,
               destinationUrl: pinterestDestination.url,
               postId: post.id,
@@ -38310,12 +38647,17 @@ async function publishApprovedSocialPosts({
                 accessToken: healthyPinterest.accessToken,
                 boardId: pinterestConnectionForPost.page_id,
                 imageUrls: pinterestImageUrls,
+                videoUrl: pinterestVideoUrl,
+                coverImageUrl: pinterestCoverImageUrl,
                 content: post.content,
                 destinationUrl: pinterestDestination.url,
                 postId: post.id,
               });
-            } else if (isPinterestTransientPublishError(pinterestError)) {
-              // Pinterest can accept the Pin and still time out while ingesting several images.
+            } else if (
+              isPinterestTransientPublishError(pinterestError) &&
+              !["media_register", "media_upload", "media_processing"].includes(pinterestError?.pinterestPhase)
+            ) {
+              // Pinterest can accept the Pin and still time out while ingesting media.
               // Persist a processing receipt immediately. Future workers must reconcile the board
               // and are forbidden from issuing another Create Pin during the settling window.
               const previousProcessingReceipt = getPinterestProcessingReceipt(publishReceipts);
@@ -38323,8 +38665,8 @@ async function publishApprovedSocialPosts({
                 state: "processing",
                 first_attempt_at: previousProcessingReceipt?.first_attempt_at || nowIso,
                 last_create_attempt_at: nowIso,
-                media_kind: normalizedFormat === "carousel" ? "multiple_images" : "image",
-                image_count: pinterestImageUrls.length,
+                media_kind: pinterestIsVideo ? "video" : normalizedFormat === "carousel" ? "multiple_images" : "image",
+                image_count: pinterestIsVideo ? 0 : pinterestImageUrls.length,
               };
               const { error: pendingReceiptError } = await supabase
                 .from("posts")
@@ -38364,6 +38706,9 @@ async function publishApprovedSocialPosts({
                 throw pinterestError;
               }
             } else {
+              if (isPinterestTransientPublishError(pinterestError)) {
+                pinterestError.pinterestTransient = true;
+              }
               throw pinterestError;
             }
           }
@@ -38372,10 +38717,32 @@ async function publishApprovedSocialPosts({
         if (!pinterestResult?.id) {
           throw new Error("Pinterest did not return a Pin id to verify");
         }
+
+        publishReceipts.pinterest = {
+          state: "processing",
+          pin_id: String(pinterestResult.id),
+          first_attempt_at: pinterestProcessingReceipt?.first_attempt_at || nowIso,
+          last_create_attempt_at: pinterestProcessingReceipt?.last_create_attempt_at || nowIso,
+          media_kind: pinterestIsVideo ? "video" : normalizedFormat === "carousel" ? "multiple_images" : "image",
+          image_count: pinterestIsVideo ? 0 : pinterestImageUrls.length,
+        };
+        const { error: pinterestPendingPinReceiptError } = await supabase
+          .from("posts")
+          .update({ publish_receipts: publishReceipts, updated_at: nowIso })
+          .eq("id", post.id);
+        if (pinterestPendingPinReceiptError) {
+          console.warn("Could not persist Pinterest Pin verification receipt", {
+            postId: post.id,
+            pinId: String(pinterestResult.id),
+            message: pinterestPendingPinReceiptError.message,
+          });
+        }
+
         pinterestResult = await verifyPinterestPublishedMedia({
           accessToken: healthyPinterest.accessToken,
           pinId: pinterestResult.id,
-          expectedImageCount: pinterestImageUrls.length,
+          expectedImageCount: pinterestIsVideo ? 0 : pinterestImageUrls.length,
+          expectedMediaKind: pinterestIsVideo ? "video" : "image",
           postId: post.id,
         });
 
@@ -40344,8 +40711,20 @@ product_research_model_used: websitePreparedRule.uses_website_content
           }
 
           try {
+            const klingRuleContext = {
+              ...ruleWithBrandProfile,
+              website_item: candidate.item,
+            };
+            const naturalStartBackground = await selectKlingNaturalStartBackground({
+              openai,
+              supabase,
+              rule: klingRuleContext,
+              sourceImageBuffer,
+            });
             const { frameBuffer: referenceFrameBuffer, referenceSafety } =
-              await createKlingProductReferenceFrame(sourceImageBuffer);
+              await createKlingProductReferenceFrame(sourceImageBuffer, {
+                naturalBackground: naturalStartBackground,
+              });
             const uploadedReference = await uploadGeneratedImageToStorage({
               supabase,
               imageBase64: referenceFrameBuffer.toString("base64"),
@@ -40357,23 +40736,19 @@ product_research_model_used: websitePreparedRule.uses_website_content
             imageUrl = uploadedReference.imageUrl;
             imageStoragePath = uploadedReference.imageStoragePath;
             finalImagePrompt =
-              "Product-safe 9:16 Kling start frame made deterministically from the verified website product image without AI redraw.";
+              "Product-safe 9:16 Kling start frame: verified product pixels composited into a believable real-world advertising environment from frame zero, without AI-redrawing the sellable product.";
 
             if (!imageUrl) {
               throw new Error("Could not create a public Kling reference-frame URL");
             }
 
-            const klingRuleContext = {
-              ...ruleWithBrandProfile,
-              website_item: candidate.item,
-            };
             const klingTextOverlay = await createAnimatedTextOverlay({
               openai,
               rule: klingRuleContext,
               postContent: generatedContent,
               backgroundAsset: {
-                brightness: "dark",
-                description: "premium cinematic AI product advertisement with moving real-world action",
+                brightness: naturalStartBackground?.brightness || referenceSafety?.startBackgroundBrightness || "medium",
+                description: "premium cinematic AI product advertisement already inside a believable real-world environment from the first frame",
               },
               dominantColor: await getProductAccentColor(sourceImageBuffer),
               productReferenceBuffer: sourceImageBuffer,
@@ -40449,6 +40824,13 @@ product_research_model_used: websitePreparedRule.uses_website_content
               video_background_selection: {
                 mode: "kling_professional_advertising_postprocess",
                 reference_safety: referenceSafety,
+                natural_start_background: {
+                  source: naturalStartBackground?.source || referenceSafety?.startBackgroundSource || null,
+                  asset_id: naturalStartBackground?.assetId || null,
+                  asset_name: naturalStartBackground?.assetName || null,
+                  family: naturalStartBackground?.family || null,
+                  brightness: naturalStartBackground?.brightness || null,
+                },
                 text_overlay_url: uploadedKlingTextOverlay.imageUrl,
                 text_overlay_storage_path: uploadedKlingTextOverlay.imageStoragePath,
                 text_overlay_provider: klingTextOverlay.provider,
