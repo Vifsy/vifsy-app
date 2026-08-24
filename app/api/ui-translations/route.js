@@ -319,6 +319,7 @@ async function translateMissingLabels({
         return {
           translated,
           failedKeys,
+          repairableFailedKeys: failedKeys,
           intentionalUnchangedKeys: translatedResult?.intentionalUnchangedKeys || [],
         };
       } catch (error) {
@@ -329,7 +330,12 @@ async function translateMissingLabels({
           keyCount: Object.keys(chunk).length,
           message: error?.message || String(error),
         });
-        return { translated: {}, failedKeys: Object.keys(chunk), intentionalUnchangedKeys: [] };
+        return {
+          translated: {},
+          failedKeys: Object.keys(chunk),
+          repairableFailedKeys: [],
+          intentionalUnchangedKeys: [],
+        };
       }
     }
   );
@@ -339,15 +345,18 @@ async function translateMissingLabels({
     ...outcomes.map((outcome) => outcome.translated || {})
   );
   let failedKeys = outcomes.flatMap((outcome) => outcome.failedKeys || []);
+  let repairableFailedKeys = outcomes.flatMap((outcome) => outcome.repairableFailedKeys || []);
   const intentionalUnchangedKeys = outcomes.flatMap(
     (outcome) => outcome.intentionalUnchangedKeys || []
   );
 
-  // One bounded repair pass for only the labels that failed validation. This
-  // avoids both English leakage and the old client-side rapid retry loop.
-  if (failedKeys.length) {
+  // One bounded repair pass is allowed only when OpenAI actually responded but
+  // individual labels failed validation. A timeout/network/provider failure is
+  // deferred immediately so one page visit can never trigger a second paid
+  // request for the same failed chunk.
+  if (repairableFailedKeys.length) {
     const repairLabels = Object.fromEntries(
-      failedKeys.filter((key) => Object.prototype.hasOwnProperty.call(missingLabels, key)).map((key) => [key, missingLabels[key]])
+      repairableFailedKeys.filter((key) => Object.prototype.hasOwnProperty.call(missingLabels, key)).map((key) => [key, missingLabels[key]])
     );
     try {
       const repair = await translateLabelChunk({
@@ -360,11 +369,12 @@ async function translateMissingLabels({
       Object.assign(translatedLabels, repair?.labels || {});
       intentionalUnchangedKeys.push(...(repair?.intentionalUnchangedKeys || []));
       failedKeys = failedKeys.filter((key) => !String(repair?.labels?.[key] || "").trim());
+      repairableFailedKeys = repairableFailedKeys.filter((key) => !String(repair?.labels?.[key] || "").trim());
     } catch (error) {
       console.warn("UI translation bounded repair deferred", {
         locale,
         namespace,
-        keyCount: failedKeys.length,
+        keyCount: repairableFailedKeys.length,
         message: error?.message || String(error),
       });
     }

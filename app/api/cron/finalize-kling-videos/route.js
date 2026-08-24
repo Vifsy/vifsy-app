@@ -156,133 +156,10 @@ async function downloadKlingVideo(videoUrl) {
   return Buffer.from(arrayBuffer);
 }
 
-async function fetchReferenceImageDataUrl(url) {
-  if (!url) throw new Error("Verified product reference URL is missing");
-  const response = await fetch(url, {
-    method: "GET",
-    redirect: "follow",
-    headers: { Accept: "image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8,*/*;q=0.5" },
-  });
-  if (!response.ok) throw new Error(`Verified product reference fetch failed (${response.status})`);
-  const contentType = String(response.headers.get("content-type") || "image/jpeg").split(";")[0];
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (!buffer.length) throw new Error("Verified product reference was empty");
-  return `data:${contentType};base64,${buffer.toString("base64")}`;
-}
-
-async function validateKlingVideoProductView({ openai, supabase, post, task }) {
-  const selection = post?.video_background_selection;
-  if (!selection || typeof selection !== "object" || Array.isArray(selection)) {
-    return { passed: true, skipped: true };
-  }
-  const existing = selection?.product_video_validation;
-  if (existing?.status === "passed") return { passed: true, skipped: false, cached: true };
-
-  const productImageUrl = String(selection?.verified_product_image_url || "").trim();
-  const productTitle = String(selection?.verified_product_title || "verified product").trim();
-  const viewLock = selection?.reference_safety?.verifiedViewLock || null;
-  if (!productImageUrl || !viewLock) {
-    throw new Error("Kling product-view validation prerequisites are missing");
-  }
-
-  const durationSeconds = normalizeVideoDurationSeconds(task.durationSeconds, post.video_duration_seconds, 6);
-  const [referenceDataUrl, frames] = await Promise.all([
-    fetchReferenceImageDataUrl(productImageUrl),
-    sampleRemoteVideoFrames({
-      videoUrl: task.videoUrl,
-      durationSeconds,
-      fractions: [0.08, 0.22, 0.38, 0.54, 0.70, 0.84, 0.95],
-    }),
-  ]);
-  if (!frames?.length) throw new Error("Kling product-view validation produced no sampled frames");
-
-  const content = [
-    {
-      type: "input_text",
-      text:
-        `Audit this finished Kling product video for the ecommerce product "${productTitle}". ` +
-        "The first image is the ONLY authoritative retailer product reference. The following images are sampled frames from the generated video. " +
-        `Verified view lock: ${String(viewLock?.verifiedView || "same source view only")}. ` +
-        `${String(viewLock?.visibleSurfaceSummary || "Only source-visible surfaces are verified.")} ` +
-        `${String(viewLock?.motionConstraint || "Never expose an unseen product surface.")} ` +
-        "A plausible hidden side is still UNVERIFIED and must be rejected. For apparel, if the retailer shows only the back, ANY frame showing the front is a failure; if only the front is shown, ANY frame exposing the back is a failure. " +
-        "Also reject if the visible print/logo/wording/color/design materially changes, disappears, moves to another side, or becomes a different product. Ignore changes to people, scenery, lighting and camera motion unless they cause an unverified product surface to become visible. If uncertain, fail closed. Return strict JSON only.",
-    },
-    { type: "input_text", text: "AUTHORITATIVE RETAILER PRODUCT REFERENCE" },
-    { type: "input_image", image_url: referenceDataUrl, detail: "high" },
-  ];
-  for (const frame of frames) {
-    content.push({ type: "input_text", text: `VIDEO FRAME at ${Number(frame.time).toFixed(2)} seconds` });
-    content.push({ type: "input_image", image_url: `data:image/jpeg;base64,${frame.buffer.toString("base64")}`, detail: "high" });
-  }
-
-  const response = await openai.responses.create({
-    model: "gpt-4.1-mini",
-    input: [{ role: "user", content }],
-    max_output_tokens: 600,
-    text: {
-      format: {
-        type: "json_schema",
-        name: "kling_product_video_surface_audit",
-        strict: true,
-        schema: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            same_product_all_frames: { type: "boolean" },
-            verified_view_preserved_all_frames: { type: "boolean" },
-            unverified_surface_exposed_any_frame: { type: "boolean" },
-            print_logo_text_preserved: { type: "boolean" },
-            confidence: { type: "number", minimum: 0, maximum: 1 },
-            reason: { type: "string" },
-          },
-          required: [
-            "same_product_all_frames",
-            "verified_view_preserved_all_frames",
-            "unverified_surface_exposed_any_frame",
-            "print_logo_text_preserved",
-            "confidence",
-            "reason",
-          ],
-        },
-      },
-    },
-  });
-  const raw = response?.output_text || response?.output?.flatMap?.((item) => item?.content || []).map?.((item) => item?.text || "").join?.("") || "";
-  let parsed = null;
-  try { parsed = JSON.parse(raw); } catch { parsed = null; }
-  const confidence = Number(parsed?.confidence || 0);
-  const passed = Boolean(
-    parsed?.same_product_all_frames === true &&
-    parsed?.verified_view_preserved_all_frames === true &&
-    parsed?.unverified_surface_exposed_any_frame !== true &&
-    parsed?.print_logo_text_preserved === true &&
-    confidence >= 0.88
-  );
-  const validation = {
-    status: passed ? "passed" : "failed",
-    checked_at: new Date().toISOString(),
-    sampled_frames: frames.map((frame) => Number(frame.time.toFixed(2))),
-    confidence,
-    reason: String(parsed?.reason || (passed ? "verified" : "product_view_validation_failed")),
-  };
-  const nextSelection = { ...selection, product_video_validation: validation };
-  const { error } = await supabase
-    .from("posts")
-    .update({ video_background_selection: nextSelection, updated_at: new Date().toISOString() })
-    .eq("id", post.id)
-    .eq("video_provider", "kling");
-  if (error) throw new Error(`Could not persist Kling product-view validation: ${error.message}`);
-
-  console.info("Kling finished-video product-view validation completed", {
-    postId: post.id,
-    passed,
-    confidence,
-    reason: validation.reason,
-    sampledFrames: validation.sampled_frames,
-  });
-  return { passed, validation };
-}
+// Product identity and visible-surface safety are enforced before the paid Kling
+// generation is submitted. Finished-video AI auditing was intentionally removed
+// from the delivery path: it added another vision call, extra frame sampling and
+// could falsely reject an otherwise usable paid video.
 
 async function uploadKlingTypographyOverlay({ supabase, post, buffer }) {
   const storagePath = `${post.user_id}/${post.id}-kling-text-overlay.png`;
@@ -358,7 +235,9 @@ async function createFinishedKlingTypographyOnce({ openai, supabase, post, task,
     const frames = await sampleRemoteVideoFrames({
       videoUrl: task.videoUrl,
       durationSeconds,
-      fractions: [0.12, 0.42, 0.72, 0.9],
+      // Two representative finished-video frames are enough to art-direct the
+      // transparent typography while keeping Chromium work and image inputs low.
+      fractions: [0.28, 0.72],
     });
     const referenceFiles = [];
     for (let index = 0; index < frames.length; index += 1) {
@@ -763,25 +642,6 @@ export async function GET(request) {
       }
 
       try {
-        const productViewValidation = await validateKlingVideoProductView({
-          openai,
-          supabase,
-          post,
-          task,
-        });
-        if (!productViewValidation.passed) {
-          const reason = productViewValidation?.validation?.reason || "The generated video exposed an unverified product surface or altered the verified product identity.";
-          await markKlingPostFailed(
-            supabase,
-            post,
-            "kling_product_surface_validation",
-            `Kling video rejected before delivery: ${reason}`
-          );
-          summary.failed += 1;
-          summary.product_surface_rejected = Number(summary.product_surface_rejected || 0) + 1;
-          continue;
-        }
-
         const finalVideo = await getKlingFinalVideoSource({
           openai,
           supabase,
