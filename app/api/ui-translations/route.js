@@ -14,7 +14,8 @@ export const maxDuration = 30;
 const MAX_NAMESPACES_PER_REQUEST = 4;
 const TRANSLATION_CHUNK_SIZE = 80;
 const TRANSLATION_CONCURRENCY = 4;
-const TRANSLATION_FETCH_TIMEOUT_MS = 6500;
+const TRANSLATION_FETCH_TIMEOUT_MS = 12000;
+const TRANSLATION_DEFER_MS = 5 * 60 * 1000;
 const TRANSLATION_META_KEY = "__spreelo_translation_meta";
 
 function getIntentionalUnchangedKeys(labels) {
@@ -32,7 +33,12 @@ function isTranslationKeyDeferred({ labels, key, defaultValue }) {
   const entry = getDeferredTranslationKeys(labels)?.[String(key)];
   if (!entry) return false;
   const until = new Date(entry.until || 0).getTime();
-  if (!Number.isFinite(until) || until <= Date.now()) return false;
+  const remainingMs = until - Date.now();
+  if (!Number.isFinite(until) || remainingMs <= 0) return false;
+  // v144.32: do not honor legacy six-hour deferrals. A transient provider
+  // timeout may cool down briefly, but it must not leave new UI copy untranslated
+  // for hours after the first visitor encountered it.
+  if (remainingMs > TRANSLATION_DEFER_MS + 30_000) return false;
   return String(entry.source || "") === String(defaultValue || "");
 }
 
@@ -468,7 +474,7 @@ async function getOrCreateNamespaceLabels({ supabaseAdmin, locale, namespace }) 
       mergedIntentionalUnchangedKeys.delete(String(key));
     }
   }
-  const deferredUntil = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
+  const deferredUntil = new Date(Date.now() + TRANSLATION_DEFER_MS).toISOString();
   for (const key of failedKeys || []) {
     mergedDeferredKeys[String(key)] = {
       source: String(defaultLabels?.[key] || ""),

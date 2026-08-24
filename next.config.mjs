@@ -19,6 +19,7 @@ const nextConfig = {
       "node_modules/@img/sharp-libvips-linux-x64/**/*",
       "node_modules/@sparticuz/chromium/**/*",
       "node_modules/.pnpm/@sparticuz+chromium@*/node_modules/@sparticuz/chromium/**/*",
+      "assets/fonts/**/*",
     ],
   },
   serverExternalPackages: [

@@ -17,6 +17,11 @@ import {
   waitForShotstackRender,
 } from "../../../../lib/shotstack.js";
 import { sampleRemoteVideoFrames } from "../../../../lib/videoFrameSampler.js";
+import {
+  escapeProductSvg,
+  getProductTypographyProfile,
+  wrapProductTitle,
+} from "../../../../lib/globalProductTypography.js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,6 +33,7 @@ const KLING_TYPOGRAPHY_MODEL = "gpt-image-2";
 const DEFAULT_MAX_PENDING_HOURS = 6;
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const KLING_FINALIZATION_LEASE_MS = 6 * 60 * 1000;
+const KLING_FINALIZATION_RETRY_BACKOFF_MS = 5 * 60 * 1000;
 const KLING_PROVIDER_PENDING_STATUSES = ["submitting", "submitted", "created", "queued", "pending", "processing", "rendering"];
 
 
@@ -85,6 +91,22 @@ function finalizationLeaseIsFresh(post, nowMs = Date.now()) {
   if (String(post?.video_status || "") !== "finalizing") return false;
   const claimedAt = new Date(post?.kling_last_polled_at || 0).getTime();
   return Number.isFinite(claimedAt) && claimedAt > 0 && nowMs - claimedAt < KLING_FINALIZATION_LEASE_MS;
+}
+
+function finalizationRetryBackoffIsFresh(post, nowMs = Date.now()) {
+  if (String(post?.video_status || "") !== "finalization_retry") return false;
+  const failedAt = new Date(post?.kling_last_polled_at || 0).getTime();
+  return Number.isFinite(failedAt) && failedAt > 0 && nowMs - failedAt < KLING_FINALIZATION_RETRY_BACKOFF_MS;
+}
+
+function hasRecoverableTypographyFailure(post) {
+  const selection = post?.video_background_selection;
+  if (!selection || typeof selection !== "object" || Array.isArray(selection)) return false;
+  const status = String(selection.text_overlay_status || "").trim();
+  if (status === "failed") return true;
+  if (status !== "generating") return false;
+  const startedAt = new Date(selection.text_overlay_generation_started_at || 0).getTime();
+  return !Number.isFinite(startedAt) || startedAt <= 0 || Date.now() - startedAt >= KLING_FINALIZATION_LEASE_MS;
 }
 
 async function claimKlingFinalization(supabase, post) {
@@ -286,14 +308,142 @@ async function normalizeFinishedKlingTypography(buffer) {
   return { buffer: normalized, visibleRatio, strongRatio, edgeRatio };
 }
 
+function layoutDeterministicTypography(value, { maxWidth, maxLines, sizes }) {
+  const text = String(value || "").replace(/\s+/gu, " ").trim();
+  const profile = getProductTypographyProfile(text);
+  for (const fontSize of sizes) {
+    const wrapped = wrapProductTitle(text, {
+      fontSize,
+      maxWidth,
+      maxLines,
+      languageHint: "und",
+    });
+    if (wrapped.complete && wrapped.lines.length <= maxLines) {
+      return { ...wrapped, fontSize, lineHeight: Math.round(fontSize * 1.16) };
+    }
+  }
+  const fontSize = sizes[sizes.length - 1];
+  const wrapped = wrapProductTitle(text, {
+    fontSize,
+    maxWidth,
+    maxLines,
+    languageHint: "und",
+  });
+  return { ...wrapped, fontSize, lineHeight: Math.round(fontSize * 1.16), profile };
+}
+
+function renderDeterministicTypographyLines(layout, firstBaseline, { strokeWidth = 7, opacity = 1 } = {}) {
+  if (!layout?.lines?.length) return "";
+  const family = escapeProductSvg(layout.profile?.family || "Noto Sans");
+  const direction = layout.profile?.direction === "rtl" ? "rtl" : "ltr";
+  return layout.lines.map((line, index) => {
+    const y = firstBaseline + index * layout.lineHeight;
+    return `<text x="540" y="${y}" text-anchor="middle" font-family="${family}, Noto Sans, sans-serif" font-size="${layout.fontSize}" font-weight="900" letter-spacing="0.4" fill="#ffffff" fill-opacity="${opacity}" stroke="#111827" stroke-opacity="0.78" stroke-width="${strokeWidth}" paint-order="stroke fill" stroke-linejoin="round" direction="${direction}" unicode-bidi="plaintext">${escapeProductSvg(line)}</text>`;
+  }).join("");
+}
+
+async function createDeterministicKlingTypographyFallback({ supabase, post, selection, reason }) {
+  if (selection?.text_overlay_url) return selection;
+  const copy = selection?.text_overlay_copy || {};
+  const headline = String(copy?.headline || "").trim();
+  const subheadline = String(copy?.subheadline || "").trim();
+  if (!headline) throw new Error("Kling typography exact headline is missing");
+
+  const headlineLayout = layoutDeterministicTypography(headline, {
+    maxWidth: 900,
+    maxLines: 3,
+    sizes: [96, 88, 80, 72, 64, 56],
+  });
+  const subLayout = subheadline
+    ? layoutDeterministicTypography(subheadline, {
+        maxWidth: 860,
+        maxLines: 2,
+        sizes: [50, 46, 42, 38, 34],
+      })
+    : null;
+
+  const headlineHeight = Math.max(1, headlineLayout.lines.length) * headlineLayout.lineHeight;
+  const subHeight = subLayout ? Math.max(1, subLayout.lines.length) * subLayout.lineHeight : 0;
+  const totalHeight = headlineHeight + (subLayout ? 34 + subHeight : 0);
+  // Place the fallback in the upper safe area. It is deliberately simple,
+  // exact and transparent; it is used only when the one paid AI typography
+  // generation failed or was abandoned.
+  const groupTop = Math.max(250, Math.min(470, 410 - Math.round(totalHeight / 2)));
+  const headlineBaseline = groupTop + headlineLayout.fontSize;
+  const subBaseline = subLayout
+    ? headlineBaseline + (headlineLayout.lines.length - 1) * headlineLayout.lineHeight + 34 + subLayout.fontSize
+    : 0;
+
+  const svg = `<svg width="1080" height="1920" viewBox="0 0 1080 1920" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#000000" flood-opacity="0.34"/>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)">
+    ${renderDeterministicTypographyLines(headlineLayout, headlineBaseline, { strokeWidth: 8 })}
+    ${subLayout ? renderDeterministicTypographyLines(subLayout, subBaseline, { strokeWidth: 5, opacity: 0.96 }) : ""}
+  </g>
+</svg>`;
+
+  const rendered = await sharp(Buffer.from(svg))
+    .ensureAlpha()
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  const normalized = await normalizeFinishedKlingTypography(rendered);
+  const uploaded = await uploadKlingTypographyOverlay({ supabase, post, buffer: normalized.buffer });
+  const completedSelection = {
+    ...selection,
+    text_overlay_url: uploaded.imageUrl,
+    text_overlay_storage_path: uploaded.storagePath,
+    text_overlay_provider: "deterministic-svg-transparent-fallback",
+    text_overlay_status: "ready",
+    text_overlay_generated_at: new Date().toISOString(),
+    text_overlay_fallback_reason: truncate(reason || "AI typography unavailable", 900),
+    text_overlay_analysis: {
+      visible_ratio: Number(normalized.visibleRatio.toFixed(4)),
+      strong_ratio: Number(normalized.strongRatio.toFixed(4)),
+      edge_ratio: Number(normalized.edgeRatio.toFixed(4)),
+    },
+  };
+  const { error: persistError } = await supabase
+    .from("posts")
+    .update({ video_background_selection: completedSelection, updated_at: new Date().toISOString() })
+    .eq("id", post.id)
+    .eq("video_provider", "kling");
+  if (persistError) throw new Error(`Could not persist deterministic Kling typography fallback: ${persistError.message}`);
+
+  console.warn("Kling typography AI unavailable; deterministic transparent fallback created", {
+    postId: post.id,
+    taskId: post.kling_task_id,
+    reason: truncate(reason || "AI typography unavailable", 500),
+  });
+  return completedSelection;
+}
+
 async function createFinishedKlingTypographyOnce({ openai, supabase, post, task, selection }) {
   if (selection?.text_overlay_url) return selection;
   const status = String(selection?.text_overlay_status || "").trim();
   if (status === "generating") {
-    throw new Error("Kling typography generation was already claimed. Spreelo will not submit a second paid GPT-Image-2 typography generation.");
+    const startedAt = new Date(selection?.text_overlay_generation_started_at || 0).getTime();
+    const stale = !Number.isFinite(startedAt) || startedAt <= 0 || Date.now() - startedAt >= KLING_FINALIZATION_LEASE_MS;
+    if (!stale) {
+      throw new Error("Kling typography generation is still inside its active finalization lease.");
+    }
+    return createDeterministicKlingTypographyFallback({
+      supabase,
+      post,
+      selection,
+      reason: "The original GPT-Image-2 typography claim became stale before completion.",
+    });
   }
   if (status === "failed") {
-    throw new Error("Kling typography generation previously failed. Spreelo will not submit a second paid GPT-Image-2 typography generation.");
+    return createDeterministicKlingTypographyFallback({
+      supabase,
+      post,
+      selection,
+      reason: selection?.text_overlay_error || "The one allowed GPT-Image-2 typography generation previously failed.",
+    });
   }
   const copy = selection?.text_overlay_copy || {};
   const headline = String(copy?.headline || "").trim();
@@ -412,7 +562,12 @@ Return only the transparent typography artwork.
       text_overlay_error: truncate(error?.message || String(error), 900),
     };
     await supabase.from("posts").update({ video_background_selection: failedSelection, updated_at: new Date().toISOString() }).eq("id", post.id).eq("video_provider", "kling");
-    throw error;
+    return createDeterministicKlingTypographyFallback({
+      supabase,
+      post,
+      selection: failedSelection,
+      reason: error?.message || String(error),
+    });
   }
 }
 
@@ -616,6 +771,7 @@ export async function GET(request) {
     poll_errors: 0,
     locked: 0,
     provider_cache_hits: 0,
+    deferred: 0,
   };
 
   try {
@@ -637,6 +793,14 @@ export async function GET(request) {
 
     for (const post of posts || []) {
       summary.checked += 1;
+
+      // Local post-processing retries are intentionally slower than the cron.
+      // A transient Shotstack/storage/etc. problem must not be hammered every
+      // minute. Successful Kling output is already cached at this point.
+      if (finalizationRetryBackoffIsFresh(post) && !hasRecoverableTypographyFailure(post)) {
+        summary.deferred += 1;
+        continue;
+      }
 
       // A cron invocation can run longer than the one-minute schedule. Claim the
       // row atomically using updated_at as a compare-and-swap token so the next
@@ -768,7 +932,7 @@ export async function GET(request) {
         // Do not fail the paid Kling generation just because local post-processing
         // had a temporary error. The successful Kling source was cached before
         // post-processing, so retries do not keep polling the provider.
-        console.warn("Kling video finalization failed; existing result will be retried", {
+        console.warn("Kling video finalization failed; cached result will retry after backoff", {
           postId: post.id,
           taskId: post.kling_task_id,
           message: finalizeError?.message || String(finalizeError),
@@ -788,7 +952,7 @@ export async function GET(request) {
 
     return Response.json({
       ok: true,
-      mode: "kling_cached_source_single_finalizer_no_generation_retry",
+      mode: "kling_cached_source_single_finalizer_backoff_with_deterministic_typography_fallback",
       max_pending_hours: maxPendingHours,
       summary,
     });
