@@ -93,7 +93,6 @@ const emptyCarouselProduct = () => ({
   product_identifier: "",
   product_display_type: "",
   product_color: "",
-  product_price: "",
   product_image_width: null,
   product_image_height: null,
   product_identity_locked: false,
@@ -396,7 +395,6 @@ export default function AdminPostApprovalsPage() {
         </div>
         <div className="admin-product-manual-fields admin-v14401-manual-primary">
           <label><span>{t("admin.approvals.productName")}</span><input value={item.title || ""} onChange={(event) => setField("title", event.target.value)} /></label>
-          <label><span>{t("admin.approvals.priceOptional")}</span><input value={item.product_price || ""} onChange={(event) => setField("product_price", event.target.value)} /></label>
           <label className="admin-product-manual-description"><span>{t("admin.approvals.productDescription")}</span><textarea value={item.description || ""} onChange={(event) => setField("description", event.target.value)} /></label>
         </div>
         <details className="admin-v14401-advanced-product-fields">

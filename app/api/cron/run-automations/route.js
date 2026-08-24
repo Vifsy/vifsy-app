@@ -68,7 +68,6 @@ import {
   isLikelyProductDetailUrl,
   isProductEngineV2Enabled,
   isSafeProductSearchQuery,
-  sanitizeCatalogPrice,
   sanitizeProductSearchQueryList,
   validateSingleProductCopyAgainstContract,
 } from "../../../../lib/productEngineV2.js";
@@ -1409,82 +1408,6 @@ function getTrustedProductCardTitle(item) {
   return title ? normalizeSlideText(title, 96) : "";
 }
 
-function getTrustedWebsiteItemPricing(websiteItem) {
-  const currentPriceRaw = findFirstProductCardValue(websiteItem, [
-    "sale_price",
-    "current_price",
-    "discount_price",
-    "final_price",
-    "offer_price",
-    "now_price",
-    "product_sale_price",
-  ]);
-  const originalPriceRaw = findFirstProductCardValue(websiteItem, [
-    "original_price",
-    "compare_at_price",
-    "regular_price",
-    "list_price",
-    "was_price",
-    "price_before_discount",
-    "product_original_price",
-  ]);
-  const fallbackPriceRaw = findFirstProductCardValue(websiteItem, [
-    "price",
-    "formatted_price",
-    "display_price",
-    "product_price",
-  ]);
-
-  let currentPrice = normalizeVerifiedPriceValue(currentPriceRaw || fallbackPriceRaw);
-  let originalPrice = normalizeVerifiedPriceValue(originalPriceRaw);
-
-  if (!currentPrice && originalPrice) {
-    currentPrice = originalPrice;
-    originalPrice = "";
-  }
-
-  if (currentPrice && originalPrice) {
-    const currentAmount = parseComparablePriceAmount(currentPrice);
-    const originalAmount = parseComparablePriceAmount(originalPrice);
-
-    if (currentAmount !== null && originalAmount !== null) {
-      if (currentAmount > originalAmount) {
-        const swappedCurrent = originalPrice;
-        originalPrice = currentPrice;
-        currentPrice = swappedCurrent;
-      } else if (Math.abs(currentAmount - originalAmount) < 0.0001) {
-        originalPrice = "";
-      }
-    } else if (currentPrice === originalPrice) {
-      originalPrice = "";
-    }
-  }
-
-  const displayPrice = currentPrice || originalPrice || "";
-  const isOnSale = Boolean(displayPrice && originalPrice && displayPrice !== originalPrice);
-
-  if (displayPrice && isLikelyWrongUsdPriceForUrl(displayPrice, websiteItem?.url || websiteItem?.website_url)) {
-    return {
-      displayPrice: "",
-      currentPrice: "",
-      salePrice: "",
-      originalPrice: "",
-      isOnSale: false,
-    };
-  }
-
-  return {
-    displayPrice,
-    currentPrice: displayPrice,
-    salePrice: isOnSale ? displayPrice : "",
-    originalPrice: isOnSale ? originalPrice : "",
-    isOnSale,
-  };
-}
-
-function getTrustedProductCardPrice(item) {
-  return getTrustedWebsiteItemPricing(item).displayPrice;
-}
 
 function buildCenteredSvgTextBlock(lines, { x, y, fontSize, lineHeight, fontWeight = 400, fill = "#0f172a" }) {
   if (!Array.isArray(lines) || !lines.length) {
@@ -3635,12 +3558,10 @@ Important campaign strategy rules:
 `.trim();
 }
 
-function formatWebsiteItemForPrompt(websiteItem, { includePrice = true } = {}) {
+function formatWebsiteItemForPrompt(websiteItem) {
   if (!websiteItem) {
     return "No specific website item was selected.";
   }
-
-  const verifiedPrice = includePrice ? getTrustedWebsiteItemPrice(websiteItem) : "";
 
   return `
 Selected locked website product:
@@ -3651,7 +3572,6 @@ Product identifier/SKU: ${websiteItem.product_identifier || websiteItem.locked_p
 Colour/variant: ${websiteItem.product_color || websiteItem.locked_product_color || websiteItem.color || "Not provided"}
 URL: ${websiteItem.url || "Not provided"}
 Description: ${websiteItem.description || "Not provided"}
-Verified price: ${includePrice ? verifiedPrice || "Not provided" : "Intentionally omitted for this format"}
 Main product image URL: ${websiteItem.image_url || "Not provided"}
 Locked same-page identity: ${websiteItem.product_identity_locked === true ? "yes" : "no"}
 
@@ -3659,13 +3579,9 @@ Important website item rules:
 - Base this post on the selected website item above.
 - Use only details that are present in the selected item information.
 - Use the selected item URL as the destination link when this post promotes the selected item.
-- Do not invent prices, discounts, guarantees, availability, dates, addresses, square meters, specifications or claims.
-- If a verified price is provided above, you may mention that exact price only, exactly as written, inside a normal sentence. Do not put a price on its own separate line. Do not convert currency and do not change the currency symbol/code.
-- If no verified price is provided above, do not mention any price at all.
-- Never invent USD, EUR, SEK, kr or any other currency. A price must come from Verified price above.
-- Do not add generic price fallback text such as "see current price" or "se aktuellt pris".
-- A visible ordinary price is not automatically an offer, sale, discount, deal, bargain, campaign price or limited-time promotion.
-- Do not call the item an offer, deal, sale, discount, bargain, fynd, erbjudande, rabatt, rea or kampanjpris unless the selected item information says so or the automation instruction contains an exact authorized customer-supplied campaign offer. In that case, use only the authorized campaign values as written.
+- Do not mention, infer, search for or display a product price.
+- Do not invent discounts, guarantees, availability, dates, addresses, square meters, specifications or claims.
+- Do not call the item an offer, deal, sale, discount, bargain, fynd, erbjudande, rabatt, rea or kampanjpris unless the automation instruction contains an exact authorized customer-supplied campaign offer. In that case, use only the authorized campaign values as written.
 - If information is missing, write around the value and benefit instead of inventing facts.
 `.trim();
 }
@@ -3675,7 +3591,6 @@ function formatWebsiteItemsForPrompt(items = []) {
   const rows = (items || [])
     .slice(0, CAROUSEL_MAX_PRODUCT_SLIDES)
     .map((item, index) => {
-      const verifiedPrice = getTrustedWebsiteItemPrice(item);
       return `Product ${index + 1}:
 Brand: ${item.product_brand || item.locked_product_brand || item.brand || "Not provided"}
 Title/model: ${item.title || "Not provided"}
@@ -3684,10 +3599,9 @@ Product identifier/SKU: ${item.product_identifier || item.locked_product_identif
 Colour/variant: ${item.product_color || item.locked_product_color || item.color || "Not provided"}
 URL: ${item.url || "Not provided"}
 Description: ${item.description || "Not provided"}
-Verified price: ${verifiedPrice || "Not provided"}
-Direct checkout proof: ${verifiedPrice ? "Price visible" : "Not verified - use contact/request-info wording, not buy-now wording"}
 Main product image URL: ${item.image_url || "Not provided"}
-Locked same-page identity: ${item.product_identity_locked === true ? "yes" : "no"}`;
+Locked same-page identity: ${item.product_identity_locked === true ? "yes" : "no"}
+Price policy: Never include or infer a product price.`;
     });
 
   if (!rows.length) {
@@ -3817,7 +3731,7 @@ function hasMeaningfulProductIdentityText(value) {
   }
 
   // A single short navigation label is weak product evidence. A one-word product
-  // can still pass later if the page has strong product proof such as schema/cart/price.
+  // can still pass later if the page has strong product proof such as schema/cart/identity.
   if (tokens.length === 1 && text.length < 9) {
     return false;
   }
@@ -3870,7 +3784,6 @@ function getCarouselProductConfidence(item) {
 
   if (hasMeaningfulProductIdentityText(item.title)) score += 18;
   if (String(item.description || "").trim().length >= 20) score += 8;
-  if (getTrustedWebsiteItemPrice(item) || normalizeVerifiedPriceValue(item.price)) score += 16;
   if (isUsableProductImageForItem(item)) score += 22;
 
   score += getProductUrlEvidenceScore(item.url);
@@ -10189,69 +10102,6 @@ function normalizeVerifiedPriceValue(value) {
 }
 
 
-function formatVerifiedPriceFromAmount(amount, currency = "") {
-  const amountText = decodeHtmlEntities(String(amount || ""))
-    .replace(/\s+/g, " ")
-    .trim();
-  const currencyText = decodeHtmlEntities(String(currency || ""))
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!amountText) {
-    return "";
-  }
-
-  const alreadyComplete = normalizeVerifiedPriceValue(amountText);
-  if (alreadyComplete) {
-    return alreadyComplete;
-  }
-
-  if (!currencyText) {
-    return "";
-  }
-
-  return normalizeVerifiedPriceValue(`${amountText} ${currencyText}`);
-}
-
-function normalizeExtractedProductPricing({
-  currentPrice = "",
-  originalPrice = "",
-  source = "",
-  confidence = "",
-} = {}) {
-  let current = normalizeVerifiedPriceValue(currentPrice);
-  let original = normalizeVerifiedPriceValue(originalPrice);
-
-  if (!current && original) {
-    current = original;
-    original = "";
-  }
-
-  if (current && original) {
-    const currentAmount = parseComparablePriceAmount(current);
-    const originalAmount = parseComparablePriceAmount(original);
-
-    if (currentAmount !== null && originalAmount !== null) {
-      if (currentAmount > originalAmount) {
-        const swap = current;
-        current = original;
-        original = swap;
-      } else if (Math.abs(currentAmount - originalAmount) < 0.0001) {
-        original = "";
-      }
-    } else if (current === original) {
-      original = "";
-    }
-  }
-
-  return {
-    price: current,
-    sale_price: current && original ? current : "",
-    original_price: current && original ? original : "",
-    price_source: current ? String(source || "").trim() : "",
-    price_confidence: current ? String(confidence || "").trim() : "",
-  };
-}
 
 function extractVerifiedPriceMatches(value) {
   const source = decodeHtmlEntities(String(value || ""))
@@ -10277,23 +10127,6 @@ function extractVerifiedPriceMatches(value) {
   return prices;
 }
 
-function extractProductPricingFromTitle(value) {
-  const title = decodeHtmlEntities(String(value || ""));
-  const prices = extractVerifiedPriceMatches(title);
-
-  if (!prices.length) {
-    return normalizeExtractedProductPricing();
-  }
-
-  const hasExplicitOriginalPriceSignal = /(rrp|uvp|msrp|list price|regular price|original price|was price|ordinarie pris|rek\.\s*pris)/i.test(title);
-
-  return normalizeExtractedProductPricing({
-    currentPrice: prices[0],
-    originalPrice: hasExplicitOriginalPriceSignal && prices.length > 1 ? prices[1] : "",
-    source: "product_search_result_title",
-    confidence: "medium",
-  });
-}
 
 function sanitizeProductTitleForCard(value) {
   let title = decodeHtmlEntities(String(value || ""))
@@ -10350,86 +10183,9 @@ function getHostnameFromUrl(value) {
   }
 }
 
-function isLikelyWrongUsdPriceForUrl(price, url) {
-  const priceText = String(price || "");
 
-  if (!/(?:\$|\busd\b)/i.test(priceText)) {
-    return false;
-  }
-
-  const host = getHostnameFromUrl(url);
-
-  if (!host) {
-    return false;
-  }
-
-  return /\.(?:se|dk|no|fi|de|fr|nl|be|es|it|pt|pl|cz|at|ch|eu|uz)$/i.test(host);
-}
-
-function getPreferredCurrencyRegexForUrl(url) {
-  const host = getHostnameFromUrl(url);
-
-  if (/\.se$/i.test(host)) return /\b(?:sek|kr)\b|:-/i;
-  if (/\.no$/i.test(host)) return /\b(?:nok|kr)\b|:-/i;
-  if (/\.dk$/i.test(host)) return /\b(?:dkk|kr)\b|:-/i;
-  if (/\.fi$/i.test(host)) return /€|\b(?:eur|euro)\b/i;
-  if (/\.(?:de|fr|nl|be|es|it|pt|at|eu)$/i.test(host)) {
-    return /€|\b(?:eur|euro)\b/i;
-  }
-  if (/\.ch$/i.test(host)) return /\bchf\b/i;
-  if (/\.pl$/i.test(host)) return /\bpln\b/i;
-  if (/\.cz$/i.test(host)) return /\bczk\b/i;
-
-  return null;
-}
-
-function pickPreferredPriceForUrl(prices, url) {
-  const uniquePrices = Array.from(
-    new Set((prices || []).map((price) => normalizeVerifiedPriceValue(price)).filter(Boolean))
-  );
-
-  if (!uniquePrices.length) {
-    return "";
-  }
-
-  const preferredCurrency = getPreferredCurrencyRegexForUrl(url);
-  if (preferredCurrency) {
-    const preferred = uniquePrices.find((price) => preferredCurrency.test(price));
-    if (preferred) return preferred;
-  }
-
-  const nonSuspicious = uniquePrices.find(
-    (price) => !isLikelyWrongUsdPriceForUrl(price, url)
-  );
-
-  return nonSuspicious || "";
-}
-
-function getTrustedWebsiteItemPrice(websiteItem) {
-  return getTrustedWebsiteItemPricing(websiteItem).displayPrice;
-}
-
-function isStandaloneUnsupportedPriceLine(line, verifiedDigits) {
-  const text = String(line || "").trim();
-
-  if (!text) return false;
-  if (!/^\d+(?:[,.]\d{1,2})?$/.test(text)) return false;
-
-  return !segmentContainsVerifiedPrice(text, verifiedDigits);
-}
-
-function segmentContainsVerifiedPrice(segment, verifiedDigits) {
-  if (!verifiedDigits) {
-    return false;
-  }
-
-  return normalizePriceDigits(segment).includes(verifiedDigits);
-}
-
-function stripUnsupportedPriceClaims(postContent, websiteItem) {
+function stripProductPriceClaims(postContent) {
   let sanitized = String(postContent || "");
-  const verifiedPrice = getTrustedWebsiteItemPrice(websiteItem);
-  const verifiedDigits = normalizePriceDigits(verifiedPrice);
 
   const pricePatterns = [
     /\bPris\s*:\s*[^.!?\n]+[.!?]?/gi,
@@ -10443,37 +10199,11 @@ function stripUnsupportedPriceClaims(postContent, websiteItem) {
   ];
 
   for (const pattern of pricePatterns) {
-    sanitized = sanitized.replace(pattern, (match) => {
-      if (segmentContainsVerifiedPrice(match, verifiedDigits)) {
-        return match;
-      }
-
-      console.warn("Removed unsupported price claim from generated post", {
-        verifiedPrice: verifiedPrice || null,
-        removed: truncateText(match, 160),
-      });
-
-      return "";
-    });
+    sanitized = sanitized.replace(pattern, "");
   }
 
-  sanitized = sanitized
-    .split(/\n/)
-    .filter((line) => {
-      if (!isStandaloneUnsupportedPriceLine(line, verifiedDigits)) {
-        return true;
-      }
-
-      console.warn("Removed standalone unsupported price line from generated post", {
-        verifiedPrice: verifiedPrice || null,
-        removed: truncateText(line, 80),
-      });
-
-      return false;
-    })
-    .join("\n");
-
   return sanitized
+    .replace(/\b(?:pris|price)\s*:\s*(?=$|[\s,.;!?])/gi, "")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/\s+([,.!?])/g, "$1")
     .replace(/\n{3,}/g, "\n\n")
@@ -10485,14 +10215,9 @@ function sanitizeUnsupportedOfferLanguage(postContent, websiteItem) {
     return postContent;
   }
 
-  // Do not rewrite generated copy with Swedish/English keyword replacements.
-  // The prompt must prevent unverified offers in the correct language. We only
-  // keep language-neutral verified price cleanup below.
-  const sanitized = websiteItem?.url
-    ? stripUnsupportedPriceClaims(String(postContent), websiteItem)
-    : String(postContent);
-
-  return sanitized.trim();
+  // Product prices are never collected or displayed. Strip any price-like
+  // claim that a generative model may nevertheless try to add.
+  return stripProductPriceClaims(String(postContent)).trim();
 }
 
 function stripDetectedPrices(value) {
@@ -10551,9 +10276,7 @@ function buildAutomationPrompt(rule) {
     : `This automation rule is supposed to create a campaign carousel. Only ${carouselProducts.length} clearly relevant website product${carouselProducts.length === 1 ? "" : "s"} could be safely selected, so use them as campaign-relevant examples and keep the caption focused on the campaign theme. Do not invent additional products.`;
   const websiteItemText = hasCarouselProducts
     ? `Selected carousel products:\n${formatWebsiteItemsForPrompt(carouselProducts)}`
-    : formatWebsiteItemForPrompt(rule.website_item, {
-        includePrice: !isAnimatedVideoRule(rule),
-      });
+    : formatWebsiteItemForPrompt(rule.website_item);
   const campaignStrategyText = formatCampaignStrategyForPrompt(rule);
   const campaignIdentityLockText = formatCampaignIdentityLockForPrompt(rule);
   const authorizedCampaignOfferText = formatAuthorizedCampaignOfferForPrompt(rule);
@@ -10571,7 +10294,7 @@ function buildAutomationPrompt(rule) {
   const productContractText = selectedContractProducts.length
     ? `Product content contract (strict):
 ${selectedContractProducts
-        .map((item, index) => `${index + 1}. ${item.title}${item.price ? ` | Verified price: ${item.price}` : ""}${item.product_url ? ` | URL: ${item.product_url}` : ""}`)
+        .map((item, index) => `${index + 1}. ${item.title}${item.product_url ? ` | URL: ${item.product_url}` : ""}`)
         .join("\n")}
 - Mention only the selected product names above.
 - Do not add, recommend, bundle or enumerate any other named products.
@@ -10672,10 +10395,10 @@ Website factual grounding rules:
 - Do not imply that a specific service exists unless the Brand profile or Selected website item clearly says the business offers that service.
 - If the post uses a general seasonal, educational or awareness angle that is not directly found on the website, keep the CTA general and safe, but still include the website URL.
 - For product-based businesses, use safe CTAs such as "see our current selection", "explore available products", "contact us for guidance" or "get help choosing the right option" when that fits the brand.
-- If the selected website item has no verified price or direct purchase proof, do not write as if it is a normal webshop checkout product. Use contact/request-info/request-quote style wording instead of buy-now wording.
+- Do not infer checkout readiness from price. Use only verified purchase/availability signals when choosing buy-now wording.
 - For service businesses, use safe CTAs such as "contact us to discuss your needs", "get in touch to learn what fits your situation" or "visit our website" unless a specific bookable service was provided.
 - Never invent services, guides, articles, guarantees, discounts, availability, booking pages or website pages that were not provided. An exact authorized customer-supplied campaign offer counts as provided information.
-- A product price is not automatically an offer, sale, discount, deal, bargain, fynd, erbjudande, rabatt, rea or kampanjpris. Use discount language only when the selected item confirms it or an exact authorized customer-supplied campaign offer is provided.
+- Use discount language only when an exact authorized customer-supplied campaign offer is provided.
 - For Black Friday, Cyber Monday, Black Week or similar shopping days, you may create buying urgency, but you must still not invent a discount, offer or campaign price. An exact authorized customer-supplied campaign offer may be used as written.
 - It is okay to use a relevant seasonal or educational angle, but do not present it as something the website specifically explains unless it actually does.
 
@@ -10690,7 +10413,7 @@ ${isGiveawayRule
 - For carousels, write one short intro and one clear CTA. Do not list every product in the caption if the slides already show them.
 - For carousel slide titles, use benefit/occasion/gift-angle wording instead of only copying product names when a campaign theme is provided.
 - If the selected platform includes both Facebook and Instagram, write a strong core post that works on both. Avoid platform-specific wording such as "click the link" unless a Destination URL is actually included.
-- Never mention a product price unless it was provided as Verified price for the selected website item. An authorized fixed-amount campaign discount is not a product price and may be mentioned exactly as supplied. If you mention a verified product price, write it naturally inside the text, never as a standalone line.
+- Never mention, infer or display a product price. An authorized customer-supplied campaign discount may still be mentioned exactly as supplied.
 - Always include the website domain in the final post if Destination URL is provided; do not show the full long product/category URL in the visible caption.
 - If emojis are disabled, do not use emojis.
 - If hashtags are enabled, include relevant hashtags at the end.
@@ -10988,25 +10711,6 @@ function getCarouselEmailProductBrand(slide) {
 
   return getTrustedProductCardBrand({
     brand_name: metadata.product_brand || slide?.product_brand || "",
-  });
-}
-
-function getCarouselEmailProductPricing(slide) {
-  const metadata = getCarouselEmailSlideMetadata(slide);
-  if (String(metadata.carousel_slide_role || "").toLowerCase().includes("outro")) {
-    return {
-      displayPrice: "",
-      currentPrice: "",
-      salePrice: "",
-      originalPrice: "",
-      isOnSale: false,
-    };
-  }
-
-  return getTrustedWebsiteItemPricing({
-    price: metadata.product_price || slide?.product_price || "",
-    sale_price: metadata.product_sale_price || "",
-    original_price: metadata.product_original_price || "",
   });
 }
 
@@ -11538,11 +11242,6 @@ function collectAutomationRunProductLogData({ websiteItem = null, websiteItems =
       title: String(item?.title || item?.name || "").trim() || null,
       url: String(item?.url || "").trim() || null,
       image_url: String(item?.image_url || item?.imageUrl || "").trim() || null,
-      price: getTrustedWebsiteItemPricing(item || {}).displayPrice || null,
-      sale_price: getTrustedWebsiteItemPricing(item || {}).salePrice || null,
-      original_price: getTrustedWebsiteItemPricing(item || {}).originalPrice || null,
-      price_source: String(item?.price_source || "").trim() || null,
-      price_confidence: String(item?.price_confidence || "").trim() || null,
       search_method: method,
       campaign_fit_score: Number.isFinite(Number(item?.campaign_fit_score)) ? Number(item.campaign_fit_score) : null,
       campaign_fit_source: String(item?.campaign_fit_source || "").trim() || null,
@@ -13238,8 +12937,6 @@ function extractLinks(html, pageUrl) {
       "courses",
       "package",
       "packages",
-      "pris",
-      "price",
     ];
 
     const negativeKeywords = [
@@ -13405,7 +13102,6 @@ function extractProductCardCandidatesFromHtml({
       title,
       url,
       description: title,
-      price: "",
       image_url: imageCandidate.imageUrl,
       source_page_url: pageUrl,
       reason: `Product card found on store search page: ${pageUrl}`,
@@ -14621,19 +14317,6 @@ function normalizeWebsiteItem(item, websiteUrl) {
   const url = resolvedUrl ? canonicalizeWebsiteProductUrl(resolvedUrl, websiteUrl) : websiteUrl;
   const normalizedRawImageUrl = normalizeShopifyImageWidthUrl(item?.image_url, 1600);
   const imageUrl = normalizedRawImageUrl ? resolveUrl(normalizedRawImageUrl, websiteUrl) : null;
-  const trustedPricing = getTrustedWebsiteItemPricing({
-    ...item,
-    url: url || websiteUrl,
-  });
-  let price = trustedPricing.displayPrice;
-  let salePrice = trustedPricing.salePrice;
-  let originalPrice = trustedPricing.originalPrice;
-
-  if (price && isLikelyWrongUsdPriceForUrl(price, url || websiteUrl)) {
-    price = "";
-    salePrice = "";
-    originalPrice = "";
-  }
 
   if (!title || !description) {
     return null;
@@ -14642,11 +14325,6 @@ function normalizeWebsiteItem(item, websiteUrl) {
   return {
     title,
     description: truncateText(description, 900),
-    price,
-    sale_price: salePrice,
-    original_price: originalPrice,
-    price_source: String(item?.price_source || "").trim(),
-    price_confidence: String(item?.price_confidence || "").trim(),
     type,
     url: url || websiteUrl,
     image_url: imageUrl && isHttpUrl(imageUrl) ? imageUrl : null,
@@ -14699,8 +14377,7 @@ Rules:
 - Do not use logos, brand logos, franchise logos, mascot images, category graphics, navigation graphics, decorative banners, hero images or generic campaign artwork as image_url.
 - Do not use an image_url if the image mainly shows a logo, brand mark, character artwork or campaign graphic without a clearly identifiable purchasable product.
 - If no real product/item image is clearly available for the selected item, set image_url to null.
-- If a clear product price is visible in the website content, include it in price.
-- If the price is not clearly visible, use an empty string for price.
+- Do not search for, return, infer or mention product prices.
 - Rank the returned items from strongest campaign match to weakest campaign match for the current automation context.
 - Do not rank by what appears first on the website.
 - Do not rank by which image is largest or most visually prominent.
@@ -14733,7 +14410,6 @@ Return JSON in this exact shape:
       "type": "product | service | listing | property | treatment | offer | course | menu_item | package | event | other",
       "url": "Full URL if known",
 "description": "Specific factual description based only on the website",
-"price": "Visible price if clearly found on the website, otherwise empty string",
 "image_url": "Full image URL if clearly relevant, otherwise null"
     }
   ]
@@ -15151,7 +14827,6 @@ function normalizeWebsiteCatalogItem(row) {
       type: "product",
       url: row.product_url || row.url || row.item_url || "",
       description: row.description || row.item_description || "",
-      price: row.price || "",
       image_url: row.image_url || row.item_image_url || null,
     },
     row.source_url || row.website_url || row.product_url || ""
@@ -15174,11 +14849,6 @@ function normalizeWebsiteCatalogItem(row) {
     category: row.category || "",
     tags: Array.isArray(row.tags) ? row.tags : [],
     availability: row.availability || "",
-    sale_price: row.sale_price || item.sale_price || "",
-    original_price: row.original_price || item.original_price || "",
-    price_source: row.price_source || item.price_source || "",
-    price_confidence: row.price_confidence || item.price_confidence || "",
-    price_rejected_reason: row.price_rejected_reason || null,
     product_schema_verified: Boolean(row.product_schema_verified),
     concrete_product_verified: persistedConcreteProductProof,
     ecommerce_proof_found: Boolean(row.ecommerce_proof_found),
@@ -15259,8 +14929,8 @@ function normalizeWebsiteCatalogItem(row) {
 }
 
 const WEBSITE_PRODUCT_CATALOG_LEGACY_SELECT =
-  "id, product_url, title, description, price, currency, image_url, source_url, times_used, last_used_at, is_active, discovery_source, item_key";
-const WEBSITE_PRODUCT_CATALOG_V2_SELECT = `${WEBSITE_PRODUCT_CATALOG_LEGACY_SELECT}, commerce_platform, page_type, page_type_confidence, category, tags, sale_price, original_price, availability, verification_score, product_schema_verified, ecommerce_proof_found, price_source, price_confidence, price_rejected_reason, last_verified_at, verification_metadata`;
+  "id, product_url, title, description, image_url, source_url, times_used, last_used_at, is_active, discovery_source, item_key";
+const WEBSITE_PRODUCT_CATALOG_V2_SELECT = `${WEBSITE_PRODUCT_CATALOG_LEGACY_SELECT}, commerce_platform, page_type, page_type_confidence, category, tags, availability, verification_score, product_schema_verified, ecommerce_proof_found, last_verified_at, verification_metadata`;
 const WEBSITE_PRODUCT_CATALOG_V3_SELECT = `${WEBSITE_PRODUCT_CATALOG_V2_SELECT}, store_map_node_url, store_map_node_title, store_map_node_type, category_urls, store_map_metadata`;
 
 function isMissingProductCatalogV2ColumnError(error) {
@@ -15272,26 +14942,6 @@ function isMissingProductCatalogV2ColumnError(error) {
     (message.includes("could not find") && message.includes("column")) ||
     message.includes("schema cache")
   );
-}
-
-function extractCurrencyFromVerifiedPrice(price) {
-  const value = String(price || "").trim();
-
-  if (!value) {
-    return "";
-  }
-
-  const lower = value.toLowerCase();
-
-  if (/\bsek\b|\bkr\b|:-/.test(lower)) return "SEK";
-  if (/\bnok\b/.test(lower)) return "NOK";
-  if (/\bdkk\b/.test(lower)) return "DKK";
-  if (/\beur\b|€|\beuro\b/.test(lower)) return "EUR";
-  if (/\busd\b|\$/.test(lower)) return "USD";
-  if (/\bgbp\b|£/.test(lower)) return "GBP";
-  if (/\buzs\b|сум/.test(lower)) return "UZS";
-
-  return "";
 }
 
 async function getWebsiteProductCatalogItems({
@@ -15477,8 +15127,6 @@ async function upsertWebsiteProductCatalogItems({
         product_url: canonicalizeWebsiteProductUrl(item.url, sourceUrl) || item.url,
         title: item.title,
         description: item.description || "",
-        price: item.price || null,
-        currency: extractCurrencyFromVerifiedPrice(item.price),
         image_url: item.image_url || null,
         item_key: createItemKey(item),
         discovery_source: discoverySource,
@@ -15489,15 +15137,10 @@ async function upsertWebsiteProductCatalogItems({
         page_type_confidence: Number(rawItem?.page_type_confidence || 0),
         category: String(rawItem?.category || "").trim() || null,
         tags: Array.isArray(rawItem?.tags) ? rawItem.tags.slice(0, 30) : [],
-        sale_price: item.sale_price || null,
-        original_price: item.original_price || null,
         availability: String(rawItem?.availability || "").trim() || null,
         verification_score: verificationScore,
         product_schema_verified: Boolean(rawItem?.product_schema_verified),
         ecommerce_proof_found: Boolean(rawItem?.ecommerce_proof_found),
-        price_source: item.price_source || null,
-        price_confidence: item.price_confidence || null,
-        price_rejected_reason: rawItem?.price_rejected_reason || null,
         last_verified_at:
           rawItem?.verification_level === "category_card"
             ? null
@@ -15631,8 +15274,6 @@ async function upsertWebsiteProductCatalogItems({
     product_url: row.product_url,
     title: row.title,
     description: row.description,
-    price: row.price,
-    currency: row.currency,
     image_url: row.image_url,
     item_key: row.item_key,
     discovery_source: row.discovery_source,
@@ -19259,7 +18900,6 @@ function formatProductsForCampaignFitPrompt(candidates) {
         `Description: ${truncateText(item?.description || "", 500) || "Not provided"}`,
         `Category: ${item?.category || "Not provided"}`,
         `Tags: ${Array.isArray(item?.tags) && item.tags.length ? item.tags.join(", ") : "Not provided"}`,
-        `Price: ${item?.price || "Not provided"}`,
       ];
 
       return fields.join("\n");
@@ -19969,7 +19609,6 @@ function formatCampaignFinalReviewCandidates(items) {
         `Description: ${truncateText(item?.description || "", 320) || "Not provided"}`,
         `Category: ${item?.category || "Not provided"}`,
         `Tags: ${Array.isArray(item?.tags) && item.tags.length ? item.tags.slice(0, 8).join(", ") : "Not provided"}`,
-        `Price: ${item?.price || "Not provided"}`,
       ];
       return fields.join("\n");
     })
@@ -21050,7 +20689,6 @@ function scoreWebsiteItemForRule(item, rule) {
   }
 
   if (item?.image_url) score += 3;
-  if (item?.price) score += 1;
   if (item?.last_used_at) score -= 2;
   score -= Math.min(Number(item?.times_used || 0), 20);
 
@@ -21908,7 +21546,6 @@ function extractLockedProductObjectFromHtml({ html, pageUrl, websiteUrl }) {
       getMetaContent(html, ["og:description", "description", "twitter:description"]) ||
       ""
   ).trim();
-  const price = product ? getProductPriceFromJsonLd(product) : "";
   const availability = inferCurrentProductAvailability({
     product,
     html,
@@ -21926,7 +21563,6 @@ function extractLockedProductObjectFromHtml({ html, pageUrl, websiteUrl }) {
     category,
     color,
     description,
-    price,
     availability,
     primaryImageUrl,
     imageUrls: imageUrls.slice(0, 12),
@@ -21940,551 +21576,6 @@ function extractLockedProductObjectFromHtml({ html, pageUrl, websiteUrl }) {
   };
 }
 
-function getProductPricingFromJsonLd(product) {
-  const offers = Array.isArray(product?.offers)
-    ? product.offers
-    : product?.offers
-      ? [product.offers]
-      : [];
-  let currentPrice = "";
-  let originalPrice = "";
-
-  for (const offer of offers) {
-    if (!offer || typeof offer !== "object") {
-      continue;
-    }
-
-    const offerCurrency = offer?.priceCurrency || "";
-    const directPrice = formatVerifiedPriceFromAmount(
-      offer?.price || offer?.lowPrice || "",
-      offerCurrency
-    );
-
-    if (directPrice && !currentPrice) {
-      currentPrice = directPrice;
-    }
-
-    const specifications = [
-      ...(Array.isArray(offer?.priceSpecification)
-        ? offer.priceSpecification
-        : offer?.priceSpecification
-          ? [offer.priceSpecification]
-          : []),
-      ...(Array.isArray(product?.priceSpecification)
-        ? product.priceSpecification
-        : product?.priceSpecification
-          ? [product.priceSpecification]
-          : []),
-    ];
-
-    for (const specification of specifications) {
-      if (!specification || typeof specification !== "object") {
-        continue;
-      }
-
-      const specificationPrice = formatVerifiedPriceFromAmount(
-        specification?.price || specification?.value || "",
-        specification?.priceCurrency || offerCurrency
-      );
-
-      if (!specificationPrice) {
-        continue;
-      }
-
-      const label = [
-        specification?.["@type"],
-        specification?.name,
-        specification?.priceType,
-        specification?.description,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      if (/(strikethrough|list|regular|original|msrp|rrp|uvp|was)/i.test(label)) {
-        originalPrice ||= specificationPrice;
-      } else if (/(sale|current|offer|discount|final|now)/i.test(label)) {
-        currentPrice ||= specificationPrice;
-      } else {
-        currentPrice ||= specificationPrice;
-      }
-    }
-
-    if (currentPrice) {
-      break;
-    }
-  }
-
-  return normalizeExtractedProductPricing({
-    currentPrice,
-    originalPrice,
-    source: "json_ld_product_offer",
-    confidence: "high",
-  });
-}
-
-function getProductPriceFromJsonLd(product) {
-  return getProductPricingFromJsonLd(product).price;
-}
-
-
-function getProductUrlFromJsonLd(product, pageUrl) {
-  const rawUrl =
-    product?.url ||
-    product?.offers?.url ||
-    product?.mainEntityOfPage?.['@id'] ||
-    product?.mainEntityOfPage?.url ||
-    "";
-
-  const resolvedUrl = rawUrl ? resolveUrl(String(rawUrl), pageUrl) : null;
-
-  return resolvedUrl && isHttpUrl(resolvedUrl) ? resolvedUrl : null;
-}
-
-function extractJsonLdProductCandidatesFromHtml({
-  html,
-  pageUrl,
-  websiteUrl,
-  campaignPrompt,
-}) {
-  const objects = extractJsonLdObjects(html);
-  const candidates = [];
-
-  for (const object of objects) {
-    if (!normalizeJsonLdType(object?.['@type']).some((type) => type.includes('product'))) {
-      continue;
-    }
-
-    const title = String(object?.name || "").trim();
-    const url = getProductUrlFromJsonLd(object, pageUrl) || pageUrl;
-    const imageUrl = getProductImageFromJsonLd(object, pageUrl);
-    const price = getProductPriceFromJsonLd(object);
-    const description = String(object?.description || "").trim();
-
-    if (!title || !url || !isSameOrSubdomainUrl(url, websiteUrl)) {
-      continue;
-    }
-
-    if (isLikelyBadDiscoveryPageUrl(url, websiteUrl)) {
-      continue;
-    }
-
-    candidates.push({
-      title,
-      url,
-      price,
-      image_url: imageUrl,
-      description,
-      reason: `Product found in structured data on ${pageUrl}`,
-      score: 40 + scorePossibleProductLink({ url, text: title, campaignPrompt }),
-    });
-  }
-
-  return dedupeUrlItems(candidates);
-}
-
-function extractProductUrlCandidatesFromText({
-  text,
-  pageUrl,
-  websiteUrl,
-  campaignPrompt,
-}) {
-  const candidates = [];
-  const source = String(text || "");
-  const origin = getWebsiteOrigin(websiteUrl);
-  const host = getHostnameWithoutWww(websiteUrl);
-  const patterns = [
-    /https?:\/\/[^"'<>\s]+/gi,
-    /["']((?:\/[^"'<>\s]+){1,})["']/g,
-  ];
-
-  for (const pattern of patterns) {
-    let match;
-
-    while ((match = pattern.exec(source)) !== null) {
-      const raw = String(match[1] || match[0] || "")
-        .replace(/\\u002F/g, "/")
-        .replace(/\\\//g, "/")
-        .replace(/&amp;/g, "&")
-        .trim();
-
-      if (!raw || raw.length > 700) {
-        continue;
-      }
-
-      const resolvedUrl = raw.startsWith("http")
-        ? raw
-        : resolveUrl(raw, origin || pageUrl);
-
-      if (!resolvedUrl || !isHttpUrl(resolvedUrl)) {
-        continue;
-      }
-
-      if (!isSameOrSubdomainUrl(resolvedUrl, websiteUrl)) {
-        continue;
-      }
-
-      if (isLikelyNonProductUrl(resolvedUrl, websiteUrl)) {
-        continue;
-      }
-
-      const lower = resolvedUrl.toLowerCase();
-      const looksItemLike =
-        lower.includes("/p/") ||
-        /\/[^/?#]+-p\d{3,}/i.test(lower) ||
-        /\/[^/?#]+\d{5,}/i.test(lower);
-
-      if (!looksItemLike && host && !lower.includes(host)) {
-        continue;
-      }
-
-      candidates.push({
-        title: "",
-        url: resolvedUrl.split("#")[0],
-        price: "",
-        reason: `Item-like URL found in embedded page data on ${pageUrl}`,
-        score: (looksItemLike ? 28 : 6) + scorePossibleProductLink({ url: resolvedUrl, text: "", campaignPrompt }),
-      });
-    }
-  }
-
-  return dedupeUrlItems(candidates);
-}
-
-function extractVisiblePriceFromText(text) {
-  const normalizedText = String(text || "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!normalizedText) {
-    return "";
-  }
-
-  const priceRegex = new RegExp(PRICE_AMOUNT_PATTERN, "gi");
-  const matches = [];
-  let match;
-
-  while ((match = priceRegex.exec(normalizedText)) !== null) {
-    const value = String(match[0] || "").trim();
-
-    if (!value || !normalizePriceDigits(value)) {
-      continue;
-    }
-
-    matches.push(value);
-  }
-
-  const preferredLocalCurrencyMatch = matches.find((value) =>
-    /\b(kr|sek|nok|dkk|eur|euro|uzs)\b|сум|:-/i.test(value)
-  );
-
-  return preferredLocalCurrencyMatch || matches[0] || "";
-}
-
-function extractProductPricingFromVisibleHtml({
-  html,
-  pageUrl = "",
-  productTitle = "",
-} = {}) {
-  const visibleHtml = String(html || "")
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
-    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, " ")
-    .replace(/<template\b[^>]*>[\s\S]*?<\/template>/gi, " ")
-    .replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, " ");
-  const visibleText = decodeHtmlEntities(stripHtmlToText(visibleHtml))
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!visibleText) {
-    return normalizeExtractedProductPricing();
-  }
-
-  const normalizedTitle = decodeHtmlEntities(String(productTitle || ""))
-    .replace(/\s+/g, " ")
-    .trim();
-  const lowerVisibleText = visibleText.toLowerCase();
-  const titleIndex = normalizedTitle
-    ? lowerVisibleText.indexOf(normalizedTitle.toLowerCase())
-    : -1;
-  const scopeStart = titleIndex >= 0 ? Math.max(0, titleIndex - 120) : 0;
-  const scopeLength = titleIndex >= 0 ? 3600 : Math.min(visibleText.length, 2200);
-  const scope = visibleText.slice(scopeStart, scopeStart + scopeLength);
-  const currentLabelRegex = new RegExp(
-    String.raw`(?:sale\s*price|current\s*price|offer\s*price|now\s*price|kampanjpris|reapris|pris\s*nu|vanligt\s*pris|price|pris)\s*[:\-–—/]?\s*(${PRICE_AMOUNT_PATTERN})`,
-    "gi"
-  );
-  const originalLabelRegex = new RegExp(
-    String.raw`(?:regular\s*price|original\s*price|list\s*price|was\s*price|ordinarie\s*pris|tidigare\s*pris|rek\.?\s*pris)\s*[:\-–—/]?\s*(${PRICE_AMOUNT_PATTERN})`,
-    "gi"
-  );
-  const saleLabelRegex = new RegExp(
-    String.raw`(?:sale\s*price|offer\s*price|now\s*price|kampanjpris|reapris|pris\s*nu)\s*[:\-–—/]?\s*(${PRICE_AMOUNT_PATTERN})`,
-    "gi"
-  );
-
-  const collectLabeledPrices = (regex) => {
-    const prices = [];
-    let match;
-    while ((match = regex.exec(scope)) !== null) {
-      const normalized = normalizeVerifiedPriceValue(match[1]);
-      if (normalized) prices.push(normalized);
-    }
-    return prices;
-  };
-
-  const salePrices = collectLabeledPrices(saleLabelRegex);
-  const originalPrices = collectLabeledPrices(originalLabelRegex);
-  const currentPrices = collectLabeledPrices(currentLabelRegex);
-  const allVisiblePrices = extractVerifiedPriceMatches(scope);
-  const currentPrice = pickPreferredPriceForUrl(
-    [...salePrices, ...currentPrices, ...allVisiblePrices],
-    pageUrl
-  );
-  const originalPrice = salePrices.length
-    ? pickPreferredPriceForUrl(originalPrices, pageUrl)
-    : "";
-
-  return normalizeExtractedProductPricing({
-    currentPrice,
-    originalPrice,
-    source: currentPrice ? "visible_product_page_price" : "",
-    confidence: currentPrice ? "high" : "",
-  });
-}
-
-
-function inferShopifyCurrencyFromHtml(html, pageUrl = "") {
-  const explicitCurrency =
-    getMetaContent(html, [
-      "product:price:currency",
-      "og:price:currency",
-      "product:currency",
-    ]) ||
-    String(html || "").match(/Shopify\.currency\.active\s*=\s*["']([A-Z]{3})["']/i)?.[1] ||
-    String(html || "").match(/["'](?:currency|presentment_currency|priceCurrency)["']\s*:\s*["']([A-Z]{3})["']/i)?.[1] ||
-    "";
-
-  if (explicitCurrency) {
-    return String(explicitCurrency).trim().toUpperCase();
-  }
-
-  const host = getHostnameFromUrl(pageUrl);
-  if (/\.se$/i.test(host)) return "SEK";
-  if (/\.no$/i.test(host)) return "NOK";
-  if (/\.dk$/i.test(host)) return "DKK";
-  if (/\.fi$/i.test(host)) return "EUR";
-  if (/\.(?:de|fr|nl|be|es|it|pt|at|eu)$/i.test(host)) return "EUR";
-  if (/\.ch$/i.test(host)) return "CHF";
-  if (/\.pl$/i.test(host)) return "PLN";
-  if (/\.cz$/i.test(host)) return "CZK";
-
-  return "";
-}
-
-function formatShopifyEmbeddedPrice(rawValue, currency) {
-  const raw = String(rawValue ?? "").trim();
-  if (!raw || !currency || !/^\d+(?:[.,]\d+)?$/.test(raw)) {
-    return "";
-  }
-
-  const normalized = raw.replace(",", ".");
-  const numeric = Number(normalized);
-  if (!Number.isFinite(numeric) || numeric <= 0) {
-    return "";
-  }
-
-  // Shopify theme/product JSON often stores integer prices in minor units
-  // (for example 22900 = 229.00 SEK), while products.json may expose 229.00.
-  const looksLikeMinorUnits = !normalized.includes(".") && numeric >= 1000;
-  const majorAmount = looksLikeMinorUnits ? numeric / 100 : numeric;
-  const amountText = Number.isInteger(majorAmount)
-    ? String(majorAmount)
-    : majorAmount.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
-
-  if (String(currency).toUpperCase() === "SEK") {
-    return normalizeVerifiedPriceValue(`${amountText} kr`);
-  }
-
-  return formatVerifiedPriceFromAmount(amountText, currency);
-}
-
-function getProductPricingFromShopifyEmbeddedData({
-  html,
-  pageUrl = "",
-  productTitle = "",
-} = {}) {
-  const source = String(html || "");
-  const handle = (() => {
-    try {
-      return new URL(pageUrl).pathname.match(/\/products\/([^/?#]+)/i)?.[1] || "";
-    } catch {
-      return "";
-    }
-  })();
-  const normalizedTitle = String(productTitle || "").trim().toLowerCase();
-  const currency = inferShopifyCurrencyFromHtml(source, pageUrl);
-
-  if (!currency || (!handle && !normalizedTitle)) {
-    return normalizeExtractedProductPricing();
-  }
-
-  const scriptBodies = Array.from(
-    source.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi),
-    (match) => String(match[1] || "")
-  );
-  const relevantScopes = [];
-
-  for (const scriptBody of scriptBodies) {
-    const lower = scriptBody.toLowerCase();
-    const handleIndex = handle ? lower.indexOf(handle.toLowerCase()) : -1;
-    const titleIndex = normalizedTitle ? lower.indexOf(normalizedTitle) : -1;
-    const identityIndex = handleIndex >= 0 ? handleIndex : titleIndex;
-
-    if (identityIndex < 0 || !/["'](?:price|price_min|price_max)["']\s*:/i.test(scriptBody)) {
-      continue;
-    }
-
-    relevantScopes.push(
-      scriptBody.slice(Math.max(0, identityIndex - 2500), identityIndex + 7500)
-    );
-  }
-
-  const prices = [];
-  const compareAtPrices = [];
-
-  for (const scope of relevantScopes) {
-    const priceRegex = /["'](?:price|price_min)["']\s*:\s*["']?(\d+(?:[.,]\d+)?)["']?/gi;
-    const compareRegex = /["'](?:compare_at_price|compareAtPrice)["']\s*:\s*["']?(\d+(?:[.,]\d+)?)["']?/gi;
-    let match;
-
-    while ((match = priceRegex.exec(scope)) !== null) {
-      const formatted = formatShopifyEmbeddedPrice(match[1], currency);
-      if (formatted && !prices.includes(formatted)) prices.push(formatted);
-    }
-
-    while ((match = compareRegex.exec(scope)) !== null) {
-      const formatted = formatShopifyEmbeddedPrice(match[1], currency);
-      if (formatted && !compareAtPrices.includes(formatted)) compareAtPrices.push(formatted);
-    }
-  }
-
-  const currentPrice = pickPreferredPriceForUrl(prices, pageUrl);
-  const originalPrice = compareAtPrices.length
-    ? pickPreferredPriceForUrl(compareAtPrices, pageUrl)
-    : "";
-
-  return normalizeExtractedProductPricing({
-    currentPrice,
-    originalPrice,
-    source: currentPrice ? "shopify_embedded_product_price" : "",
-    confidence: currentPrice ? "high" : "",
-  });
-}
-
-function getProductPricingFromMeta(html) {
-  const currency = getMetaContent(html, [
-    "product:price:currency",
-    "og:price:currency",
-    "product:currency",
-  ]);
-  const currentAmount = getMetaContent(html, [
-    "product:sale_price:amount",
-    "product:discount_price:amount",
-    "product:price:amount",
-    "og:price:amount",
-  ]);
-  const originalAmount = getMetaContent(html, [
-    "product:original_price:amount",
-    "product:regular_price:amount",
-    "product:list_price:amount",
-    "product:price:standard_amount",
-  ]);
-
-  return normalizeExtractedProductPricing({
-    currentPrice: formatVerifiedPriceFromAmount(currentAmount, currency),
-    originalPrice: formatVerifiedPriceFromAmount(originalAmount, currency),
-    source: "product_meta_price",
-    confidence: "high",
-  });
-}
-
-function extractItempropValueFromHtml(html, itempropName) {
-  const source = String(html || "");
-  const escapedName = String(itempropName || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const tagRegex = new RegExp(
-    `<([a-z0-9]+)\\b[^>]*itemprop=["'][^"']*\\b${escapedName}\\b[^"']*["'][^>]*>([\\s\\S]{0,180}?)<\\/\\1>|<[^>]+itemprop=["'][^"']*\\b${escapedName}\\b[^"']*["'][^>]*>`,
-    "gi"
-  );
-  let match;
-
-  while ((match = tagRegex.exec(source)) !== null) {
-    const fullTag = String(match[0] || "");
-    const openingTagMatch = fullTag.match(/^<[^>]+>/);
-    const openingTag = openingTagMatch?.[0] || fullTag;
-    const attributeValue =
-      getAttributeValueFromTag(openingTag, "content") ||
-      getAttributeValueFromTag(openingTag, "value");
-    const textValue = stripHtmlToText(match[2] || "");
-    const value = decodeHtmlEntities(attributeValue || textValue).trim();
-
-    if (value) {
-      return value;
-    }
-  }
-
-  return "";
-}
-
-function getProductPricingFromMicrodata(html) {
-  const amount = extractItempropValueFromHtml(html, "price");
-  const currency = extractItempropValueFromHtml(html, "priceCurrency");
-
-  return normalizeExtractedProductPricing({
-    currentPrice: formatVerifiedPriceFromAmount(amount, currency),
-    source: "product_microdata_price",
-    confidence: "medium",
-  });
-}
-
-function extractProductPricingFromHtml({
-  html,
-  product = null,
-  fallbackTitle = "",
-  pageUrl = "",
-} = {}) {
-  const sources = [
-    extractProductPricingFromVisibleHtml({
-      html,
-      pageUrl,
-      productTitle: product?.name || fallbackTitle,
-    }),
-    getProductPricingFromShopifyEmbeddedData({
-      html,
-      pageUrl,
-      productTitle: product?.name || fallbackTitle,
-    }),
-    getProductPricingFromJsonLd(product),
-    getProductPricingFromMeta(html),
-    getProductPricingFromMicrodata(html),
-    // Search/discovery text is deliberately last because it can reflect a
-    // different Shopify market or presentment currency than the product page.
-    extractProductPricingFromTitle(fallbackTitle),
-  ];
-
-  return (
-    sources.find((pricing) => pricing?.price) ||
-    normalizeExtractedProductPricing()
-  );
-}
-
-function extractProductPriceFromHtml(html, product = null, fallbackTitle = "") {
-  return extractProductPricingFromHtml({
-    html,
-    product,
-    fallbackTitle,
-  }).price;
-}
 
 function imageUrlMatchesProductIdentity(imageUrl, productUrl, productTitle = "") {
   const imageComparable = normalizeComparableValue(imageUrl);
@@ -22598,9 +21689,7 @@ async function extractProductDataFromProductPage({
     (isLikelyProductDetailUrl(effectiveProductUrl) ||
       Boolean(
         expectedTitle &&
-          (webSearchProduct?.image_url ||
-            webSearchProduct?.price ||
-            webSearchProduct?.visible_price)
+          webSearchProduct?.image_url
       ));
 
   if (
@@ -22698,29 +21787,6 @@ async function extractProductDataFromProductPage({
     ],
     30
   );
-
-  const extractedPricing = extractProductPricingFromHtml({
-    html,
-    product,
-    fallbackTitle: webSearchProduct?.title || rawTitle,
-    pageUrl: effectiveProductUrl,
-  });
-  const safeMainPrice = sanitizeCatalogPrice({
-    price: extractedPricing.price,
-    html,
-    source: extractedPricing.price_source,
-  });
-  const safeSalePrice = sanitizeCatalogPrice({
-    price: extractedPricing.sale_price,
-    html,
-    source: extractedPricing.price_source,
-  });
-  const safeOriginalPrice = sanitizeCatalogPrice({
-    price: extractedPricing.original_price,
-    html,
-    source: extractedPricing.price_source,
-  });
-  const price = safeMainPrice.price;
   const purchaseActionDetected = hasDirectProductPurchaseAction(html);
   const currentAvailability = inferCurrentProductAvailability({
     product,
@@ -22730,21 +21796,6 @@ async function extractProductDataFromProductPage({
       webSearchProduct?.availability ||
       "unknown",
   });
-
-  if (extractedPricing.price && !price) {
-    console.log("Product Engine V2 rejected unsafe product price", {
-      productUrl,
-      title,
-      rejectedPrice: extractedPricing.price,
-      rejectedReason: safeMainPrice.rejectedReason,
-      priceSource: extractedPricing.price_source,
-    });
-  } else if (!price) {
-    console.log("Product page candidate has no trustworthy main-product price; continuing without a displayed price", {
-      productUrl,
-      title,
-    });
-  }
 
   const directProductProof =
     productSchemaFound ||
@@ -22763,7 +21814,8 @@ async function extractProductDataFromProductPage({
     (
       productUrlProof ||
       productTitleIdentityProof ||
-      structuredCommerceProductProof
+      structuredCommerceProductProof ||
+      (purchaseActionDetected && Number(pageClassification.confidence || 0) >= 88)
     );
   let imageUrl = extractBestProductImageFromHtml(
     html,
@@ -22825,11 +21877,6 @@ async function extractProductDataFromProductPage({
       type: "product",
       url: effectiveProductUrl,
       description,
-      price,
-      sale_price: safeSalePrice.price,
-      original_price: safeOriginalPrice.price,
-      price_source: price ? extractedPricing.price_source : "",
-      price_confidence: price ? extractedPricing.price_confidence : "",
       image_url: imageUrl,
     },
     websiteUrl
@@ -22896,7 +21943,6 @@ async function extractProductDataFromProductPage({
     page_type: pageClassification.pageType === "unknown" ? "product" : pageClassification.pageType,
     page_type_confidence: pageClassification.confidence,
     page_type_reason: pageClassification.reason,
-    price_rejected_reason: safeMainPrice.rejectedReason || null,
     last_verified_at: new Date().toISOString(),
   };
 
@@ -23022,7 +22068,6 @@ async function upsertWebsiteProductCandidateQueue({
         canonical_product_url: productUrl,
         title: String(candidate?.title || "").trim() || null,
         image_url: candidate?.image_url || null,
-        visible_price: candidate?.price || null,
         discovery_score: Number(candidate?.score || candidate?.discovery_score || 0),
         status: "pending",
         next_attempt_at: nowIso,
@@ -23089,7 +22134,7 @@ async function loadWebsiteProductCandidateQueue({ supabase, rule, sourceUrl, cat
   if (!supabase || !rule?.brand_profile_id) return [];
   let query = supabase
     .from("website_product_candidate_queue")
-    .select("automation_rule_id,product_url,title,image_url,visible_price,discovery_score,category_url,metadata,status,next_attempt_at")
+    .select("automation_rule_id,product_url,title,image_url,discovery_score,category_url,metadata,status,next_attempt_at")
     .eq("brand_profile_id", rule.brand_profile_id)
     .eq("automation_rule_id", rule.id)
     .in("status", ["pending", "rate_limited"])
@@ -23112,7 +22157,6 @@ async function loadWebsiteProductCandidateQueue({ supabase, rule, sourceUrl, cat
     title: row.title || "",
     url: row.product_url,
     image_url: row.image_url || "",
-    price: row.visible_price || "",
     score: Number(row.discovery_score || 0),
     source_page_url: row.category_url || categoryUrl || sourceUrl || "",
     campaign_fit_source: row?.metadata?.campaign_fit_source || "persistent_candidate_queue",
@@ -23730,7 +22774,6 @@ function extractProductLinksFromDiscoveryPage({
     candidates.push({
       title: link.text || "",
       url,
-      price: "",
       reason: `Product link found on discovery page: ${pageUrl}`,
       score,
       source_page_url: pageUrl,
@@ -24205,13 +23248,6 @@ function normalizeStoreSearchProductSuggestion(product, origin, campaignPrompt) 
     product?.images?.[0] ||
     "";
   const imageUrl = rawImage ? resolveUrl(String(rawImage), origin) : "";
-  const price = normalizeVerifiedPriceValue(
-    product?.price ||
-      product?.price_min ||
-      product?.min_price ||
-      product?.variants?.[0]?.price ||
-      ""
-  );
 
   if (!title || !productUrl || !isHttpUrl(productUrl)) {
     return null;
@@ -24220,7 +23256,6 @@ function normalizeStoreSearchProductSuggestion(product, origin, campaignPrompt) 
   return {
     title,
     url: productUrl,
-    price,
     image_url: imageUrl && isHttpUrl(imageUrl) ? imageUrl : null,
     description: String(product?.body || product?.body_html || product?.description || ""),
     reason: "Product found from store search suggestions",
@@ -24828,10 +23863,6 @@ async function discoverShopifyProductsJson({ websiteUrl, campaignPrompt }) {
         const variants = Array.isArray(product?.variants)
           ? product.variants
           : [];
-        const firstVariant = variants[0] || null;
-        const price = normalizeVerifiedPriceValue(
-          firstVariant?.price ? String(firstVariant.price) : ""
-        );
         const explicitInStock = variants.some(
           (variant) =>
             variant?.available === true ||
@@ -24846,7 +23877,6 @@ async function discoverShopifyProductsJson({ websiteUrl, campaignPrompt }) {
         discovered.push({
           title,
           url: productUrl,
-          price,
           image_url: imageUrl && isHttpUrl(imageUrl) ? imageUrl : null,
           description: String(product?.body_html || product?.body || ""),
           availability: explicitInStock ? "in_stock" : "unknown",
@@ -24938,8 +23968,7 @@ async function discoverWooCommerceStoreApiProducts({
         discovered.push({
           title,
           url: productUrl,
-          price: "",
-          image_url: imageUrl && isHttpUrl(imageUrl) ? imageUrl : null,
+              image_url: imageUrl && isHttpUrl(imageUrl) ? imageUrl : null,
           description: String(product?.short_description || product?.description || ""),
           availability: explicitInStock ? "in_stock" : "unknown",
           availability_status: explicitInStock ? "in_stock" : "unknown",
@@ -25056,8 +24085,6 @@ async function discoverShopifyCollectionJson({ websiteUrl, campaignPrompt }) {
         const title = String(product?.title || "").trim();
         const productUrl = handle ? `${origin}/products/${handle}` : "";
         const imageUrl = product?.image?.src || product?.images?.[0]?.src || null;
-        const firstVariant = Array.isArray(product?.variants) ? product.variants[0] : null;
-        const price = normalizeVerifiedPriceValue(firstVariant?.price ? String(firstVariant.price) : "");
 
         if (!productUrl || !title || isLikelyNonProductUrl(productUrl, websiteUrl)) {
           continue;
@@ -25066,7 +24093,6 @@ async function discoverShopifyCollectionJson({ websiteUrl, campaignPrompt }) {
         discovered.push({
           title,
           url: productUrl,
-          price,
           image_url: imageUrl && isHttpUrl(imageUrl) ? imageUrl : null,
           description: String(product?.body_html || product?.body || ""),
           reason: `Product found from Shopify campaign collection: ${search}`,
@@ -25142,8 +24168,7 @@ async function discoverProductsFromSitemaps({
         .map((url) => ({
           title: "",
           url,
-          price: "",
-          reason: `Product URL found in sitemap: ${sitemapUrl}`,
+              reason: `Product URL found in sitemap: ${sitemapUrl}`,
           score: scoreDiscoveredProductUrl(url, websiteUrl, campaignPrompt),
         }))
         .filter((item) => item.score >= 0)
@@ -25283,8 +24308,7 @@ async function discoverProductCandidatesFromWebsite({
           .map((url) => ({
             title: "",
             url,
-            price: "",
-            reason: `Product URL found in sitemap/discovery page: ${discoveryUrl}`,
+                  reason: `Product URL found in sitemap/discovery page: ${discoveryUrl}`,
             score: scoreDiscoveredProductUrl(url, websiteUrl, campaignPrompt),
             commerce_platform: detectedPlatform,
           }));
@@ -25718,7 +24742,6 @@ function normalizeCampaignSearchPoolItem(
       type: "product",
       url: rawUrl,
       description,
-      price: item?.price || "",
       image_url: rawImageUrl,
     },
     websiteUrl
@@ -26159,9 +25182,6 @@ function mergePrimaryWebResearchTechnicalRecovery({
     ...selectedCandidate,
     url: recoveredUrl,
     image_url: recoveredImage,
-    price:
-      String(recoveredProduct?.price || "").trim() ||
-      String(selectedCandidate?.price || "").trim(),
     technical_identity_recovered: true,
     technical_identity_recovery_source:
       recoveredProduct?.campaign_fit_source || "targeted_store_search",
@@ -26317,7 +25337,7 @@ For every supplied product:
 - Find the CURRENT canonical direct product page for the SAME product in the same country/market as ${websiteUrl}.
 - A stale URL may come from an older commerce platform or search index. Prefer the retailer's current canonical URL structure.
 - Open the current official result immediately before returning it. Confirm that it loads as a live product page rather than a 404, redirect loop, search result, category or cached snippet.
-- Treat the MAIN PRODUCT block on the opened product detail page as one indivisible object. Read current_title, product_identifier/SKU, brand, category, color, current_price and the main image from that same main-product block.
+- Treat the MAIN PRODUCT block on the opened product detail page as one indivisible object. Read current_title, product_identifier/SKU, brand, category, color and the main image from that same main-product block. Do not search for or return a product price.
 - Also read current stock availability from that same official main-product page. For a physical/e-commerce product, Spreelo may promote it only when the CURRENT official page explicitly proves it is IN STOCK NOW. availability_status must still be exactly one of in_stock, available, preorder, backorder, out_of_stock, discontinued or unknown, but only in_stock is eligible for promotion. Generic "available", preorder, backorder, made-to-order, beställningsvara/order item, zero-stock with an add-to-cart button, out_of_stock, discontinued and unknown are NOT eligible. Never infer stock from an old search snippet.
 - Return availability_evidence as concise CURRENT official evidence, including the explicit in-stock wording and stock quantity when shown. An add-to-cart/order button by itself is not stock evidence.
 - Return the best direct product-image file URL that is visibly attached to the MAIN PRODUCT on that exact opened product detail page.
@@ -26431,7 +25451,6 @@ Return only the required JSON structure.`.trim();
                     brand: { type: "string" },
                     category: { type: "string" },
                     color: { type: "string" },
-                    current_price: { type: "string" },
                     image_alt_text: { type: "string" },
                     main_product_evidence: { type: "string" },
                     identity_hints: {
@@ -26457,7 +25476,6 @@ Return only the required JSON structure.`.trim();
                     "brand",
                     "category",
                     "color",
-                    "current_price",
                     "image_alt_text",
                     "main_product_evidence",
                     "identity_hints",
@@ -26609,7 +25627,6 @@ Return only the required JSON structure.`.trim();
         "",
       category: String(repairedProduct?.category || "").trim(),
       product_color: String(repairedProduct?.color || "").trim(),
-      price: String(repairedProduct?.current_price || "").trim(),
       availability: availabilityStatus,
       availability_status: availabilityStatus,
       availability_evidence: availabilityEvidence,
@@ -26635,7 +25652,6 @@ Return only the required JSON structure.`.trim();
       locked_product_brand: String(repairedProduct?.brand || "").trim(),
       locked_product_category: String(repairedProduct?.category || "").trim(),
       locked_product_color: String(repairedProduct?.color || "").trim(),
-      locked_product_price: String(repairedProduct?.current_price || "").trim(),
       locked_product_availability: availabilityStatus,
       locked_product_availability_evidence: availabilityEvidence,
       stock_verified_at: new Date().toISOString(),
@@ -26774,7 +25790,6 @@ async function hydrateAuthoritativeWebAgentProduct({
         category: String(candidate?.locked_product_category || candidate?.category || "").trim(),
         color: String(candidate?.locked_product_color || candidate?.product_color || "").trim(),
         description: String(candidate?.description || candidate?.reason || "").trim(),
-        price: String(candidate?.locked_product_price || "").trim(),
         availability: normalizeProductAvailabilityStatus(
           candidate?.locked_product_availability || candidate?.availability_status || candidate?.availability
         ),
@@ -26814,7 +25829,6 @@ async function hydrateAuthoritativeWebAgentProduct({
       url: lockedProduct.url,
       description:
         lockedProduct.description || String(candidate?.reason || "").trim(),
-      price: lockedProduct.price || "",
       image_url: lockedProduct.primaryImageUrl,
     },
     websiteUrl
@@ -26867,7 +25881,6 @@ async function hydrateAuthoritativeWebAgentProduct({
     locked_product_brand: lockedProduct.brand || "",
     locked_product_category: lockedProduct.category || "",
     locked_product_color: lockedProduct.color || "",
-    locked_product_price: lockedProduct.price || "",
     availability: normalizeProductAvailabilityStatus(lockedProduct.availability),
     availability_status: normalizeProductAvailabilityStatus(lockedProduct.availability),
     locked_product_availability: normalizeProductAvailabilityStatus(lockedProduct.availability),
@@ -27469,7 +26482,7 @@ async function findPrimaryCampaignProductsWithWebSearch({
 - Every returned product must have at least one official product image visibly available in its product gallery. People, human body parts and animals are allowed when they are part of a genuine product image.
  - Return the best direct official product image URL you can actually verify for each product. Use an empty string if the image URL is not visible; never guess it.
  - Return the product brand/manufacturer when it is visible on the exact product page. Use an empty string if it cannot be verified.
- - Return the displayed price only when clearly visible. Otherwise use an empty string.
+ - Do not search for, return or mention product prices.
  ${researchRound > 1 ? "- This is a bounded diversity/recovery round. The earlier URLs are excluded below; actively look for other complementary product families that can strengthen a complete five-product carousel." : ""}
 ${usedProducts.length ? `- Prefer products not used in recent Spreelo posts. Avoid these unless the site cannot provide ten better choices:\n${usedProducts.join("\n")}` : ""}
 ${blockedProducts.length ? `- HARD TECHNICAL EXCLUSIONS: the following URLs were already returned in an earlier round and could not be opened as current product pages. Never return these URLs again. You may select the same product identity only if you find and open its different, current canonical product URL:\n${blockedProducts.join("\n")}` : ""}
@@ -27541,7 +26554,6 @@ Return the result in the required JSON structure. Keep each reason concise and g
                     },
                     image_url: { type: "string" },
                     brand: { type: "string" },
-                    price: { type: "string" },
                     relevance_class: {
                       type: "string",
                       enum: ["direct", "contextual"],
@@ -27556,7 +26568,6 @@ Return the result in the required JSON structure. Keep each reason concise and g
                     "product_family",
                     "image_url",
                     "brand",
-                    "price",
                     "relevance_class",
                   ],
                 },
@@ -27648,7 +26659,6 @@ Return the result in the required JSON structure. Keep each reason concise and g
       url: productUrl,
       image_url: String(product?.image_url || "").trim(),
       product_brand: String(product?.brand || "").trim(),
-      price: String(product?.price || "").trim(),
       reason,
       score: 1000 - globalRank,
       discovery_score: 1000 - globalRank,
@@ -28587,9 +27597,8 @@ Language-neutral campaign and business-fit rules:
 - Search the customer's site for campaign/theme/occasion/category pages in the site's own language, then open concrete product pages from those areas.
 - When a campaign/theme-specific product category exists on the site, products from that area should outrank generic homepage products, generic custom products and broad bestsellers.
 - A product should be chosen because it clearly fits the campaign intent, not merely because it is on the website or has a good image.
-- If discount information is not clearly visible, do not invent a discount.
-- A visible ordinary price is not proof of an offer, sale, deal, discount or campaign price.
-- Do not describe a product as an offer/deal/sale/discount unless the product page clearly says it is discounted or on sale.
+- Do not search for, return or mention product prices.
+- Do not describe a product as an offer/deal/sale/discount unless the customer-supplied campaign instructions explicitly authorize it.
 
 Output:
 Return strict JSON only.
@@ -28602,7 +27611,6 @@ JSON shape:
     {
       "title": "Exact product title",
       "url": "Full product page URL",
-      "price": "Visible price if clearly found, otherwise empty string",
       "availability_status": "in_stock",
       "availability_evidence": "Short evidence from the current official page that the product can be purchased or ordered now",
       "reason": "Short reason why this product fits the campaign, buyer and recipient"
@@ -28709,7 +27717,6 @@ For campaign carousels, stop once you have enough concrete product pages for a u
     validProducts.push({
       title: String(product?.title || "").trim(),
       url: productUrl,
-      price: String(product?.price || "").trim(),
       availability: availabilityStatus,
       availability_status: availabilityStatus,
       availability_evidence: String(product?.availability_evidence || "").trim(),
@@ -29321,9 +28328,6 @@ async function findWebsiteProductWithWebSearch({
           productUrl: websiteItem.url,
           title: websiteItem.title,
           imageUrl: websiteItem.image_url,
-          price: websiteItem.price || null,
-          priceSource: websiteItem.price_source || null,
-          priceConfidence: websiteItem.price_confidence || null,
           attempt,
           verifiedCount: verifiedItems.length,
         });
@@ -29409,7 +28413,6 @@ Invite people to explore the website for relevant options.
       type: "campaign_fallback",
       url: websiteUrl,
       description,
-      price: "",
       image_url: null,
     },
     websiteUrl
@@ -30983,7 +29986,6 @@ function buildFallbackProductCarouselSlides(rule, products, postContent = "") {
     image_url: product.image_url || null,
     product_title: product.title || null,
     product_identity_key: createItemKey(product),
-    product_price: getTrustedProductCardPrice(product) || null,
   }));
 
   productSlides.push({
@@ -31084,7 +30086,7 @@ Rules:
 - Keep text short enough for a social media carousel.
 - Use only facts from the product list and brand profile.
 - Do not invent prices, discounts, stock status, reviews, delivery promises, guarantees or features.
-- If a verified price is provided for a product, you may mention it exactly as written. If not, do not mention price.
+- Never mention or infer a product price.
 - The first product slide can feel like a hook, but it must still feature Product 1.
 - The final outro slide should invite the reader to explore more or visit the website.
 - The final outro slide should include short overlay_text suitable for a text overlay on an AI-generated closing image.
@@ -31126,7 +30128,6 @@ Return JSON exactly in this shape:
         image_url: product.image_url || null,
         product_title: product.title || null,
         product_identity_key: createItemKey(product),
-        product_price: getTrustedProductCardPrice(product) || null,
       };
     });
 
@@ -31503,9 +30504,6 @@ async function saveCarouselSlidesForPost({
         product_image_height: Number(slideProduct?.product_image_height || 0) || null,
         product_identity_locked: !isOutroSlide ? slideProduct?.product_identity_locked === true : null,
         locked_product_fingerprint: !isOutroSlide ? String(slideProduct?.locked_product_fingerprint || "").trim() || null : null,
-        product_price: getTrustedWebsiteItemPricing(slideProduct || {}).displayPrice || slide.product_price || null,
-        product_sale_price: getTrustedWebsiteItemPricing(slideProduct || {}).salePrice || null,
-        product_original_price: getTrustedWebsiteItemPricing(slideProduct || {}).originalPrice || null,
         product_label_applied: productLabelApplied,
         product_label_layout: productLabelMetadata.productLabelLayout || null,
         product_label_placement: productLabelMetadata.productLabelPlacement || null,

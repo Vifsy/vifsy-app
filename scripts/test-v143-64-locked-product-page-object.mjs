@@ -63,10 +63,8 @@ assert.doesNotMatch(hydrate, /extractBestProductImageFromHtml/,
 assert.doesNotMatch(hydrate, /collectProductImageCandidates/,
   "authoritative campaign hydration must not pull recommendation images into the product object");
 assert.match(hydrate, /The exact product page is now authoritative/);
-assert.match(hydrate, /price: lockedProduct\.price \|\| ""/,
-  "price must come from the locked page object, not from loose research metadata");
-assert.doesNotMatch(hydrate, /lockedProduct\.price \|\| String\(candidate\?\.price/,
-  "research price must not leak into a different locked product object");
+assert.doesNotMatch(hydrate, /lockedProduct\.price|candidate\?\.price|product_price|locked_product_price/,
+  "product prices must not be carried through locked product hydration");
 
 const resolverStart = route.indexOf("async function resolveLargestProductImagesBeforeGeneration");
 const resolverEnd = route.indexOf("function normalizeProductBrandIdentity", resolverStart);
@@ -85,9 +83,9 @@ assert.match(semantic, /locked identifier:/);
 assert.match(semantic, /locked category:/);
 assert.match(semantic, /locked colour\/variant:/);
 assert.match(semantic, /same-page lock is the primary source of truth/i);
-assert.match(route, /current_price and the main image from that same main-product block/);
+assert.match(route, /brand, category, color and the main image from that same main-product block/);
 assert.match(route, /Do not substitute a similar product or a different colour\/size\/style variant/);
-assert.match(route, /locked_product_price/);
+assert.doesNotMatch(route, /locked_product_price|current_price|product_price/);
 
 assert.match(route, /function verifyPinterestPublishedMedia/);
 assert.match(route, /mediaType === "multiple_images"/);

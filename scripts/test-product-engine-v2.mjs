@@ -3,7 +3,6 @@ import {
   classifyCommercePage,
   detectCommercePlatform,
   getAdaptiveProductPoolTargets,
-  sanitizeCatalogPrice,
   sanitizeProductSearchQueryList,
 } from "../lib/productEngineV2.js";
 
@@ -46,22 +45,27 @@ assert.equal(
   "product"
 );
 
-assert.equal(
-  sanitizeCatalogPrice({
-    price: "999:-",
-    html: "Fri frakt över 999:-",
-    source: "visible_product_page_price",
-  }).price,
-  ""
-);
+
+
 
 assert.equal(
-  sanitizeCatalogPrice({
-    price: "499 kr",
-    html: "Produktpris 499 kr. Fri frakt över 999 kr.",
-    source: "visible_product_page_price",
-  }).price,
-  "499 kr"
+  classifyCommercePage({
+    url: "https://example.se/for-henne/vibratorer/lelo-nea-3",
+    html: `
+      <link rel="canonical" href="https://example.se/for-henne/vibratorer/lelo-nea-3">
+      <meta property="og:image" content="https://cdn.quickbutik.com/product.jpg">
+      <h1>LELO Nea 3</h1>
+      <form class="product-form"><button>Add to cart</button></form>
+      <div class="product-card">Related</div>
+      <div class="product-card">Related</div>
+      <div class="product-card">Related</div>
+      <div class="product-card">Related</div>
+    `,
+    productSchemaFound: false,
+    ecommerceProofFound: true,
+  }).pageType,
+  "product",
+  "A Quickbutik-style product page must be recognized without relying on price metadata"
 );
 
 assert.deepEqual(getAdaptiveProductPoolTargets(5), {

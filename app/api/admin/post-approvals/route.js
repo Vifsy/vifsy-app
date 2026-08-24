@@ -603,7 +603,6 @@ function normalizeProductItems(items) {
     product_identifier: String(item?.product_identifier || "").trim().slice(0, 180),
     product_display_type: String(item?.product_display_type || "").trim().slice(0, 220),
     product_color: String(item?.product_color || "").trim().slice(0, 220),
-    product_price: String(item?.product_price || item?.price || "").trim().slice(0, 120),
     product_image_width: Number(item?.product_image_width || 0) || null,
     product_image_height: Number(item?.product_image_height || 0) || null,
     product_identity_locked: item?.product_identity_locked === true,

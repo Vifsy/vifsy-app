@@ -11,7 +11,6 @@ import {
   canonicalProductImageAssetKey,
   selectLargestVerifiedProductImage,
 } from "../lib/productImageResolver.js";
-import { sanitizeCatalogPrice } from "../lib/productEngineV2.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const route = fs.readFileSync(
@@ -170,22 +169,6 @@ assert.equal(
 );
 assert.equal(imageSelection.selected.identityMethod, "same_primary_asset");
 
-const ordinaryPrice = sanitizeCatalogPrice({
-  price: "399 kr",
-  source: "visible_product_price",
-  html: "Fri frakt vid köp över 799 kr. Produktpris 399 kr.",
-});
-assert.equal(
-  ordinaryPrice.price,
-  "399 kr",
-  "An ordinary product price near a separate shipping message must remain usable"
-);
-const actualShippingThreshold = sanitizeCatalogPrice({
-  price: "799 kr",
-  source: "visible_text",
-  html: "Fri frakt vid köp över 799 kr.",
-});
-assert.equal(actualShippingThreshold.rejectedReason, "shipping_threshold");
 
 assert.match(route, /competingThemeTerms/);
 assert.match(
