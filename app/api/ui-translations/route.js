@@ -22,6 +22,20 @@ function getIntentionalUnchangedKeys(labels) {
   return new Set(Array.isArray(keys) ? keys.map((key) => String(key)) : []);
 }
 
+function getDeferredTranslationKeys(labels) {
+  const entries = labels?.[TRANSLATION_META_KEY]?.deferred_keys;
+  if (!entries || typeof entries !== "object" || Array.isArray(entries)) return {};
+  return entries;
+}
+
+function isTranslationKeyDeferred({ labels, key, defaultValue }) {
+  const entry = getDeferredTranslationKeys(labels)?.[String(key)];
+  if (!entry) return false;
+  const until = new Date(entry.until || 0).getTime();
+  if (!Number.isFinite(until) || until <= Date.now()) return false;
+  return String(entry.source || "") === String(defaultValue || "");
+}
+
 function stripTranslationMetadata(labels) {
   if (!labels || typeof labels !== "object" || Array.isArray(labels)) return {};
   const { [TRANSLATION_META_KEY]: _meta, ...clean } = labels;
@@ -105,7 +119,8 @@ function getLabelsNeedingTranslation(defaultLabels, translatedLabels, locale) {
         translatedValue,
         locale,
         intentionalUnchangedKeys,
-      })
+      }) &&
+      !isTranslationKeyDeferred({ labels: translatedLabels, key, defaultValue: value })
     ) {
       labelsNeedingTranslation[key] = value;
     }
@@ -319,16 +334,43 @@ async function translateMissingLabels({
     }
   );
 
-  return {
-    translatedLabels: Object.assign(
-      {},
-      ...outcomes.map((outcome) => outcome.translated || {})
-    ),
-    failedKeys: outcomes.flatMap((outcome) => outcome.failedKeys || []),
-    intentionalUnchangedKeys: outcomes.flatMap(
-      (outcome) => outcome.intentionalUnchangedKeys || []
-    ),
-  };
+  const translatedLabels = Object.assign(
+    {},
+    ...outcomes.map((outcome) => outcome.translated || {})
+  );
+  let failedKeys = outcomes.flatMap((outcome) => outcome.failedKeys || []);
+  const intentionalUnchangedKeys = outcomes.flatMap(
+    (outcome) => outcome.intentionalUnchangedKeys || []
+  );
+
+  // One bounded repair pass for only the labels that failed validation. This
+  // avoids both English leakage and the old client-side rapid retry loop.
+  if (failedKeys.length) {
+    const repairLabels = Object.fromEntries(
+      failedKeys.filter((key) => Object.prototype.hasOwnProperty.call(missingLabels, key)).map((key) => [key, missingLabels[key]])
+    );
+    try {
+      const repair = await translateLabelChunk({
+        locale,
+        languageName,
+        namespace,
+        labels: repairLabels,
+        chunkIndex: chunks.length,
+      });
+      Object.assign(translatedLabels, repair?.labels || {});
+      intentionalUnchangedKeys.push(...(repair?.intentionalUnchangedKeys || []));
+      failedKeys = failedKeys.filter((key) => !String(repair?.labels?.[key] || "").trim());
+    } catch (error) {
+      console.warn("UI translation bounded repair deferred", {
+        locale,
+        namespace,
+        keyCount: failedKeys.length,
+        message: error?.message || String(error),
+      });
+    }
+  }
+
+  return { translatedLabels, failedKeys, intentionalUnchangedKeys };
 }
 
 async function getOrCreateNamespaceLabels({ supabaseAdmin, locale, namespace }) {
@@ -406,19 +448,29 @@ async function getOrCreateNamespaceLabels({ supabaseAdmin, locale, namespace }) 
     });
 
   const mergedIntentionalUnchangedKeys = new Set(existingIntentionalUnchangedKeys);
+  const mergedDeferredKeys = { ...getDeferredTranslationKeys(existingLabels) };
   for (const key of newlyIntentionalUnchangedKeys || []) {
     mergedIntentionalUnchangedKeys.add(String(key));
   }
   for (const [key, translatedValue] of Object.entries(translatedMissingLabels || {})) {
+    delete mergedDeferredKeys[String(key)];
     if (String(translatedValue || "").trim() !== String(defaultLabels?.[key] || "").trim()) {
       mergedIntentionalUnchangedKeys.delete(String(key));
     }
+  }
+  const deferredUntil = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
+  for (const key of failedKeys || []) {
+    mergedDeferredKeys[String(key)] = {
+      source: String(defaultLabels?.[key] || ""),
+      until: deferredUntil,
+    };
   }
   const mergedLabels = {
     ...stripTranslationMetadata(existingLabels),
     ...translatedMissingLabels,
     [TRANSLATION_META_KEY]: {
       intentional_unchanged_keys: Array.from(mergedIntentionalUnchangedKeys).sort(),
+      deferred_keys: mergedDeferredKeys,
     },
   };
   const translationComplete = failedKeys.length === 0;

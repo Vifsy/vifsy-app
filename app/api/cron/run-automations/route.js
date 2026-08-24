@@ -10604,6 +10604,10 @@ ${isAnimatedVideoRule(rule)
   ? `Animated Reel price rule:\n- Do not mention a product price anywhere in this caption.\n- ${hasAuthorizedCampaignOffer ? "The exact authorized campaign discount may be mentioned, but it must not be presented as a product price." : "Do not write a currency symbol, currency code, monetary amount, discount price or \"from\" price."}`
   : ""}
 
+${isKlingAiVideoRule(rule)
+  ? `AI product video overlay-copy rule:\n- The FIRST non-empty line of the caption must be a short standalone advertising headline in the selected post language, normally 3-6 words.\n- It must fit this exact verified product and the actual content angle/campaign, while remaining factual and avoiding unverified claims.\n- Do not put an emoji, hashtag, price, URL or trailing punctuation-only decoration on that first line.\n- Spreelo will reuse that exact first line as the transparent video headline, so make it polished and self-contained.\n- After that first line, continue with the normal social caption.`
+  : ""}
+
 ${focusedPageContextText}
 
 ${campaignStrategyText}
@@ -13914,7 +13918,98 @@ async function selectKlingNaturalStartBackground({ openai, supabase, rule, sourc
 
 
 
-async function assessKlingReferenceSafety(sourceImageBuffer) {
+function getKlingVerifiedViewInstruction(referenceSafety = {}) {
+  const lock = referenceSafety?.verifiedViewLock || {};
+  const verifiedView = String(lock.verifiedView || "same verified source view").trim();
+  const summary = String(lock.visibleSurfaceSummary || "Only the product surfaces/details visible in the authoritative retailer image are verified.").trim();
+  const motion = String(lock.motionConstraint || "Keep the product in the same verified camera-facing orientation and never reveal an unseen side or surface.").trim();
+  return [
+    `VERIFIED VIEW LOCK: ${verifiedView}.`,
+    summary,
+    motion,
+    "This view lock applies even when the product is fully visible and safe to wear/hold/use. Full-product interaction NEVER grants permission to invent or reveal an unverified front, back, side, top, bottom, underside, interior, label or hidden detail.",
+  ].join(" ");
+}
+
+async function analyzeKlingVerifiedViewLock({ openai, websiteItem, sourceImageBuffer }) {
+  const fallback = {
+    verifiedView: "same verified source view only",
+    visibleSurfaceSummary: "Only the exact product surfaces/details visible in the authoritative retailer image are verified.",
+    motionConstraint: "Keep the same camera-facing product orientation for the entire clip. Do not turn, rotate, orbit, flip or otherwise reveal any product surface that is not visible in the retailer image.",
+    confidence: 0,
+    source: "strict_same_view_fallback",
+  };
+  if (!openai || !sourceImageBuffer?.length) return fallback;
+
+  const productTitle = String(websiteItem?.title || websiteItem?.item_title || "the verified product").trim();
+  const reference = await sharp(sourceImageBuffer)
+    .rotate()
+    .resize({ width: 1024, height: 1024, fit: "inside", withoutEnlargement: true })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  const imageUrl = `data:image/png;base64,${reference.toString("base64")}`;
+
+  try {
+    const response = await openai.responses.create(
+      {
+        model: PRODUCT_RESEARCH_FAST_MODEL,
+        input: [{
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text:
+                `Analyze the authoritative retailer image for the ecommerce product "${productTitle}". ` +
+                "Your job is NOT to infer how hidden parts probably look. Identify only which camera-facing side/view and product surfaces are actually verified by visible pixels. " +
+                "For apparel, distinguish front/back/side when possible based on the visible garment construction and print placement. A back-only retailer image verifies the back only; a later video must never show the front. " +
+                "For rigid products, footwear, packaging and other objects, describe the exact visible view (for example front, left side, three-quarter front-left, top detail) and explicitly forbid any rotation that would expose an unseen surface. " +
+                "Return strict JSON only. If uncertain, choose the stricter same-view constraint.",
+            },
+            { type: "input_image", image_url: imageUrl, detail: "high" },
+          ],
+        }],
+        max_output_tokens: 500,
+        text: {
+          format: {
+            type: "json_schema",
+            name: "kling_verified_view_lock",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                verified_view: { type: "string" },
+                visible_surface_summary: { type: "string" },
+                motion_constraint: { type: "string" },
+                confidence: { type: "number", minimum: 0, maximum: 1 },
+              },
+              required: ["verified_view", "visible_surface_summary", "motion_constraint", "confidence"],
+            },
+          },
+        },
+      },
+      { timeout: 20_000, maxRetries: 0 }
+    );
+    const parsed = safeJsonParse(getOpenAiResponseOutputText(response));
+    const confidence = Number(parsed?.confidence || 0);
+    if (!parsed?.verified_view || !parsed?.motion_constraint || confidence < 0.72) return fallback;
+    return {
+      verifiedView: String(parsed.verified_view).trim(),
+      visibleSurfaceSummary: String(parsed.visible_surface_summary || fallback.visibleSurfaceSummary).trim(),
+      motionConstraint: String(parsed.motion_constraint).trim(),
+      confidence,
+      source: "vision_verified_view_lock",
+    };
+  } catch (error) {
+    console.warn("Kling verified-view analysis unavailable; strict same-view fallback applied", {
+      productTitle,
+      message: error?.message || String(error),
+    });
+    return fallback;
+  }
+}
+
+async function assessKlingReferenceSafety(sourceImageBuffer, { openai = null, websiteItem = null } = {}) {
   const normalizedSource = await sharp(sourceImageBuffer)
     .rotate()
     .png({ compressionLevel: 9 })
@@ -13940,6 +14035,11 @@ async function assessKlingReferenceSafety(sourceImageBuffer) {
       Number.isFinite(boundsAreaRatio) &&
       boundsAreaRatio <= 0.92
   );
+  const verifiedViewLock = await analyzeKlingVerifiedViewLock({
+    openai,
+    websiteItem,
+    sourceImageBuffer: normalizedSource,
+  });
   return {
     compositionMode,
     interactionMode: fullProductInteractionSafe
@@ -13950,6 +14050,7 @@ async function assessKlingReferenceSafety(sourceImageBuffer) {
     boundsAreaRatio: Number.isFinite(boundsAreaRatio) ? boundsAreaRatio : null,
     sourceWidth: Number(sourceMetadata.width || 0) || null,
     sourceHeight: Number(sourceMetadata.height || 0) || null,
+    verifiedViewLock,
   };
 }
 
@@ -13959,6 +14060,7 @@ async function reviewKlingOpeningSceneIdentity({
   sourceImageBuffer,
   generatedImageBuffer,
   fullProductInteractionSafe = false,
+  verifiedViewLock = null,
 }) {
   if (!openai || !sourceImageBuffer?.length || !generatedImageBuffer?.length) {
     return { accepted: false, confidence: 0, reason: "opening_scene_reviewer_unavailable" };
@@ -13986,7 +14088,8 @@ async function reviewKlingOpeningSceneIdentity({
                   (fullProductInteractionSafe
                     ? "Natural in-use deformation is allowed (for example apparel worn by a person), but visible color, print/design, logo/wording, distinctive geometry, materials and identity-defining details must still match. "
                     : "The source is cropped or uncertain. Image 2 must not invent or expose new identity-defining product surfaces/details outside what Image 1 verifies; it may only place the same visible portion into a believable context. ") +
-                  "Reject if the AI changed the visible variant, print, wording, logo, silhouette/geometry, key hardware, product type, or substituted a similar product. If uncertain, reject. Return only the requested JSON.",
+                  ` ${verifiedViewLock ? getKlingVerifiedViewInstruction({ verifiedViewLock }) : "Only product surfaces visible in Image 1 are verified; reject any newly exposed side or surface."} ` +
+                  "Reject if Image 2 exposes any product side/surface that Image 1 does not visibly verify, even if that hidden side looks plausible. Reject if the AI changed the visible variant, print, wording, logo, silhouette/geometry, key hardware, product type, or substituted a similar product. If uncertain, reject. Return only the requested JSON.",
               },
               { type: "input_text", text: "IMAGE 1 — authoritative retailer product" },
               { type: "input_image", image_url: sourceDataUrl, detail: "high" },
@@ -14009,6 +14112,8 @@ async function reviewKlingOpeningSceneIdentity({
                 visible_variant_match: { type: "boolean" },
                 print_logo_text_match: { type: "boolean" },
                 invented_identity_detail: { type: "boolean" },
+                verified_view_preserved: { type: "boolean" },
+                unverified_surface_exposed: { type: "boolean" },
                 confidence: { type: "number", minimum: 0, maximum: 1 },
                 reason: { type: "string" },
               },
@@ -14017,6 +14122,8 @@ async function reviewKlingOpeningSceneIdentity({
                 "visible_variant_match",
                 "print_logo_text_match",
                 "invented_identity_detail",
+                "verified_view_preserved",
+                "unverified_surface_exposed",
                 "confidence",
                 "reason",
               ],
@@ -14033,6 +14140,8 @@ async function reviewKlingOpeningSceneIdentity({
         parsed?.visible_variant_match === true &&
         parsed?.print_logo_text_match === true &&
         parsed?.invented_identity_detail !== true &&
+        parsed?.verified_view_preserved === true &&
+        parsed?.unverified_surface_exposed !== true &&
         confidence >= 0.9
     );
     return {
@@ -14076,9 +14185,10 @@ async function generateKlingDirectSceneOpeningFrame({
     type: "image/png",
   });
 
+  const verifiedViewInstruction = getKlingVerifiedViewInstruction(referenceSafety);
   const interactionInstruction = fullProductInteractionSafe
-    ? `Start with the exact product already being genuinely used in the scene. For apparel, put the exact garment naturally on a person while preserving the exact visible color, print, words/logo and design. For handheld products, have a person naturally hold/use the exact product. For tools, appliances, sports or outdoor products, show authentic product-specific use. The product must never appear first as a floating cutout, catalog card, isolated hero object, pedestal display or pasted layer.`
-    : `The source is cropped or identity-sensitive. Keep only the exact verified visible portion/view of the product and place that same verified view naturally into a real context. Do not complete, extend, rotate or invent unseen product surfaces. Use a believable close-up/detail-shot commercial composition instead of a floating catalog object.`;
+    ? `Start with the exact product already being genuinely used in the scene. For apparel, put the exact garment naturally on a person while preserving the exact visible color, print, words/logo and design. For handheld products, have a person naturally hold/use the exact product. For tools, appliances, sports or outdoor products, show authentic product-specific use. The product must never appear first as a floating cutout, catalog card, isolated hero object, pedestal display or pasted layer. ${verifiedViewInstruction}`
+    : `The source is cropped or identity-sensitive. Keep only the exact verified visible portion/view of the product and place that same verified view naturally into a real context. Do not complete, extend, rotate or invent unseen product surfaces. Use a believable close-up/detail-shot commercial composition instead of a floating catalog object. ${verifiedViewInstruction}`;
 
   const prompt = `
 Create the literal FIRST FRAME of a premium 9:16 social-media product commercial for this verified ecommerce product:
@@ -14124,6 +14234,7 @@ NON-NEGOTIABLE OPENING RULES:
     sourceImageBuffer: source,
     generatedImageBuffer,
     fullProductInteractionSafe,
+    verifiedViewLock: referenceSafety?.verifiedViewLock || null,
   });
   if (!identity.accepted) {
     throw new Error(
@@ -14275,6 +14386,7 @@ function getKlingProductPromptFallback({ rule, postContent, referenceSafety = nu
   );
   const campaignIdentityLock = formatCampaignIdentityLockForPrompt(rule);
   const fullProductInteractionSafe = referenceSafety?.fullProductInteractionSafe === true;
+  const verifiedViewInstruction = getKlingVerifiedViewInstruction(referenceSafety);
   const interactionDirection = fullProductInteractionSafe
     ? "The reference appears to show a sufficiently isolated/full product. The product MUST be genuinely used in the scene in the most natural product-specific way: apparel should be worn by a person while keeping the exact visible print/color/design, handheld products should be held or operated, tools should be used, appliances should be operated, and other products should participate in a believable real-world action. Do not settle for floating, spinning or merely decorating the product."
     : "The reference is cropped or not safely isolated. Do NOT zoom out, complete the product, or reveal any unseen area. Keep exactly the same visible crop/view and create the advertising action around the visible product area instead of inventing missing product pixels.";
@@ -14292,6 +14404,7 @@ function getKlingProductPromptFallback({ rule, postContent, referenceSafety = nu
     "Start with the verified product reference already large and visually dominant in that natural environment; never animate a small picture card expanding to fill the screen.",
     "Create an immediate pattern interrupt in the first 0.5-1.0 second with a real product-relevant event, human/animal/physical action or purposeful camera/action beat inside the same believable environment. Decorative particles alone are not a concept.",
     interactionDirection,
+    verifiedViewInstruction,
     "Make the scene escalate quickly and deliver a clear visual payoff by the final second while staying visually continuous and physically coherent. Avoid a generic slow zoom, simple spin, floating product, empty studio demonstration, backdrop reveal, environment teleport or a product surrounded only by decorative effects.",
     "The uploaded first frame is the authoritative product reference and the exact product identity must remain recognizable throughout.",
     identityMotionDirection,
@@ -14341,6 +14454,7 @@ ${formatCampaignIdentityLockForPrompt(rule) || "No campaign identity lock applie
 Post caption context: ${truncateText(String(postContent || ""), 700)}
 Reference safety mode: ${referenceSafety?.interactionMode || "cropped_or_uncertain_reference"}
 Full-product interaction allowed: ${referenceSafety?.fullProductInteractionSafe === true ? "YES" : "NO"}
+Verified product view lock: ${getKlingVerifiedViewInstruction(referenceSafety)}
 Natural first-frame environment source: ${referenceSafety?.startBackgroundSource || "real-world environment plate"}
 Return JSON exactly in this shape:
 {"creative_strategy":"...","motion_prompt":"..."}.
@@ -14352,7 +14466,7 @@ Creative goals:
 - do not linger on a static, staged or composited opening frame; begin believable in-scene motion/action immediately and be fully inside the real commercial world within the first 0.2-0.3 second
 - create a pattern interrupt in the first 0.5-1.0 second using a real product-relevant event, person, animal, physical action or purposeful camera/action beat inside that real environment; decorative particles alone are not enough
 - the result must feel like a professionally directed short commercial, not a prettier version of a simple animated product post
-- when Full-product interaction allowed is YES, the product MUST be genuinely used in the scene in the most natural way for that exact product: apparel worn by a person, handheld items held/operated, tools used, appliances operated, sports/outdoor gear used in context, etc.
+- when Full-product interaction allowed is YES, the product MUST be genuinely used in the scene in the most natural way for that exact product: apparel worn by a person, handheld items held/operated, tools used, appliances operated, sports/outdoor gear used in context, etc. BUT usage never grants permission to reveal an unverified product side: the camera-facing verified view must remain locked for the entire clip
 - when Full-product interaction allowed is NO, never fabricate missing product areas just to show use; preserve the exact visible crop and create the story/action around that crop
 - escalate quickly and deliver a satisfying visual payoff by the final second
 - feel native to TikTok/Reels/Shorts and commercially persuasive, not a generic studio spin, slow zoom, floating product or product-with-particles demo
@@ -14367,8 +14481,8 @@ NON-NEGOTIABLE PRODUCT RULES:
 - the uploaded first frame is authoritative; it may show the whole product or only the retailer-verified visible portion
 - preserve the exact visible identity-defining design, print, colors, proportions, materials, branding, logos and printed product text
 - if Full-product interaction allowed is NO: keep the SAME visible camera angle/crop throughout, show only surfaces/details already visible, never extend/complete the crop, and never rotate/orbit/tilt to reveal a new area
-- if Full-product interaction allowed is YES: natural product use and modest physical motion are allowed, but never invent a different variant/design, never show an unverified identity-defining side/detail, and keep the verified front/design visible enough to remain clearly the exact product
-- for apparel specifically, a person may wear the exact garment while the visible print/color/design stays unchanged and prominent; do not replace it with a similar garment
+- if Full-product interaction allowed is YES: natural product use and modest physical motion are allowed, but NEVER reveal a side/surface that is absent from the retailer image. Keep the same verified camera-facing orientation for the entire clip
+- for apparel specifically, a person may wear the exact garment while the visible print/color/design stays unchanged and prominent. If the retailer image verifies only the BACK, the wearer must stay back-facing/three-quarter-back and must never turn far enough for the front to become visible. If only the FRONT is verified, the reverse applies. Do not replace it with a similar garment
 - for rigid products, interaction must not morph geometry, move controls/components, alter ports/hardware, or fabricate hidden product surfaces
 `,
         },
@@ -14383,6 +14497,7 @@ NON-NEGOTIABLE PRODUCT RULES:
     const fullProductInteractionSafe = referenceSafety?.fullProductInteractionSafe === true;
     const safetyTail = [
       "CRITICAL PRODUCT LOCK: the first frame is authoritative.",
+      getKlingVerifiedViewInstruction(referenceSafety),
       fullProductInteractionSafe
         ? "Genuine product use is required. Use the exact product naturally in-scene while preserving its verified identity-defining design, print, color, branding and proportions. Apparel may be worn with its exact visible design preserved; rigid products must not morph or gain invented hardware/surfaces."
         : "The reference is cropped or uncertain: keep exactly the same visible crop/view for the whole clip, never zoom out to complete it, and never reveal or invent any unseen side, back, top, bottom, underside, interior, hidden edge or label.",
@@ -34112,6 +34227,262 @@ async function normalizeGeneratedAnimatedTextPanel(generatedBuffer) {
   };
 }
 
+function cleanKlingOverlayTextLine(value, maxWords = 7, maxChars = 58) {
+  const withoutUrls = String(value || "")
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/www\.\S+/gi, " ")
+    .replace(/#[\p{L}\p{N}_-]+/gu, " ")
+    .replace(/[\p{Extended_Pictographic}\uFE0F]/gu, " ")
+    .replace(/^[\s\-–—:|•·]+|[\s\-–—:|•·]+$/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!withoutUrls) return "";
+  const words = withoutUrls.split(/\s+/).filter(Boolean).slice(0, maxWords);
+  return truncateText(words.join(" "), maxChars).replace(/[.,;:!?]+$/g, "").trim();
+}
+
+function buildKlingAdvertisingOverlayCopy({ postContent, websiteItem }) {
+  const lines = String(postContent || "")
+    .split(/\n+/)
+    .map((line) => cleanKlingOverlayTextLine(line))
+    .filter(Boolean);
+  let headline = lines[0] || "";
+  const productTitle = sanitizeProductTitleForCard(
+    websiteItem?.title || websiteItem?.item_title || ""
+  );
+  if (!headline) headline = cleanKlingOverlayTextLine(productTitle, 7, 58);
+  const presentation = getCarouselProductLabelPresentation(
+    websiteItem || {},
+    productTitle || headline || "Featured product"
+  );
+  const descriptorCandidate =
+    String(presentation?.descriptor || "").trim() ||
+    String(presentation?.title || productTitle || "").trim();
+  let subheadline = cleanKlingOverlayTextLine(descriptorCandidate, 5, 42);
+  if (subheadline && headline.toLocaleLowerCase() === subheadline.toLocaleLowerCase()) {
+    subheadline = "";
+  }
+  return { headline, subheadline };
+}
+
+const KLING_TYPOGRAPHY_PLACEMENTS = {
+  top_left: { left: 70, top: 170, width: 420, height: 300 },
+  top_right: { left: 590, top: 170, width: 420, height: 300 },
+  middle_left: { left: 70, top: 650, width: 400, height: 310 },
+  middle_right: { left: 610, top: 650, width: 400, height: 310 },
+  lower_left: { left: 70, top: 1190, width: 420, height: 280 },
+  lower_right: { left: 590, top: 1190, width: 420, height: 280 },
+};
+
+async function analyzeKlingTypographyPlacement({ openai, sceneBuffer, productTitle }) {
+  if (!openai || !sceneBuffer?.length) {
+    throw new Error("Kling typography placement needs the finished opening scene");
+  }
+  const scene = await sharp(sceneBuffer)
+    .rotate()
+    .resize({ width: 768, height: 1365, fit: "cover" })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  const sceneUrl = `data:image/png;base64,${scene.toString("base64")}`;
+  const response = await openai.responses.create(
+    {
+      model: PRODUCT_RESEARCH_FAST_MODEL,
+      input: [{
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text:
+              `Choose one safe placement for transparent advertising typography in this 9:16 commercial frame for "${String(productTitle || "product")}". ` +
+              "Do not place text over the advertised product, its print/logo, a person's face, hands, or the main action. Keep the bottom UI/caption area clear. " +
+              "Allowed placements are top_left, top_right, middle_left, middle_right, lower_left, lower_right. Choose the visually cleanest area with strong readability. Return strict JSON only.",
+          },
+          { type: "input_image", image_url: sceneUrl, detail: "high" },
+        ],
+      }],
+      max_output_tokens: 300,
+      text: {
+        format: {
+          type: "json_schema",
+          name: "kling_typography_placement",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              placement: { type: "string", enum: Object.keys(KLING_TYPOGRAPHY_PLACEMENTS) },
+              text_tone: { type: "string", enum: ["light", "dark"] },
+              confidence: { type: "number", minimum: 0, maximum: 1 },
+            },
+            required: ["placement", "text_tone", "confidence"],
+          },
+        },
+      },
+    },
+    { timeout: 20_000, maxRetries: 0 }
+  );
+  const parsed = safeJsonParse(getOpenAiResponseOutputText(response));
+  const placement = String(parsed?.placement || "");
+  const confidence = Number(parsed?.confidence || 0);
+  if (!KLING_TYPOGRAPHY_PLACEMENTS[placement] || confidence < 0.72) {
+    throw new Error("No sufficiently safe scene-aware typography placement was found");
+  }
+  return {
+    placement,
+    textTone: parsed?.text_tone === "light" ? "light" : "dark",
+    confidence,
+  };
+}
+
+function getKlingTypographyPlacementGuidance(placement) {
+  const box = KLING_TYPOGRAPHY_PLACEMENTS[placement];
+  if (!box) throw new Error("Unknown Kling typography placement");
+  const left = Math.round((box.left / 1080) * 100);
+  const right = Math.round(((box.left + box.width) / 1080) * 100);
+  const top = Math.round((box.top / 1920) * 100);
+  const bottom = Math.round(((box.top + box.height) / 1920) * 100);
+  return `Keep every visible letter/accent completely inside x=${left}%–${right}% and y=${top}%–${bottom}% of the portrait canvas.`;
+}
+
+async function normalizeKlingTypographyOverlay(buffer, placement) {
+  const normalized = await sharp(buffer)
+    .rotate()
+    .resize({ width: 1080, height: 1920, fit: "fill", kernel: sharp.kernel.lanczos3 })
+    .ensureAlpha()
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  const { data, info } = await sharp(normalized).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const box = KLING_TYPOGRAPHY_PLACEMENTS[placement];
+  const pad = 45;
+  const allowed = {
+    left: Math.max(0, box.left - pad),
+    top: Math.max(0, box.top - pad),
+    right: Math.min(1080, box.left + box.width + pad),
+    bottom: Math.min(1920, box.top + box.height + pad),
+  };
+  let visible = 0;
+  let strong = 0;
+  let outside = 0;
+  for (let y = 0; y < info.height; y += 1) {
+    for (let x = 0; x < info.width; x += 1) {
+      const alpha = data[(y * info.width + x) * info.channels + 3];
+      if (alpha < 28) continue;
+      visible += 1;
+      if (alpha >= 150) strong += 1;
+      if (x < allowed.left || x >= allowed.right || y < allowed.top || y >= allowed.bottom) outside += 1;
+    }
+  }
+  const pixels = Math.max(1, info.width * info.height);
+  const visibleRatio = visible / pixels;
+  const outsideRatio = outside / Math.max(1, visible);
+  if (visibleRatio < 0.0015 || strong / pixels < 0.00055) {
+    throw new Error("GPT Image Kling typography was visually empty");
+  }
+  if (visibleRatio > 0.17) {
+    throw new Error("GPT Image Kling typography contained excessive opaque area");
+  }
+  if (outsideRatio > 0.07) {
+    throw new Error("GPT Image Kling typography left its scene-safe placement");
+  }
+  return {
+    textOverlayBuffer: normalized,
+    analysis: {
+      visibleRatio: Number(visibleRatio.toFixed(4)),
+      outsideSafeAreaRatio: Number(outsideRatio.toFixed(4)),
+    },
+  };
+}
+
+async function createKlingAdvertisingTypographyOverlay({
+  openai,
+  rule,
+  sceneBuffer,
+  productReferenceBuffer,
+}) {
+  if (!openai || !sceneBuffer?.length || !productReferenceBuffer?.length) {
+    throw new Error("Professional Kling typography requires GPT Image, the real opening scene and the verified product reference");
+  }
+  const websiteItem = rule?.website_item || {};
+  const presentation = getCarouselProductLabelPresentation(
+    websiteItem,
+    websiteItem?.title || rule?.content_type_label || "Featured product"
+  );
+  const title = sanitizeProductTitleForCard(
+    presentation?.title || websiteItem?.title || rule?.content_type_label || "Featured product"
+  ) || "Featured product";
+  const brand = String(presentation?.brand || "").trim();
+  const descriptor = String(presentation?.descriptor || "").trim();
+  const placement = await analyzeKlingTypographyPlacement({
+    openai,
+    sceneBuffer,
+    productTitle: title,
+  });
+  const sceneReference = await sharp(sceneBuffer)
+    .rotate()
+    .resize({ width: 1024, height: 1536, fit: "cover" })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  const productReference = await sharp(productReferenceBuffer)
+    .rotate()
+    .resize({ width: 768, height: 768, fit: "contain", withoutEnlargement: true, background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  const files = [
+    await toFile(sceneReference, "kling-scene-reference.png", { type: "image/png" }),
+    await toFile(productReference, "verified-product-reference.png", { type: "image/png" }),
+  ];
+  const prompt = `
+Create ONLY the finished transparent typography artwork for a premium vertical social-media product commercial.
+Reference image 1 is the actual opening commercial scene. Reference image 2 is the verified ecommerce product. Use both only as art-direction/placement context; do not reproduce either image.
+
+EXACT VISIBLE TEXT:
+${brand ? `- Optional small brand eyebrow, exact spelling: "${brand}"` : "- No brand eyebrow is required."}
+- Main product name, exact spelling: "${title}"
+${descriptor ? `- Optional descriptor, exact spelling: "${descriptor}"` : "- No descriptor line is required."}
+Do not add slogans, prices, offers, claims, calls to action or any other words. Do not rewrite, translate or abbreviate the product name.
+
+OUTPUT:
+- 9:16 transparent RGBA canvas.
+- Every pixel outside the typography and tiny text-supporting accents must be truly transparent alpha.
+- No card, panel, badge, sticker, banner, rectangle, capsule, opaque plate, photo, product, person, logo mark, mockup or watermark.
+- Use professional advertising typography that feels art-directed for this exact scene/product, not generic default text.
+- Strong mobile readability, confident scale, refined hierarchy, excellent contrast against the real scene.
+- A restrained underline, outline, shadow or tiny flourish is allowed if it belongs directly to the typography.
+- ${getKlingTypographyPlacementGuidance(placement.placement)}
+- Do not overlap the advertised product, its print/design, the person's face/hands or the main action.
+- The selected tone is ${placement.textTone}; use that as a contrast hint, but the scene reference is authoritative.
+Return only the transparent typography asset.
+`.trim();
+  const response = await openai.images.edit(
+    {
+      model: ANIMATED_OVERLAY_IMAGE_MODEL,
+      image: files,
+      prompt,
+      size: "1024x1536",
+      quality: "medium",
+      background: "transparent",
+      output_format: "png",
+    },
+    { timeout: 65_000, maxRetries: 0 }
+  );
+  const base64 = response?.data?.[0]?.b64_json;
+  if (!base64) throw new Error("GPT Image returned no professional Kling typography");
+  const normalized = await normalizeKlingTypographyOverlay(Buffer.from(base64, "base64"), placement.placement);
+  console.info("GPT Image scene-aware Kling typography created", {
+    ruleId: rule?.id || null,
+    model: ANIMATED_OVERLAY_IMAGE_MODEL,
+    placement: placement.placement,
+    placementConfidence: placement.confidence,
+    ...normalized.analysis,
+  });
+  return {
+    ...normalized,
+    prompt,
+    provider: "gpt-image-2-scene-aware-transparent-typography",
+    placement: placement.placement,
+  };
+}
+
 async function createAnimatedTextOverlay({
   openai,
   rule,
@@ -40960,7 +41331,10 @@ product_research_model_used: websitePreparedRule.uses_website_content
               ...ruleWithBrandProfile,
               website_item: candidate.item,
             };
-            let referenceSafety = await assessKlingReferenceSafety(sourceImageBuffer);
+            let referenceSafety = await assessKlingReferenceSafety(sourceImageBuffer, {
+              openai,
+              websiteItem: candidate.item,
+            });
             let naturalStartBackground = null;
             let referenceFrameBuffer = null;
             let klingSceneTrimSeconds = 0.15;
@@ -41018,12 +41392,24 @@ product_research_model_used: websitePreparedRule.uses_website_content
               referenceFrameBuffer = fallbackReference.frameBuffer;
               referenceSafety = {
                 ...fallbackReference.referenceSafety,
+                verifiedViewLock: referenceSafety?.verifiedViewLock || null,
                 openingSceneMode: "pixel_preserving_setup_fully_trimmed",
               };
               openingSceneMode = "pixel_preserving_setup_fully_trimmed";
               klingSceneTrimSeconds = 1.9;
               finalImagePrompt =
                 "Pixel-preserving Kling guidance frame retained only for provider identity guidance; the full setup-to-scene transition is trimmed from the delivered advertisement.";
+            }
+
+            const uploadedVerifiedProduct = await uploadGeneratedImageToStorage({
+              supabase,
+              imageBase64: sourceImageBuffer.toString("base64"),
+              userId: rule.user_id,
+              postId: post.id,
+              fileSuffix: "kling-verified-product",
+            });
+            if (!uploadedVerifiedProduct.imageUrl) {
+              throw new Error("Could not preserve the authoritative product image for finished-video validation");
             }
 
             const uploadedReference = await uploadGeneratedImageToStorage({
@@ -41041,26 +41427,12 @@ product_research_model_used: websitePreparedRule.uses_website_content
               throw new Error("Could not create a public Kling reference-frame URL");
             }
 
-            const klingTextOverlay = await createAnimatedTextOverlay({
-              openai,
-              rule: klingRuleContext,
+            const klingOverlayCopy = buildKlingAdvertisingOverlayCopy({
               postContent: generatedContent,
-              backgroundAsset: {
-                brightness: naturalStartBackground?.brightness || referenceSafety?.startBackgroundBrightness || "medium",
-                description: "premium cinematic AI product advertisement already inside a believable real-world environment from the first frame",
-              },
-              dominantColor: await getProductAccentColor(sourceImageBuffer),
-              productReferenceBuffer: sourceImageBuffer,
+              websiteItem: candidate.item,
             });
-            const uploadedKlingTextOverlay = await uploadGeneratedImageToStorage({
-              supabase,
-              imageBase64: klingTextOverlay.textOverlayBuffer.toString("base64"),
-              userId: rule.user_id,
-              postId: post.id,
-              fileSuffix: "kling-text-overlay",
-            });
-            if (!uploadedKlingTextOverlay.imageUrl) {
-              throw new Error("Could not create the transparent Kling advertising typography URL");
+            if (!klingOverlayCopy.headline) {
+              throw new Error("AI product video could not prepare a factual short overlay headline");
             }
 
             klingPrompt = await buildKlingProductVideoPrompt({
@@ -41130,10 +41502,15 @@ product_research_model_used: websitePreparedRule.uses_website_content
                   family: naturalStartBackground?.family || null,
                   brightness: naturalStartBackground?.brightness || null,
                 },
-                text_overlay_url: uploadedKlingTextOverlay.imageUrl,
-                text_overlay_storage_path: uploadedKlingTextOverlay.imageStoragePath,
-                text_overlay_provider: klingTextOverlay.provider,
-                text_overlay_prompt: klingTextOverlay.prompt,
+                verified_product_image_url: uploadedVerifiedProduct.imageUrl,
+                verified_product_source_url: candidate.item?.image_url || null,
+                verified_product_title: candidate.item?.title || candidate.item?.item_title || null,
+                text_overlay_url: null,
+                text_overlay_storage_path: null,
+                text_overlay_provider: null,
+                text_overlay_prompt: null,
+                text_overlay_status: "waiting_for_finished_video",
+                text_overlay_copy: klingOverlayCopy,
                 opening_scene_mode: openingSceneMode,
                 scene_trim_start_seconds: klingSceneTrimSeconds,
                 overlay_start_seconds: KLING_TEXT_OVERLAY_START_SECONDS,

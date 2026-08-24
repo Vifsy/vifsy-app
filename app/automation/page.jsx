@@ -6129,6 +6129,7 @@ const [slots, setSlots] = useState([]);
 
   const [message, setMessage] = useState("");
   const [savedPlanSummary, setSavedPlanSummary] = useState(null);
+  const [showPlanActivatedModal, setShowPlanActivatedModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [planLimitDetails, setPlanLimitDetails] = useState(null);
@@ -10043,10 +10044,13 @@ ${slot.campaignSummary}`
         credits: plannedCredits,
         method: translatePlanMode(planCreationMode),
         channels: actualPlanChannelsLabel,
+        goal: translateAutoPlanGoalLabel(autoPlanGoal),
       });
 
       if (planCreationMode === "campaign") {
         setShowCampaignActivatedModal(true);
+      } else {
+        setShowPlanActivatedModal(true);
       }
 
       setGuideExpanded(false);
@@ -13196,6 +13200,72 @@ function blockFormatCardClickAfterDrag(event) {
             </div>
           </div>
         )}
+        {showPlanActivatedModal && savedPlanSummary && !campaignOpportunity && (
+          <div className="campaign-v14348-activated-backdrop" role="presentation">
+            <section
+              className="campaign-v14348-activated-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="plan-activated-title"
+            >
+              <div className="campaign-v14348-activated-icon" aria-hidden="true">
+                <CheckCircle2 size={28} />
+              </div>
+              <p className="campaign-v14348-activated-eyebrow">
+                {t("automation.planActivated.eyebrow")}
+              </p>
+              <h2 id="plan-activated-title">
+                {t("automation.planActivated.title")}
+              </h2>
+              <p className="campaign-v14348-activated-copy">
+                {t("automation.planActivated.text")}
+              </p>
+
+              <div className="campaign-v14348-activated-summary">
+                <div>
+                  <span>{t("automation.planActivated.posts")}</span>
+                  <strong>{savedPlanSummary.totalPosts}</strong>
+                </div>
+                <div>
+                  <span>{t("automation.planActivated.firstPost")}</span>
+                  <strong>{savedPlanSummary.firstPostLabel}</strong>
+                </div>
+                <div>
+                  <span>{t("automation.planActivated.channels")}</span>
+                  <strong>{savedPlanSummary.channels || platform}</strong>
+                </div>
+                <div>
+                  <span>{t("automation.planActivated.goal")}</span>
+                  <strong>{savedPlanSummary.goal || t("automation.notSet")}</strong>
+                </div>
+              </div>
+
+              <div className="campaign-v14348-activated-next">
+                <strong>{t("automation.planActivated.next")}</strong>
+                <p>{t("automation.planActivated.nextText")}</p>
+              </div>
+
+              <div className="campaign-v14348-activated-actions">
+                <button
+                  type="button"
+                  className="is-primary"
+                  onClick={() => {
+                    window.location.href = "/calendar";
+                  }}
+                >
+                  {t("automation.planActivated.viewCalendar")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPlanActivatedModal(false)}
+                >
+                  {t("automation.planActivated.close")}
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
+
         {showCampaignActivatedModal && savedPlanSummary && campaignOpportunity && (
           <div className="campaign-v14348-activated-backdrop" role="presentation">
             <section

@@ -15,10 +15,10 @@ must(route, 'apparel should be worn by a person', 'Wearables must be directed to
 must(route, 'Decorative particles alone are not a concept', 'Particle-only animation must be explicitly rejected.');
 must(route, 'never zoom out to complete it', 'Cropped references must not be expanded beyond verified pixels.');
 must(route, 'Spreelo adds professional typography after the video is generated', 'Kling itself must not hallucinate readable ad text.');
-must(route, 'fileSuffix: "kling-text-overlay"', 'Kling must create a durable transparent typography asset.');
-must(route, 'createAnimatedTextOverlay({', 'Kling must reuse the GPT-Image-2 transparent Reel typography system.');
+must(finalizer, 'kling-text-overlay.png', 'Kling must create a durable transparent typography asset after the finished video exists.');
+must(finalizer, 'gpt-image-2-finished-video-transparent-typography', 'Kling must use GPT-Image-2 transparent finished-video typography.');
 must(route, 'mode: "kling_professional_advertising_postprocess"', 'Kling posts must persist professional post-process metadata.');
-must(route, 'text_overlay_provider: klingTextOverlay.provider', 'The typography provider must be persisted.');
+must(route, 'text_overlay_status: "waiting_for_finished_video"', 'The typography generation must wait for the finished video.');
 must(route, '? ANIMATED_OVERLAY_IMAGE_MODEL', 'Kling post metadata must report the GPT-Image-2 overlay model.');
 must(route, 'Protected retailer direct discovery fetch blocked; continuing with allowed fallback', 'Expected protected-site 403s should no longer be logged as generic red errors.');
 
