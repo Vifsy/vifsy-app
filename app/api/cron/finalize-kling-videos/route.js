@@ -175,7 +175,7 @@ async function getKlingFinalVideoSource({ supabase, post, task, costTracker }) {
     0,
     Math.min(
       Math.max(0.2, durationSeconds - 1.2),
-      Number(postprocess.scene_trim_start_seconds ?? 0.7) || 0.7
+      Number(postprocess.scene_trim_start_seconds ?? 1.9) || 1.9
     )
   );
   const overlayStartSeconds = Math.max(

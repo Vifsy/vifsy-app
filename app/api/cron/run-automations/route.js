@@ -13912,6 +13912,241 @@ async function selectKlingNaturalStartBackground({ openai, supabase, rule, sourc
   );
 }
 
+
+
+async function assessKlingReferenceSafety(sourceImageBuffer) {
+  const normalizedSource = await sharp(sourceImageBuffer)
+    .rotate()
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  const sourceMetadata = await sharp(normalizedSource).metadata();
+  let cutoutAnalysis = null;
+  let compositionMode = "official_frame_large";
+  try {
+    const prepared = await prepareAnimatedProductCutout(normalizedSource);
+    cutoutAnalysis = prepared.analysis || null;
+    compositionMode = `pixel_preserving_${prepared.analysis?.mode || "cutout"}`;
+  } catch (error) {
+    console.info("Kling reference safety assessed from official frame because local cutout was unavailable", {
+      message: error?.message || String(error),
+    });
+  }
+  const edgeVisibleRatio = Number(cutoutAnalysis?.edgeVisibleRatio ?? 1);
+  const boundsAreaRatio = Number(cutoutAnalysis?.boundsAreaRatio ?? 1);
+  const fullProductInteractionSafe = Boolean(
+    compositionMode.startsWith("pixel_preserving_") &&
+      Number.isFinite(edgeVisibleRatio) &&
+      edgeVisibleRatio <= 0.035 &&
+      Number.isFinite(boundsAreaRatio) &&
+      boundsAreaRatio <= 0.92
+  );
+  return {
+    compositionMode,
+    interactionMode: fullProductInteractionSafe
+      ? "full_product_reference"
+      : "cropped_or_uncertain_reference",
+    fullProductInteractionSafe,
+    edgeVisibleRatio: Number.isFinite(edgeVisibleRatio) ? edgeVisibleRatio : null,
+    boundsAreaRatio: Number.isFinite(boundsAreaRatio) ? boundsAreaRatio : null,
+    sourceWidth: Number(sourceMetadata.width || 0) || null,
+    sourceHeight: Number(sourceMetadata.height || 0) || null,
+  };
+}
+
+async function reviewKlingOpeningSceneIdentity({
+  openai,
+  websiteItem,
+  sourceImageBuffer,
+  generatedImageBuffer,
+  fullProductInteractionSafe = false,
+}) {
+  if (!openai || !sourceImageBuffer?.length || !generatedImageBuffer?.length) {
+    return { accepted: false, confidence: 0, reason: "opening_scene_reviewer_unavailable" };
+  }
+
+  const productTitle = String(
+    websiteItem?.title || websiteItem?.item_title || "the verified product"
+  ).trim();
+  const sourceDataUrl = `data:image/png;base64,${sourceImageBuffer.toString("base64")}`;
+  const generatedDataUrl = `data:image/png;base64,${generatedImageBuffer.toString("base64")}`;
+
+  try {
+    const response = await openai.responses.create(
+      {
+        model: PRODUCT_RESEARCH_FAST_MODEL,
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text:
+                  `Compare two images of the ecommerce product named "${productTitle}". ` +
+                  "Image 1 is the authoritative retailer reference. Image 2 is a proposed photorealistic first frame for a product commercial. The environment/person/props may change completely, but the advertised product itself must remain the same verified product. " +
+                  (fullProductInteractionSafe
+                    ? "Natural in-use deformation is allowed (for example apparel worn by a person), but visible color, print/design, logo/wording, distinctive geometry, materials and identity-defining details must still match. "
+                    : "The source is cropped or uncertain. Image 2 must not invent or expose new identity-defining product surfaces/details outside what Image 1 verifies; it may only place the same visible portion into a believable context. ") +
+                  "Reject if the AI changed the visible variant, print, wording, logo, silhouette/geometry, key hardware, product type, or substituted a similar product. If uncertain, reject. Return only the requested JSON.",
+              },
+              { type: "input_text", text: "IMAGE 1 — authoritative retailer product" },
+              { type: "input_image", image_url: sourceDataUrl, detail: "high" },
+              { type: "input_text", text: "IMAGE 2 — proposed commercial opening scene" },
+              { type: "input_image", image_url: generatedDataUrl, detail: "high" },
+            ],
+          },
+        ],
+        max_output_tokens: 500,
+        text: {
+          format: {
+            type: "json_schema",
+            name: "kling_opening_scene_identity",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                same_product: { type: "boolean" },
+                visible_variant_match: { type: "boolean" },
+                print_logo_text_match: { type: "boolean" },
+                invented_identity_detail: { type: "boolean" },
+                confidence: { type: "number", minimum: 0, maximum: 1 },
+                reason: { type: "string" },
+              },
+              required: [
+                "same_product",
+                "visible_variant_match",
+                "print_logo_text_match",
+                "invented_identity_detail",
+                "confidence",
+                "reason",
+              ],
+            },
+          },
+        },
+      },
+      { timeout: 20_000, maxRetries: 0 }
+    );
+    const parsed = safeJsonParse(getOpenAiResponseOutputText(response));
+    const confidence = Number(parsed?.confidence || 0);
+    const accepted = Boolean(
+      parsed?.same_product === true &&
+        parsed?.visible_variant_match === true &&
+        parsed?.print_logo_text_match === true &&
+        parsed?.invented_identity_detail !== true &&
+        confidence >= 0.9
+    );
+    return {
+      accepted,
+      confidence,
+      reason: String(parsed?.reason || "").trim() || (accepted ? "verified_opening_scene" : "opening_scene_identity_uncertain"),
+    };
+  } catch (error) {
+    return {
+      accepted: false,
+      confidence: 0,
+      reason: `opening_scene_review_failed: ${error?.message || String(error)}`,
+    };
+  }
+}
+
+async function generateKlingDirectSceneOpeningFrame({
+  openai,
+  rule,
+  sourceImageBuffer,
+  referenceSafety,
+}) {
+  if (!openai || !sourceImageBuffer?.length) {
+    throw new Error("Kling direct-scene opening requires OpenAI and the verified product image");
+  }
+
+  const item = rule?.website_item || {};
+  const brand = rule?.brand_profile || {};
+  const productTitle = String(item?.title || item?.item_title || "the verified product").trim();
+  const productDescription = truncateText(
+    String(item?.description || item?.body || item?.reason || "").replace(/\s+/g, " ").trim(),
+    500
+  );
+  const fullProductInteractionSafe = referenceSafety?.fullProductInteractionSafe === true;
+  const source = await sharp(sourceImageBuffer)
+    .rotate()
+    .resize({ width: 1280, height: 1280, fit: "inside", withoutEnlargement: true })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  const referenceFile = await toFile(source, "kling-direct-scene-product-reference.png", {
+    type: "image/png",
+  });
+
+  const interactionInstruction = fullProductInteractionSafe
+    ? `Start with the exact product already being genuinely used in the scene. For apparel, put the exact garment naturally on a person while preserving the exact visible color, print, words/logo and design. For handheld products, have a person naturally hold/use the exact product. For tools, appliances, sports or outdoor products, show authentic product-specific use. The product must never appear first as a floating cutout, catalog card, isolated hero object, pedestal display or pasted layer.`
+    : `The source is cropped or identity-sensitive. Keep only the exact verified visible portion/view of the product and place that same verified view naturally into a real context. Do not complete, extend, rotate or invent unseen product surfaces. Use a believable close-up/detail-shot commercial composition instead of a floating catalog object.`;
+
+  const prompt = `
+Create the literal FIRST FRAME of a premium 9:16 social-media product commercial for this verified ecommerce product:
+"${productTitle}"
+${productDescription ? `Verified product context: ${productDescription}` : ""}
+${brand?.industry ? `Business industry: ${truncateText(String(brand.industry), 100)}` : ""}
+
+The supplied image is the authoritative product identity reference. The result must already look like a frame captured in the middle of a real professionally directed commercial — not a setup image that later transitions into a scene.
+
+${interactionInstruction}
+
+NON-NEGOTIABLE OPENING RULES:
+- Frame 0 must be a complete photorealistic real-world scene with natural depth, lighting, surfaces and spatial context.
+- NO plain/solid/gradient/abstract background, studio sweep, catalog background, display card, product-on-backdrop composition, poster, title card or transitional setup frame.
+- NO visual state where the product is simply centered against a background waiting for the video to begin.
+- The scene must be suitable for immediate natural motion by Kling from the first instant.
+- Preserve the exact verified product identity: visible color/variant, print/design, wording/logo, proportions, materials and distinctive details.
+- Do not substitute a similar product and do not invent another variant.
+- Do not add marketing typography, captions, prices, claims, logos or watermarks. Preserve only text physically printed on the real product.
+- People, hands, environment and props may be newly created when useful, but they must support the exact product rather than obscure it.
+- Output one finished 9:16 photorealistic commercial frame only.
+`.trim();
+
+  const response = await openai.images.edit(
+    {
+      model: IMAGE_MODEL,
+      image: referenceFile,
+      prompt,
+      size: "1024x1536",
+      quality: "medium",
+      output_format: "png",
+    },
+    { timeout: 65_000, maxRetries: 0 }
+  );
+  const imageBase64 = response?.data?.[0]?.b64_json;
+  if (!imageBase64) {
+    throw new Error("GPT Image returned no direct-scene Kling opening frame");
+  }
+  const generatedImageBuffer = Buffer.from(imageBase64, "base64");
+  const identity = await reviewKlingOpeningSceneIdentity({
+    openai,
+    websiteItem: item,
+    sourceImageBuffer: source,
+    generatedImageBuffer,
+    fullProductInteractionSafe,
+  });
+  if (!identity.accepted) {
+    throw new Error(
+      `Direct-scene opening frame was rejected by product identity review (${identity.reason || "identity mismatch"})`
+    );
+  }
+
+  console.info("Kling direct-scene opening frame accepted", {
+    ruleId: rule?.id || null,
+    productTitle,
+    interactionMode: referenceSafety?.interactionMode || null,
+    identityConfidence: identity.confidence,
+    identityReason: identity.reason,
+  });
+
+  return {
+    buffer: generatedImageBuffer,
+    source: "gpt_image_2_verified_direct_scene",
+    identityConfidence: identity.confidence,
+    identityReason: identity.reason,
+  };
+}
+
 async function createKlingProductReferenceFrame(sourceImageBuffer, { naturalBackground = null } = {}) {
   if (!sourceImageBuffer?.length) {
     throw new Error("Kling AI video needs a verified product image buffer");
@@ -40725,16 +40960,72 @@ product_research_model_used: websitePreparedRule.uses_website_content
               ...ruleWithBrandProfile,
               website_item: candidate.item,
             };
-            const naturalStartBackground = await selectKlingNaturalStartBackground({
-              openai,
-              supabase,
-              rule: klingRuleContext,
-              sourceImageBuffer,
-            });
-            const { frameBuffer: referenceFrameBuffer, referenceSafety } =
-              await createKlingProductReferenceFrame(sourceImageBuffer, {
+            let referenceSafety = await assessKlingReferenceSafety(sourceImageBuffer);
+            let naturalStartBackground = null;
+            let referenceFrameBuffer = null;
+            let klingSceneTrimSeconds = 0.15;
+            let openingSceneMode = "verified_direct_scene";
+
+            try {
+              const directOpeningScene = await generateKlingDirectSceneOpeningFrame({
+                openai,
+                rule: klingRuleContext,
+                sourceImageBuffer,
+                referenceSafety,
+              });
+              referenceFrameBuffer = directOpeningScene.buffer;
+              naturalStartBackground = {
+                source: directOpeningScene.source,
+                assetId: null,
+                assetName: null,
+                family: "verified_in_scene_opening",
+                brightness: "medium",
+              };
+              referenceSafety = {
+                ...referenceSafety,
+                startBackgroundSource: directOpeningScene.source,
+                startBackgroundAssetId: null,
+                startBackgroundAssetName: null,
+                startBackgroundFamily: "verified_in_scene_opening",
+                startBackgroundBrightness: "medium",
+                naturalEnvironmentFromFirstFrame: true,
+                openingSceneMode,
+                openingSceneIdentityConfidence: directOpeningScene.identityConfidence,
+                openingSceneIdentityReason: directOpeningScene.identityReason,
+              };
+              finalImagePrompt =
+                "Verified GPT-Image-2 direct-scene first frame: the exact product is already naturally inside the finished real-world commercial scene before Kling motion begins.";
+            } catch (directSceneError) {
+              // Quality-preserving fallback: if GPT Image cannot make a scene that
+              // passes strict product-identity review, keep the deterministic
+              // pixel-preserving setup frame for Kling guidance but remove the
+              // entire setup/transition section from the delivered video.
+              console.warn("Kling direct-scene opening unavailable; using fully trimmed safety fallback", {
+                ruleId: rule.id,
+                postId: post.id,
+                productTitle: candidate.item?.title || null,
+                message: directSceneError?.message || String(directSceneError),
+              });
+              naturalStartBackground = await selectKlingNaturalStartBackground({
+                openai,
+                supabase,
+                rule: klingRuleContext,
+                sourceImageBuffer,
+              });
+              const fallbackReference = await createKlingProductReferenceFrame(sourceImageBuffer, {
                 naturalBackground: naturalStartBackground,
               });
+              referenceFrameBuffer = fallbackReference.frameBuffer;
+              referenceSafety = {
+                ...fallbackReference.referenceSafety,
+                openingSceneMode: "pixel_preserving_setup_fully_trimmed",
+              };
+              openingSceneMode = "pixel_preserving_setup_fully_trimmed";
+              klingSceneTrimSeconds = 1.9;
+              finalImagePrompt =
+                "Pixel-preserving Kling guidance frame retained only for provider identity guidance; the full setup-to-scene transition is trimmed from the delivered advertisement.";
+            }
+
             const uploadedReference = await uploadGeneratedImageToStorage({
               supabase,
               imageBase64: referenceFrameBuffer.toString("base64"),
@@ -40745,8 +41036,6 @@ product_research_model_used: websitePreparedRule.uses_website_content
 
             imageUrl = uploadedReference.imageUrl;
             imageStoragePath = uploadedReference.imageStoragePath;
-            finalImagePrompt =
-              "Product-safe 9:16 Kling start frame: verified product pixels composited into a believable real-world advertising environment from frame zero, without AI-redrawing the sellable product.";
 
             if (!imageUrl) {
               throw new Error("Could not create a public Kling reference-frame URL");
@@ -40845,7 +41134,8 @@ product_research_model_used: websitePreparedRule.uses_website_content
                 text_overlay_storage_path: uploadedKlingTextOverlay.imageStoragePath,
                 text_overlay_provider: klingTextOverlay.provider,
                 text_overlay_prompt: klingTextOverlay.prompt,
-                scene_trim_start_seconds: KLING_NATURAL_SCENE_TRIM_SECONDS,
+                opening_scene_mode: openingSceneMode,
+                scene_trim_start_seconds: klingSceneTrimSeconds,
                 overlay_start_seconds: KLING_TEXT_OVERLAY_START_SECONDS,
                 shotstack_render_id: null,
                 shotstack_status: "waiting_for_kling",

@@ -15,6 +15,30 @@ const MAX_NAMESPACES_PER_REQUEST = 4;
 const TRANSLATION_CHUNK_SIZE = 80;
 const TRANSLATION_CONCURRENCY = 4;
 const TRANSLATION_FETCH_TIMEOUT_MS = 6500;
+const TRANSLATION_META_KEY = "__spreelo_translation_meta";
+
+function getIntentionalUnchangedKeys(labels) {
+  const keys = labels?.[TRANSLATION_META_KEY]?.intentional_unchanged_keys;
+  return new Set(Array.isArray(keys) ? keys.map((key) => String(key)) : []);
+}
+
+function stripTranslationMetadata(labels) {
+  if (!labels || typeof labels !== "object" || Array.isArray(labels)) return {};
+  const { [TRANSLATION_META_KEY]: _meta, ...clean } = labels;
+  return clean;
+}
+
+function targetLocaleRequiresLocalizedScript(locale) {
+  const language = String(locale || "").toLowerCase().split("-")[0];
+  return new Set(["zh", "ja", "ko", "ar", "he", "th", "hi", "bn", "uk", "ru", "bg", "el"]).has(language);
+}
+
+function canAcceptIntentionalUnchanged({ locale, sourceText }) {
+  const source = String(sourceText || "").trim();
+  if (!source) return false;
+  if (targetLocaleRequiresLocalizedScript(locale) && /[A-Za-z]{2,}/.test(source)) return false;
+  return source.length <= 40;
+}
 
 function createSupabaseAdminClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -42,7 +66,7 @@ function parseNamespaces(value) {
   return Array.from(new Set(["common", ...namespaces])).slice(0, MAX_NAMESPACES_PER_REQUEST);
 }
 
-function shouldRetranslateLabel({ defaultValue, translatedValue, locale }) {
+function shouldRetranslateLabel({ key, defaultValue, translatedValue, locale, intentionalUnchangedKeys }) {
   if (translatedValue === null || translatedValue === undefined) {
     return true;
   }
@@ -62,6 +86,7 @@ function shouldRetranslateLabel({ defaultValue, translatedValue, locale }) {
   // back to English. This is what can make one language, such as Swedish, stay
   // English even though newer languages work.
   if (defaultText && translatedText === defaultText) {
+    if (intentionalUnchangedKeys?.has(String(key))) return false;
     return true;
   }
 
@@ -69,14 +94,17 @@ function shouldRetranslateLabel({ defaultValue, translatedValue, locale }) {
 }
 
 function getLabelsNeedingTranslation(defaultLabels, translatedLabels, locale) {
+  const intentionalUnchangedKeys = getIntentionalUnchangedKeys(translatedLabels);
   return Object.entries(defaultLabels).reduce((labelsNeedingTranslation, [key, value]) => {
     const translatedValue = translatedLabels?.[key];
 
     if (
       shouldRetranslateLabel({
+        key,
         defaultValue: value,
         translatedValue,
         locale,
+        intentionalUnchangedKeys,
       })
     ) {
       labelsNeedingTranslation[key] = value;
@@ -171,7 +199,7 @@ async function translateLabelChunk({
           {
             role: "system",
             content:
-              "You translate SaaS user interface labels. Return only valid JSON. Preserve all JSON keys exactly. Preserve placeholders like {brandName}, {count}, {year}, {date}, {days}, and {number} exactly. Keep translations concise and natural for buttons, menus, form labels, tooltips, empty states and dashboard UI. Do not translate brand names such as Spreelo.",
+              "You translate SaaS user interface labels. Return only one valid JSON object. Preserve all supplied label keys exactly and add one reserved array key named __intentional_unchanged_keys. Preserve placeholders like {brandName}, {count}, {year}, {date}, {days}, and {number} exactly. Keep translations concise and natural for buttons, menus, form labels, tooltips, empty states and dashboard UI. Do not translate brand names such as Spreelo. If—and only if—the correct natural target-language UI term is genuinely spelled exactly the same as the English source (for example a borrowed technical term), return that identical value and include its label key in __intentional_unchanged_keys. Never use that array merely because you are unsure or skipped a translation. For languages normally written in a non-Latin script, prefer the normal localized-script UI term rather than retaining English words.",
           },
           {
             role: "user",
@@ -199,17 +227,29 @@ async function translateLabelChunk({
     const data = await response.json();
     const content = data?.choices?.[0]?.message?.content || "";
     const translatedLabels = extractJsonObject(content);
-
-    return Object.keys(labels).reduce((safeLabels, key) => {
+    const declaredUnchanged = new Set(
+      Array.isArray(translatedLabels?.__intentional_unchanged_keys)
+        ? translatedLabels.__intentional_unchanged_keys.map((key) => String(key))
+        : []
+    );
+    const intentionalUnchangedKeys = [];
+    const safeLabels = Object.keys(labels).reduce((result, key) => {
       const translatedValue = translatedLabels?.[key];
+      const allowUnchanged = Boolean(
+        declaredUnchanged.has(key) &&
+          String(translatedValue || "").trim() === String(labels[key] || "").trim() &&
+          canAcceptIntentionalUnchanged({ locale, sourceText: labels[key] })
+      );
       const validation = validateGeneratedUiTranslation({
         sourceText: labels[key],
         translatedText: translatedValue,
         locale,
+        allowUnchanged,
       });
 
       if (validation.valid) {
-        safeLabels[key] = String(translatedValue);
+        result[key] = String(translatedValue);
+        if (allowUnchanged) intentionalUnchangedKeys.push(key);
       } else {
         console.warn("UI translation label deferred", {
           locale,
@@ -219,8 +259,9 @@ async function translateLabelChunk({
           reason: validation.reason,
         });
       }
-      return safeLabels;
+      return result;
     }, {});
+    return { labels: safeLabels, intentionalUnchangedKeys };
   } catch (error) {
     if (error?.name === "AbortError") {
       throw new Error(
@@ -249,17 +290,22 @@ async function translateMissingLabels({
     TRANSLATION_CONCURRENCY,
     async (chunk, chunkIndex) => {
       try {
-        const translated = await translateLabelChunk({
+        const translatedResult = await translateLabelChunk({
           locale,
           languageName,
           namespace,
           labels: chunk,
           chunkIndex,
         });
+        const translated = translatedResult?.labels || {};
         const failedKeys = Object.keys(chunk).filter(
           (key) => !String(translated?.[key] || "").trim()
         );
-        return { translated, failedKeys };
+        return {
+          translated,
+          failedKeys,
+          intentionalUnchangedKeys: translatedResult?.intentionalUnchangedKeys || [],
+        };
       } catch (error) {
         console.warn("UI translation chunk deferred", {
           locale,
@@ -268,7 +314,7 @@ async function translateMissingLabels({
           keyCount: Object.keys(chunk).length,
           message: error?.message || String(error),
         });
-        return { translated: {}, failedKeys: Object.keys(chunk) };
+        return { translated: {}, failedKeys: Object.keys(chunk), intentionalUnchangedKeys: [] };
       }
     }
   );
@@ -279,6 +325,9 @@ async function translateMissingLabels({
       ...outcomes.map((outcome) => outcome.translated || {})
     ),
     failedKeys: outcomes.flatMap((outcome) => outcome.failedKeys || []),
+    intentionalUnchangedKeys: outcomes.flatMap(
+      (outcome) => outcome.intentionalUnchangedKeys || []
+    ),
   };
 }
 
@@ -305,6 +354,7 @@ async function getOrCreateNamespaceLabels({ supabaseAdmin, locale, namespace }) 
   }
 
   const existingLabels = existingPack?.labels || {};
+  const existingIntentionalUnchangedKeys = getIntentionalUnchangedKeys(existingLabels);
   const refreshRequested = existingPack?.status === "refresh_requested";
   const missingLabels = refreshRequested
     ? { ...defaultLabels }
@@ -315,7 +365,7 @@ async function getOrCreateNamespaceLabels({ supabaseAdmin, locale, namespace }) 
       );
 
   if (Object.keys(missingLabels).length === 0) {
-    return existingLabels;
+    return stripTranslationMetadata(existingLabels);
   }
 
   const languageName = getUiLanguageName(locale);
@@ -344,17 +394,32 @@ async function getOrCreateNamespaceLabels({ supabaseAdmin, locale, namespace }) 
     );
   }
 
-  const { translatedLabels: translatedMissingLabels, failedKeys } =
-    await translateMissingLabels({
+  const {
+    translatedLabels: translatedMissingLabels,
+    failedKeys,
+    intentionalUnchangedKeys: newlyIntentionalUnchangedKeys,
+  } = await translateMissingLabels({
       locale,
       languageName,
       namespace,
       missingLabels,
     });
 
+  const mergedIntentionalUnchangedKeys = new Set(existingIntentionalUnchangedKeys);
+  for (const key of newlyIntentionalUnchangedKeys || []) {
+    mergedIntentionalUnchangedKeys.add(String(key));
+  }
+  for (const [key, translatedValue] of Object.entries(translatedMissingLabels || {})) {
+    if (String(translatedValue || "").trim() !== String(defaultLabels?.[key] || "").trim()) {
+      mergedIntentionalUnchangedKeys.delete(String(key));
+    }
+  }
   const mergedLabels = {
-    ...existingLabels,
+    ...stripTranslationMetadata(existingLabels),
     ...translatedMissingLabels,
+    [TRANSLATION_META_KEY]: {
+      intentional_unchanged_keys: Array.from(mergedIntentionalUnchangedKeys).sort(),
+    },
   };
   const translationComplete = failedKeys.length === 0;
 
@@ -378,7 +443,7 @@ async function getOrCreateNamespaceLabels({ supabaseAdmin, locale, namespace }) 
     throw upsertError;
   }
 
-  return mergedLabels;
+  return stripTranslationMetadata(mergedLabels);
 }
 
 export async function GET(request) {
