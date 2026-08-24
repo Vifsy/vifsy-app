@@ -278,34 +278,107 @@ async function uploadKlingTypographyOverlay({ supabase, post, buffer }) {
   return { imageUrl, storagePath };
 }
 
+async function uploadRejectedKlingTypographyOverlay({ supabase, post, buffer }) {
+  const storagePath = `${post.user_id}/${post.id}-kling-text-overlay-rejected.png`;
+  const { error: uploadError } = await supabase.storage
+    .from(POST_IMAGES_BUCKET)
+    .upload(storagePath, buffer, { contentType: "image/png", upsert: true });
+  if (uploadError) throw new Error(uploadError.message || "Could not store rejected Kling typography overlay");
+  const { data } = supabase.storage.from(POST_IMAGES_BUCKET).getPublicUrl(storagePath);
+  const imageUrl = data?.publicUrl || null;
+  if (!imageUrl) throw new Error("Could not create public URL for rejected Kling typography overlay");
+  return { imageUrl, storagePath };
+}
+
+function throwKlingTypographyValidationError(message, buffer, analysis) {
+  const error = new Error(message);
+  error.typographyDebugBuffer = buffer;
+  error.typographyAnalysis = analysis;
+  throw error;
+}
+
 async function normalizeFinishedKlingTypography(buffer) {
+  // GPT-Image-2 currently returns a portrait canvas that is not exactly 9:16.
+  // Preserve the artwork's geometry and place it on a transparent 1080x1920
+  // canvas instead of stretching the lettering/decorations with fit: "fill".
   const normalized = await sharp(buffer)
     .rotate()
-    .resize({ width: 1080, height: 1920, fit: "fill", kernel: sharp.kernel.lanczos3 })
+    .resize({
+      width: 1080,
+      height: 1920,
+      fit: "contain",
+      position: "centre",
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+      kernel: sharp.kernel.lanczos3,
+    })
     .ensureAlpha()
     .png({ compressionLevel: 9 })
     .toBuffer();
   const { data, info } = await sharp(normalized).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   let visible = 0;
   let strong = 0;
+  let lowAlpha = 0;
   let edgeVisible = 0;
+  let minX = info.width;
+  let minY = info.height;
+  let maxX = -1;
+  let maxY = -1;
   for (let y = 0; y < info.height; y += 1) {
     for (let x = 0; x < info.width; x += 1) {
       const alpha = data[(y * info.width + x) * info.channels + 3];
+      if (alpha > 0 && alpha < 24) lowAlpha += 1;
       if (alpha < 24) continue;
       visible += 1;
       if (alpha >= 150) strong += 1;
       if (x < 18 || x >= info.width - 18 || y < 18 || y >= info.height - 18) edgeVisible += 1;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
     }
   }
   const pixels = Math.max(1, info.width * info.height);
   const visibleRatio = visible / pixels;
   const strongRatio = strong / pixels;
+  const lowAlphaRatio = lowAlpha / pixels;
   const edgeRatio = edgeVisible / Math.max(1, visible);
-  if (visibleRatio < 0.0025 || strongRatio < 0.0009) throw new Error("GPT-Image-2 Kling typography was visually empty");
-  if (visibleRatio > 0.22) throw new Error("GPT-Image-2 Kling typography contained too much opaque area");
-  if (edgeRatio > 0.08) throw new Error("GPT-Image-2 Kling typography touched the canvas edge");
-  return { buffer: normalized, visibleRatio, strongRatio, edgeRatio };
+  const bboxWidth = maxX >= minX ? maxX - minX + 1 : 0;
+  const bboxHeight = maxY >= minY ? maxY - minY + 1 : 0;
+  const bboxArea = Math.max(1, bboxWidth * bboxHeight);
+  const bboxWidthRatio = bboxWidth / Math.max(1, info.width);
+  const bboxHeightRatio = bboxHeight / Math.max(1, info.height);
+  const bboxAreaRatio = bboxArea / pixels;
+  const bboxFillRatio = visible / bboxArea;
+  const analysis = {
+    visibleRatio,
+    strongRatio,
+    lowAlphaRatio,
+    edgeRatio,
+    bboxWidthRatio,
+    bboxHeightRatio,
+    bboxAreaRatio,
+    bboxFillRatio,
+  };
+
+  if (visibleRatio < 0.0025 || strongRatio < 0.0009) {
+    throwKlingTypographyValidationError("GPT-Image-2 Kling typography was visually empty", normalized, analysis);
+  }
+  // A transparent overlay may legitimately contain a headline plus a compact
+  // underline/brush/flourish. Do not reject that just because it crosses the
+  // old 22% occupancy threshold. Reject only clear background-like output.
+  if (visibleRatio > 0.42) {
+    throwKlingTypographyValidationError("GPT-Image-2 Kling typography contained a background-sized opaque area", normalized, analysis);
+  }
+  if (bboxAreaRatio > 0.18 && bboxFillRatio > 0.72) {
+    throwKlingTypographyValidationError("GPT-Image-2 Kling typography contained a large opaque panel-like area", normalized, analysis);
+  }
+  if (lowAlphaRatio > 0.18) {
+    throwKlingTypographyValidationError("GPT-Image-2 Kling typography contained excessive translucent haze", normalized, analysis);
+  }
+  if (edgeRatio > 0.12) {
+    throwKlingTypographyValidationError("GPT-Image-2 Kling typography touched the canvas edge", normalized, analysis);
+  }
+  return { buffer: normalized, ...analysis };
 }
 
 function layoutDeterministicTypography(value, { maxWidth, maxLines, sizes }) {
@@ -502,16 +575,26 @@ DESIGN:
 - Make the typography feel specifically art-directed for the finished video and product, as a professional short commercial rather than generic system text.
 - Strong, confident mobile readability; polished hierarchy, kerning and scale.
 - Choose a typography character that fits the actual content: e.g. urban, premium, technical, playful, elegant or energetic only when supported by the references.
-- Mostly light/white or dark high-contrast lettering as the frames require. A restrained accent color, underline, brush stroke, crown/flourish or small graphic accent may be used when it genuinely suits the content.
-- Keep the design compact enough to avoid the advertised product, its verified print/design, faces, hands and the main action across the supplied frames.
-- No card, panel, badge, sticker, banner, rectangle, capsule or opaque plate behind the text.
+- Mostly light/white or dark high-contrast lettering as the frames require.
+- You MAY make the typography more alive with a restrained accent color, a compact underline, a SMALL brush stroke, a SMALL crown/flourish, or another SMALL graphic accent when it genuinely suits the content.
+- Decorative accents must stay visually attached to the lettering and close to the text. They are part of the typography design, never a background.
+- Keep the entire design compact enough to avoid the advertised product, its verified print/design, faces, hands and the main action across the supplied frames.
+- NO card, panel, badge, sticker base, banner, rectangle, capsule, ribbon or opaque plate behind the text.
+- NO shadow of any kind (including drop shadow, soft shadow or long shadow), no glow, haze, mist, blur or atmospheric halo. Use crisp lettering and crisp decorative accents instead.
+
+TRANSPARENCY / LAYER RULE — CRITICAL:
+- This artwork is NOT a standalone poster or image. It is a FOREGROUND OVERLAY LAYER that will be composited directly on top of an existing video.
+- Create ONLY the typography design itself: exact letters plus the small decorative accents described above.
+- EVERY pixel that is not part of a letter or a small, tightly attached decorative accent must be fully transparent with alpha = 0.
+- The area surrounding the complete design must remain completely transparent so the underlying video is fully visible.
+- Do not create a translucent wash, tint, vignette or painted area around/behind the design.
+- Anti-aliased edge pixels belonging directly to letters or decorative accents may use partial alpha; unrelated surrounding pixels must be alpha = 0.
 
 OUTPUT RULES:
-- 9:16 transparent RGBA canvas.
-- TRUE alpha transparency everywhere outside typography and tiny typography-supporting accents.
+- Transparent RGBA PNG portrait overlay intended for a final 9:16 video composition.
 - No black/white/colored background, no checkerboard, no scene, no photo, no clothing, no person, no product, no mockup, no logo recreation, no watermark.
 - Do not invent or rewrite any words. Do not add a price, offer, CTA, slogan or hashtag.
-Return only the transparent typography artwork.
+- Return ONLY the transparent typography overlay layer and nothing else.
 `.trim();
     const response = await openai.images.edit({
       model: KLING_TYPOGRAPHY_MODEL,
@@ -537,7 +620,12 @@ Return only the transparent typography artwork.
       text_overlay_analysis: {
         visible_ratio: Number(normalized.visibleRatio.toFixed(4)),
         strong_ratio: Number(normalized.strongRatio.toFixed(4)),
+        low_alpha_ratio: Number((normalized.lowAlphaRatio || 0).toFixed(4)),
         edge_ratio: Number(normalized.edgeRatio.toFixed(4)),
+        bbox_width_ratio: Number((normalized.bboxWidthRatio || 0).toFixed(4)),
+        bbox_height_ratio: Number((normalized.bboxHeightRatio || 0).toFixed(4)),
+        bbox_area_ratio: Number((normalized.bboxAreaRatio || 0).toFixed(4)),
+        bbox_fill_ratio: Number((normalized.bboxFillRatio || 0).toFixed(4)),
       },
     };
     const { error: persistError } = await supabase
@@ -555,11 +643,50 @@ Return only the transparent typography artwork.
     });
     return completedSelection;
   } catch (error) {
+    let rejectedOverlay = null;
+    if (error?.typographyDebugBuffer) {
+      try {
+        rejectedOverlay = await uploadRejectedKlingTypographyOverlay({
+          supabase,
+          post,
+          buffer: error.typographyDebugBuffer,
+        });
+        console.warn("Rejected GPT-Image-2 Kling typography saved for diagnostics", {
+          postId: post.id,
+          taskId: post.kling_task_id,
+          reason: truncate(error?.message || String(error), 500),
+          rejectedOverlayUrl: rejectedOverlay.imageUrl,
+          analysis: error?.typographyAnalysis || null,
+        });
+      } catch (debugError) {
+        console.warn("Could not save rejected GPT-Image-2 Kling typography diagnostic", {
+          postId: post.id,
+          taskId: post.kling_task_id,
+          message: truncate(debugError?.message || String(debugError), 500),
+        });
+      }
+    }
     const failedSelection = {
       ...claimedSelection,
       text_overlay_status: "failed",
       text_overlay_failed_at: new Date().toISOString(),
       text_overlay_error: truncate(error?.message || String(error), 900),
+      ...(rejectedOverlay?.imageUrl
+        ? {
+            text_overlay_rejected_url: rejectedOverlay.imageUrl,
+            text_overlay_rejected_storage_path: rejectedOverlay.storagePath,
+          }
+        : {}),
+      ...(error?.typographyAnalysis
+        ? {
+            text_overlay_rejected_analysis: Object.fromEntries(
+              Object.entries(error.typographyAnalysis).map(([key, value]) => [
+                key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`),
+                Number(Number(value || 0).toFixed(4)),
+              ])
+            ),
+          }
+        : {}),
     };
     await supabase.from("posts").update({ video_background_selection: failedSelection, updated_at: new Date().toISOString() }).eq("id", post.id).eq("video_provider", "kling");
     return createDeterministicKlingTypographyFallback({
