@@ -5756,7 +5756,7 @@ function extractStoreMapLinkNodes({
   pageUrl,
   originUrl,
   websiteUrl = originUrl,
-  contentLanguage = "",
+  targetMarketCode = "",
   parentDepth = 0,
   intent,
 }) {
@@ -5765,7 +5765,7 @@ function extractStoreMapLinkNodes({
   for (const link of extractLinks(html, pageUrl)) {
     const canonicalUrl = canonicalizeStoreMapUrl(link?.url, originUrl);
     if (!canonicalUrl) continue;
-    if (!matchesConfiguredWebsiteMarket(canonicalUrl, websiteUrl, contentLanguage)) continue;
+    if (!matchesConfiguredWebsiteMarket(canonicalUrl, websiteUrl, targetMarketCode)) continue;
 
     const hint = classifyStoreMapLinkHint({
       url: canonicalUrl,
@@ -5807,6 +5807,7 @@ async function buildOrRefreshWebsiteStoreMap({
   supabase,
   rule,
   websiteUrl,
+  crawlDeadlineMs = Number.POSITIVE_INFINITY,
 }) {
   const originUrl = getStoreOriginUrl(websiteUrl);
   if (!originUrl) {
@@ -5818,8 +5819,7 @@ async function buildOrRefreshWebsiteStoreMap({
     };
   }
 
-  const preferredContentLanguage =
-    rule?.language || rule?.content_language || rule?.brand_profile?.content_language || "";
+  const targetMarketCode = getProductMarketCodeForRule(rule, websiteUrl);
   const loadedNodes = await getWebsiteStoreMapNodes({
     supabase,
     userId: rule.user_id,
@@ -5827,20 +5827,48 @@ async function buildOrRefreshWebsiteStoreMap({
     originUrl,
   });
   const existingNodes = loadedNodes.filter((node) =>
-    matchesConfiguredWebsiteMarket(node?.url || node?.canonical_url, websiteUrl, preferredContentLanguage)
+    matchesConfiguredWebsiteMarket(node?.url || node?.canonical_url, websiteUrl, targetMarketCode)
   );
+  const sourceHasExplicitMarketScope = isUrlExplicitlyScopedToProductMarket(
+    websiteUrl,
+    targetMarketCode
+  );
+  const explicitlyMarketScopedCachedNodeCount = sourceHasExplicitMarketScope
+    ? existingNodes.filter((node) =>
+        isUrlExplicitlyScopedToProductMarket(
+          node?.url || node?.canonical_url,
+          targetMarketCode
+        )
+      ).length
+    : 0;
   if (loadedNodes.length > existingNodes.length) {
     console.info("Store Map cross-market nodes excluded", {
       ruleId: rule?.id || null,
       websiteUrl,
-      preferredContentLanguage: preferredContentLanguage || null,
+      targetMarketCode: targetMarketCode || null,
       excludedCount: loadedNodes.length - existingNodes.length,
     });
   }
-  const needsRefresh = shouldRefreshStoreMap(existingNodes, {
-    minimumNodes: 6,
-    maxAgeHours: STORE_MAP_REFRESH_HOURS,
-  });
+  const needsRefresh =
+    shouldRefreshStoreMap(existingNodes, {
+      minimumNodes: 6,
+      maxAgeHours: STORE_MAP_REFRESH_HOURS,
+    }) ||
+    (sourceHasExplicitMarketScope && explicitlyMarketScopedCachedNodeCount < 3);
+
+  if (
+    sourceHasExplicitMarketScope &&
+    existingNodes.length &&
+    explicitlyMarketScopedCachedNodeCount < 3
+  ) {
+    console.info("Store Map refresh forced for market-specific storefront", {
+      ruleId: rule?.id || null,
+      websiteUrl,
+      targetMarketCode,
+      cachedNodeCount: existingNodes.length,
+      explicitlyMarketScopedCachedNodeCount,
+    });
+  }
 
   if (!needsRefresh) {
     return {
@@ -5852,7 +5880,10 @@ async function buildOrRefreshWebsiteStoreMap({
   }
 
   const intent = buildStoreMapIntentForRule(rule);
-  const crawlDeadline = Date.now() + 75_000;
+  const crawlDeadline = Math.min(
+    Date.now() + 75_000,
+    Number.isFinite(crawlDeadlineMs) ? crawlDeadlineMs : Number.POSITIVE_INFINITY
+  );
   const maxPages = Math.max(
     4,
     Math.min(
@@ -5934,7 +5965,7 @@ async function buildOrRefreshWebsiteStoreMap({
         pageUrl: currentUrl,
         originUrl,
         websiteUrl,
-        contentLanguage: preferredContentLanguage,
+        targetMarketCode,
         parentDepth: Number(current?.depth || 0),
         intent,
       });
@@ -6021,7 +6052,7 @@ async function buildOrRefreshWebsiteStoreMap({
   }
 
   const nodes = dedupeStoreMapNodes(discoveredNodes).filter((node) =>
-    matchesConfiguredWebsiteMarket(node?.url || node?.canonical_url, websiteUrl, preferredContentLanguage)
+    matchesConfiguredWebsiteMarket(node?.url || node?.canonical_url, websiteUrl, targetMarketCode)
   );
   await upsertWebsiteStoreMapNodes({
     supabase,
@@ -6197,6 +6228,10 @@ async function discoverProductsFromStoreMapAgent({
     supabase,
     rule,
     websiteUrl,
+    crawlDeadlineMs:
+      requiredCount >= CAROUSEL_PRODUCT_SLIDE_TARGET
+        ? agentDeadline - 120_000
+        : agentDeadline - 70_000,
   });
   if (!storeMap.nodes.length) {
     return {
@@ -6304,7 +6339,14 @@ async function discoverProductsFromStoreMapAgent({
     const uniqueVerified = dedupeWebsiteItemsByUrlTitleAndImage(products).filter(
       isValidCarouselProduct
     );
-    if (uniqueVerified.length >= agentTargets.minimumVerifiedProducts) {
+    const deeplyVerified = uniqueVerified.filter(
+      (item) => item?.verification_level !== "category_card"
+    );
+    const minimumDeepVerifiedProducts =
+      requiredCount >= CAROUSEL_PRODUCT_SLIDE_TARGET
+        ? agentTargets.minimumVerifiedProducts
+        : Math.min(2, agentTargets.minimumVerifiedProducts);
+    if (deeplyVerified.length >= minimumDeepVerifiedProducts) {
       const diversitySatisfied =
         requiredCount >= CAROUSEL_PRODUCT_SLIDE_TARGET ||
         !(recentUsedItems || []).length ||
@@ -6313,7 +6355,8 @@ async function discoverProductsFromStoreMapAgent({
         ruleId: rule?.id,
         shelfUrl: shelf.url,
         verifiedCount: uniqueVerified.length,
-        technicalPoolTarget: agentTargets.minimumVerifiedProducts,
+        deeplyVerifiedCount: deeplyVerified.length,
+        technicalPoolTarget: minimumDeepVerifiedProducts,
         diversitySatisfied,
         recentDiversityHistoryCount: getRecentProductDiversityProfiles(recentUsedItems, 8).length,
       });
@@ -7055,9 +7098,17 @@ async function prepareCarouselProductsForRule({
     });
   };
 
-  const websiteUrl = getWebsiteProductSourceUrl(brandProfile, rule);
-  const contentType = rule.content_type_id || "carousel_website_item";
   const contentSourceScope = getRuleContentSourceScope(rule);
+  const rawWebsiteUrl = getWebsiteProductSourceUrl(brandProfile, rule);
+  const websiteUrl =
+    contentSourceScope === "whole_website"
+      ? await resolveMarketAwareProductSourceUrl({
+          websiteUrl: rawWebsiteUrl,
+          brandProfile,
+          rule,
+        })
+      : rawWebsiteUrl;
+  const contentType = rule.content_type_id || "carousel_website_item";
   const isCampaignRule = isCampaignScopedWebsiteRule(rule);
 
   if (!websiteUrl) {
@@ -13232,6 +13283,312 @@ async function fetchHtml(url) {
   }
 }
 
+
+const MARKET_PRODUCT_SOURCE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const marketProductSourceCache = new Map();
+
+function getDomainBrandStem(value) {
+  try {
+    const labels = new URL(String(value || "")).hostname
+      .toLowerCase()
+      .replace(/^www\./, "")
+      .split(".")
+      .filter(Boolean);
+    if (!labels.length) return "";
+    const commonSecondLevelSuffixes = new Set(["co", "com", "org", "net", "ac", "gov"]);
+    if (labels.length >= 3 && commonSecondLevelSuffixes.has(labels.at(-2))) {
+      return labels.at(-3) || "";
+    }
+    return labels.at(-2) || labels[0] || "";
+  } catch {
+    return "";
+  }
+}
+
+function areLikelySameBrandWebsiteUrls(a, b) {
+  const aStem = getDomainBrandStem(a);
+  const bStem = getDomainBrandStem(b);
+  return Boolean(aStem && bStem && aStem === bStem);
+}
+
+function getMarketStorefrontBaseUrl(value, targetMarketCode) {
+  const targetMarket = normalizeProductMarketCode(targetMarketCode);
+  const scoped = getWebsiteLocalePathScope(value);
+  if (!targetMarket || !scoped?.market) return "";
+  const scopedMarket = scoped.market === "uk" ? "gb" : scoped.market;
+  if (scopedMarket !== targetMarket) return "";
+
+  try {
+    const url = new URL(String(value || ""));
+    const prefix = Array.isArray(scoped.prefix) ? scoped.prefix.filter(Boolean) : [];
+    if (!prefix.length) return "";
+    return `${url.origin}/${prefix.join("/")}`;
+  } catch {
+    return "";
+  }
+}
+
+function extractMarketStorefrontUrlCandidates({
+  html,
+  pageUrl,
+  targetMarketCode,
+  referenceUrl,
+}) {
+  const targetMarket = normalizeProductMarketCode(targetMarketCode);
+  if (!targetMarket) return [];
+
+  const candidates = [];
+  const hrefRegex = /<(?:a|link)\b[^>]*href=["']([^"']+)["'][^>]*>/gi;
+  let match;
+  while ((match = hrefRegex.exec(String(html || ""))) !== null) {
+    const resolved = resolveUrl(match[1], pageUrl);
+    if (!resolved || !isHttpUrl(resolved)) continue;
+    if (!areLikelySameBrandWebsiteUrls(resolved, referenceUrl || pageUrl)) continue;
+    const base = getMarketStorefrontBaseUrl(resolved, targetMarket);
+    if (!base) continue;
+    const scope = getWebsiteLocalePathScope(base);
+    const primaryLanguages = PRODUCT_MARKET_PRIMARY_LANGUAGES[targetMarket] || [];
+    candidates.push({
+      url: base,
+      evidence: "official_link",
+      score:
+        100 +
+        (scope?.language && primaryLanguages[0] === scope.language ? 25 : 0) +
+        (scope?.language && primaryLanguages.includes(scope.language) ? 10 : 0),
+    });
+  }
+
+  return candidates;
+}
+
+function hasMarketStorefrontCommerceSignals(html, pageUrl) {
+  const source = String(html || "");
+  const directProductLinks = (
+    source.match(/href=["'][^"']*\/(?:[a-z]{2,3}-[a-z]{2}\/)?products\/[^"'#?]+/gi) || []
+  ).length;
+  const collectionSignals = (
+    source.match(/href=["'][^"']*\/(?:[a-z]{2,3}-[a-z]{2}\/)?collections\/[^"'#?]+/gi) || []
+  ).length;
+  const platform = detectCommercePlatform({ html: source, url: pageUrl });
+  const catalogMarkupSignal =
+    /(?:collections\/all|product-card|product__title|card__heading|grid-product|product-grid|collection-grid)/i.test(source);
+  return (
+    directProductLinks >= 2 ||
+    collectionSignals >= 2 ||
+    (platform !== "generic" && catalogMarkupSignal)
+  );
+}
+
+async function fetchHtmlWithFinalUrl(url) {
+  const safeUrl = await assertPublicHttpUrl(url);
+  await acquireWebsiteFetchSlot(safeUrl);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), WEBSITE_FETCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(safeUrl, {
+      method: "GET",
+      redirect: "follow",
+      signal: controller.signal,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (compatible; SpreeloBot/1.0; +https://app.spreelo.com)",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+    });
+    const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
+    await recordWebsiteFetchResult(safeUrl, response.status, retryAfterMs);
+    if (response.status === 429) {
+      throw new WebsiteRateLimitError(`Website returned 429`, {
+        url: safeUrl,
+        domain: getWebsiteFetchDomain(safeUrl),
+        retryAfterMs,
+        status: 429,
+      });
+    }
+    if (!response.ok) {
+      const error = new Error(`Website returned ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
+    const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+    if (
+      contentType &&
+      !contentType.includes("text/html") &&
+      !contentType.includes("application/xhtml") &&
+      !contentType.includes("application/xml") &&
+      !contentType.includes("text/xml") &&
+      !contentType.includes("text/plain")
+    ) {
+      throw new Error(`Website did not return readable HTML/XML content: ${contentType}`);
+    }
+    return {
+      html: await response.text(),
+      finalUrl: String(response.url || safeUrl),
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function resolveMarketAwareProductSourceUrl({
+  websiteUrl,
+  brandProfile = null,
+  rule = null,
+}) {
+  const sourceUrl = normalizeWebsiteUrl(websiteUrl || "");
+  if (!sourceUrl) return sourceUrl;
+
+  const targetMarketCode = getProductMarketCodeForRule(rule, sourceUrl, brandProfile);
+  if (!targetMarketCode) return sourceUrl;
+
+  const explicitScope = getWebsiteLocalePathScope(sourceUrl);
+  const explicitMarket = explicitScope?.market === "uk" ? "gb" : explicitScope?.market || "";
+  if (explicitMarket === targetMarketCode) {
+    if (rule) {
+      rule.product_market_code = targetMarketCode;
+      rule.product_market_source_url = sourceUrl;
+    }
+    return sourceUrl;
+  }
+
+  const cacheKey = `${getDomainBrandStem(sourceUrl)}:${targetMarketCode}`;
+  const cached = marketProductSourceCache.get(cacheKey);
+  if (
+    cached?.url &&
+    Number(cached?.cachedAt || 0) > Date.now() - MARKET_PRODUCT_SOURCE_CACHE_TTL_MS
+  ) {
+    if (rule) {
+      rule.product_market_code = targetMarketCode;
+      rule.product_market_source_url = cached.url;
+    }
+    return cached.url;
+  }
+
+  let snapshot = null;
+  try {
+    snapshot = await fetchHtmlWithFinalUrl(sourceUrl);
+  } catch (error) {
+    console.info("Market-specific storefront discovery could not inspect saved source; keeping configured source", {
+      ruleId: rule?.id || null,
+      sourceUrl,
+      targetMarketCode,
+      message: error?.message || String(error),
+    });
+    if (rule) {
+      rule.product_market_code = targetMarketCode;
+      rule.product_market_source_url = sourceUrl;
+    }
+    return sourceUrl;
+  }
+
+  const finalUrl = snapshot?.finalUrl || sourceUrl;
+  const candidates = [];
+  const addCandidate = (url, evidence, score) => {
+    const base = getMarketStorefrontBaseUrl(url, targetMarketCode);
+    if (!base) return;
+    if (!areLikelySameBrandWebsiteUrls(base, sourceUrl) && !areLikelySameBrandWebsiteUrls(base, finalUrl)) {
+      return;
+    }
+    candidates.push({ url: base, evidence, score: Number(score || 0) });
+  };
+
+  addCandidate(finalUrl, "redirect", 150);
+  for (const candidate of extractMarketStorefrontUrlCandidates({
+    html: snapshot?.html || "",
+    pageUrl: finalUrl,
+    targetMarketCode,
+    referenceUrl: sourceUrl,
+  })) {
+    candidates.push(candidate);
+  }
+
+  const origins = Array.from(
+    new Set(
+      [sourceUrl, finalUrl]
+        .map((value) => getWebsiteOrigin(value))
+        .filter(Boolean)
+    )
+  );
+  const marketLanguages = PRODUCT_MARKET_PRIMARY_LANGUAGES[targetMarketCode] || [];
+  for (const origin of origins) {
+    for (const [index, languageCode] of marketLanguages.entries()) {
+      addCandidate(
+        `${origin}/${languageCode}-${targetMarketCode}`,
+        "derived_market_locale",
+        80 - index * 5
+      );
+    }
+  }
+
+  const deduped = Array.from(
+    new Map(
+      candidates
+        .sort((a, b) => Number(b.score || 0) - Number(a.score || 0))
+        .map((candidate) => [normalizeComparableValue(candidate.url), candidate])
+    ).values()
+  ).slice(0, 4);
+
+  for (const candidate of deduped) {
+    try {
+      const candidateMatchesSnapshot =
+        normalizeComparableValue(candidate.url) ===
+        normalizeComparableValue(getMarketStorefrontBaseUrl(finalUrl, targetMarketCode));
+      const probe = candidateMatchesSnapshot
+        ? { html: snapshot.html, finalUrl }
+        : await fetchHtmlWithFinalUrl(candidate.url);
+      const resolvedCandidateBase =
+        getMarketStorefrontBaseUrl(probe?.finalUrl || candidate.url, targetMarketCode) ||
+        candidate.url;
+      if (
+        !areLikelySameBrandWebsiteUrls(resolvedCandidateBase, sourceUrl) &&
+        !areLikelySameBrandWebsiteUrls(resolvedCandidateBase, finalUrl)
+      ) {
+        continue;
+      }
+      if (!hasMarketStorefrontCommerceSignals(probe?.html || "", resolvedCandidateBase)) continue;
+
+      marketProductSourceCache.set(cacheKey, {
+        url: resolvedCandidateBase,
+        cachedAt: Date.now(),
+      });
+      if (rule) {
+        rule.product_market_code = targetMarketCode;
+        rule.product_market_source_url = resolvedCandidateBase;
+      }
+      console.info("Market-specific product storefront resolved", {
+        ruleId: rule?.id || null,
+        sourceUrl,
+        resolvedSourceUrl: resolvedCandidateBase,
+        targetMarketCode,
+        evidence: candidate.evidence,
+      });
+      return resolvedCandidateBase;
+    } catch (error) {
+      if (isWebsiteRateLimitError(error)) throw error;
+      console.info("Market storefront candidate unavailable", {
+        ruleId: rule?.id || null,
+        candidateUrl: candidate.url,
+        targetMarketCode,
+        evidence: candidate.evidence,
+        message: error?.message || String(error),
+      });
+    }
+  }
+
+  if (rule) {
+    rule.product_market_code = targetMarketCode;
+    rule.product_market_source_url = sourceUrl;
+  }
+  console.info("Market-specific storefront not resolved; using configured source without blocking generation", {
+    ruleId: rule?.id || null,
+    sourceUrl,
+    targetMarketCode,
+  });
+  return sourceUrl;
+}
+
 export async function prepareFocusedPageContextForRule(rule) {
   const sourceUrl = getRuleContentSourceUrl(rule);
   if (!sourceUrl) return null;
@@ -14926,6 +15283,10 @@ function normalizeWebsiteCatalogItem(row) {
     times_used: Number(row.times_used || 0),
     last_used_at: row.last_used_at || null,
     catalog_source: row.discovery_source || "catalog",
+    source_url: row.source_url || "",
+    product_market_code:
+      row.verification_metadata?.product_market_code ||
+      inferProductMarketCodeFromWebsiteUrl(row.source_url || row.product_url || ""),
     commerce_platform: row.commerce_platform || "generic",
     page_type: row.page_type || "product",
     page_type_confidence: Number(row.page_type_confidence || 0),
@@ -15230,6 +15591,8 @@ async function upsertWebsiteProductCatalogItems({
             : rawItem?.last_verified_at || nowIso,
         verification_metadata: {
           page_type_reason: rawItem?.page_type_reason || null,
+          product_market_code:
+            rawItem?.product_market_code || inferProductMarketCodeFromWebsiteUrl(sourceUrl),
           concrete_product_verified:
             rawItem?.concrete_product_verified === true
               ? true
@@ -15861,12 +16224,13 @@ function filterWebsiteCatalogItemsForRule(items, rule) {
     const itemUrl = item?.url || item?.product_url || item?.item_url || "";
     const sourceUrl = item?.source_url || item?.website_url || itemUrl;
 
-    const preferredContentLanguage =
-      rule?.language || rule?.content_language || rule?.brand_profile?.content_language || "";
+    const targetMarketCode = getProductMarketCodeForRule(rule, sourceUrl);
+    const persistedMarketCode = normalizeProductMarketCode(item?.product_market_code);
 
     return (
       !isLikelyBadDiscoveryPageUrl(itemUrl, sourceUrl) &&
-      matchesConfiguredWebsiteMarket(itemUrl, sourceUrl, preferredContentLanguage) &&
+      (!targetMarketCode || !persistedMarketCode || persistedMarketCode === targetMarketCode) &&
+      matchesConfiguredWebsiteMarket(itemUrl, sourceUrl, targetMarketCode) &&
       !isProductKnownUnavailableForPromotion(item)
     );
   });
@@ -20978,13 +21342,13 @@ const WEBSITE_MARKET_PATH_CODES = new Set([
   "ae", "at", "au", "be", "bg", "br", "ca", "ch", "cz", "de", "dk", "ee",
   "es", "eu", "fi", "fr", "gb", "gr", "hr", "hu", "ie", "is", "it", "jp",
   "lt", "lu", "lv", "mx", "nl", "no", "nz", "pl", "pt", "ro", "se", "si",
-  "sk", "uk", "us",
+  "sk", "uk", "us", "cn", "hk", "kr", "sg", "tw", "in", "za", "uz",
 ]);
 
 const WEBSITE_LANGUAGE_PATH_CODES = new Set([
   "ar", "bg", "cs", "da", "de", "el", "en", "es", "fi", "fil", "fr", "hi",
   "hu", "id", "it", "ja", "ko", "ms", "nb", "nl", "nn", "no", "pl", "pt",
-  "ro", "ru", "sv", "th", "tr", "uk", "vi", "zh",
+  "ro", "ru", "sv", "th", "tr", "uk", "uz", "vi", "zh",
 ]);
 
 function getWebsiteLocalePathScope(value) {
@@ -21030,43 +21394,128 @@ function getWebsiteLocalePathScope(value) {
   }
 }
 
-function getPreferredWebsiteContentLanguageCode(value) {
+const PRODUCT_MARKET_NAME_PATTERNS = [
+  [/\b(?:sweden|sverige)\b/i, "se"],
+  [/\b(?:denmark|danmark)\b/i, "dk"],
+  [/\b(?:norway|norge)\b/i, "no"],
+  [/\b(?:finland|suomi)\b/i, "fi"],
+  [/\b(?:germany|deutschland)\b/i, "de"],
+  [/\b(?:netherlands|nederland)\b/i, "nl"],
+  [/\b(?:belgium|belgique|belgie|belgië)\b/i, "be"],
+  [/\b(?:france)\b/i, "fr"],
+  [/\b(?:spain|espana|españa)\b/i, "es"],
+  [/\b(?:italy|italia)\b/i, "it"],
+  [/\b(?:portugal)\b/i, "pt"],
+  [/\b(?:austria|osterreich|österreich)\b/i, "at"],
+  [/\b(?:switzerland|schweiz|suisse|svizzera)\b/i, "ch"],
+  [/\b(?:poland|polska)\b/i, "pl"],
+  [/\b(?:united kingdom|great britain|britain|england)\b/i, "gb"],
+  [/\b(?:united states|usa|u\.?s\.?a\.?|america)\b/i, "us"],
+  [/\b(?:canada)\b/i, "ca"],
+  [/\b(?:australia)\b/i, "au"],
+  [/\b(?:new zealand)\b/i, "nz"],
+  [/\b(?:ireland)\b/i, "ie"],
+  [/\b(?:united arab emirates|uae)\b/i, "ae"],
+  [/\b(?:singapore)\b/i, "sg"],
+  [/\b(?:india)\b/i, "in"],
+  [/\b(?:south africa)\b/i, "za"],
+  [/\b(?:brazil|brasil)\b/i, "br"],
+  [/\b(?:mexico|méxico)\b/i, "mx"],
+  [/\b(?:japan|日本)\b/i, "jp"],
+  [/\b(?:china|中国)\b/i, "cn"],
+  [/\b(?:hong kong|香港)\b/i, "hk"],
+  [/\b(?:south korea|korea|대한민국)\b/i, "kr"],
+  [/\b(?:taiwan|台灣|台湾)\b/i, "tw"],
+  [/\b(?:uzbekistan|oʻzbekiston|o'zbekiston)\b/i, "uz"],
+];
+
+const PRODUCT_MARKET_PRIMARY_LANGUAGES = {
+  se: ["sv", "en"], dk: ["da", "en"], no: ["no", "nb", "en"], fi: ["fi", "en"],
+  de: ["de", "en"], nl: ["nl", "en"], be: ["nl", "fr", "en"], fr: ["fr", "en"],
+  es: ["es", "en"], it: ["it", "en"], pt: ["pt", "en"], at: ["de", "en"],
+  ch: ["de", "fr", "it", "en"], pl: ["pl", "en"], gb: ["en"], uk: ["en"], us: ["en"],
+  ca: ["en", "fr"], au: ["en"], nz: ["en"], ie: ["en"], ae: ["ar", "en"],
+  sg: ["en"], in: ["en", "hi"], za: ["en"], br: ["pt", "en"], mx: ["es", "en"], jp: ["ja", "en"],
+  cn: ["zh", "en"], hk: ["zh", "en"], kr: ["ko", "en"], tw: ["zh", "en"], uz: ["uz", "ru", "en"],
+};
+
+function normalizeProductMarketCode(value) {
   const raw = String(value || "").trim();
-  if (!raw || /^(?:auto|automatic|detect|detected)$/i.test(raw)) return "";
-  const normalized = normalizeSingleContentLanguage(raw, "English");
-  const locale = String(resolveUiLocaleFromLanguageName(normalized) || "").trim().toLowerCase();
-  return locale.split(/[-_]/)[0] || "";
-}
-
-function matchesConfiguredWebsiteMarket(candidateUrl, websiteUrl, preferredContentLanguage = "") {
-  const configured = getWebsiteLocalePathScope(websiteUrl);
-  const candidate = getWebsiteLocalePathScope(candidateUrl);
-
-  // When the customer saved an explicit locale/market URL, that exact market
-  // is authoritative even if the post itself is written in another language.
-  // Reject only candidates that explicitly prove they belong to another locale;
-  // unscoped canonical URLs remain allowed because many Shopify sites canonicalize
-  // localized product pages back to /products/... on the same host.
-  if (configured) {
-    if (configured.language && candidate?.language && candidate.language !== configured.language) {
-      return false;
-    }
-    if (configured.market && candidate?.market && candidate.market !== configured.market) {
-      return false;
-    }
-    return true;
+  if (!raw || /^(?:auto|automatic|global|international|international \/ global|other)$/i.test(raw)) {
+    return "";
   }
 
-  // If the saved website URL is market-neutral (for example example.com), use
-  // the content language only as a conservative fallback. This prevents a
-  // Swedish automation from selecting an explicitly Danish /da-dk/ product
-  // while still allowing locale-neutral canonical product URLs.
-  const preferredLanguage = getPreferredWebsiteContentLanguageCode(preferredContentLanguage);
-  if (preferredLanguage && candidate?.language && candidate.language !== preferredLanguage) {
+  const compact = raw.toLowerCase().replace(/_/g, "-");
+  if (/^[a-z]{2}$/.test(compact)) {
+    return compact === "uk" ? "gb" : compact;
+  }
+
+  for (const [pattern, code] of PRODUCT_MARKET_NAME_PATTERNS) {
+    if (pattern.test(raw)) return code;
+  }
+
+  return "";
+}
+
+function inferProductMarketCodeFromWebsiteUrl(value) {
+  const scoped = getWebsiteLocalePathScope(value);
+  if (scoped?.market) return scoped.market === "uk" ? "gb" : scoped.market;
+
+  try {
+    const tld = new URL(String(value || "")).hostname.toLowerCase().split(".").filter(Boolean).at(-1) || "";
+    if (WEBSITE_MARKET_PATH_CODES.has(tld)) return tld === "uk" ? "gb" : tld;
+  } catch {
+    // No URL market signal.
+  }
+  return "";
+}
+
+function getProductMarketCodeForRule(rule, websiteUrl = "", brandProfile = null) {
+  return (
+    normalizeProductMarketCode(
+      brandProfile?.country_code || rule?.country_code || rule?.brand_profile?.country_code
+    ) ||
+    normalizeProductMarketCode(
+      brandProfile?.content_market || rule?.content_market || rule?.brand_profile?.content_market
+    ) ||
+    inferProductMarketCodeFromWebsiteUrl(websiteUrl)
+  );
+}
+
+function matchesConfiguredWebsiteMarket(candidateUrl, websiteUrl, targetMarketCode = "") {
+  const configured = getWebsiteLocalePathScope(websiteUrl);
+  const candidate = getWebsiteLocalePathScope(candidateUrl);
+  const targetMarket =
+    normalizeProductMarketCode(targetMarketCode) ||
+    (configured?.market === "uk" ? "gb" : configured?.market || "") ||
+    inferProductMarketCodeFromWebsiteUrl(websiteUrl);
+  const candidateMarket = candidate?.market === "uk" ? "gb" : candidate?.market || "";
+
+  // Product market and content language are intentionally independent.
+  // A Swedish-market product may be advertised in German, English or any other
+  // customer-selected content language. Only an explicit conflicting MARKET
+  // path (for example /da-dk while the target market is SE) is rejected here.
+  if (targetMarket && candidateMarket && candidateMarket !== targetMarket) {
     return false;
   }
 
+  const configuredMarket = configured?.market === "uk" ? "gb" : configured?.market || "";
+  if (configuredMarket && candidateMarket && candidateMarket !== configuredMarket) {
+    return false;
+  }
+
+  // Locale-neutral canonical URLs remain eligible. Many Shopify storefronts
+  // canonicalize a valid localized product page back to /products/... . Market
+  // availability is therefore established by the market-specific discovery
+  // source, not by requiring every final canonical URL to contain a locale.
   return true;
+}
+
+function isUrlExplicitlyScopedToProductMarket(value, targetMarketCode) {
+  const targetMarket = normalizeProductMarketCode(targetMarketCode);
+  const scope = getWebsiteLocalePathScope(value);
+  const scopedMarket = scope?.market === "uk" ? "gb" : scope?.market || "";
+  return Boolean(targetMarket && scopedMarket && scopedMarket === targetMarket);
 }
 
 function isLikelyNonProductUrl(value, websiteUrl) {
@@ -22705,7 +23154,17 @@ async function discoverProductsFromFocusedCategory({
   verificationCache = null,
 }) {
   const campaignPrompt = buildCampaignResearchText(rule);
-  const targets = getAdaptiveProductPoolTargets(CAROUSEL_PRODUCT_SLIDE_TARGET);
+  const requestedProductScale = Math.max(
+    1,
+    Math.min(CAROUSEL_PRODUCT_SLIDE_TARGET, Number(limit) || 1)
+  );
+  const targets = getAdaptiveProductPoolTargets(requestedProductScale);
+  const focusedCandidateTarget = Math.max(
+    12,
+    Math.min(60, Math.max(Number(limit || 0) * 3, requestedProductScale * 6))
+  );
+  const singleProductFocusedDiscovery = Number(limit || 0) <= 8;
+  const productVerificationReserveMs = singleProductFocusedDiscovery ? 42_000 : 35_000;
   const pageQueue = [categoryUrl];
   const visitedPages = new Set();
   const candidates = [];
@@ -22722,8 +23181,8 @@ async function discoverProductsFromFocusedCategory({
   while (
     pageQueue.length &&
     visitedPages.size < 8 &&
-    candidates.length < targets.minimumCandidatePool * 3 &&
-    Date.now() < deadlineMs - 35_000
+    candidates.length < focusedCandidateTarget &&
+    Date.now() < deadlineMs - productVerificationReserveMs
   ) {
     const pageUrl = pageQueue.shift();
     const comparable = normalizeComparableValue(pageUrl);
@@ -22806,7 +23265,11 @@ async function discoverProductsFromFocusedCategory({
     })
     .slice(0, Math.max(limit * 6, targets.minimumCandidatePool * 4, 180));
 
-  if (!rateLimited && dedupedCandidates.length < targets.minimumCandidatePool && Date.now() < deadlineMs - 60_000) {
+  const focusedMinimumBeforeBroadFallback = Math.max(
+    12,
+    Math.min(targets.minimumCandidatePool, Math.max(Number(limit || 0) * 2, requestedProductScale * 4))
+  );
+  if (!rateLimited && dedupedCandidates.length < focusedMinimumBeforeBroadFallback && Date.now() < deadlineMs - 60_000) {
     try {
       const broaderCandidates = await discoverProductCandidatesFromWebsite({
         websiteUrl: categoryUrl,
@@ -22844,14 +23307,16 @@ async function discoverProductsFromFocusedCategory({
     candidates: dedupedCandidates,
   });
 
-  const requestedVerifiedCount = Math.min(
-    24,
-    Math.max(
-      CAROUSEL_PRODUCT_SLIDE_TARGET + 3,
-      targets.minimumVerifiedPool,
-      Number(limit) || 0
-    )
-  );
+  const requestedVerifiedCount = singleProductFocusedDiscovery
+    ? Math.min(6, Math.max(4, Number(limit || 0) > 0 ? Math.ceil(Number(limit) / 2) : 4))
+    : Math.min(
+        24,
+        Math.max(
+          CAROUSEL_PRODUCT_SLIDE_TARGET + 3,
+          targets.minimumVerifiedPool,
+          Number(limit) || 0
+        )
+      );
   const verified = await verifyDiscoveredWebsiteProductCandidates({
     candidates: dedupedCandidates,
     websiteUrl: categoryUrl,
@@ -24189,15 +24654,16 @@ function scoreDiscoveredProductUrl(url, websiteUrl, campaignPrompt) {
 
 async function discoverShopifyProductsJson({ websiteUrl, campaignPrompt }) {
   const origin = getWebsiteOrigin(websiteUrl);
+  const storefrontBase = getWebsiteSearchBaseUrls(websiteUrl)[0] || origin;
 
-  if (!origin) {
+  if (!origin || !storefrontBase) {
     return [];
   }
 
   const discovered = [];
 
   for (let page = 1; page <= 3; page += 1) {
-    const jsonUrl = `${origin}/products.json?limit=250&page=${page}`;
+    const jsonUrl = `${storefrontBase}/products.json?limit=250&page=${page}`;
 
     try {
       const safeJsonUrl = await assertPublicHttpUrl(jsonUrl);
@@ -24226,7 +24692,7 @@ async function discoverShopifyProductsJson({ websiteUrl, campaignPrompt }) {
       for (const product of products) {
         const handle = String(product?.handle || "").trim();
         const title = String(product?.title || "").trim();
-        const productUrl = handle ? `${origin}/products/${handle}` : "";
+        const productUrl = handle ? `${storefrontBase}/products/${handle}` : "";
         const imageUrl =
           product?.image?.src ||
           product?.images?.[0]?.src ||
@@ -24421,15 +24887,16 @@ async function discoverPublicCommerceFeedCandidates({
 
 async function discoverShopifyCollectionJson({ websiteUrl, campaignPrompt }) {
   const origin = getWebsiteOrigin(websiteUrl);
+  const storefrontBase = getWebsiteSearchBaseUrls(websiteUrl)[0] || origin;
   const searches = buildCampaignDiscoverySearches(campaignPrompt);
   const discovered = [];
 
-  if (!origin || !searches.length) {
+  if (!origin || !storefrontBase || !searches.length) {
     return [];
   }
 
   for (const search of searches.slice(0, 6)) {
-    const jsonUrl = `${origin}/collections/${search}/products.json?limit=250`;
+    const jsonUrl = `${storefrontBase}/collections/${search}/products.json?limit=250`;
 
     try {
       const safeJsonUrl = await assertPublicHttpUrl(jsonUrl);
@@ -24454,7 +24921,7 @@ async function discoverShopifyCollectionJson({ websiteUrl, campaignPrompt }) {
       for (const product of products) {
         const handle = String(product?.handle || "").trim();
         const title = String(product?.title || "").trim();
-        const productUrl = handle ? `${origin}/products/${handle}` : "";
+        const productUrl = handle ? `${storefrontBase}/products/${handle}` : "";
         const imageUrl = product?.image?.src || product?.images?.[0]?.src || null;
 
         if (!productUrl || !title || isLikelyNonProductUrl(productUrl, websiteUrl)) {
@@ -24716,18 +25183,17 @@ async function discoverProductCandidatesFromWebsite({
         PRODUCT_ENGINE_V2_POOL_TARGETS.minimumCandidatePool * 3
       );
 
-  const preferredContentLanguage =
-    rule?.language || rule?.content_language || rule?.brand_profile?.content_language || "";
+  const targetMarketCode = getProductMarketCodeForRule(rule, websiteUrl);
   const dedupedCandidates = dedupeUrlItems(candidates);
   const marketScopedCandidates = dedupedCandidates.filter((item) =>
-    matchesConfiguredWebsiteMarket(item?.url, websiteUrl, preferredContentLanguage)
+    matchesConfiguredWebsiteMarket(item?.url, websiteUrl, targetMarketCode)
   );
   const crossMarketRejectedCount = Math.max(0, dedupedCandidates.length - marketScopedCandidates.length);
   if (crossMarketRejectedCount > 0) {
     console.info("Product discovery rejected cross-market locale candidates", {
       ruleId: rule?.id || null,
       websiteUrl,
-      preferredContentLanguage: preferredContentLanguage || null,
+      targetMarketCode: targetMarketCode || null,
       rejectedCount: crossMarketRejectedCount,
     });
   }
@@ -24778,7 +25244,7 @@ async function verifyDiscoveredWebsiteProductCandidates({
       matchesConfiguredWebsiteMarket(
         candidate?.url,
         websiteUrl,
-        rule?.language || rule?.content_language || rule?.brand_profile?.content_language || ""
+        getProductMarketCodeForRule(rule, websiteUrl)
       )
     )
     .slice(
@@ -25983,7 +26449,7 @@ Return only the required JSON structure.`.trim();
       !currentUrl ||
       !isHttpUrl(currentUrl) ||
       !isSameOrSubdomainUrl(currentUrl, websiteUrl) ||
-      !matchesConfiguredWebsiteMarket(currentUrl, websiteUrl, rule?.language || rule?.content_language || rule?.brand_profile?.content_language || "") ||
+      !matchesConfiguredWebsiteMarket(currentUrl, websiteUrl, getProductMarketCodeForRule(rule, websiteUrl)) ||
       isLikelyNonProductUrl(currentUrl, websiteUrl) ||
       isLikelyBadDiscoveryPageUrl(currentUrl, websiteUrl) ||
       !isHttpUrl(imageUrl) ||
@@ -27005,13 +27471,12 @@ async function findPrimaryCampaignProductsWithWebSearch({
   requiredVerifiedCount = CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED,
 }) {
   const startedAt = Date.now();
-  const preferredContentLanguage =
-    rule?.language || rule?.content_language || rule?.brand_profile?.content_language || "";
+  const targetProductMarketCode = getProductMarketCodeForRule(rule, websiteUrl);
   cachedWebsiteItems = (cachedWebsiteItems || []).filter((item) =>
     matchesConfiguredWebsiteMarket(
       item?.url || item?.product_url || item?.item_url,
       item?.source_url || item?.website_url || websiteUrl,
-      preferredContentLanguage
+      targetProductMarketCode
     )
   );
   const allowedDomain = getWebsiteFetchDomain(websiteUrl);
@@ -27240,7 +27705,7 @@ Return the result in the required JSON structure. Keep each reason concise and g
       !productUrl ||
       !isHttpUrl(productUrl) ||
       !isExactConfiguredWebsiteHostUrl(productUrl, websiteUrl) ||
-      !matchesConfiguredWebsiteMarket(productUrl, websiteUrl, rule?.language || rule?.content_language || rule?.brand_profile?.content_language || "") ||
+      !matchesConfiguredWebsiteMarket(productUrl, websiteUrl, getProductMarketCodeForRule(rule, websiteUrl)) ||
       isLikelyNonProductUrl(productUrl, websiteUrl) ||
       isLikelyBadDiscoveryPageUrl(productUrl, websiteUrl)
     ) {
@@ -28279,7 +28744,7 @@ For campaign carousels, stop once you have enough concrete product pages for a u
       continue;
     }
 
-    if (!matchesConfiguredWebsiteMarket(productUrl, websiteUrl, rule?.language || rule?.content_language || rule?.brand_profile?.content_language || "")) {
+    if (!matchesConfiguredWebsiteMarket(productUrl, websiteUrl, getProductMarketCodeForRule(rule, websiteUrl))) {
       console.log("Product researcher returned product from the wrong website market", {
         ruleId: rule?.id,
         websiteUrl,
@@ -28364,7 +28829,7 @@ For campaign carousels, stop once you have enough concrete product pages for a u
       continue;
     }
 
-    if (!matchesConfiguredWebsiteMarket(pageUrl, websiteUrl, rule?.language || rule?.content_language || rule?.brand_profile?.content_language || "")) {
+    if (!matchesConfiguredWebsiteMarket(pageUrl, websiteUrl, getProductMarketCodeForRule(rule, websiteUrl))) {
       console.log("Product researcher returned discovery page from the wrong website market", {
         ruleId: rule?.id,
         websiteUrl,
@@ -29065,7 +29530,16 @@ async function prepareWebsiteContentForRule({
     brandProfile,
   });
 
-  const websiteUrl = getWebsiteProductSourceUrl(brandProfile, rule);
+  const contentSourceScope = getRuleContentSourceScope(rule);
+  const rawWebsiteUrl = getWebsiteProductSourceUrl(brandProfile, rule);
+  const websiteUrl =
+    contentSourceScope === "whole_website"
+      ? await resolveMarketAwareProductSourceUrl({
+          websiteUrl: rawWebsiteUrl,
+          brandProfile,
+          rule,
+        })
+      : rawWebsiteUrl;
   const finalizePreparedWebsiteItem = async (
     item,
     cycleNumber = 1,
@@ -29099,7 +29573,6 @@ async function prepareWebsiteContentForRule({
       websiteRule: rule,
     };
   };
-  const contentSourceScope = getRuleContentSourceScope(rule);
   const contentType = rule.content_type_id || "website_item";
   const productIntentScoped = isProductIntentScopedWebsiteRule(rule);
 
@@ -40348,19 +40821,34 @@ async function runAutomationCron(request, options = {}) {
           rule,
           automationBrandProfile
         );
-        // Runtime language authority: an explicit non-Auto post language wins;
-        // otherwise the analyzed customer-facing brand language wins; only then
-        // do we fall back to the configured website locale. Mutating this
-        // in-memory rule makes the same language authoritative for product
-        // locale filtering, caption generation, image/video copy and post save.
+        // Runtime text-language authority: an explicit non-Auto post language wins;
+        // otherwise the brand Content language wins. Product MARKET is separate:
+        // it comes from the analyzed brand market/country and must not change just
+        // because the customer wants the post written in another language.
         rule.language = resolvedPostLanguage.language;
         rule.content_language = resolvedPostLanguage.language;
-        console.info("Automation post language resolved", {
+        rule.content_market =
+          automationBrandProfile?.content_market || rule.content_market || "";
+        rule.country_code =
+          automationBrandProfile?.country_code || rule.country_code || "";
+        rule.brand_profile = automationBrandProfile || rule.brand_profile || null;
+        rule.product_market_code = getProductMarketCodeForRule(
+          rule,
+          automationBrandProfile?.website_product_source_url ||
+            automationBrandProfile?.website_url ||
+            rule.website_url ||
+            "",
+          automationBrandProfile
+        );
+        console.info("Automation post language and product market resolved", {
           ruleId: rule.id,
           brandProfileId: rule.brand_profile_id || null,
           language: resolvedPostLanguage.language,
-          source: resolvedPostLanguage.source,
+          languageSource: resolvedPostLanguage.source,
           analyzedLanguage: automationBrandProfile?.content_language || null,
+          productMarketCode: rule.product_market_code || null,
+          analyzedMarket: automationBrandProfile?.content_market || null,
+          countryCode: automationBrandProfile?.country_code || null,
           websiteUrl:
             automationBrandProfile?.website_url ||
             automationBrandProfile?.website_product_source_url ||
