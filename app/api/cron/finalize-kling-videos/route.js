@@ -1187,13 +1187,15 @@ async function finalizeReadyTask(
       kling_task_status: task.status || "succeeded",
       kling_completed_at: nowIso,
       kling_last_polled_at: nowIso,
-      video_duration_seconds: Number(finalDurationSeconds) > 0
-        ? Number(Number(finalDurationSeconds).toFixed(3))
-        : normalizeVideoDurationSeconds(
-            task.durationSeconds,
-            post.video_duration_seconds,
-            6
-          ),
+      // posts.video_duration_seconds is an INTEGER column. Keep the exact
+      // post-processed duration in video_background_selection.delivered_duration_seconds,
+      // but normalize the summary column to a whole second before persistence.
+      video_duration_seconds: normalizeVideoDurationSeconds(
+        finalDurationSeconds,
+        task.durationSeconds,
+        post.video_duration_seconds,
+        6
+      ),
       video_error: null,
       status: "pending_approval",
       updated_at: nowIso,

@@ -28950,18 +28950,22 @@ async function prepareWebsiteContentForRule({
       });
     }
 
-    const focusedSelection = await chooseUnusedWebsiteItem({
-      supabase,
-      userId: rule.user_id,
-      brandProfileId: rule.brand_profile_id,
-      sourceUrl: websiteUrl,
-      contentType,
-      items: focusedCategoryItems,
-      rule,
-      usedWebsiteImageUrlsThisRun,
-      recentUsedItems,
-      allowReuseWhenExhausted: false,
-    });
+    const selectFocusedCandidate = async (items) =>
+      chooseUnusedWebsiteItem({
+        supabase,
+        userId: rule.user_id,
+        brandProfileId: rule.brand_profile_id,
+        sourceUrl: websiteUrl,
+        contentType,
+        items,
+        rule,
+        usedWebsiteImageUrlsThisRun,
+        recentUsedItems,
+        allowReuseWhenExhausted: false,
+      });
+
+    let focusedCandidatePool = [...focusedCategoryItems];
+    let focusedSelection = await selectFocusedCandidate(focusedCandidatePool);
 
     if (!focusedSelection?.item) {
       if (focusedCategoryItems?.rateLimited) {
@@ -28990,19 +28994,131 @@ async function prepareWebsiteContentForRule({
       );
     }
 
-    await upsertWebsiteProductCatalogItems({
-      supabase,
-      userId: rule.user_id,
-      brandProfileId: rule.brand_profile_id,
-      sourceUrl: websiteUrl,
-      items: [focusedSelection.item],
-      discoverySource: "customer_selected_category",
-    });
+    // v144.46: a focused category/page can expose many technically verified
+    // products while one particular product page has markup that cannot be
+    // converted into Spreelo's strict locked-product object. Do not throw away
+    // the entire post because the first editorial winner is the bad page.
+    // Try the remaining verified candidates deterministically first; only if
+    // that whole pool is exhausted may the best original candidate spend one
+    // bounded GPT-5.5 repair attempt.
+    const firstFocusedSelection = focusedSelection;
+    const focusedLockFailures = [];
+    const focusedLockAttemptLimit = Math.min(
+      Math.max(focusedCategoryItems.length, 1),
+      WEBSITE_TEXT_INTENT_STORE_VERIFY_LIMIT
+    );
 
-    summary.website_items_found += 1;
-    summary.website_content_success += 1;
+    for (
+      let candidateIndex = 0;
+      focusedSelection?.item && candidateIndex < focusedLockAttemptLimit;
+      candidateIndex += 1
+    ) {
+      const candidate = focusedSelection.item;
+      try {
+        const prepared = await finalizePreparedWebsiteItem(
+          candidate,
+          focusedSelection.cycleNumber,
+          { allowAiRepair: false }
+        );
 
-    return finalizePreparedWebsiteItem(focusedSelection.item, focusedSelection.cycleNumber);
+        await upsertWebsiteProductCatalogItems({
+          supabase,
+          userId: rule.user_id,
+          brandProfileId: rule.brand_profile_id,
+          sourceUrl: websiteUrl,
+          items: [prepared.websiteItem],
+          discoverySource: "customer_selected_category",
+        });
+
+        summary.website_items_found += 1;
+        summary.website_content_success += 1;
+
+        console.log("Focused category product locked successfully", {
+          ruleId: rule.id,
+          brandProfileId: rule.brand_profile_id,
+          websiteUrl,
+          productUrl: prepared?.websiteItem?.url || candidate?.url || null,
+          title: prepared?.websiteItem?.title || candidate?.title || null,
+          lockCandidateIndex: candidateIndex,
+          priorLockFailureCount: focusedLockFailures.length,
+          verifiedProductCount: focusedCategoryItems.length,
+        });
+
+        return prepared;
+      } catch (error) {
+        if (isWebsiteRateLimitError(error)) throw error;
+
+        focusedLockFailures.push({
+          productUrl: candidate?.url || null,
+          title: candidate?.title || null,
+          message: error?.message || String(error),
+        });
+        console.warn("Focused category product could not be locked; trying next verified product", {
+          ruleId: rule.id,
+          brandProfileId: rule.brand_profile_id,
+          websiteUrl,
+          candidateIndex,
+          verifiedProductCount: focusedCategoryItems.length,
+          productUrl: candidate?.url || null,
+          title: candidate?.title || null,
+          message: error?.message || String(error),
+        });
+
+        focusedCandidatePool = focusedCandidatePool.filter(
+          (item) => !areSameWebsiteItem(item, candidate, websiteUrl)
+        );
+        focusedSelection = focusedCandidatePool.length
+          ? await selectFocusedCandidate(focusedCandidatePool)
+          : null;
+      }
+    }
+
+    if (firstFocusedSelection?.item && focusedLockFailures.length) {
+      try {
+        console.info("Focused category deterministic lock pool exhausted; trying one bounded AI repair", {
+          ruleId: rule.id,
+          brandProfileId: rule.brand_profile_id,
+          websiteUrl,
+          attemptedVerifiedProductCount: focusedLockFailures.length,
+          repairProductUrl: firstFocusedSelection.item?.url || null,
+          repairProductTitle: firstFocusedSelection.item?.title || null,
+        });
+
+        const repaired = await finalizePreparedWebsiteItem(
+          firstFocusedSelection.item,
+          firstFocusedSelection.cycleNumber,
+          { allowAiRepair: true }
+        );
+
+        await upsertWebsiteProductCatalogItems({
+          supabase,
+          userId: rule.user_id,
+          brandProfileId: rule.brand_profile_id,
+          sourceUrl: websiteUrl,
+          items: [repaired.websiteItem],
+          discoverySource: "customer_selected_category_ai_repair",
+        });
+
+        summary.website_items_found += 1;
+        summary.website_content_success += 1;
+        return repaired;
+      } catch (error) {
+        if (isWebsiteRateLimitError(error)) throw error;
+        focusedLockFailures.push({
+          productUrl: firstFocusedSelection.item?.url || null,
+          title: firstFocusedSelection.item?.title || null,
+          aiRepair: true,
+          message: error?.message || String(error),
+        });
+      }
+    }
+
+    const exhaustedError = new Error(
+      `Spreelo tried ${focusedLockFailures.filter((failure) => !failure.aiRepair).length} verified products from the customer-selected category/page, but none could be converted into a safe locked product object.`
+    );
+    exhaustedError.code = "FOCUSED_PRODUCT_LOCK_POOL_EXHAUSTED";
+    exhaustedError.lockFailures = focusedLockFailures;
+    throw exhaustedError;
   }
 
   let catalogItems = filterWebsiteCatalogItemsForRule(
@@ -29342,40 +29458,147 @@ async function prepareWebsiteContentForRule({
               minimumStrongProducts: 1,
             });
 
-            const storeSearchSelection = await chooseUnusedWebsiteItem({
-              supabase,
-              userId: rule.user_id,
-              brandProfileId: rule.brand_profile_id,
-              sourceUrl: websiteUrl,
-              contentType,
-              items: [
-                ...storeSearchItems,
-                ...getSafeCampaignProductCandidates(sortedCatalogItems, rule).map((item) => ({
-                  ...item,
-                  selection_priority: 30,
-                })),
-              ],
-              rule,
-              usedWebsiteImageUrlsThisRun,
-              recentUsedItems,
-              allowReuseWhenExhausted: false,
-            });
+            const storeSearchLockPool = [
+              ...storeSearchItems,
+              ...getSafeCampaignProductCandidates(sortedCatalogItems, rule).map((item) => ({
+                ...item,
+                selection_priority: 30,
+              })),
+            ].filter((item) => isAcceptableWebsiteTextProductSelection(item, rule));
 
-            if (storeSearchSelection?.item && isAcceptableWebsiteTextProductSelection(storeSearchSelection.item, rule)) {
-              await upsertWebsiteProductCatalogItems({
+            const selectStoreSearchCandidate = async (items) =>
+              chooseUnusedWebsiteItem({
                 supabase,
                 userId: rule.user_id,
                 brandProfileId: rule.brand_profile_id,
                 sourceUrl: websiteUrl,
-                items: [storeSearchSelection.item],
-                discoverySource: getWebsiteCatalogDiscoverySource("store_search", rule),
+                contentType,
+                items,
+                rule,
+                usedWebsiteImageUrlsThisRun,
+                recentUsedItems,
+                allowReuseWhenExhausted: false,
               });
 
-              summary.website_items_found += 1;
-              summary.website_content_success += 1;
-              summary.website_web_search_success += 1;
+            let remainingStoreSearchItems = [...storeSearchLockPool];
+            let storeSearchSelection = await selectStoreSearchCandidate(
+              remainingStoreSearchItems
+            );
+            const firstStoreSearchSelection = storeSearchSelection;
+            const storeSearchLockFailures = [];
+            const storeSearchLockAttemptLimit = Math.min(
+              remainingStoreSearchItems.length,
+              WEBSITE_TEXT_INTENT_STORE_VERIFY_LIMIT
+            );
 
-              return finalizePreparedWebsiteItem(storeSearchSelection.item, storeSearchSelection.cycleNumber);
+            for (
+              let candidateIndex = 0;
+              storeSearchSelection?.item && candidateIndex < storeSearchLockAttemptLimit;
+              candidateIndex += 1
+            ) {
+              const candidate = storeSearchSelection.item;
+              try {
+                // v144.46: these pages were just technically verified. Try the
+                // next verified store-search product before paying GPT-5.5 to
+                // repair one awkward product page.
+                const prepared = await finalizePreparedWebsiteItem(
+                  candidate,
+                  storeSearchSelection.cycleNumber,
+                  { allowAiRepair: false }
+                );
+
+                await upsertWebsiteProductCatalogItems({
+                  supabase,
+                  userId: rule.user_id,
+                  brandProfileId: rule.brand_profile_id,
+                  sourceUrl: websiteUrl,
+                  items: [prepared.websiteItem],
+                  discoverySource: getWebsiteCatalogDiscoverySource("store_search", rule),
+                });
+
+                summary.website_items_found += 1;
+                summary.website_content_success += 1;
+                summary.website_web_search_success += 1;
+
+                console.log("Store-search product locked successfully", {
+                  ruleId: rule.id,
+                  brandProfileId: rule.brand_profile_id,
+                  websiteUrl,
+                  productUrl: prepared?.websiteItem?.url || candidate?.url || null,
+                  title: prepared?.websiteItem?.title || candidate?.title || null,
+                  lockCandidateIndex: candidateIndex,
+                  priorLockFailureCount: storeSearchLockFailures.length,
+                  verifiedProductCount: storeSearchItems.length,
+                });
+
+                return prepared;
+              } catch (error) {
+                if (isWebsiteRateLimitError(error)) throw error;
+                storeSearchLockFailures.push({
+                  productUrl: candidate?.url || null,
+                  title: candidate?.title || null,
+                  message: error?.message || String(error),
+                });
+                console.warn("Store-search verified product could not be locked; trying next verified product", {
+                  ruleId: rule.id,
+                  brandProfileId: rule.brand_profile_id,
+                  websiteUrl,
+                  candidateIndex,
+                  verifiedProductCount: storeSearchItems.length,
+                  productUrl: candidate?.url || null,
+                  title: candidate?.title || null,
+                  message: error?.message || String(error),
+                });
+
+                remainingStoreSearchItems = remainingStoreSearchItems.filter(
+                  (item) => !areSameWebsiteItem(item, candidate, websiteUrl)
+                );
+                storeSearchSelection = remainingStoreSearchItems.length
+                  ? await selectStoreSearchCandidate(remainingStoreSearchItems)
+                  : null;
+              }
+            }
+
+            if (firstStoreSearchSelection?.item && storeSearchLockFailures.length) {
+              try {
+                console.info("Store-search deterministic lock pool exhausted; trying one bounded AI repair", {
+                  ruleId: rule.id,
+                  brandProfileId: rule.brand_profile_id,
+                  websiteUrl,
+                  attemptedVerifiedProductCount: storeSearchLockFailures.length,
+                  repairProductUrl: firstStoreSearchSelection.item?.url || null,
+                  repairProductTitle: firstStoreSearchSelection.item?.title || null,
+                });
+
+                const repaired = await finalizePreparedWebsiteItem(
+                  firstStoreSearchSelection.item,
+                  firstStoreSearchSelection.cycleNumber,
+                  { allowAiRepair: true }
+                );
+
+                await upsertWebsiteProductCatalogItems({
+                  supabase,
+                  userId: rule.user_id,
+                  brandProfileId: rule.brand_profile_id,
+                  sourceUrl: websiteUrl,
+                  items: [repaired.websiteItem],
+                  discoverySource: getWebsiteCatalogDiscoverySource("store_search_ai_repair", rule),
+                });
+
+                summary.website_items_found += 1;
+                summary.website_content_success += 1;
+                summary.website_web_search_success += 1;
+                return repaired;
+              } catch (error) {
+                if (isWebsiteRateLimitError(error)) throw error;
+                console.warn("Store-search verified lock pool and bounded AI repair were exhausted; continuing to the next product discovery fallback", {
+                  ruleId: rule.id,
+                  brandProfileId: rule.brand_profile_id,
+                  websiteUrl,
+                  attemptedVerifiedProductCount: storeSearchLockFailures.length,
+                  message: error?.message || String(error),
+                });
+              }
             }
           }
         }

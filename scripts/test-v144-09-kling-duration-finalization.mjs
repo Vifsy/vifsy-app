@@ -16,4 +16,13 @@ assert(finalizer.includes('normalizeVideoDurationSeconds('), "Kling finalizer do
 assert(!finalizer.includes('Number(task.durationSeconds || post.video_duration_seconds || 0)'), "Old raw fractional duration persistence is still present");
 assert(!finalizer.includes("submitKlingImageToVideo"), "Finalizer must never submit a second paid Kling generation");
 
+assert(
+  finalizer.includes("video_duration_seconds: normalizeVideoDurationSeconds("),
+  "Final delivered duration must be normalized before writing the integer database column"
+);
+assert(
+  !finalizer.includes("Number(Number(finalDurationSeconds).toFixed(3))"),
+  "Fractional post-processed duration must never be written directly to posts.video_duration_seconds"
+);
+
 console.log("v144.09 Kling fractional-duration finalization checks passed");
