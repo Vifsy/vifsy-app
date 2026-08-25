@@ -31,6 +31,7 @@ const POST_VIDEOS_BUCKET = "post-videos";
 const POST_IMAGES_BUCKET = "post-images";
 const KLING_TYPOGRAPHY_MODEL = "gpt-image-2";
 const KLING_PRODUCT_IDENTITY_AUDIT_MODEL = "gpt-4.1-mini";
+const KLING_CLOSING_HERO_HOLD_SECONDS = 0.9;
 const DEFAULT_MAX_PENDING_HOURS = 6;
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const KLING_FINALIZATION_LEASE_MS = 6 * 60 * 1000;
@@ -498,6 +499,18 @@ async function uploadKlingTypographyOverlay({ supabase, post, buffer }) {
   return { imageUrl, storagePath };
 }
 
+async function uploadKlingClosingHeroFrame({ supabase, post, buffer }) {
+  const storagePath = `${post.user_id}/${post.id}-kling-closing-hero.jpg`;
+  const { error: uploadError } = await supabase.storage
+    .from(POST_IMAGES_BUCKET)
+    .upload(storagePath, buffer, { contentType: "image/jpeg", upsert: true });
+  if (uploadError) throw new Error(uploadError.message || "Could not store Kling closing hero frame");
+  const { data } = supabase.storage.from(POST_IMAGES_BUCKET).getPublicUrl(storagePath);
+  const imageUrl = data?.publicUrl || null;
+  if (!imageUrl) throw new Error("Could not create public URL for Kling closing hero frame");
+  return { imageUrl, storagePath };
+}
+
 async function uploadRejectedKlingTypographyOverlay({ supabase, post, buffer }) {
   const storagePath = `${post.user_id}/${post.id}-kling-text-overlay-rejected.png`;
   const { error: uploadError } = await supabase.storage
@@ -749,6 +762,7 @@ async function createFinishedKlingTypographyOnce({ openai, supabase, post, task,
     text_overlay_generation_started_at: new Date().toISOString(),
     text_overlay_generation_attempts: 1,
   };
+  let workingSelection = claimedSelection;
   const { error: claimError } = await supabase
     .from("posts")
     .update({ video_background_selection: claimedSelection, updated_at: new Date().toISOString() })
@@ -761,10 +775,29 @@ async function createFinishedKlingTypographyOnce({ openai, supabase, post, task,
     const frames = await sampleRemoteVideoFrames({
       videoUrl: task.videoUrl,
       durationSeconds,
-      // Two representative finished-video frames are enough to art-direct the
-      // transparent typography while keeping Chromium work and image inputs low.
-      fractions: [0.28, 0.72],
+      // Two representative frames art-direct the typography; the late frame
+      // also becomes the deliberate closing hero hold used after Kling motion.
+      fractions: [0.28, 0.72, 0.975],
     });
+    const closingFrame = frames[frames.length - 1];
+    if (closingFrame?.buffer) {
+      const closingHeroBuffer = await sharp(closingFrame.buffer)
+        .resize({ width: 1080, height: 1920, fit: "cover" })
+        .jpeg({ quality: 92, chromaSubsampling: "4:4:4" })
+        .toBuffer();
+      const closingHero = await uploadKlingClosingHeroFrame({
+        supabase,
+        post,
+        buffer: closingHeroBuffer,
+      });
+      workingSelection = {
+        ...workingSelection,
+        closing_hero_frame_url: closingHero.imageUrl,
+        closing_hero_frame_storage_path: closingHero.storagePath,
+        closing_hero_source_time_seconds: Number(closingFrame.time.toFixed(3)),
+        closing_hero_hold_seconds: KLING_CLOSING_HERO_HOLD_SECONDS,
+      };
+    }
     const referenceFiles = [];
     for (let index = 0; index < frames.length; index += 1) {
       const frame = await sharp(frames[index].buffer)
@@ -830,7 +863,7 @@ OUTPUT RULES:
     const normalized = await normalizeFinishedKlingTypography(Buffer.from(base64, "base64"));
     const uploaded = await uploadKlingTypographyOverlay({ supabase, post, buffer: normalized.buffer });
     const completedSelection = {
-      ...claimedSelection,
+      ...workingSelection,
       text_overlay_url: uploaded.imageUrl,
       text_overlay_storage_path: uploaded.storagePath,
       text_overlay_provider: "gpt-image-2-finished-video-transparent-typography",
@@ -887,7 +920,7 @@ OUTPUT RULES:
       }
     }
     const failedSelection = {
-      ...claimedSelection,
+      ...workingSelection,
       text_overlay_status: "failed",
       text_overlay_failed_at: new Date().toISOString(),
       text_overlay_error: truncate(error?.message || String(error), 900),
@@ -918,6 +951,47 @@ OUTPUT RULES:
   }
 }
 
+async function ensureKlingClosingHeroFrame({ supabase, post, task, selection }) {
+  if (String(selection?.closing_hero_frame_url || "").trim()) return selection;
+
+  const durationSeconds = normalizeVideoDurationSeconds(
+    task.durationSeconds,
+    post.video_duration_seconds,
+    6
+  );
+  const frames = await sampleRemoteVideoFrames({
+    videoUrl: task.videoUrl,
+    durationSeconds,
+    fractions: [0.975],
+  });
+  const closingFrame = frames[0];
+  if (!closingFrame?.buffer) throw new Error("Could not sample Kling closing hero frame");
+  const closingHeroBuffer = await sharp(closingFrame.buffer)
+    .resize({ width: 1080, height: 1920, fit: "cover" })
+    .jpeg({ quality: 92, chromaSubsampling: "4:4:4" })
+    .toBuffer();
+  const uploaded = await uploadKlingClosingHeroFrame({
+    supabase,
+    post,
+    buffer: closingHeroBuffer,
+  });
+  const nextSelection = {
+    ...selection,
+    closing_hero_frame_url: uploaded.imageUrl,
+    closing_hero_frame_storage_path: uploaded.storagePath,
+    closing_hero_source_time_seconds: Number(closingFrame.time.toFixed(3)),
+    closing_hero_hold_seconds: KLING_CLOSING_HERO_HOLD_SECONDS,
+  };
+  const { error } = await supabase
+    .from("posts")
+    .update({ video_background_selection: nextSelection, updated_at: new Date().toISOString() })
+    .eq("id", post.id)
+    .eq("video_provider", "kling");
+  if (error) throw new Error(`Could not persist Kling closing hero frame: ${error.message}`);
+  post.video_background_selection = nextSelection;
+  return nextSelection;
+}
+
 function getKlingAdvertisingPostprocess(post) {
   const selection = post?.video_background_selection;
   if (!selection || typeof selection !== "object" || Array.isArray(selection)) return null;
@@ -932,6 +1006,7 @@ async function getKlingFinalVideoSource({ openai, supabase, post, task, costTrac
       videoUrl: task.videoUrl,
       postprocessApplied: false,
       postprocessRenderId: null,
+      durationSeconds: normalizeVideoDurationSeconds(task.durationSeconds, post.video_duration_seconds, 6),
     };
   }
 
@@ -966,18 +1041,34 @@ async function getKlingFinalVideoSource({ openai, supabase, post, task, costTrac
   let nextSelection = postprocess;
 
   if (!renderId) {
+    postprocess = await ensureKlingClosingHeroFrame({
+      supabase,
+      post,
+      task,
+      selection: postprocess,
+    });
+    const closingHoldSeconds = String(postprocess.closing_hero_frame_url || "").trim()
+      ? Math.max(0.6, Math.min(1.5, Number(postprocess.closing_hero_hold_seconds) || KLING_CLOSING_HERO_HOLD_SECONDS))
+      : 0;
+    const deliveredMotionDurationSeconds = Math.max(2.5, durationSeconds - trimStartSeconds);
+    const deliveredDurationSeconds = deliveredMotionDurationSeconds + closingHoldSeconds;
     const edit = buildVideoOverlayEdit({
       videoUrl: task.videoUrl,
       textOverlayUrl: postprocess.text_overlay_url,
+      closingFrameUrl: postprocess.closing_hero_frame_url,
       durationSeconds,
       overlayStartSeconds,
       trimStartSeconds,
+      closingHoldSeconds,
     });
     renderId = await queueShotstackRender(edit);
     nextSelection = {
       ...postprocess,
       scene_trim_start_seconds: trimStartSeconds,
       overlay_start_seconds: overlayStartSeconds,
+      closing_hero_hold_seconds: closingHoldSeconds,
+      delivered_duration_seconds: Number(deliveredDurationSeconds.toFixed(3)),
+      shotstack_closing_hero_applied: Boolean(postprocess.closing_hero_frame_url),
       shotstack_render_id: renderId,
       shotstack_status: "rendering",
       shotstack_started_at: new Date().toISOString(),
@@ -1052,10 +1143,20 @@ async function getKlingFinalVideoSource({ openai, supabase, post, task, costTrac
     videoUrl: render.url,
     postprocessApplied: true,
     postprocessRenderId: renderId,
+    durationSeconds: Number(
+      nextSelection.delivered_duration_seconds ||
+        Math.max(2.5, durationSeconds - trimStartSeconds)
+    ),
   };
 }
 
-async function finalizeReadyTask(supabase, post, task, finalVideoUrl = task.videoUrl) {
+async function finalizeReadyTask(
+  supabase,
+  post,
+  task,
+  finalVideoUrl = task.videoUrl,
+  finalDurationSeconds = null
+) {
   const videoBuffer = await downloadKlingVideo(finalVideoUrl);
   const storagePath = `${post.user_id}/${post.id}-kling.mp4`;
   const { error: uploadError } = await supabase.storage
@@ -1086,11 +1187,13 @@ async function finalizeReadyTask(supabase, post, task, finalVideoUrl = task.vide
       kling_task_status: task.status || "succeeded",
       kling_completed_at: nowIso,
       kling_last_polled_at: nowIso,
-      video_duration_seconds: normalizeVideoDurationSeconds(
-        task.durationSeconds,
-        post.video_duration_seconds,
-        6
-      ),
+      video_duration_seconds: Number(finalDurationSeconds) > 0
+        ? Number(Number(finalDurationSeconds).toFixed(3))
+        : normalizeVideoDurationSeconds(
+            task.durationSeconds,
+            post.video_duration_seconds,
+            6
+          ),
       video_error: null,
       status: "pending_approval",
       updated_at: nowIso,
@@ -1291,7 +1394,13 @@ export async function GET(request) {
           task,
           costTracker,
         });
-        await finalizeReadyTask(supabase, post, task, finalVideo.videoUrl);
+        await finalizeReadyTask(
+          supabase,
+          post,
+          task,
+          finalVideo.videoUrl,
+          finalVideo.durationSeconds
+        );
         summary.completed += 1;
         if (finalVideo.postprocessApplied) {
           summary.professional_typography_applied =

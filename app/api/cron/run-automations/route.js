@@ -14127,7 +14127,7 @@ function getKlingProductPromptFallback({ rule, postContent, referenceSafety = nu
     "Create an immediate pattern interrupt in the first 0.5-1.0 second with a real product-relevant event, human/animal/physical action or purposeful camera/action beat inside the same believable environment. Decorative particles alone are not a concept.",
     interactionDirection,
     verifiedViewInstruction,
-    "Make the scene escalate quickly and deliver a clear visual payoff by the final second while staying visually continuous and physically coherent. Avoid a generic slow zoom, simple spin, floating product, empty studio demonstration, backdrop reveal, environment teleport or a product surrounded only by decorative effects.",
+    "Make the scene escalate quickly and deliver the main visual payoff BEFORE the final second while staying visually continuous and physically coherent. Complete all meaningful product, hand, camera and environmental action by about 5.0 seconds, then settle into a clean, stable, professionally composed product hero shot for the final 0.8-1.0 second. Hold that resolved composition through the final frame so the commercial feels deliberately finished and is never cut off mid-action. Avoid a generic slow zoom, simple spin, floating product, empty studio demonstration, backdrop reveal, environment teleport or a product surrounded only by decorative effects.",
     "The uploaded first frame is the authoritative product reference and the exact product identity must remain recognizable throughout.",
     identityMotionDirection,
     "Preserve visible color, materials, branding, logos, printed text/design and identity-defining details exactly. Visible buttons/controls/openings, their number and positions, material boundaries, color blocking and surface finish must stay exactly as in the authoritative first frame. Do not morph, redesign or substitute the product.",
@@ -14161,7 +14161,7 @@ async function buildKlingProductVideoPrompt({ openai, rule, postContent, referen
         {
           role: "system",
           content:
-            "You are Spreelo's short-form product video director. Return strict JSON only. Design one highly attention-grabbing, sales-oriented but physically plausible 6-second concept that begins inside a believable real-world environment from frame zero. Product identity safety is more important than spectacle.",
+            "You are Spreelo's short-form product video director. Return strict JSON only. Design one highly attention-grabbing, sales-oriented but physically plausible 6-second concept that begins inside a believable real-world environment from frame zero and ends with a deliberate stable product hero shot. Product identity safety is more important than spectacle.",
         },
         {
           role: "user",
@@ -14190,7 +14190,9 @@ Creative goals:
 - the result must feel like a professionally directed short commercial, not a prettier version of a simple animated product post
 - when Full-product interaction allowed is YES, the product MUST be genuinely used in the scene in the most natural way for that exact product: apparel worn by a person, handheld items held/operated, tools used, appliances operated, sports/outdoor gear used in context, etc. BUT usage never grants permission to reveal an unverified product side: the camera-facing verified view must remain locked for the entire clip
 - when Full-product interaction allowed is NO, never fabricate missing product areas just to show use; preserve the exact visible crop and create the story/action around that crop
-- escalate quickly and deliver a satisfying visual payoff by the final second
+- escalate quickly and deliver the MAIN visual payoff before the final second; do not save a major action, reveal, hand movement or camera move for the final frame
+- complete all meaningful action by about 5.0 seconds, then use the final 0.8-1.0 second as a clean, stable product hero shot: major hand/product/camera/environment motion has settled, the composition is resolved, and the final frame is intentionally held rather than cut off mid-action
+- the closing hero shot must still be part of the same believable scene; do not switch to a new end card, studio backdrop or graphic screen
 - feel native to TikTok/Reels/Shorts and commercially persuasive, not a generic studio spin, slow zoom, floating product or product-with-particles demo
 - one coherent 6-second commercial world with continuous physical space and natural lighting; camera framing/action may evolve, but do not teleport from a studio/graphic backdrop into a different lifestyle location
 
@@ -14231,7 +14233,7 @@ NON-NEGOTIABLE PRODUCT RULES:
       "No product morph, redesign or substitution with a similar product. Never add/remove/move visible buttons, controls, openings, seams or hardware, and never change visible material boundaries, surface finish or color blocking. If necessary, reduce product motion rather than redraw the product.",
       "Do not generate any new readable overlay text, captions, slogans, prices, labels or typography. Spreelo adds professional typography after the video is generated. Preserve only text physically present on the verified product reference.",
       "No fake logos and no watermark.",
-      "Make the action bold, surprising, product-specific and sales-oriented, with an immediate first-second hook and a clear final payoff inside one physically coherent real-world commercial environment. Decorative particles alone are not a concept.",
+      "Make the action bold, surprising, product-specific and sales-oriented, with an immediate first-second hook and the main payoff completed before the final second inside one physically coherent real-world commercial environment. By about 5.0 seconds, all meaningful action must resolve. Hold a clean, stable product hero composition for the final 0.8-1.0 second through the last frame; never end during a hand movement, product movement, camera move, reveal or other unfinished action. Decorative particles alone are not a concept.",
     ].join(" ");
 
     return truncateText(`${creativePrompt} ${safetyTail}`, 3000);
