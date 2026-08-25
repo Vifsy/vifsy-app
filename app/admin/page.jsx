@@ -15,6 +15,7 @@ import {
   LayoutGrid,
   Languages,
   LoaderCircle,
+  Music2,
   RefreshCw,
   ShieldCheck,
   Shapes,
@@ -367,6 +368,16 @@ export default function AdminDashboardPage() {
                   <span className="admin-card-kicker">{t("admin.dashboard.libraryKicker")}</span>
                   <h2>{t("admin.dashboard.imageBackgrounds")}</h2>
                   <p>{t("admin.dashboard.imageText")}</p>
+                </div>
+                <strong>{t("admin.dashboard.openLibrary")} →</strong>
+              </a>
+
+              <a className="admin-tool-card" href="/admin/music-library">
+                <span className="admin-tool-icon"><Music2 size={24} aria-hidden="true" /></span>
+                <div>
+                  <span className="admin-card-kicker">{t("admin.dashboard.libraryKicker")}</span>
+                  <h2>{t("admin.dashboard.musicLibrary")}</h2>
+                  <p>{t("admin.dashboard.musicText")}</p>
                 </div>
                 <strong>{t("admin.dashboard.openLibrary")} →</strong>
               </a>

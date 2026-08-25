@@ -17,6 +17,7 @@ import {
   waitForShotstackRender,
 } from "../../../../lib/shotstack.js";
 import { sampleRemoteVideoFrames } from "../../../../lib/videoFrameSampler.js";
+import { selectBestVideoMusic } from "../../../../lib/videoMusicLibrary.js";
 import {
   escapeProductSvg,
   getProductTypographyProfile,
@@ -1052,6 +1053,16 @@ async function getKlingFinalVideoSource({ openai, supabase, post, task, costTrac
       : 0;
     const deliveredMotionDurationSeconds = Math.max(2.5, durationSeconds - trimStartSeconds);
     const deliveredDurationSeconds = deliveredMotionDurationSeconds + closingHoldSeconds;
+    const musicSelection = await selectBestVideoMusic({
+      supabase,
+      context: postprocess.music_context || {
+        content_format: "animated_video",
+        product_title: postprocess.verified_product_title || null,
+        headline: postprocess.text_overlay_copy?.headline || null,
+        subheadline: postprocess.text_overlay_copy?.subheadline || null,
+      },
+      targetDurationSeconds: deliveredDurationSeconds,
+    });
     const edit = buildVideoOverlayEdit({
       videoUrl: task.videoUrl,
       textOverlayUrl: postprocess.text_overlay_url,
@@ -1060,6 +1071,10 @@ async function getKlingFinalVideoSource({ openai, supabase, post, task, costTrac
       overlayStartSeconds,
       trimStartSeconds,
       closingHoldSeconds,
+      musicUrl: musicSelection?.url || null,
+      musicDurationSeconds: musicSelection?.durationSeconds || null,
+      musicTrimStartSeconds: musicSelection?.trimStartSeconds || null,
+      musicVolume: musicSelection?.volume ?? 0.5,
     });
     renderId = await queueShotstackRender(edit);
     nextSelection = {
@@ -1068,6 +1083,15 @@ async function getKlingFinalVideoSource({ openai, supabase, post, task, costTrac
       overlay_start_seconds: overlayStartSeconds,
       closing_hero_hold_seconds: closingHoldSeconds,
       delivered_duration_seconds: Number(deliveredDurationSeconds.toFixed(3)),
+      music_applied: Boolean(musicSelection),
+      music_asset_id: musicSelection?.id || null,
+      music_asset_name: musicSelection?.name || null,
+      music_source_url: musicSelection?.url || null,
+      music_asset_duration_seconds: musicSelection?.durationSeconds || null,
+      music_trim_start_seconds: musicSelection?.trimStartSeconds ?? null,
+      music_volume: musicSelection?.volume ?? null,
+      music_selection_score: musicSelection?.score ?? null,
+      music_selection_reasons: musicSelection?.reasons || [],
       shotstack_closing_hero_applied: Boolean(postprocess.closing_hero_frame_url),
       shotstack_render_id: renderId,
       shotstack_status: "rendering",
@@ -1091,6 +1115,9 @@ async function getKlingFinalVideoSource({ openai, supabase, post, task, costTrac
       klingTaskId: post.kling_task_id,
       shotstackRenderId: renderId,
       overlayProvider: postprocess.text_overlay_provider || null,
+      musicAssetId: musicSelection?.id || null,
+      musicAssetName: musicSelection?.name || null,
+      musicTrimStartSeconds: musicSelection?.trimStartSeconds ?? null,
     });
   }
 

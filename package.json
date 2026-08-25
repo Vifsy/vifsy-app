@@ -137,7 +137,9 @@
     "test:v144.41": "node scripts/test-v144-41-transparent-creative-kling-typography.mjs",
     "test:v144.42": "node scripts/test-v144-42-complete-headlines-strict-kling-product-identity.mjs",
     "test:v144.43": "node scripts/test-v144-43-market-locale-product-lock.mjs",
-    "test:v144.44": "node scripts/test-v144-44-deliberate-kling-ending.mjs"
+    "test:v144.44": "node scripts/test-v144-44-deliberate-kling-ending.mjs",
+    "test:v144.48": "node scripts/test-v144-48-video-music-library.mjs",
+    "test:v144.49": "node scripts/test-v144-49-admin-music-library.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

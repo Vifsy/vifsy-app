@@ -42,6 +42,7 @@ import {
   waitForShotstackRender,
 } from "../../../../lib/shotstack.js";
 import { submitKlingImageToVideo } from "../../../../lib/kling.js";
+import { selectBestVideoMusic } from "../../../../lib/videoMusicLibrary.js";
 import { createGenerationCostTracker, wrapOpenAIForCostTracking } from "../../../../lib/generationCostTracking.js";
 import {
   buildVideoBackgroundProfile,
@@ -34958,6 +34959,22 @@ export async function generateAnimatedProductVideo({
     userId,
     postId,
   });
+  const musicSelection = await selectBestVideoMusic({
+    supabase,
+    context: {
+      content_type_id: rule?.content_type_id || null,
+      content_type_label: rule?.content_type_label || rule?.post_type || null,
+      content_format: rule?.content_format || "animated_video",
+      campaign_name: rule?.name || null,
+      goal: rule?.goal || rule?.content_goal || rule?.objective || null,
+      business_name: rule?.brand_profile?.business_name || null,
+      industry: rule?.brand_profile?.industry || rule?.brand_profile?.business_category || null,
+      product_title: rule?.website_item?.title || rule?.website_item?.item_title || null,
+      product_category: rule?.website_item?.category || rule?.website_item?.product_category || null,
+      post_copy: String(postContent || "").slice(0, 600),
+    },
+    targetDurationSeconds: ANIMATED_VIDEO_DURATION_SECONDS,
+  });
   const edit = buildProductPushEdit({
     backgroundVideoUrl: assets.backgroundVideoUrl,
     productDataUri: assets.productDataUri,
@@ -34966,6 +34983,10 @@ export async function generateAnimatedProductVideo({
     textOverlayUrl: assets.textOverlayUrl,
     logoOverlayUrl: assets.logoOverlayUrl,
     durationSeconds: ANIMATED_VIDEO_DURATION_SECONDS,
+    musicUrl: musicSelection?.url || null,
+    musicDurationSeconds: musicSelection?.durationSeconds || null,
+    musicTrimStartSeconds: musicSelection?.trimStartSeconds ?? null,
+    musicVolume: musicSelection?.volume ?? 0.5,
   });
   const renderId = await queueShotstackRender(edit);
 
@@ -34976,7 +34997,18 @@ export async function generateAnimatedProductVideo({
       video_status: "rendering",
       video_background_asset_id: assets.backgroundAsset.id,
       video_background_family: assets.backgroundAsset.family,
-      video_background_selection: assets.backgroundSelection,
+      video_background_selection: {
+        ...assets.backgroundSelection,
+        music_applied: Boolean(musicSelection),
+        music_asset_id: musicSelection?.id || null,
+        music_asset_name: musicSelection?.name || null,
+        music_source_url: musicSelection?.url || null,
+        music_asset_duration_seconds: musicSelection?.durationSeconds || null,
+        music_trim_start_seconds: musicSelection?.trimStartSeconds ?? null,
+        music_volume: musicSelection?.volume ?? null,
+        music_selection_score: musicSelection?.score ?? null,
+        music_selection_reasons: musicSelection?.reasons || [],
+      },
       updated_at: new Date().toISOString(),
     })
     .eq("id", postId);
@@ -41595,6 +41627,18 @@ product_research_model_used: websitePreparedRule.uses_website_content
                 verified_product_image_url: uploadedVerifiedProduct.imageUrl,
                 verified_product_source_url: candidate.item?.image_url || null,
                 verified_product_title: candidate.item?.title || candidate.item?.item_title || null,
+                music_context: {
+                  content_type_id: rule.content_type_id || null,
+                  content_type_label: rule.content_type_label || rule.post_type || null,
+                  content_format: rule.content_format || "animated_video",
+                  campaign_name: rule.name || null,
+                  goal: rule.goal || rule.content_goal || rule.objective || null,
+                  business_name: rule.brand_profile?.business_name || null,
+                  industry: rule.brand_profile?.industry || rule.brand_profile?.business_category || null,
+                  product_title: candidate.item?.title || candidate.item?.item_title || null,
+                  product_category: candidate.item?.category || candidate.item?.product_category || null,
+                  post_copy: String(generatedContent || "").slice(0, 600),
+                },
                 text_overlay_url: null,
                 text_overlay_storage_path: null,
                 text_overlay_provider: null,
