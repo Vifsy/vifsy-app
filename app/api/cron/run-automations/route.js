@@ -5324,6 +5324,8 @@ async function runProductEngineV2FinalCarouselExpansion({
     limit: targets.finalVerificationLimit,
     verificationCache,
     deadlineMs,
+    supabase,
+    rule,
   });
 
   if (isCampaignScopedWebsiteRule(rule) && verifiedExpansionItems.length) {
@@ -5747,6 +5749,8 @@ function extractStoreMapLinkNodes({
   html,
   pageUrl,
   originUrl,
+  websiteUrl = originUrl,
+  contentLanguage = "",
   parentDepth = 0,
   intent,
 }) {
@@ -5755,6 +5759,7 @@ function extractStoreMapLinkNodes({
   for (const link of extractLinks(html, pageUrl)) {
     const canonicalUrl = canonicalizeStoreMapUrl(link?.url, originUrl);
     if (!canonicalUrl) continue;
+    if (!matchesConfiguredWebsiteMarket(canonicalUrl, websiteUrl, contentLanguage)) continue;
 
     const hint = classifyStoreMapLinkHint({
       url: canonicalUrl,
@@ -5807,12 +5812,25 @@ async function buildOrRefreshWebsiteStoreMap({
     };
   }
 
-  const existingNodes = await getWebsiteStoreMapNodes({
+  const preferredContentLanguage =
+    rule?.language || rule?.content_language || rule?.brand_profile?.content_language || "";
+  const loadedNodes = await getWebsiteStoreMapNodes({
     supabase,
     userId: rule.user_id,
     brandProfileId: rule.brand_profile_id,
     originUrl,
   });
+  const existingNodes = loadedNodes.filter((node) =>
+    matchesConfiguredWebsiteMarket(node?.url || node?.canonical_url, websiteUrl, preferredContentLanguage)
+  );
+  if (loadedNodes.length > existingNodes.length) {
+    console.info("Store Map cross-market nodes excluded", {
+      ruleId: rule?.id || null,
+      websiteUrl,
+      preferredContentLanguage: preferredContentLanguage || null,
+      excludedCount: loadedNodes.length - existingNodes.length,
+    });
+  }
   const needsRefresh = shouldRefreshStoreMap(existingNodes, {
     minimumNodes: 6,
     maxAgeHours: STORE_MAP_REFRESH_HOURS,
@@ -5837,9 +5855,12 @@ async function buildOrRefreshWebsiteStoreMap({
       STORE_MAP_AGENT_TARGETS.mapCrawlPageLimit
     )
   );
+  const seedUrl = canonicalizeStoreMapUrl(websiteUrl, originUrl);
+  const hasExplicitLocaleScope = Boolean(getWebsiteLocalePathScope(websiteUrl));
+  const crawlStartUrl = hasExplicitLocaleScope && seedUrl ? seedUrl : originUrl;
   const queue = [
     {
-      url: originUrl,
+      url: crawlStartUrl,
       parentUrl: null,
       depth: 0,
       hintType: "category",
@@ -5849,8 +5870,7 @@ async function buildOrRefreshWebsiteStoreMap({
     },
   ];
 
-  const seedUrl = canonicalizeStoreMapUrl(websiteUrl, originUrl);
-  if (seedUrl && seedUrl !== originUrl) {
+  if (seedUrl && seedUrl !== crawlStartUrl) {
     const seedHint = classifyStoreMapLinkHint({
       url: seedUrl,
       text: "Saved website source",
@@ -5907,6 +5927,8 @@ async function buildOrRefreshWebsiteStoreMap({
         html,
         pageUrl: currentUrl,
         originUrl,
+        websiteUrl,
+        contentLanguage: preferredContentLanguage,
         parentDepth: Number(current?.depth || 0),
         intent,
       });
@@ -5992,7 +6014,9 @@ async function buildOrRefreshWebsiteStoreMap({
     }
   }
 
-  const nodes = dedupeStoreMapNodes(discoveredNodes);
+  const nodes = dedupeStoreMapNodes(discoveredNodes).filter((node) =>
+    matchesConfiguredWebsiteMarket(node?.url || node?.canonical_url, websiteUrl, preferredContentLanguage)
+  );
   await upsertWebsiteStoreMapNodes({
     supabase,
     userId: rule.user_id,
@@ -15792,8 +15816,12 @@ function filterWebsiteCatalogItemsForRule(items, rule) {
     const itemUrl = item?.url || item?.product_url || item?.item_url || "";
     const sourceUrl = item?.source_url || item?.website_url || itemUrl;
 
+    const preferredContentLanguage =
+      rule?.language || rule?.content_language || rule?.brand_profile?.content_language || "";
+
     return (
       !isLikelyBadDiscoveryPageUrl(itemUrl, sourceUrl) &&
+      matchesConfiguredWebsiteMarket(itemUrl, sourceUrl, preferredContentLanguage) &&
       !isProductKnownUnavailableForPromotion(item)
     );
   });
@@ -20908,50 +20936,92 @@ const WEBSITE_MARKET_PATH_CODES = new Set([
   "sk", "uk", "us",
 ]);
 
-function getConfiguredWebsiteMarketPath(websiteUrl) {
-  try {
-    const segments = new URL(websiteUrl).pathname
-      .split("/")
-      .map((segment) => segment.trim().toLowerCase())
-      .filter(Boolean);
-    const market = segments[0] || "";
-    const language = segments[1] || "";
+const WEBSITE_LANGUAGE_PATH_CODES = new Set([
+  "ar", "bg", "cs", "da", "de", "el", "en", "es", "fi", "fil", "fr", "hi",
+  "hu", "id", "it", "ja", "ko", "ms", "nb", "nl", "nn", "no", "pl", "pt",
+  "ro", "ru", "sv", "th", "tr", "uk", "vi", "zh",
+]);
 
-    if (!WEBSITE_MARKET_PATH_CODES.has(market)) {
-      return null;
+function getWebsiteLocalePathScope(value) {
+  try {
+    const segments = new URL(String(value || "")).pathname
+      .split("/")
+      .map((segment) => segment.trim().toLowerCase().replace(/_/g, "-"))
+      .filter(Boolean);
+    const first = segments[0] || "";
+    const second = segments[1] || "";
+    if (!first) return null;
+
+    const compound = first.match(/^([a-z]{2,3})-([a-z]{2})$/);
+    if (compound && WEBSITE_LANGUAGE_PATH_CODES.has(compound[1])) {
+      return {
+        language: compound[1],
+        market: compound[2],
+        prefix: [first],
+      };
     }
 
-    return {
-      market,
-      language: /^[a-z]{2}(?:-[a-z]{2})?$/.test(language) ? language : "",
-    };
+    if (WEBSITE_LANGUAGE_PATH_CODES.has(first) && WEBSITE_MARKET_PATH_CODES.has(second)) {
+      return { language: first, market: second, prefix: [first, second] };
+    }
+
+    if (WEBSITE_MARKET_PATH_CODES.has(first) && WEBSITE_LANGUAGE_PATH_CODES.has(second)) {
+      return { language: second, market: first, prefix: [first, second] };
+    }
+
+    if (WEBSITE_LANGUAGE_PATH_CODES.has(first) && WEBSITE_MARKET_PATH_CODES.has(first)) {
+      return { language: first, market: first, prefix: [first] };
+    }
+    if (WEBSITE_LANGUAGE_PATH_CODES.has(first)) {
+      return { language: first, market: "", prefix: [first] };
+    }
+    if (WEBSITE_MARKET_PATH_CODES.has(first)) {
+      return { language: "", market: first, prefix: [first] };
+    }
+
+    return null;
   } catch {
     return null;
   }
 }
 
-function matchesConfiguredWebsiteMarket(candidateUrl, websiteUrl) {
-  const configured = getConfiguredWebsiteMarketPath(websiteUrl);
-  if (!configured) return true;
+function getPreferredWebsiteContentLanguageCode(value) {
+  const raw = String(value || "").trim();
+  if (!raw || /^(?:auto|automatic|detect|detected)$/i.test(raw)) return "";
+  const normalized = normalizeSingleContentLanguage(raw, "English");
+  const locale = String(resolveUiLocaleFromLanguageName(normalized) || "").trim().toLowerCase();
+  return locale.split(/[-_]/)[0] || "";
+}
 
-  try {
-    const candidateSegments = new URL(candidateUrl).pathname
-      .split("/")
-      .map((segment) => segment.trim().toLowerCase())
-      .filter(Boolean);
+function matchesConfiguredWebsiteMarket(candidateUrl, websiteUrl, preferredContentLanguage = "") {
+  const configured = getWebsiteLocalePathScope(websiteUrl);
+  const candidate = getWebsiteLocalePathScope(candidateUrl);
 
-    if (candidateSegments[0] !== configured.market) {
+  // When the customer saved an explicit locale/market URL, that exact market
+  // is authoritative even if the post itself is written in another language.
+  // Reject only candidates that explicitly prove they belong to another locale;
+  // unscoped canonical URLs remain allowed because many Shopify sites canonicalize
+  // localized product pages back to /products/... on the same host.
+  if (configured) {
+    if (configured.language && candidate?.language && candidate.language !== configured.language) {
       return false;
     }
-
-    if (configured.language && candidateSegments[1] !== configured.language) {
+    if (configured.market && candidate?.market && candidate.market !== configured.market) {
       return false;
     }
-
     return true;
-  } catch {
+  }
+
+  // If the saved website URL is market-neutral (for example example.com), use
+  // the content language only as a conservative fallback. This prevents a
+  // Swedish automation from selecting an explicitly Danish /da-dk/ product
+  // while still allowing locale-neutral canonical product URLs.
+  const preferredLanguage = getPreferredWebsiteContentLanguageCode(preferredContentLanguage);
+  if (preferredLanguage && candidate?.language && candidate.language !== preferredLanguage) {
     return false;
   }
+
+  return true;
 }
 
 function isLikelyNonProductUrl(value, websiteUrl) {
@@ -23136,6 +23206,7 @@ function buildCampaignDiscoverySearches(campaignPrompt) {
 
 function buildLikelyDiscoveryUrls(websiteUrl, campaignPrompt = "", platform = "generic") {
   const origin = getWebsiteOrigin(websiteUrl);
+  const discoveryBase = getWebsiteSearchBaseUrls(websiteUrl)[0] || origin;
   const urls = [];
 
   if (websiteUrl && isHttpUrl(websiteUrl)) {
@@ -23154,33 +23225,33 @@ function buildLikelyDiscoveryUrls(websiteUrl, campaignPrompt = "", platform = "g
       const searchSlug = makeSearchSlug(search);
       const encoded = encodeURIComponent(search.replace(/-/g, " "));
       urls.push(
-        `${origin}/collections/${searchSlug}`,
-        `${origin}/collections/${searchSlug}/products.json?limit=250`,
-        `${origin}/search?q=${encoded}`,
-        `${origin}/search?type=product&q=${encoded}`,
-        `${origin}/collections/all/${searchSlug}`
+        `${discoveryBase}/collections/${searchSlug}`,
+        `${discoveryBase}/collections/${searchSlug}/products.json?limit=250`,
+        `${discoveryBase}/search?q=${encoded}`,
+        `${discoveryBase}/search?type=product&q=${encoded}`,
+        `${discoveryBase}/collections/all/${searchSlug}`
       );
     }
 
-    urls.push(`${origin}/collections/all`, `${origin}/products`);
+    urls.push(`${discoveryBase}/collections/all`, `${discoveryBase}/products`);
   } else if (normalizedPlatform === "woocommerce") {
     for (const search of campaignSearches) {
       const encoded = encodeURIComponent(search.replace(/-/g, " "));
       urls.push(
-        `${origin}/?s=${encoded}&post_type=product`,
-        `${origin}/product-category/${makeSearchSlug(search)}`
+        `${discoveryBase}/?s=${encoded}&post_type=product`,
+        `${discoveryBase}/product-category/${makeSearchSlug(search)}`
       );
     }
-    urls.push(`${origin}/shop`, `${origin}/product`);
+    urls.push(`${discoveryBase}/shop`, `${discoveryBase}/product`);
   } else if (normalizedPlatform === "magento") {
     for (const search of campaignSearches) {
       const encoded = encodeURIComponent(search.replace(/-/g, " "));
-      urls.push(`${origin}/catalogsearch/result/?q=${encoded}`);
+      urls.push(`${discoveryBase}/catalogsearch/result/?q=${encoded}`);
     }
   } else if (normalizedPlatform !== "quickbutik") {
     // Generic fallback paths are deliberately conservative. Platform-specific
     // paths are never tried until the platform has been positively detected.
-    urls.push(`${origin}/products`, `${origin}/produkter`, `${origin}/shop`, `${origin}/butik`);
+    urls.push(`${discoveryBase}/products`, `${discoveryBase}/produkter`, `${discoveryBase}/shop`, `${discoveryBase}/butik`);
   }
 
   urls.push(
@@ -23229,9 +23300,10 @@ function getWebsiteSearchBaseUrls(websiteUrl) {
     ? `${origin}/${localeSegments.join("/")}`
     : "";
 
-  return Array.from(
-    new Set([localizedBase, origin].filter(Boolean))
-  );
+  // A saved locale path is a market boundary, not merely a search hint.
+  // Do not also probe the bare origin because multilingual Shopify stores often
+  // expose sibling country/language catalogs there (for example /sv-se and /da-dk).
+  return localizedBase ? [localizedBase] : [origin];
 }
 
 function buildStoreSearchUrls(websiteUrl, campaignPrompt = "", platform = "generic") {
@@ -24545,7 +24617,22 @@ async function discoverProductCandidatesFromWebsite({
         PRODUCT_ENGINE_V2_POOL_TARGETS.minimumCandidatePool * 3
       );
 
-  const result = dedupeUrlItems(candidates)
+  const preferredContentLanguage =
+    rule?.language || rule?.content_language || rule?.brand_profile?.content_language || "";
+  const dedupedCandidates = dedupeUrlItems(candidates);
+  const marketScopedCandidates = dedupedCandidates.filter((item) =>
+    matchesConfiguredWebsiteMarket(item?.url, websiteUrl, preferredContentLanguage)
+  );
+  const crossMarketRejectedCount = Math.max(0, dedupedCandidates.length - marketScopedCandidates.length);
+  if (crossMarketRejectedCount > 0) {
+    console.info("Product discovery rejected cross-market locale candidates", {
+      ruleId: rule?.id || null,
+      websiteUrl,
+      preferredContentLanguage: preferredContentLanguage || null,
+      rejectedCount: crossMarketRejectedCount,
+    });
+  }
+  const result = marketScopedCandidates
     .filter((item) => !excludeUsed || !usedComparable.has(normalizeComparableValue(item.url)))
     .sort((a, b) => Number(b.score || 0) - Number(a.score || 0))
     .slice(0, resultLimit);
@@ -24588,7 +24675,13 @@ async function verifyDiscoveredWebsiteProductCandidates({
     websiteUrl
   )
     .filter((candidate) => !isBadProductUrl(candidate?.url))
-    .filter((candidate) => matchesConfiguredWebsiteMarket(candidate?.url, websiteUrl))
+    .filter((candidate) =>
+      matchesConfiguredWebsiteMarket(
+        candidate?.url,
+        websiteUrl,
+        rule?.language || rule?.content_language || rule?.brand_profile?.content_language || ""
+      )
+    )
     .slice(
     0,
     Math.max(limit * 3, PRODUCT_ENGINE_V2_POOL_TARGETS.minimumCandidatePool)
@@ -25791,7 +25884,7 @@ Return only the required JSON structure.`.trim();
       !currentUrl ||
       !isHttpUrl(currentUrl) ||
       !isSameOrSubdomainUrl(currentUrl, websiteUrl) ||
-      !matchesConfiguredWebsiteMarket(currentUrl, websiteUrl) ||
+      !matchesConfiguredWebsiteMarket(currentUrl, websiteUrl, rule?.language || rule?.content_language || rule?.brand_profile?.content_language || "") ||
       isLikelyNonProductUrl(currentUrl, websiteUrl) ||
       isLikelyBadDiscoveryPageUrl(currentUrl, websiteUrl) ||
       !isHttpUrl(imageUrl) ||
@@ -26665,6 +26758,15 @@ async function findPrimaryCampaignProductsWithWebSearch({
   requiredVerifiedCount = CAMPAIGN_PRIMARY_WEB_RESEARCH_MIN_VERIFIED,
 }) {
   const startedAt = Date.now();
+  const preferredContentLanguage =
+    rule?.language || rule?.content_language || rule?.brand_profile?.content_language || "";
+  cachedWebsiteItems = (cachedWebsiteItems || []).filter((item) =>
+    matchesConfiguredWebsiteMarket(
+      item?.url || item?.product_url || item?.item_url,
+      item?.source_url || item?.website_url || websiteUrl,
+      preferredContentLanguage
+    )
+  );
   const allowedDomain = getWebsiteFetchDomain(websiteUrl);
   const campaignTheme = getPrimaryCampaignWebResearchTheme(rule);
   const remainingBudgetMs = Number.isFinite(deadlineMs)
@@ -26891,7 +26993,7 @@ Return the result in the required JSON structure. Keep each reason concise and g
       !productUrl ||
       !isHttpUrl(productUrl) ||
       !isExactConfiguredWebsiteHostUrl(productUrl, websiteUrl) ||
-      !matchesConfiguredWebsiteMarket(productUrl, websiteUrl) ||
+      !matchesConfiguredWebsiteMarket(productUrl, websiteUrl, rule?.language || rule?.content_language || rule?.brand_profile?.content_language || "") ||
       isLikelyNonProductUrl(productUrl, websiteUrl) ||
       isLikelyBadDiscoveryPageUrl(productUrl, websiteUrl)
     ) {
@@ -27930,7 +28032,7 @@ For campaign carousels, stop once you have enough concrete product pages for a u
       continue;
     }
 
-    if (!matchesConfiguredWebsiteMarket(productUrl, websiteUrl)) {
+    if (!matchesConfiguredWebsiteMarket(productUrl, websiteUrl, rule?.language || rule?.content_language || rule?.brand_profile?.content_language || "")) {
       console.log("Product researcher returned product from the wrong website market", {
         ruleId: rule?.id,
         websiteUrl,
@@ -28015,7 +28117,7 @@ For campaign carousels, stop once you have enough concrete product pages for a u
       continue;
     }
 
-    if (!matchesConfiguredWebsiteMarket(pageUrl, websiteUrl)) {
+    if (!matchesConfiguredWebsiteMarket(pageUrl, websiteUrl, rule?.language || rule?.content_language || rule?.brand_profile?.content_language || "")) {
       console.log("Product researcher returned discovery page from the wrong website market", {
         ruleId: rule?.id,
         websiteUrl,

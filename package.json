@@ -135,7 +135,8 @@
     "test:v144.39": "node scripts/test-v144-39-universal-reliable-product-lock.mjs",
     "test:v144.40": "node scripts/test-v144-40-product-image-gate-isolation.mjs",
     "test:v144.41": "node scripts/test-v144-41-transparent-creative-kling-typography.mjs",
-    "test:v144.42": "node scripts/test-v144-42-complete-headlines-strict-kling-product-identity.mjs"
+    "test:v144.42": "node scripts/test-v144-42-complete-headlines-strict-kling-product-identity.mjs",
+    "test:v144.43": "node scripts/test-v144-43-market-locale-product-lock.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
