@@ -10,7 +10,10 @@ import {
   resolveUiLocaleFromLanguageName,
 } from "../../../../lib/i18n/serverUiText.js";
 import { assertPublicHttpUrl } from "../../../../lib/security.js";
-import { normalizeSingleContentLanguage } from "../../../../lib/contentLanguage.js";
+import {
+  normalizeSingleContentLanguage,
+  resolveContentLanguagePreference,
+} from "../../../../lib/contentLanguage.js";
 import {
   isConnectionAuthFailure,
   markConnectionExpiredAndAlert,
@@ -3412,14 +3415,14 @@ function getLanguageInstruction(language) {
 
   if (!language || language === "Auto") {
     return `
-Language: Auto-detect from the user's instruction.
+Language: Use the analyzed customer-facing content language from the Brand profile.
 
 Important language rule:
-- Write the final post in the same language as the user's instruction.
-- If the user's instruction is in Swedish, write the post in Swedish.
-- If the user's instruction is in English, write the post in English.
-- If the user's instruction is in Danish, Norwegian, German, Spanish, French or any other language, write the post in that same language.
-- Do not translate to English unless the user specifically asks for English.
+- The Brand profile content language is authoritative when it is available.
+- Product titles, product metadata, source pages, alternate storefront locales and imported brand terms may use another language; never adopt that surrounding language for the marketing copy.
+- Keep exact brand/model/product names unchanged, but write every surrounding customer-facing sentence, headline, descriptor and CTA in the Brand profile content language.
+- Only if the Brand profile has no usable content language may you fall back to the language of the user's instruction.
+- Do not mix multiple languages in the same post.
 `.trim();
   }
 
@@ -3461,6 +3464,8 @@ Website product source URL: ${
 }
 Industry / business type: ${brandProfile.industry || "Not provided"}
 Target audience: ${brandProfile.target_audience || "Not provided"}
+Market: ${brandProfile.content_market || brandProfile.country_code || "Not provided"}
+Content language: ${brandProfile.content_language || "Not provided"}
 `.trim();
 }
 
@@ -12406,7 +12411,7 @@ async function getBrandProfileForRule(supabase, rule) {
   const { data, error } = await supabase
     .from("brand_profiles")
     .select(
-  "id, business_name, website_url, website_product_source_url, website_product_mode_available, brand_description, industry, target_audience, content_language, logo_url, logo_storage_path, logo_enabled_by_default"
+  "id, business_name, website_url, website_product_source_url, website_product_mode_available, brand_description, industry, target_audience, content_market, country_code, content_language, logo_url, logo_storage_path, logo_enabled_by_default"
 )
     .eq("id", rule.brand_profile_id)
     .eq("user_id", rule.user_id)
@@ -12425,6 +12430,36 @@ async function getBrandProfileForRule(supabase, rule) {
 
   return data || null;
 }
+
+function resolveAutomationPostLanguage(rule, brandProfile) {
+  const requestedLanguage = String(rule?.language || "").trim();
+  const analyzedLanguage = String(brandProfile?.content_language || "").trim();
+  const websiteUrl =
+    brandProfile?.website_url ||
+    brandProfile?.website_product_source_url ||
+    rule?.website_url ||
+    rule?.content_source_url ||
+    "";
+
+  const language = resolveContentLanguagePreference({
+    requestedLanguage,
+    analyzedLanguage,
+    websiteUrl,
+    fallback: "English",
+  });
+
+  const source =
+    requestedLanguage && !/^(?:auto|automatic|other)$/i.test(requestedLanguage)
+      ? "explicit_rule"
+      : analyzedLanguage && !/^(?:auto|automatic|other)$/i.test(analyzedLanguage)
+        ? "brand_analysis"
+        : websiteUrl
+          ? "website_locale"
+          : "fallback";
+
+  return { language, source };
+}
+
 function normalizeWebsiteUrl(value) {
   const trimmedValue = String(value || "").trim();
 
@@ -34212,17 +34247,19 @@ function cleanKlingOverlayTextLine(value, maxWords = 7, maxChars = 58) {
 }
 
 function buildKlingAdvertisingOverlayCopy({ postContent, websiteItem }) {
-  const firstCaptionLine = String(postContent || "")
+  const captionLines = String(postContent || "")
     .split(/\n+/)
     .map((line) => String(line || "").trim())
-    .find(Boolean) || "";
+    .filter(Boolean);
+  const firstCaptionLine = captionLines[0] || "";
   let headline = cleanKlingOverlayTextLine(firstCaptionLine, 7, 58);
   const productTitle = sanitizeProductTitleForCard(
     websiteItem?.title || websiteItem?.item_title || ""
   );
   if (!headline) {
-    // Product labels are independently meaningful and therefore a safer
-    // multilingual fallback than truncating generated marketing prose.
+    // Product labels are independently meaningful and remain a safer complete
+    // fallback than truncating generated prose. Do not invent or translate a
+    // model name when the caption headline is unusable.
     headline = cleanKlingOverlayTextLine(productTitle, 10, 72);
   }
   const presentation = getCarouselProductLabelPresentation(
@@ -34236,12 +34273,19 @@ function buildKlingAdvertisingOverlayCopy({ postContent, websiteItem }) {
       72
     );
   }
-  const descriptorCandidate =
-    String(presentation?.descriptor || "").trim() ||
-    String(presentation?.title || productTitle || "").trim();
-  let subheadline = cleanKlingOverlayTextLine(descriptorCandidate, 5, 42);
-  if (subheadline && headline.toLocaleLowerCase() === subheadline.toLocaleLowerCase()) {
-    subheadline = "";
+
+  // v144.50 language truth: customer-facing overlay copy must come from the
+  // already language-locked caption, never from a storefront descriptor. A
+  // verified product page may expose a sibling-market language even when the
+  // customer brand targets another language. Blank is safer than a correct
+  // product descriptor in the wrong customer-facing language.
+  let subheadline = "";
+  for (const line of captionLines.slice(1, 4)) {
+    const candidate = cleanKlingOverlayTextLine(line, 5, 42);
+    if (candidate && candidate.toLocaleLowerCase() !== headline.toLocaleLowerCase()) {
+      subheadline = candidate;
+      break;
+    }
   }
   return { headline, subheadline };
 }
@@ -40300,6 +40344,29 @@ async function runAutomationCron(request, options = {}) {
 
         automationCurrentStage = "brand_profile_load";
         automationBrandProfile = await getBrandProfileForRule(supabase, rule);
+        const resolvedPostLanguage = resolveAutomationPostLanguage(
+          rule,
+          automationBrandProfile
+        );
+        // Runtime language authority: an explicit non-Auto post language wins;
+        // otherwise the analyzed customer-facing brand language wins; only then
+        // do we fall back to the configured website locale. Mutating this
+        // in-memory rule makes the same language authoritative for product
+        // locale filtering, caption generation, image/video copy and post save.
+        rule.language = resolvedPostLanguage.language;
+        rule.content_language = resolvedPostLanguage.language;
+        console.info("Automation post language resolved", {
+          ruleId: rule.id,
+          brandProfileId: rule.brand_profile_id || null,
+          language: resolvedPostLanguage.language,
+          source: resolvedPostLanguage.source,
+          analyzedLanguage: automationBrandProfile?.content_language || null,
+          websiteUrl:
+            automationBrandProfile?.website_url ||
+            automationBrandProfile?.website_product_source_url ||
+            rule.website_url ||
+            null,
+        });
         if (automationBrandProfile) {
           summary.brand_profile_found += 1;
           await updateAutomationRunLogBrandSnapshot({
@@ -41177,6 +41244,8 @@ const focusedPageContext = await prepareFocusedPageContextForRule(rule);
 
         let ruleWithBrandProfile = {
           ...websitePreparedRule,
+          language: rule.language,
+          content_language: rule.language,
           brand_profile: brandProfile,
           website_item: websiteItem,
           website_items: websiteItems,
@@ -41232,7 +41301,7 @@ const { data: post, error: postError } = await supabase
             content: generatedContent,
             platform: rule.platform || null,
             tone: rule.tone || null,
-            language: normalizeSingleContentLanguage(rule.language || brandProfile?.content_language, "English"),
+            language: normalizeSingleContentLanguage(ruleWithBrandProfile.language || brandProfile?.content_language, "English"),
             post_type: rule.post_type || null,
             website_url:
   websiteItem?.url ||

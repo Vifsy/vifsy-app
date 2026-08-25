@@ -5,6 +5,7 @@ import { buildProductContentContract } from "../../../../../lib/productEngineV2"
 import { snapshotAdminPostVersion } from "../../../../../lib/adminPostVersions";
 import { createGenerationCostTracker, wrapOpenAIForCostTracking } from "../../../../../lib/generationCostTracking";
 import {
+import { resolveContentLanguagePreference } from "../../../../../lib/contentLanguage";
   applyLogoOverlayIfNeeded,
   generateAnimatedProductVideo,
   generateLockedProductPostContentForUse,
@@ -205,6 +206,12 @@ export async function POST(request) {
           ruleId: ruleId || "admin-product-regeneration",
         });
     const product = normalizeProduct(lockedProduct, productUrl);
+    const effectiveLanguage = resolveContentLanguagePreference({
+      requestedLanguage: rule?.language,
+      analyzedLanguage: brandProfile?.content_language,
+      websiteUrl: brandProfile?.website_url || websiteUrl || productUrl || "",
+      fallback: post?.language || "English",
+    });
     const enhancedRule = {
       ...(rule || {}),
       id: rule?.id || ruleId || `admin-${occurrenceId || reviewCaseId || post?.id || "repair"}`,
@@ -213,7 +220,7 @@ export async function POST(request) {
       brand_profile: brandProfile || null,
       content_type_id: rule?.content_type_id || post?.post_type || occurrence?.content_type_id || reviewCase?.content_type_label || "website_item",
       content_format: post?.content_format || occurrence?.content_format || reviewCase?.content_format || rule?.content_format || "single_image",
-      language: post?.language || rule?.language || brandProfile?.content_language || "English",
+      language: effectiveLanguage,
       tone: post?.tone || rule?.tone || "Professional",
       platform: post?.platform || rule?.platform || "Instagram",
       uses_website_content: true,

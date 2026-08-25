@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import { adminContextError, getAdminContext } from "../../../../../lib/adminAuth";
 import { snapshotAdminPostVersion } from "../../../../../lib/adminPostVersions";
 import { createGenerationCostTracker, wrapOpenAIForCostTracking } from "../../../../../lib/generationCostTracking";
+import { resolveContentLanguagePreference } from "../../../../../lib/contentLanguage";
 import {
   applyLogoOverlayIfNeeded,
   createEmergencySocialCardUpload,
@@ -126,8 +127,16 @@ export async function POST(request) {
     if (!userId) throw new Error("The customer account for this generation is missing.");
 
     const sourceUrl = requestedSourceUrl || cleanUrl(post?.website_url) || cleanUrl(rule.content_source_url) || cleanUrl(rule.website_url) || cleanUrl(brandProfile?.website_url);
+    const effectiveLanguage = resolveContentLanguagePreference({
+      requestedLanguage: rule?.language,
+      analyzedLanguage: brandProfile?.content_language,
+      websiteUrl: brandProfile?.website_url || sourceUrl || rule?.website_url || "",
+      fallback: post?.language || "English",
+    });
     const enhancedRule = {
       ...rule,
+      language: effectiveLanguage,
+      content_language: effectiveLanguage,
       user_id: userId,
       brand_profile_id: brandProfileId,
       brand_profile: brandProfile || null,
@@ -180,7 +189,7 @@ export async function POST(request) {
         content: generatedContent,
         platform: rule.platform || "instagram",
         tone: rule.tone || null,
-        language: rule.language || brandProfile?.content_language || "English",
+        language: effectiveLanguage,
         post_type: rule.post_type || reviewCase?.content_type_label || occurrence?.content_type_label || "Post",
         content_format: contentFormat,
         website_url: sourceUrl || null,
