@@ -13908,8 +13908,8 @@ async function generateKlingDirectSceneOpeningFrame({
 
   const verifiedViewInstruction = getKlingVerifiedViewInstruction(referenceSafety);
   const interactionInstruction = fullProductInteractionSafe
-    ? `Start with the exact product already being genuinely used in the scene. For apparel, put the exact garment naturally on a person while preserving the exact visible color, print, words/logo and design. For handheld products, have a person naturally hold/use the exact product. For tools, appliances, sports or outdoor products, show authentic product-specific use. The product must never appear first as a floating cutout, catalog card, isolated hero object, pedestal display or pasted layer. ${verifiedViewInstruction}`
-    : `The source is cropped or identity-sensitive. Keep only the exact verified visible portion/view of the product and place that same verified view naturally into a real context. Do not complete, extend, rotate or invent unseen product surfaces. Use a believable close-up/detail-shot commercial composition instead of a floating catalog object. ${verifiedViewInstruction}`;
+    ? `Start with the exact product already integrated naturally into a believable real scene. Visual completeness only means the visible product geometry is safe to preserve; it does NOT prove how the product operates. Apparel may be worn, shoes may be worn/walked in, a bicycle may be ridden/pedaled, and similarly universally self-evident direct physical use is allowed. For any ambiguous mechanism or output, keep the product mechanically passive: a person may hold, carry, present or move it without pressing, opening, pumping, spraying, dispensing, switching, unlatching, removing parts or implying an unverified function. Perfume/cosmetic bottles may be held and presented but must not be pressed, sprayed, pumped, dispensed, opened or have parts removed unless the verified product context explicitly proves that exact mechanism. The product must never appear first as a floating cutout, catalog card, isolated hero object, pedestal display or pasted layer. ${verifiedViewInstruction}`
+    : `The source is cropped or identity-sensitive. Keep only the exact verified visible portion/view of the product and place that same verified view naturally into a real context. Do not complete, extend, rotate or invent unseen product surfaces or mechanisms. Keep functionally ambiguous products mechanically passive; hands may hold or present them without operating controls, opening parts or producing outputs. Use a believable close-up/detail-shot commercial composition instead of a floating catalog object. ${verifiedViewInstruction}`;
 
   const prompt = `
 Create the literal FIRST FRAME of a premium 9:16 social-media product commercial for this verified ecommerce product:
@@ -14110,7 +14110,7 @@ function getKlingProductPromptFallback({ rule, postContent, referenceSafety = nu
   const fullProductInteractionSafe = referenceSafety?.fullProductInteractionSafe === true;
   const verifiedViewInstruction = getKlingVerifiedViewInstruction(referenceSafety);
   const interactionDirection = fullProductInteractionSafe
-    ? "The reference appears to show a sufficiently isolated/full product. The product MUST be genuinely used in the scene in the most natural product-specific way: apparel should be worn by a person while keeping the exact visible print/color/design, handheld products should be held or operated, tools should be used, appliances should be operated, and other products should participate in a believable real-world action. Do not settle for floating, spinning or merely decorating the product."
+    ? "The reference appears to show a sufficiently isolated/full product, so natural physical interaction is allowed, but visual completeness does NOT prove product functionality. Prefer safe, identity-preserving interaction such as wearing apparel, holding/carrying an item, placing it in context, or obvious direct physical use. NEVER press, pump, spray, dispense, open, close, twist, remove a cap, activate, switch, unfold, transform, attach/detach parts, operate controls, or demonstrate a feature unless that exact action is explicitly supported by the verified product description/data or is universally self-evident from the visible product itself (for example pedaling a clearly visible bicycle, walking in shoes, wearing clothing, or sitting on a chair). If functionality is uncertain, keep the product passive and move the person, hand, camera, props or environment instead."
     : "The reference is cropped or not safely isolated. Do NOT zoom out, complete the product, or reveal any unseen area. Keep exactly the same visible crop/view and create the advertising action around the visible product area instead of inventing missing product pixels.";
   const identityMotionDirection = fullProductInteractionSafe
     ? "Natural product-use motion is allowed, but preserve identity-defining geometry, visible design/print, colors, branding and proportions. For rigid products, the number, position, shape and size of visible buttons/controls/openings, material boundaries, color blocking and surface finish are immutable. If an action would require redrawing or redesigning the object, keep the product itself visually rigid and move the hand, camera or environment instead. Apparel may be worn while the exact visible design remains prominent; rigid products must not morph or gain invented hardware or surfaces."
@@ -14161,7 +14161,7 @@ async function buildKlingProductVideoPrompt({ openai, rule, postContent, referen
         {
           role: "system",
           content:
-            "You are Spreelo's short-form product video director. Return strict JSON only. Design one highly attention-grabbing, sales-oriented but physically plausible 6-second concept that begins inside a believable real-world environment from frame zero and ends with a deliberate stable product hero shot. Product identity safety is more important than spectacle.",
+            "You are Spreelo's short-form product video director. Return strict JSON only. Design one highly attention-grabbing, sales-oriented but physically plausible 6-second concept that begins inside a believable real-world environment from frame zero and ends with a deliberate stable product hero shot. Product identity and functional truth are more important than spectacle. Never invent how a product operates merely because its appearance or category suggests a plausible mechanism.",
         },
         {
           role: "user",
@@ -14188,13 +14188,20 @@ Creative goals:
 - do not linger on a static, staged or composited opening frame; begin believable in-scene motion/action immediately and be fully inside the real commercial world within the first 0.2-0.3 second
 - create a pattern interrupt in the first 0.5-1.0 second using a real product-relevant event, person, animal, physical action or purposeful camera/action beat inside that real environment; decorative particles alone are not enough
 - the result must feel like a professionally directed short commercial, not a prettier version of a simple animated product post
-- when Full-product interaction allowed is YES, the product MUST be genuinely used in the scene in the most natural way for that exact product: apparel worn by a person, handheld items held/operated, tools used, appliances operated, sports/outdoor gear used in context, etc. BUT usage never grants permission to reveal an unverified product side: the camera-facing verified view must remain locked for the entire clip
+- when Full-product interaction allowed is YES, natural physical interaction is allowed, but this means VISUAL interaction safety only; it does NOT prove how the product functions. Apparel may be worn, ordinary objects may be held/carried/placed, and universally self-evident direct physical use is allowed (for example pedaling a clearly visible bicycle, walking in shoes, wearing clothing, or sitting on a chair). NEVER invent or infer a mechanism or feature: do not press, pump, spray, dispense, open, close, twist, remove a cap, activate, switch, unfold, transform, attach/detach parts, operate a control, or show an output/effect unless that exact action is explicitly supported by the verified product description/data or is visibly unambiguous. If uncertain, keep the product passive and create the action with the person, hand, camera, props or environment. Usage never grants permission to reveal an unverified product side; the camera-facing verified view must remain locked for the entire clip
 - when Full-product interaction allowed is NO, never fabricate missing product areas just to show use; preserve the exact visible crop and create the story/action around that crop
 - escalate quickly and deliver the MAIN visual payoff before the final second; do not save a major action, reveal, hand movement or camera move for the final frame
 - complete all meaningful action by about 5.0 seconds, then use the final 0.8-1.0 second as a clean, stable product hero shot: major hand/product/camera/environment motion has settled, the composition is resolved, and the final frame is intentionally held rather than cut off mid-action
 - the closing hero shot must still be part of the same believable scene; do not switch to a new end card, studio backdrop or graphic screen
 - feel native to TikTok/Reels/Shorts and commercially persuasive, not a generic studio spin, slow zoom, floating product or product-with-particles demo
 - one coherent 6-second commercial world with continuous physical space and natural lighting; camera framing/action may evolve, but do not teleport from a studio/graphic backdrop into a different lifestyle location
+
+FUNCTIONAL TRUTH SAFETY:
+- never infer a product function from appearance, category stereotypes or general world knowledge when the verified product data does not prove that exact function
+- a fully visible product is NOT the same as a functionally verified product
+- never invent a button, pump, sprayer, dispenser, latch, hinge behavior, opening method, removable part, control, output, transformation or operating sequence
+- perfume/cosmetic bottles may be held and presented, but do not press the cap/top, spray, pump, dispense, open or remove parts unless the verified product data explicitly proves that exact mechanism/action
+- when in doubt, keep the product mechanically passive and put the motion in the hand/person/camera/props/environment instead
 
 TEXT SAFETY:
 - do not generate any new readable overlay text, captions, slogans, prices, labels or typography
@@ -14207,9 +14214,9 @@ NON-NEGOTIABLE PRODUCT RULES:
 - if Full-product interaction allowed is NO: keep the SAME visible camera angle/crop throughout, show only surfaces/details already visible, never extend/complete the crop, and never rotate/orbit/tilt to reveal a new area
 - if Full-product interaction allowed is YES: natural product use and modest physical motion are allowed, but NEVER reveal a side/surface that is absent from the retailer image. Keep the same verified camera-facing orientation for the entire clip
 - for apparel specifically, a person may wear the exact garment while the visible print/color/design stays unchanged and prominent. If the retailer image verifies only the BACK, the wearer must stay back-facing/three-quarter-back and must never turn far enough for the front to become visible. If only the FRONT is verified, the reverse applies. Do not replace it with a similar garment
-- for rigid products, interaction must not morph geometry, move controls/components, alter ports/hardware, or fabricate hidden product surfaces
+- for rigid products, interaction must not morph geometry, move controls/components, alter ports/hardware, fabricate hidden product surfaces, or imply that a visible component is a control/mechanism unless verified product data proves that function
 - every visible control/detail is immutable: never add, remove, relocate, resize or reshape buttons, switches, controls, openings, seams, joints or hardware; preserve material boundaries, surface finish, texture and color blocking exactly
-- if the desired action would require the model to redraw or redesign the product, reduce product motion and move the hand/person, camera, props or environment instead
+- if the desired action would require the model to redraw or redesign the product, reduce product motion rather than redraw the product; move the hand/person, camera, props or environment instead
 `,
         },
       ],
@@ -14225,12 +14232,12 @@ NON-NEGOTIABLE PRODUCT RULES:
       "CRITICAL PRODUCT LOCK: the first frame is authoritative.",
       getKlingVerifiedViewInstruction(referenceSafety),
       fullProductInteractionSafe
-        ? "Genuine product use is required. Use the exact product naturally in-scene while preserving its verified identity-defining design, print, color, branding and proportions. Apparel may be worn with its exact visible design preserved; rigid products must not morph or gain invented hardware/surfaces."
+        ? "Natural product interaction is allowed, but visual completeness does not verify functionality. Apparel may be worn and ordinary products may be safely held/carried/placed; only universally self-evident direct physical use is allowed without explicit feature evidence. Do not operate, activate, press, pump, spray, dispense, open, twist, remove parts, switch, unfold or demonstrate any mechanism unless the verified product data explicitly supports that exact action. Rigid products must not morph or gain invented hardware/surfaces."
         : "The reference is cropped or uncertain: keep exactly the same visible crop/view for the whole clip, never zoom out to complete it, and never reveal or invent any unseen side, back, top, bottom, underside, interior, hidden edge or label.",
       "The first visible frame must already look like a finished real-world commercial scene. Continue the supplied natural environment immediately; no solid-color, monochrome, gradient, abstract or empty studio intro and no backdrop-to-lifestyle transition.",
       "Do not begin with or create a small image card that expands to full screen.",
       "Do not linger on a static, staged or composited opening frame. The clip must feel already in-progress from the first instant and be fully inside believable scene action within the first 0.2-0.3 second.",
-      "No product morph, redesign or substitution with a similar product. Never add/remove/move visible buttons, controls, openings, seams or hardware, and never change visible material boundaries, surface finish or color blocking. If necessary, reduce product motion rather than redraw the product.",
+      "No product morph, redesign or substitution with a similar product. Never add/remove/move visible buttons, controls, openings, seams or hardware, and never change visible material boundaries, surface finish or color blocking. FUNCTIONAL TRUTH OVERRIDES ANY EARLIER CREATIVE IDEA: never infer that a visible part is a button, pump, sprayer, dispenser, latch, removable cap or control, and never show a product output/effect or operating sequence unless the verified product data explicitly proves that exact action or the direct physical use is universally self-evident. If functionality is uncertain, keep the product mechanically passive and move the hand/person/camera/props/environment instead.",
       "Do not generate any new readable overlay text, captions, slogans, prices, labels or typography. Spreelo adds professional typography after the video is generated. Preserve only text physically present on the verified product reference.",
       "No fake logos and no watermark.",
       "Make the action bold, surprising, product-specific and sales-oriented, with an immediate first-second hook and the main payoff completed before the final second inside one physically coherent real-world commercial environment. By about 5.0 seconds, all meaningful action must resolve. Hold a clean, stable product hero composition for the final 0.8-1.0 second through the last frame; never end during a hand movement, product movement, camera move, reveal or other unfinished action. Decorative particles alone are not a concept.",
@@ -21978,6 +21985,15 @@ async function extractProductDataFromProductPage({
     effectiveProductUrl,
     title
   );
+  // v144.47: keep the provenance of the image that Product Engine V2 has
+  // already bound to this exact fetched product page. The final product-lock
+  // stage must not throw away this proof and then fail simply because a second,
+  // stricter HTML parser represents the same storefront differently.
+  let productImagePageBound = Boolean(imageUrl);
+  let productImagePageBoundSource = imageUrl
+    ? "product_engine_exact_page_static"
+    : null;
+  let productImageSourcePageUrl = imageUrl ? effectiveProductUrl : null;
 
   // A page can prove that it is a real product while keeping its main gallery
   // behind client-side rendering. In that case render once and trust the
@@ -21999,6 +22015,9 @@ async function extractProductDataFromProductPage({
       if (renderedImageUrl) {
         imageUrl = renderedImageUrl;
         effectiveProductUrl = renderedProductUrl;
+        productImagePageBound = true;
+        productImagePageBoundSource = "product_engine_exact_page_rendered";
+        productImageSourcePageUrl = renderedProductUrl;
         console.log("Product page main-gallery image recovered after rendered verification", {
           productUrl,
           finalUrl: effectiveProductUrl,
@@ -22025,6 +22044,31 @@ async function extractProductDataFromProductPage({
       ))
   ) {
     imageUrl = webSearchProduct.image_url;
+    const hintedSourcePageUrl = String(
+      webSearchProduct?.product_image_source_page_url || ""
+    ).trim();
+    const hintedSourceMatchesExactPage = Boolean(
+      webSearchProduct?.product_image_page_bound === true &&
+        hintedSourcePageUrl &&
+        normalizeComparableValue(
+          canonicalizeWebsiteProductUrl(hintedSourcePageUrl, effectiveProductUrl) ||
+            hintedSourcePageUrl
+        ) ===
+          normalizeComparableValue(
+            canonicalizeWebsiteProductUrl(effectiveProductUrl, effectiveProductUrl) ||
+              effectiveProductUrl
+          )
+    );
+    productImagePageBound = hintedSourceMatchesExactPage;
+    productImagePageBoundSource = hintedSourceMatchesExactPage
+      ? String(
+          webSearchProduct?.product_image_page_bound_source ||
+            "verified_exact_page_hint"
+        )
+      : "discovery_image_hint";
+    productImageSourcePageUrl = hintedSourceMatchesExactPage
+      ? hintedSourcePageUrl
+      : null;
   }
 
   const normalizedItem = normalizeWebsiteItem(
@@ -22099,6 +22143,23 @@ async function extractProductDataFromProductPage({
     page_type: pageClassification.pageType === "unknown" ? "product" : pageClassification.pageType,
     page_type_confidence: pageClassification.confidence,
     page_type_reason: pageClassification.reason,
+    // v144.47: this is deterministic exact-page evidence, not a semantic AI
+    // approval. The final resolver may reuse it only when the source page URL
+    // is the same product URL and all concrete-product checks passed.
+    product_image_page_bound: Boolean(
+      productImagePageBound && concreteProductProof && imageUrl
+    ),
+    product_image_page_bound_source:
+      productImagePageBound && concreteProductProof && imageUrl
+        ? productImagePageBoundSource
+        : null,
+    product_image_source_page_url:
+      productImagePageBound && concreteProductProof && imageUrl
+        ? productImageSourcePageUrl || effectiveProductUrl
+        : null,
+    technical_identity_same_page_verified: Boolean(
+      productImagePageBound && concreteProductProof && imageUrl
+    ),
     last_verified_at: new Date().toISOString(),
   };
 
@@ -26005,6 +26066,111 @@ Return only the required JSON structure.`.trim();
   };
 }
 
+function buildLockedProductFromVerifiedExactPageCandidate({
+  candidate,
+  websiteUrl,
+}) {
+  const productUrl =
+    canonicalizeWebsiteProductUrl(
+      candidate?.url || candidate?.product_url || candidate?.item_url,
+      websiteUrl
+    ) || String(candidate?.url || candidate?.product_url || candidate?.item_url || "").trim();
+  const title = String(candidate?.title || candidate?.item_title || "").trim();
+  const imageUrl = String(candidate?.image_url || candidate?.imageUrl || "").trim();
+  const sourcePageUrl = String(candidate?.product_image_source_page_url || "").trim();
+  const confidence = Number(candidate?.product_confidence || 0);
+  const pageConfidence = Number(candidate?.page_type_confidence || 0);
+  const samePage = Boolean(
+    productUrl &&
+      sourcePageUrl &&
+      normalizeComparableValue(
+        canonicalizeWebsiteProductUrl(sourcePageUrl, productUrl) || sourcePageUrl
+      ) ===
+        normalizeComparableValue(
+          canonicalizeWebsiteProductUrl(productUrl, productUrl) || productUrl
+        )
+  );
+
+  // v144.47: Product Engine V2 has already fetched the exact direct product
+  // page, proved that it is one concrete product and bound these pixels to that
+  // same page. Reusing that evidence is safer than reparsing the same HTML with
+  // a second parser that may disagree about JSON-LD/canonical conventions.
+  // Discovery/listing thumbnails never qualify because product_image_page_bound
+  // and samePage are mandatory.
+  if (
+    candidate?.product_page_verified !== true ||
+    candidate?.concrete_product_verified !== true ||
+    candidate?.product_image_page_bound !== true ||
+    candidate?.technical_identity_same_page_verified !== true ||
+    !samePage ||
+    confidence < CAROUSEL_PRODUCT_CONFIDENCE_SOFT_MIN ||
+    (pageConfidence && pageConfidence < 78) ||
+    !title ||
+    !productUrl ||
+    !imageUrl ||
+    !isHttpUrl(productUrl) ||
+    !isHttpUrl(imageUrl) ||
+    (websiteUrl && !isSameOrSubdomainUrl(productUrl, websiteUrl)) ||
+    (websiteUrl && !matchesConfiguredWebsiteMarket(productUrl, websiteUrl)) ||
+    isLikelyNonProductUrl(productUrl, websiteUrl || productUrl) ||
+    isLikelyBadDiscoveryPageUrl(productUrl, websiteUrl || productUrl) ||
+    isBadProductImageUrl(imageUrl)
+  ) {
+    return null;
+  }
+
+  const imageUrls = Array.from(
+    new Set(
+      [
+        imageUrl,
+        ...(Array.isArray(candidate?.locked_product_image_urls)
+          ? candidate.locked_product_image_urls
+          : []),
+      ]
+        .map((value) => String(value || "").trim())
+        .filter((value) => isHttpUrl(value) && !isBadProductImageUrl(value))
+    )
+  ).slice(0, 12);
+
+  return {
+    title,
+    url: productUrl,
+    identifier: String(
+      candidate?.locked_product_identifier || candidate?.product_identifier || ""
+    ).trim(),
+    brand: String(
+      candidate?.locked_product_brand || candidate?.product_brand || candidate?.brand || ""
+    ).trim(),
+    category: String(
+      candidate?.locked_product_category || candidate?.category || ""
+    ).trim(),
+    color: String(
+      candidate?.locked_product_color || candidate?.product_color || ""
+    ).trim(),
+    description: String(candidate?.description || candidate?.reason || "").trim(),
+    availability: normalizeProductAvailabilityStatus(
+      candidate?.locked_product_availability ||
+        candidate?.availability_status ||
+        candidate?.availability
+    ),
+    purchaseActionDetected: Boolean(candidate?.purchase_action_detected),
+    exactProductPageVerified: true,
+    primaryImageUrl: imageUrl,
+    imageUrls,
+    source: String(
+      candidate?.product_image_page_bound_source ||
+        "product_engine_exact_page_verification"
+    ).trim(),
+    fingerprint: buildLockedProductIdentityFingerprint({
+      url: productUrl,
+      identifier:
+        candidate?.locked_product_identifier || candidate?.product_identifier,
+      title,
+      primaryImageUrl: imageUrl,
+    }),
+  };
+}
+
 async function hydrateAuthoritativeWebAgentProduct({
   candidate,
   websiteUrl,
@@ -26054,6 +26220,25 @@ async function hydrateAuthoritativeWebAgentProduct({
         websiteUrl,
       })
     : null;
+
+  if (!lockedProduct) {
+    const verifiedExactPageLock =
+      buildLockedProductFromVerifiedExactPageCandidate({
+        candidate,
+        websiteUrl,
+      });
+    if (verifiedExactPageLock) {
+      lockedProduct = verifiedExactPageLock;
+      console.info("Verified exact-page Product Engine object reused as final product lock", {
+        productUrl: lockedProduct.url,
+        title: lockedProduct.title,
+        imageUrl: lockedProduct.primaryImageUrl,
+        source: lockedProduct.source,
+        productConfidence: Number(candidate?.product_confidence || 0) || null,
+        pageTypeConfidence: Number(candidate?.page_type_confidence || 0) || null,
+      });
+    }
+  }
 
   // Some retailers block Spreelo's technical fetch while the web-research
   // agent can still open the exact product page. In that bounded fallback we
@@ -26229,6 +26414,7 @@ export async function resolveLockedProductUrlForUse({
   productUrl,
   websiteUrl,
   titleHint = "",
+  verifiedCandidate = null,
   rule = null,
   ruleId = "manual-product-resolution",
   allowAiRepair = true,
@@ -26252,12 +26438,34 @@ export async function resolveLockedProductUrlForUse({
       return "Selected product";
     }
   })();
+  const verifiedCandidateUrl =
+    canonicalizeWebsiteProductUrl(
+      verifiedCandidate?.url || verifiedCandidate?.product_url || verifiedCandidate?.item_url,
+      websiteUrl || canonicalUrl
+    ) || "";
+  const verifiedCandidateMatches = Boolean(
+    verifiedCandidate &&
+      verifiedCandidateUrl &&
+      normalizeComparableValue(verifiedCandidateUrl) ===
+        normalizeComparableValue(canonicalUrl)
+  );
   const candidate = {
-    title: String(titleHint || fallbackTitle || "Selected product").trim(),
+    ...(verifiedCandidateMatches ? verifiedCandidate : {}),
+    title: String(
+      (verifiedCandidateMatches &&
+        (verifiedCandidate?.title || verifiedCandidate?.item_title)) ||
+        titleHint ||
+        fallbackTitle ||
+        "Selected product"
+    ).trim(),
     url: canonicalUrl,
-    reason: "Selected product URL; exact page is authoritative.",
-    campaign_research_rank: 1,
-    campaign_research_round: 1,
+    reason:
+      (verifiedCandidateMatches && verifiedCandidate?.reason) ||
+      "Selected product URL; exact page is authoritative.",
+    campaign_research_rank:
+      Number(verifiedCandidateMatches && verifiedCandidate?.campaign_research_rank) || 1,
+    campaign_research_round:
+      Number(verifiedCandidateMatches && verifiedCandidate?.campaign_research_round) || 1,
     authoritative_web_agent_selected: true,
   };
 
@@ -26437,6 +26645,7 @@ async function ensureLockedProductPoolForUse({
         productUrl: item.url,
         websiteUrl: websiteUrl || item.url,
         titleHint: item.title || item.item_title || "",
+        verifiedCandidate: item,
         rule,
         ruleId,
       });
@@ -28841,6 +29050,7 @@ async function prepareWebsiteContentForRule({
           productUrl: item?.url || item?.product_url || item?.item_url || websiteUrl,
           websiteUrl,
           titleHint: item?.title || item?.item_title || rule?.content_source_title || "",
+          verifiedCandidate: item,
           rule,
           ruleId: rule?.id || "single-product",
           allowAiRepair,
@@ -29488,7 +29698,10 @@ async function prepareWebsiteContentForRule({
             const storeSearchLockFailures = [];
             const storeSearchLockAttemptLimit = Math.min(
               remainingStoreSearchItems.length,
-              WEBSITE_TEXT_INTENT_STORE_VERIFY_LIMIT
+              Math.max(
+                WEBSITE_TEXT_INTENT_STORE_VERIFY_LIMIT,
+                storeSearchItems.length
+              )
             );
 
             for (
@@ -29724,54 +29937,156 @@ async function prepareWebsiteContentForRule({
         }
       }
 
-      const selected = await chooseUnusedWebsiteItem({
-        supabase,
-        userId: rule.user_id,
-        brandProfileId: rule.brand_profile_id,
-        sourceUrl: websiteUrl,
-        contentType,
-        items: productIntentScoped
-          ? [
-              ...webSearchItems.map((item) => ({
-                ...item,
-                selection_priority: 100,
-                campaign_fit_source: isCampaignScopedWebsiteRule(rule) ? "ai_campaign_research" : "ai_product_intent_research",
-                campaign_fit_score: scoreCampaignFitForRule(item, rule) + 40,
-              })),
-              ...getSafeCampaignProductCandidates(sortedCatalogItems, rule).map((item) => ({ ...item, selection_priority: 10 })),
-            ]
-          : webSearchItems,
-        rule,
-        usedWebsiteImageUrlsThisRun,
-        recentUsedItems,
-        allowReuseWhenExhausted: false,
-      });
+      // v144.47: web research can return several already-verified exact products.
+      // Never let one storefront/parser incompatibility discard that entire expensive
+      // verified pool. Try candidates one by one without additional AI repair first,
+      // carrying their exact-page verification provenance into the final lock.
+      const webSearchSelectionPool = productIntentScoped
+        ? webSearchItems.map((item) => ({
+            ...item,
+            selection_priority: 100,
+            campaign_fit_source: isCampaignScopedWebsiteRule(rule) ? "ai_campaign_research" : "ai_product_intent_research",
+            campaign_fit_score: scoreCampaignFitForRule(item, rule) + 40,
+          }))
+        : [...webSearchItems];
+      let remainingWebSearchItems = dedupeUrlItems(webSearchSelectionPool);
+      const webSearchLockFailures = [];
+      let firstWebSearchSelection = null;
 
-      if (selected?.item && isAcceptableWebsiteTextProductSelection(selected.item, rule)) {
-        await upsertWebsiteProductCatalogItems({
+      while (remainingWebSearchItems.length) {
+        const selected = await chooseUnusedWebsiteItem({
           supabase,
           userId: rule.user_id,
           brandProfileId: rule.brand_profile_id,
           sourceUrl: websiteUrl,
-          items: [selected.item],
-          discoverySource: getWebsiteCatalogDiscoverySource("ai_web_search", rule),
+          contentType,
+          items: remainingWebSearchItems,
+          rule,
+          usedWebsiteImageUrlsThisRun,
+          recentUsedItems,
+          allowReuseWhenExhausted: false,
         });
 
-        summary.website_items_found += 1;
-        summary.website_content_success += 1;
-        summary.website_web_search_success += 1;
+        if (!selected?.item) break;
 
-        return finalizePreparedWebsiteItem(selected.item, selected.cycleNumber);
+        const selectedKey = normalizeUrlForComparison(
+          selected.item?.url || selected.item?.product_url || selected.item?.item_url || ""
+        ) || createItemKey(selected.item);
+        remainingWebSearchItems = remainingWebSearchItems.filter((candidate) => {
+          const candidateKey = normalizeUrlForComparison(
+            candidate?.url || candidate?.product_url || candidate?.item_url || ""
+          ) || createItemKey(candidate);
+          return candidateKey !== selectedKey;
+        });
+
+        if (!isAcceptableWebsiteTextProductSelection(selected.item, rule)) {
+          continue;
+        }
+
+        if (!firstWebSearchSelection) firstWebSearchSelection = selected;
+
+        try {
+          const finalized = await finalizePreparedWebsiteItem(
+            selected.item,
+            selected.cycleNumber,
+            { allowAiRepair: false }
+          );
+
+          await upsertWebsiteProductCatalogItems({
+            supabase,
+            userId: rule.user_id,
+            brandProfileId: rule.brand_profile_id,
+            sourceUrl: websiteUrl,
+            items: [finalized.websiteItem],
+            discoverySource: getWebsiteCatalogDiscoverySource("ai_web_search", rule),
+          });
+
+          summary.website_items_found += 1;
+          summary.website_content_success += 1;
+          summary.website_web_search_success += 1;
+          return finalized;
+        } catch (error) {
+          if (isWebsiteRateLimitError(error)) throw error;
+          webSearchLockFailures.push({
+            url: selected.item?.url || null,
+            title: selected.item?.title || null,
+            message: error?.message || String(error),
+          });
+          console.warn("Web-search verified product could not be locked; trying next verified product", {
+            ruleId: rule.id,
+            brandProfileId: rule.brand_profile_id,
+            websiteUrl,
+            attemptedCount: webSearchLockFailures.length,
+            verifiedProductCount: webSearchItems.length,
+            productUrl: selected.item?.url || null,
+            title: selected.item?.title || null,
+            message: error?.message || String(error),
+          });
+        }
       }
 
-      console.log("Verified products were found but all were recently used; expanding catalog discovery", {
-        ruleId: rule.id,
-        brandProfileId: rule.brand_profile_id,
-        websiteUrl,
-        verifiedCount: webSearchItems.length,
-        recentUsedCount: recentUsedItems.length,
-        reuseLimit: WEBSITE_PRODUCT_REUSE_LIMIT,
-      });
+      // Only after every already-verified candidate has failed do one bounded
+      // exact-asset repair. This keeps the common path deterministic and avoids
+      // paying repeated GPT repair calls for a single awkward storefront parser.
+      if (firstWebSearchSelection?.item && webSearchLockFailures.length) {
+        try {
+          console.info("Web-search verified lock pool exhausted; trying one bounded AI repair", {
+            ruleId: rule.id,
+            brandProfileId: rule.brand_profile_id,
+            websiteUrl,
+            attemptedVerifiedProductCount: webSearchLockFailures.length,
+            repairProductUrl: firstWebSearchSelection.item?.url || null,
+            repairProductTitle: firstWebSearchSelection.item?.title || null,
+          });
+          const repaired = await finalizePreparedWebsiteItem(
+            firstWebSearchSelection.item,
+            firstWebSearchSelection.cycleNumber,
+            { allowAiRepair: true }
+          );
+
+          await upsertWebsiteProductCatalogItems({
+            supabase,
+            userId: rule.user_id,
+            brandProfileId: rule.brand_profile_id,
+            sourceUrl: websiteUrl,
+            items: [repaired.websiteItem],
+            discoverySource: getWebsiteCatalogDiscoverySource("ai_web_search_repair", rule),
+          });
+
+          summary.website_items_found += 1;
+          summary.website_content_success += 1;
+          summary.website_web_search_success += 1;
+          return repaired;
+        } catch (error) {
+          if (isWebsiteRateLimitError(error)) throw error;
+          console.warn("Web-search verified lock pool and bounded AI repair were exhausted; expanding catalog discovery", {
+            ruleId: rule.id,
+            brandProfileId: rule.brand_profile_id,
+            websiteUrl,
+            attemptedVerifiedProductCount: webSearchLockFailures.length,
+            message: error?.message || String(error),
+          });
+        }
+      }
+
+      if (webSearchLockFailures.length) {
+        console.warn("Verified web-research products could not be safely locked; expanding catalog discovery", {
+          ruleId: rule.id,
+          brandProfileId: rule.brand_profile_id,
+          websiteUrl,
+          verifiedCount: webSearchItems.length,
+          attemptedLockCount: webSearchLockFailures.length,
+        });
+      } else {
+        console.log("Verified products were found but all were recently used; expanding catalog discovery", {
+          ruleId: rule.id,
+          brandProfileId: rule.brand_profile_id,
+          websiteUrl,
+          verifiedCount: webSearchItems.length,
+          recentUsedCount: recentUsedItems.length,
+          reuseLimit: WEBSITE_PRODUCT_REUSE_LIMIT,
+        });
+      }
     }
 
     const discoveredCandidates = await discoverProductCandidatesFromWebsite({

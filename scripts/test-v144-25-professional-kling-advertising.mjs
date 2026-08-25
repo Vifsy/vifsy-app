@@ -10,8 +10,8 @@ const mustNot = (source, text, message) => assert(!source.includes(text), messag
 
 must(route, 'full_product_reference', 'Kling must distinguish a sufficiently full reference.');
 must(route, 'cropped_or_uncertain_reference', 'Kling must distinguish cropped/uncertain references.');
-must(route, 'The product MUST be genuinely used in the scene', 'Full references must require genuine product use.');
-must(route, 'apparel should be worn by a person', 'Wearables must be directed toward real use instead of floating animation.');
+must(route, 'a fully visible product is NOT the same as a functionally verified product', 'Full references must not be treated as proof of product functionality.');
+must(route, 'Apparel may be worn', 'Wearables must remain eligible for obvious natural use instead of floating animation.');
 must(route, 'Decorative particles alone are not a concept', 'Particle-only animation must be explicitly rejected.');
 must(route, 'never zoom out to complete it', 'Cropped references must not be expanded beyond verified pixels.');
 must(route, 'Spreelo adds professional typography after the video is generated', 'Kling itself must not hallucinate readable ad text.');
