@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import {
   VIDEO_MUSIC_BUCKET,
   VIDEO_MUSIC_CATALOG_PATH,
+  VIDEO_MUSIC_CATALOG_VERSION,
   VIDEO_MUSIC_LIBRARY,
   normalizeVideoMusicCatalog,
   selectBestVideoMusicFromTracks,
@@ -22,8 +23,15 @@ assert.equal(VIDEO_MUSIC_CATALOG_PATH, "catalog/library.json");
 assert.equal(VIDEO_MUSIC_LIBRARY[0].id, "wait-for-the-drop-v1");
 assert.equal(VIDEO_MUSIC_LIBRARY[0].duration_seconds, 7.2);
 
-const empty = normalizeVideoMusicCatalog({ version: 1, tracks: [] });
-assert.deepEqual(empty.tracks, [], "An admin must be able to intentionally leave the managed library empty");
+const empty = normalizeVideoMusicCatalog({ version: VIDEO_MUSIC_CATALOG_VERSION, tracks: [] });
+assert.deepEqual(empty.tracks, [], "An admin must be able to intentionally leave the current managed library empty");
+
+const migratedV1 = normalizeVideoMusicCatalog({ version: 1, tracks: [VIDEO_MUSIC_LIBRARY[0]] });
+assert.equal(
+  migratedV1.tracks.length,
+  VIDEO_MUSIC_LIBRARY.length,
+  "A v1 managed catalog should receive the new bundled tracks exactly once"
+);
 
 const multiTrack = [
   {

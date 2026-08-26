@@ -3,6 +3,7 @@ import { adminContextError, getAdminContext } from "../../../lib/adminAuth.js";
 import {
   VIDEO_MUSIC_BUCKET,
   VIDEO_MUSIC_CATALOG_PATH,
+  VIDEO_MUSIC_CATALOG_VERSION,
   buildDefaultVideoMusicCatalog,
   normalizeVideoMusicCatalog,
   normalizeVideoMusicTrack,
@@ -122,7 +123,15 @@ async function readCatalog(admin) {
 
   if (!error && data) {
     try {
-      return normalizeVideoMusicCatalog(JSON.parse(await data.text()));
+      const parsed = JSON.parse(await data.text());
+      const sourceVersion = Number(parsed?.version || 1);
+      const normalized = normalizeVideoMusicCatalog(parsed);
+      if (sourceVersion < VIDEO_MUSIC_CATALOG_VERSION) {
+        // Persist the one-time bundled-library migration so future admin
+        // deletions remain intentional and are not re-seeded.
+        return await writeCatalog(admin, normalized);
+      }
+      return normalized;
     } catch {
       // Replace a corrupt catalog with the safe bundled seed below.
     }

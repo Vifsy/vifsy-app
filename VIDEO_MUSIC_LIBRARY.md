@@ -25,7 +25,7 @@ The protected `/api/video-music` API maintains a Supabase Storage bucket named `
 
 The bucket is created/configured automatically by the service-role API. No SQL migration is required.
 
-`Wait for the Drop` is still bundled at `public/audio-library/wait-for-the-drop.wav` so a brand-new deployment has a safe first track before the managed Storage catalog exists. When Admin opens the library for the first time, that bundled track seeds the managed catalog.
+`Wait for the Drop` plus 37 additional curated tracks are bundled under `public/audio-library/`. A brand-new deployment starts with all 38 tracks. Existing version-1 managed catalogs are upgraded once to catalog version 2: missing bundled tracks are appended while existing Admin edits are preserved. After the migration, deleting a bundled track in Admin remains intentional and it is not re-added automatically.
 
 ## Selection
 
@@ -42,3 +42,8 @@ The real musical ending is protected. For a track of `A` seconds and a finished 
 The final `V` seconds of the audio are used, so the track's real ending lands on the video's final frame.
 
 Spreelo does not loop, stretch or synthesize a fade to make a music track fit. If no eligible track is long enough, the video remains silent and still completes normally.
+
+
+## v144.55 curated pack
+
+The 37 new supplied WAV files are renamed to stable kebab-case asset names and categorized by style, mood, industry, video format, keywords and energy. Per-track video volume is balanced from measured loudness so the library stays reasonably consistent without modifying the source audio.

@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   VIDEO_MUSIC_LIBRARY,
-  selectBestVideoMusic,
+  selectBestVideoMusicFromTracks,
 } from "../lib/videoMusicLibrary.js";
 import { buildProductPushEdit, buildVideoOverlayEdit } from "../lib/shotstack.js";
 
@@ -12,14 +12,15 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const runSource = fs.readFileSync(path.join(root, "app/api/cron/run-automations/route.js"), "utf8");
 const finalizerSource = fs.readFileSync(path.join(root, "app/api/cron/finalize-kling-videos/route.js"), "utf8");
 
-assert.equal(VIDEO_MUSIC_LIBRARY.length, 1, "v144.48 should start with exactly the supplied track");
+assert.ok(VIDEO_MUSIC_LIBRARY.length >= 1, "The original supplied track must remain in the expanded library");
 assert.equal(VIDEO_MUSIC_LIBRARY[0].id, "wait-for-the-drop-v1");
 assert.ok(
   fs.existsSync(path.join(root, "public/audio-library/wait-for-the-drop.wav")),
   "The supplied Suno WAV must ship with the app"
 );
 
-const selection = await selectBestVideoMusic({
+const selection = selectBestVideoMusicFromTracks({
+  tracks: [VIDEO_MUSIC_LIBRARY[0]],
   context: {
     content_format: "animated_video",
     product_category: "fragrance",
@@ -28,7 +29,7 @@ const selection = await selectBestVideoMusic({
   targetDurationSeconds: 6.75,
   appUrl: "https://app.spreelo.com",
 });
-assert.ok(selection, "The only eligible music track should be selected");
+assert.ok(selection, "The original bundled music track should remain selectable");
 assert.equal(selection.id, "wait-for-the-drop-v1");
 assert.equal(selection.url, "https://app.spreelo.com/audio-library/wait-for-the-drop.wav");
 assert.equal(selection.trimStartSeconds, 0.45, "A 7.2 s song on a 6.75 s video must start at 0.45 s so the real ending survives");
@@ -51,7 +52,8 @@ assert.equal(audioClips[0].asset.trim, 0.45);
 assert.equal(audioClips[0].length, 6.75);
 assert.equal(audioClips[0].asset.effect, "none", "Do not synthesize a fake fade; retain the Suno ending");
 
-const legacyMusic = await selectBestVideoMusic({
+const legacyMusic = selectBestVideoMusicFromTracks({
+  tracks: [VIDEO_MUSIC_LIBRARY[0]],
   context: { content_format: "animated_video", product_category: "retail" },
   targetDurationSeconds: 5,
   appUrl: "https://app.spreelo.com",
@@ -70,7 +72,8 @@ assert.ok(legacyAudio, "The existing Shotstack animated product Reel should use 
 assert.equal(legacyAudio.asset.trim, 2.2, "The 5 s Reel should use the final 5 s of the 7.2 s track");
 assert.equal(legacyAudio.length, 5);
 
-const tooShort = await selectBestVideoMusic({
+const tooShort = selectBestVideoMusicFromTracks({
+  tracks: [VIDEO_MUSIC_LIBRARY[0]],
   context: { content_format: "animated_video" },
   targetDurationSeconds: 7.21,
 });
