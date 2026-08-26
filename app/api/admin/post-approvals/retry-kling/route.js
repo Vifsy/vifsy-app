@@ -18,8 +18,15 @@ ADMIN RETRY PRODUCT LOCK — NON-NEGOTIABLE:
 - Preserve every visible logo, emblem, letter, number, label graphic, printed mark and color character-for-character. Never redraw, simplify, substitute or reinterpret label text or brand marks.
 - Do not expose an unseen side or surface of the product. Do not invent controls, openings, accessories, mechanisms or product details.
 - If exact product preservation conflicts with motion, keep the product visually rigid and create motion with the camera, people, lighting and environment instead.
+
+ADMIN RETRY SCENE CONTINUITY LOCK — NON-NEGOTIABLE:
+- Treat the opening frame as one fixed real-world set filmed continuously by a real camera.
+- Static visible furniture, benches, signs, lamps, plants, architecture, paths, ground features and background structures must persist in stable world-space positions. Never make them appear, disappear, morph, relocate or swap.
+- A static object may become newly visible only when camera movement naturally reveals an area that was previously outside frame. Never add an object to an area already shown empty.
+- People, animals, vehicles and moving props may enter or leave only by continuous physical movement or plausible occlusion. No pop-in, pop-out, teleporting, duplication or unexplained disappearance.
+- If spectacle conflicts with continuity, simplify the action and preserve the fixed physical scene.
 `.trim();
-  return `${base}\n\n${retryLock}`.trim().slice(0, 2500);
+  return `${retryLock}\n\nORIGINAL CREATIVE DIRECTION:\n${base}`.trim().slice(0, 2500);
 }
 
 function cleanSelection(selection) {

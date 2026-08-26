@@ -148,6 +148,9 @@ function getKlingAuditViolationLabels(audit, t) {
     controls_or_hardware_changed: "admin.approvals.klingViolationHardware",
     material_color_or_print_changed: "admin.approvals.klingViolationPrint",
     invented_or_moved_identity_detail: "admin.approvals.klingViolationInventedDetail",
+    scene_continuity_broken: "admin.approvals.klingViolationSceneContinuity",
+    environment_geometry_changed: "admin.approvals.klingViolationEnvironmentGeometry",
+    object_appeared_or_disappeared: "admin.approvals.klingViolationObjectAppeared",
     identity_audit_uncertain: "admin.approvals.klingViolationUncertain",
   };
   return codes.map((code) => t(labelKeys[code] || "admin.approvals.klingViolationGeneric", { code }));

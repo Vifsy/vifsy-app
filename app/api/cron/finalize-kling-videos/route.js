@@ -360,11 +360,11 @@ async function validateFinishedKlingProductIdentity({ openai, supabase, post, ta
         `Verified view lock: ${String(viewLock?.verifiedView || "same source view only")}. ` +
         `${String(viewLock?.visibleSurfaceSummary || "Only source-visible surfaces are verified.")} ` +
         `${String(viewLock?.motionConstraint || "Never expose an unseen product surface.")} ` +
-        "The environment, hands, people, camera, lighting and props may change. The PRODUCT DESIGN may not. Compare visible identity details whenever the product is visible. " +
+        "The PRODUCT DESIGN may not change. The shot must also preserve real-world scene continuity: treat the sampled frames as moments from one continuous physical set, not independent regenerated images. Static environmental objects, furniture, benches, signs, lamps, vegetation, architecture, paths, ground features and background structures must remain spatially persistent. A static object may become newly visible only if camera movement naturally reveals an area that was previously outside frame; reject a bench/object that materializes in a region previously visible and empty, or any static object that disappears, morphs, relocates or is replaced without a physically plausible occlusion/camera explanation. Moving people, animals, vehicles and props may enter/exit only through continuous motion or motivated occlusion; reject unexplained pop-in, pop-out, teleporting, duplication or disappearance. Compare visible identity details whenever the product is visible. " +
         "For rigid products, explicitly compare the number, position, shape and size of visible buttons, switches, controls, openings, seams, joints and distinctive hardware; compare material boundaries, surface finish/texture, color blocking, silhouette/proportions, logos and printed design. " +
         "Reject if any frame visibly adds a button/control/detail, removes or relocates one, changes material or color regions, changes the visible geometry, substitutes a similar product, or exposes an unverified product side/surface. " +
         "Do NOT fail merely because a real detail is temporarily occluded by a hand, motion blur, perspective, glare or is too small to judge. Fail only for a visible contradiction/addition/redesign, or an unverified surface exposure. " +
-        "A plausible invented detail is still a failure. Every boolean must agree with the written reason: never set unverified_surface_exposed=true if the reason says no unverified surface was exposed, and never set a preservation field=true if the reason describes that property as changed. Return strict JSON only.",
+        "A plausible invented detail is still a failure. Every boolean must agree with the written reason: never set unverified_surface_exposed=true if the reason says no unverified surface was exposed; never set object_materialized_or_disappeared=true if every newly visible object is naturally explained by camera reveal/continuous entry; and never set a preservation field=true if the reason describes that property as changed. Return strict JSON only.",
     },
     { type: "input_text", text: "AUTHORITATIVE RETAILER PRODUCT REFERENCE" },
     { type: "input_image", image_url: referenceDataUrl, detail: "high" },
@@ -401,6 +401,9 @@ async function validateFinishedKlingProductIdentity({ openai, supabase, post, ta
               visible_controls_hardware_preserved: { type: "boolean" },
               visible_material_color_design_preserved: { type: "boolean" },
               invented_or_moved_identity_detail: { type: "boolean" },
+              scene_continuity_preserved: { type: "boolean" },
+              static_environment_geometry_preserved: { type: "boolean" },
+              object_materialized_or_disappeared: { type: "boolean" },
               confidence: { type: "number", minimum: 0, maximum: 1 },
               reason: { type: "string" },
             },
@@ -411,6 +414,9 @@ async function validateFinishedKlingProductIdentity({ openai, supabase, post, ta
               "visible_controls_hardware_preserved",
               "visible_material_color_design_preserved",
               "invented_or_moved_identity_detail",
+              "scene_continuity_preserved",
+              "static_environment_geometry_preserved",
+              "object_materialized_or_disappeared",
               "confidence",
               "reason",
             ],
@@ -439,6 +445,9 @@ async function validateFinishedKlingProductIdentity({ openai, supabase, post, ta
       parsed?.visible_controls_hardware_preserved === true &&
       parsed?.visible_material_color_design_preserved === true &&
       parsed?.invented_or_moved_identity_detail !== true &&
+      parsed?.scene_continuity_preserved === true &&
+      parsed?.static_environment_geometry_preserved === true &&
+      parsed?.object_materialized_or_disappeared !== true &&
       confidence >= 0.9
   );
   const violationCodes = [];
@@ -447,6 +456,9 @@ async function validateFinishedKlingProductIdentity({ openai, supabase, post, ta
   if (parsed?.visible_controls_hardware_preserved !== true) violationCodes.push("controls_or_hardware_changed");
   if (parsed?.visible_material_color_design_preserved !== true) violationCodes.push("material_color_or_print_changed");
   if (parsed?.invented_or_moved_identity_detail === true) violationCodes.push("invented_or_moved_identity_detail");
+  if (parsed?.scene_continuity_preserved !== true) violationCodes.push("scene_continuity_broken");
+  if (parsed?.static_environment_geometry_preserved !== true) violationCodes.push("environment_geometry_changed");
+  if (parsed?.object_materialized_or_disappeared === true) violationCodes.push("object_appeared_or_disappeared");
   if (!passed && !violationCodes.length) violationCodes.push("identity_audit_uncertain");
 
   const validation = {
@@ -461,6 +473,9 @@ async function validateFinishedKlingProductIdentity({ openai, supabase, post, ta
     visible_controls_hardware_preserved: parsed?.visible_controls_hardware_preserved === true,
     visible_material_color_design_preserved: parsed?.visible_material_color_design_preserved === true,
     invented_or_moved_identity_detail: parsed?.invented_or_moved_identity_detail === true,
+    scene_continuity_preserved: parsed?.scene_continuity_preserved === true,
+    static_environment_geometry_preserved: parsed?.static_environment_geometry_preserved === true,
+    object_materialized_or_disappeared: parsed?.object_materialized_or_disappeared === true,
     violation_codes: violationCodes,
     reason: String(parsed?.reason || (passed ? "verified" : "product_identity_mismatch")).trim(),
   };
@@ -486,6 +501,9 @@ async function validateFinishedKlingProductIdentity({ openai, supabase, post, ta
     materialColorDesignPreserved: validation.visible_material_color_design_preserved,
     inventedOrMovedIdentityDetail: validation.invented_or_moved_identity_detail,
     unverifiedSurfaceExposed: validation.unverified_surface_exposed,
+    sceneContinuityPreserved: validation.scene_continuity_preserved,
+    staticEnvironmentGeometryPreserved: validation.static_environment_geometry_preserved,
+    objectMaterializedOrDisappeared: validation.object_materialized_or_disappeared,
     violationCodes: validation.violation_codes,
     reason: truncate(validation.reason, 700),
   });
