@@ -253,8 +253,8 @@ const TRANSIENT_AUTOMATION_RETRY_DELAY_MS = 90_000;
 // v144.20: protected retailers (403 / anti-bot / challenge pages) get a few
 // more bounded occurrence-level research retries. We still fail closed rather
 // than publishing an unverified or stale product.
-const PROTECTED_PRODUCT_RESEARCH_MAX_RETRIES = 4;
-const PROTECTED_PRODUCT_RESEARCH_RETRY_DELAY_MS = 3 * 60 * 1000;
+const PROTECTED_PRODUCT_RESEARCH_MAX_RETRIES = 1;
+const PROTECTED_PRODUCT_RESEARCH_RETRY_DELAY_MS = 30 * 60 * 1000;
 // Availability is volatile. Product identity and the exact main image may be
 // cached much longer, but a protected-retailer "in stock" decision must have
 // been re-checked recently before the locked item may bypass fresh research.
@@ -5449,7 +5449,7 @@ async function getProductEngineV2SingleProductReserves({
     return [];
   }
 
-  const reserveTarget = 3;
+  const reserveTarget = 1;
   let pool = await getWebsiteProductCatalogItems({
     supabase,
     userId: rule.user_id,
@@ -5532,16 +5532,24 @@ async function getProductEngineV2SingleProductReserves({
         (item) => Number(item?.campaign_fit_score || 0) >= CAMPAIGN_NEAR_PRODUCT_FIT_SCORE
       ).length
     : reserves.length;
+  const selectedAlreadyStronglyLocked = Boolean(
+    selectedItem?.product_identity_locked === true &&
+    selectedItem?.image_url &&
+    (selectedItem?.locked_product_fingerprint ||
+      selectedItem?.exact_page_verified === true ||
+      selectedItem?.technical_identity_same_page_verified === true ||
+      selectedItem?.locked_product_source)
+  );
 
   if (
-    isIndexedSecurityFallbackLockedProduct(selectedItem) &&
+    (selectedAlreadyStronglyLocked || isIndexedSecurityFallbackLockedProduct(selectedItem)) &&
     (reserves.length < reserveTarget || strongReserveCount < reserveTarget)
   ) {
     // v144.11: the retailer is already proven to block direct crawling. Reuse
     // the exact products recovered in the one paid indexed batch instead of
     // spending another minute retrying sitemap/catalog/product HTML that will
     // only return 403. Reserves are optional for single-product delivery.
-    console.log("Product Engine V2 skipped direct reserve discovery for indexed 403 product", {
+    console.log("Product Engine V2 skipped optional direct reserve discovery after strong primary product lock", {
       ruleId: rule?.id,
       websiteUrl,
       selectedProductUrl: selectedItem.url,
@@ -6345,7 +6353,7 @@ async function discoverProductsFromStoreMapAgent({
     const minimumDeepVerifiedProducts =
       requiredCount >= CAROUSEL_PRODUCT_SLIDE_TARGET
         ? agentTargets.minimumVerifiedProducts
-        : Math.min(2, agentTargets.minimumVerifiedProducts);
+        : 1;
     if (deeplyVerified.length >= minimumDeepVerifiedProducts) {
       const diversitySatisfied =
         requiredCount >= CAROUSEL_PRODUCT_SLIDE_TARGET ||
@@ -7158,52 +7166,67 @@ async function prepareCarouselProductsForRule({
   }
 
   if (websiteAccessProtected) {
+    const manufacturerCatalogSource = isManufacturerCatalogSource(rule, brandProfile);
     const beforeFreshFilter = catalogItems.length;
-    catalogItems = catalogItems.filter((item) =>
-      isFreshProductStockVerification(item)
-    );
 
-    const publicFeedItems = filterWebsiteCatalogItemsForRule(
-      await discoverPublicCommerceFeedCandidates({
-        websiteUrl,
-        campaignPrompt: buildCampaignResearchText(rule),
-      }),
-      rule
-    ).map((item) => ({
-      ...item,
-      selection_priority: Math.max(Number(item?.selection_priority || 0), 360),
-      campaign_fit_source:
-        item?.campaign_fit_source || "protected_public_commerce_feed",
-      campaign_fit_score:
-        Number(item?.campaign_fit_score || 0) +
-        scoreCampaignFitForRule(item, rule) +
-        45,
-    }));
-
-    if (publicFeedItems.length) {
-      catalogItems = dedupeWebsiteItemsByUrlTitleAndImage([
-        ...publicFeedItems,
-        ...catalogItems,
-      ]);
-      await upsertWebsiteProductCatalogItems({
-        supabase,
-        userId: rule.user_id,
+    if (manufacturerCatalogSource) {
+      catalogItems = catalogItems.filter((item) =>
+        isProductEligibleForWebsiteSource(item, rule, brandProfile)
+      );
+      console.log("Protected manufacturer carousel catalog kept current official products", {
+        ruleId: rule.id,
         brandProfileId: rule.brand_profile_id,
-        sourceUrl: websiteUrl,
-        items: publicFeedItems,
-        discoverySource: "protected_public_commerce_feed",
+        websiteUrl,
+        priorCatalogCount: beforeFreshFilter,
+        verifiedCatalogCount: catalogItems.length,
+      });
+    } else {
+      catalogItems = catalogItems.filter((item) =>
+        isFreshProductStockVerification(item)
+      );
+
+      const publicFeedItems = filterWebsiteCatalogItemsForRule(
+        await discoverPublicCommerceFeedCandidates({
+          websiteUrl,
+          campaignPrompt: buildCampaignResearchText(rule),
+        }),
+        rule
+      ).map((item) => ({
+        ...item,
+        selection_priority: Math.max(Number(item?.selection_priority || 0), 360),
+        campaign_fit_source:
+          item?.campaign_fit_source || "protected_public_commerce_feed",
+        campaign_fit_score:
+          Number(item?.campaign_fit_score || 0) +
+          scoreCampaignFitForRule(item, rule) +
+          45,
+      }));
+
+      if (publicFeedItems.length) {
+        catalogItems = dedupeWebsiteItemsByUrlTitleAndImage([
+          ...publicFeedItems,
+          ...catalogItems,
+        ]);
+        await upsertWebsiteProductCatalogItems({
+          supabase,
+          userId: rule.user_id,
+          brandProfileId: rule.brand_profile_id,
+          sourceUrl: websiteUrl,
+          items: publicFeedItems,
+          discoverySource: "protected_public_commerce_feed",
+        });
+      }
+
+      console.log("Protected retailer carousel catalog prepared from fresh stock and public feeds", {
+        ruleId: rule.id,
+        brandProfileId: rule.brand_profile_id,
+        websiteUrl,
+        priorCatalogCount: beforeFreshFilter,
+        freshCatalogCount: catalogItems.length,
+        publicFeedCount: publicFeedItems.length,
+        freshnessMs: PROTECTED_PRODUCT_STOCK_FRESH_MS,
       });
     }
-
-    console.log("Protected retailer carousel catalog prepared from fresh stock and public feeds", {
-      ruleId: rule.id,
-      brandProfileId: rule.brand_profile_id,
-      websiteUrl,
-      priorCatalogCount: beforeFreshFilter,
-      freshCatalogCount: catalogItems.length,
-      publicFeedCount: publicFeedItems.length,
-      freshnessMs: PROTECTED_PRODUCT_STOCK_FRESH_MS,
-    });
   }
 
   const recentUsedItems = await getRecentUsedWebsiteItems({
@@ -12462,7 +12485,7 @@ async function getBrandProfileForRule(supabase, rule) {
   const { data, error } = await supabase
     .from("brand_profiles")
     .select(
-  "id, business_name, website_url, website_product_source_url, website_product_mode_available, brand_description, industry, target_audience, content_market, country_code, content_language, logo_url, logo_storage_path, logo_enabled_by_default"
+  "id, business_name, website_url, website_product_source_url, website_product_mode_available, website_product_mode_reason, brand_description, industry, target_audience, content_market, country_code, content_language, logo_url, logo_storage_path, logo_enabled_by_default"
 )
     .eq("id", rule.brand_profile_id)
     .eq("user_id", rule.user_id)
@@ -14041,6 +14064,8 @@ function getKlingVerifiedViewInstruction(referenceSafety = {}) {
     summary,
     motion,
     "This view lock applies even when the product is fully visible and safe to wear/hold/use. Full-product interaction NEVER grants permission to invent or reveal an unverified front, back, side, top, bottom, underside, interior, label or hidden detail.",
+    "COMPONENT ROLE LOCK: every visible component keeps the same purpose, attachment, geometry and mechanical state for the entire clip unless the verified product data explicitly proves that exact transformation. Never reinterpret fabric, panels, covers, seams, caps, handles or other existing parts as a new accessory, sunshade, flap, opening, control or feature.",
+    "SURFACE PRINT LOCK: every visible logo, emblem, letter, number, label graphic and printed mark is identity-critical. Preserve the exact characters and placement; never redraw, abbreviate, simplify, restyle or substitute them.",
   ].join(" ");
 }
 
@@ -14320,6 +14345,8 @@ NON-NEGOTIABLE OPENING RULES:
 - NO visual state where the product is simply centered against a background waiting for the video to begin.
 - The scene must be suitable for immediate natural motion by Kling from the first instant.
 - Preserve the exact verified product identity: visible color/variant, print/design, wording/logo, proportions, materials and distinctive details.
+- Every visible logo, emblem, letter, number and printed mark is locked character-for-character. Never regenerate a similar-looking label or change even one glyph.
+- Every visible component keeps its verified role, attachment, geometry and mechanical state. Never turn an existing product part into a new accessory/feature or show it unfolding, extending, opening, converting or changing purpose unless the verified source explicitly proves that exact state change.
 - Treat every visible design feature as immutable: do not add, remove, relocate, resize or reshape buttons, switches, controls, openings, seams, joints or hardware; do not change material boundaries, surface finish, texture or color blocking.
 - Do not substitute a similar product and do not invent another variant.
 - Do not add marketing typography, captions, prices, claims, logos or watermarks. Preserve only text physically printed on the real product.
@@ -14593,6 +14620,7 @@ FUNCTIONAL TRUTH SAFETY:
 - never infer a product function from appearance, category stereotypes or general world knowledge when the verified product data does not prove that exact function
 - a fully visible product is NOT the same as a functionally verified product
 - never invent a button, pump, sprayer, dispenser, latch, hinge behavior, opening method, removable part, control, output, transformation or operating sequence
+- never reinterpret an existing visible component as a different feature or accessory. A fabric panel cannot become a sunshade, a cover cannot become a flap, and a fixed part cannot become extendable unless the verified source explicitly proves that exact function/state
 - perfume/cosmetic bottles may be held and presented, but do not press the cap/top, spray, pump, dispense, open or remove parts unless the verified product data explicitly proves that exact mechanism/action
 - when in doubt, keep the product mechanically passive and put the motion in the hand/person/camera/props/environment instead
 
@@ -14604,6 +14632,8 @@ TEXT SAFETY:
 NON-NEGOTIABLE PRODUCT RULES:
 - the uploaded first frame is authoritative; it may show the whole product or only the retailer-verified visible portion
 - preserve the exact visible identity-defining design, print, colors, proportions, materials, branding, logos and printed product text
+- treat visible logos, emblems, letters, numbers, label graphics and packaging print as character-for-character locked. Never redraw or approximate them; if exact preservation conflicts with motion, reduce product motion and move the camera/environment instead
+- treat every visible component's role, attachment, geometry and mechanical state as locked. Do not unfold, extend, open, transform, repurpose or convert a component unless that exact transformation is explicitly verified in the product source
 - if Full-product interaction allowed is NO: keep the SAME visible camera angle/crop throughout, show only surfaces/details already visible, never extend/complete the crop, and never rotate/orbit/tilt to reveal a new area
 - if Full-product interaction allowed is YES: natural product use and modest physical motion are allowed, but NEVER reveal a side/surface that is absent from the retailer image. Keep the same verified camera-facing orientation for the entire clip
 - for apparel specifically, a person may wear the exact garment while the visible print/color/design stays unchanged and prominent. If the retailer image verifies only the BACK, the wearer must stay back-facing/three-quarter-back and must never turn far enough for the front to become visible. If only the FRONT is verified, the reverse applies. Do not replace it with a similar garment
@@ -14630,7 +14660,7 @@ NON-NEGOTIABLE PRODUCT RULES:
       "The first visible frame must already look like a finished real-world commercial scene. Continue the supplied natural environment immediately; no solid-color, monochrome, gradient, abstract or empty studio intro and no backdrop-to-lifestyle transition.",
       "Do not begin with or create a small image card that expands to full screen.",
       "Do not linger on a static, staged or composited opening frame. The clip must feel already in-progress from the first instant and be fully inside believable scene action within the first 0.2-0.3 second.",
-      "No product morph, redesign or substitution with a similar product. Never add/remove/move visible buttons, controls, openings, seams or hardware, and never change visible material boundaries, surface finish or color blocking. FUNCTIONAL TRUTH OVERRIDES ANY EARLIER CREATIVE IDEA: never infer that a visible part is a button, pump, sprayer, dispenser, latch, removable cap or control, and never show a product output/effect or operating sequence unless the verified product data explicitly proves that exact action or the direct physical use is universally self-evident. If functionality is uncertain, keep the product mechanically passive and move the hand/person/camera/props/environment instead.",
+      "No product morph, redesign or substitution with a similar product. Never add/remove/move visible buttons, controls, openings, seams or hardware, and never change visible material boundaries, surface finish or color blocking. COMPONENT ROLE LOCK: every visible component must keep the same purpose, attachment, geometry and mechanical state; never turn an existing part into a sunshade, flap, opening, extendable section, control or other new feature unless that exact transformation is explicitly verified. SURFACE PRINT LOCK: every visible logo, emblem, letter, number and label graphic must remain character-for-character identical; never redraw, approximate or substitute product print. If exact identity conflicts with motion, keep the product visually rigid and move the person, camera, props or environment instead. FUNCTIONAL TRUTH OVERRIDES ANY EARLIER CREATIVE IDEA: never infer that a visible part is a button, pump, sprayer, dispenser, latch, removable cap or control, and never show a product output/effect or operating sequence unless the verified product data explicitly proves that exact action or the direct physical use is universally self-evident. If functionality is uncertain, keep the product mechanically passive and move the hand/person/camera/props/environment instead.",
       "Do not generate any new readable overlay text, captions, slogans, prices, labels or typography. Spreelo adds professional typography after the video is generated. Preserve only text physically present on the verified product reference.",
       "No fake logos and no watermark.",
       "Make the action bold, surprising, product-specific and sales-oriented, with an immediate first-second hook and the main payoff completed before the final second inside one physically coherent real-world commercial environment. By about 5.0 seconds, all meaningful action must resolve. Hold a clean, stable product hero composition for the final 0.8-1.0 second through the last frame; never end during a hand movement, product movement, camera move, reveal or other unfinished action. Decorative particles alone are not a concept.",
@@ -21930,6 +21960,46 @@ function getStructuredProductBrand(product) {
   return String(raw || "").trim();
 }
 
+function normalizeWebsiteProductSourceTypeForRuntime(value) {
+  const raw = String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const aliases = { shop: "ecommerce", webshop: "ecommerce", retailer: "retailer_catalog", manufacturer: "manufacturer_catalog", product_catalog: "manufacturer_catalog" };
+  return aliases[raw] || raw || "";
+}
+
+function getWebsiteProductSourceTypeForRule(rule, brandProfile = null) {
+  const explicit = normalizeWebsiteProductSourceTypeForRuntime(
+    rule?.website_product_source_type || brandProfile?.website_product_source_type || ""
+  );
+  if (explicit) return explicit;
+
+  const reasonText = String(
+    rule?.website_product_mode_reason || brandProfile?.website_product_mode_reason || ""
+  );
+  const taggedSourceType = reasonText.match(/\[source_type=([a-z_]+)\]/i)?.[1] || "";
+  const taggedNormalized = normalizeWebsiteProductSourceTypeForRuntime(taggedSourceType);
+  if (taggedNormalized) return taggedNormalized;
+
+  // Backward-compatible inference for brand profiles analyzed before v144.53.
+  // This avoids forcing an immediate re-analysis just to stop treating a
+  // manufacturer catalog like a direct-stock retailer.
+  const context = normalizeSearchText([
+    rule?.website_product_mode_reason,
+    brandProfile?.website_product_mode_reason,
+    rule?.brand_profile?.industry,
+    brandProfile?.industry,
+    rule?.brand_profile?.brand_description,
+    brandProfile?.brand_description,
+  ].filter(Boolean).join(" "));
+  if (/manufacturer|manufactur|producer|tillverk|official product catalog|product range|aterforsalj|återförsälj|dealer network/.test(context)) {
+    return "manufacturer_catalog";
+  }
+  return "ecommerce";
+}
+
+function isManufacturerCatalogSource(rule, brandProfile = null) {
+  return getWebsiteProductSourceTypeForRule(rule, brandProfile) === "manufacturer_catalog";
+}
+
 function normalizeProductAvailabilityStatus(value) {
   const raw = String(value || "")
     .trim()
@@ -21943,6 +22013,7 @@ function normalizeProductAvailabilityStatus(value) {
   if (/pre ?order|förbeställ|forbestall/.test(raw)) return "preorder";
   if (/back ?order|restorder/.test(raw)) return "backorder";
   if (/in stock|instock|i lager/.test(raw)) return "in_stock";
+  if (/catalog current|current catalog|official catalog|current official product|current product range/.test(raw)) return "catalog_current";
   if (/available|orderable|buyable|kan köpas|kan kopas/.test(raw)) return "available";
   return "unknown";
 }
@@ -21995,6 +22066,27 @@ function isProductConfirmedPurchasable(item) {
       item?.purchase_action_detected === true &&
       !isProductKnownUnavailableForPromotion(item)
   );
+}
+
+function isProductEligibleForWebsiteSource(item, rule, brandProfile = null) {
+  if (isProductKnownUnavailableForPromotion(item)) return false;
+  if (!isManufacturerCatalogSource(rule, brandProfile)) {
+    return isProductConfirmedPurchasable(item);
+  }
+
+  const availability = getProductPromotionAvailability(item);
+  const hasIdentity = Boolean(item?.url && item?.title && item?.image_url);
+  const hasOfficialVerification = Boolean(
+    item?.product_identity_locked === true ||
+    item?.concrete_product_verified === true ||
+    item?.product_page_verified === true ||
+    item?.authoritative_web_agent_selected === true ||
+    item?.indexed_security_fallback_verified === true ||
+    item?.locked_product_page_object === true ||
+    item?.exact_page_verified === true ||
+    availability === "catalog_current"
+  );
+  return hasIdentity && hasOfficialVerification;
 }
 
 function hasDirectProductPurchaseAction(html) {
@@ -23153,6 +23245,15 @@ async function discoverProductsFromFocusedCategory({
   excludeProductUrls = [],
   verificationCache = null,
 }) {
+  const knownDomainState = await getWebsiteDomainFetchState(categoryUrl).catch(() => null);
+  if (isWebsiteAccessProtectedState(knownDomainState)) {
+    console.info("Focused category direct crawl skipped for known protected website", {
+      ruleId: rule?.id || null,
+      categoryUrl,
+    });
+    return [];
+  }
+
   const campaignPrompt = buildCampaignResearchText(rule);
   const requestedProductScale = Math.max(
     1,
@@ -23308,7 +23409,7 @@ async function discoverProductsFromFocusedCategory({
   });
 
   const requestedVerifiedCount = singleProductFocusedDiscovery
-    ? Math.min(6, Math.max(4, Number(limit || 0) > 0 ? Math.ceil(Number(limit) / 2) : 4))
+    ? 1
     : Math.min(
         24,
         Math.max(
@@ -24339,6 +24440,15 @@ async function discoverProductCandidatesFromStoreSearch({
   rule = null,
   deadlineMs = null,
 }) {
+  const knownDomainState = await getWebsiteDomainFetchState(websiteUrl).catch(() => null);
+  if (isWebsiteAccessProtectedState(knownDomainState)) {
+    console.info("Direct store-search discovery skipped for known protected website", {
+      ruleId: rule?.id || null,
+      websiteUrl,
+    });
+    return [];
+  }
+
   const candidates = [];
   const usedComparable = new Set(
     (usedItems || [])
@@ -25044,6 +25154,15 @@ async function discoverProductCandidatesFromWebsite({
   supabase = null,
   rule = null,
 }) {
+  const knownDomainState = await getWebsiteDomainFetchState(websiteUrl).catch(() => null);
+  if (isWebsiteAccessProtectedState(knownDomainState)) {
+    console.info("Direct website product discovery skipped for known protected website", {
+      ruleId: rule?.id || null,
+      websiteUrl,
+    });
+    return [];
+  }
+
   const candidates = [];
   const usedComparable = new Set(
     (usedItems || [])
@@ -26150,6 +26269,7 @@ async function repairAuthoritativeWebAgentProductAssets({
 }) {
   const startedAt = Date.now();
   const allowedDomain = getWebsiteFetchDomain(websiteUrl);
+  const manufacturerCatalogSource = isManufacturerCatalogSource(rule, rule?.brand_profile);
   const remainingBudgetMs = Number.isFinite(deadlineMs)
     ? Math.max(0, deadlineMs - Date.now())
     : CAMPAIGN_PRIMARY_ASSET_REPAIR_TIMEOUT_MS +
@@ -26188,7 +26308,7 @@ async function repairAuthoritativeWebAgentProductAssets({
   }
 
   const instructions = `
-You are a technical product-identity and asset repair agent. The senior marketer has already selected and ranked product candidates. Preserve an exact selected identity when it is still explicitly in stock; when the in-stock replacement rule below applies, replace it with a current in-stock product rather than preserving a stale or non-stock identity.
+You are a technical product-identity and asset repair agent. The senior marketer has already selected and ranked product candidates. Preserve the exact selected identity when it is still a CURRENT official product in the target market. ${manufacturerCatalogSource ? "This source is an official manufacturer catalog: do not require direct checkout or manufacturer stock wording; verify current official catalog presence instead." : "For a direct retailer/ecommerce source, current purchasability rules still apply."}
 
 For every supplied product:
 - Search only ${allowedDomain} using exact product-title searches plus every supplied stable identity hint/SKU.
@@ -26196,8 +26316,8 @@ For every supplied product:
 - A stale URL may come from an older commerce platform or search index. Prefer the retailer's current canonical URL structure.
 - Open the current official result immediately before returning it. Confirm that it loads as a live product page rather than a 404, redirect loop, search result, category or cached snippet.
 - Treat the MAIN PRODUCT block on the opened product detail page as one indivisible object. Read current_title, product_identifier/SKU, brand, category, color and the main image from that same main-product block. Do not search for or return a product price.
-- Also read current availability from that same official main-product page. availability_status must be exactly one of in_stock, available, preorder, backorder, out_of_stock, discontinued or unknown. Prefer in_stock when the page explicitly says so. Use available only when the CURRENT exact product page has an active purchase action and does not expose an out-of-stock, discontinued, preorder-only or backorder-only signal.
-- Return purchase_action_detected=true only when you actually observed an active buy/add-to-cart/order action on that exact current product page. Return availability_evidence as concise CURRENT official evidence. Never infer availability from an old search snippet.
+- Also read current availability/catalog status from that same official main-product page. availability_status must be exactly one of in_stock, available, catalog_current, preorder, backorder, out_of_stock, discontinued or unknown. For manufacturer_catalog use catalog_current when the CURRENT official product page/catalog clearly presents this as a current product and there is no discontinued/archive signal. For direct ecommerce, prefer in_stock when explicitly shown and use available only with an active purchase action.
+- Return purchase_action_detected=true only when you actually observed an active buy/add-to-cart/order action on that exact current product page. For manufacturer_catalog it may correctly remain false. Return availability_evidence as concise CURRENT official evidence. Never infer availability from an old search snippet.
 - Return the best direct product-image file URL that is visibly attached to the MAIN PRODUCT on that exact opened product detail page.
 - The image, current_title and product facts must come from the same opened current_url and the same main-product block. Never borrow an image or text from recommendations, related products, search-result cards, colour swatches, "more from the brand" sections or image-search thumbnails.
 - Set image_source_page_url to the exact product detail page where the returned image is attached to the main product, and set image_is_main_product_asset=true only when you verified that relationship.
@@ -26208,7 +26328,7 @@ For every supplied product:
 - Return image_alt_text when the main image exposes it, otherwise an empty string.
 - Return main_product_evidence as a concise description of the main-product block that jointly proves the title and image belong together.
 - Keep identity_evidence concise and state the exact title, SKU/product number or other official evidence that proves the match.
-${allowPurchasableReplacements ? `
+${allowPurchasableReplacements && !manufacturerCatalogSource ? `
 IN-STOCK REPLACEMENT RULE — DELIVERY SAFE:
 - First inspect the exact selected candidate. Keep that exact identity when the CURRENT official page proves it is purchasable now: either availability_status=in_stock, or availability_status=available together with purchase_action_detected=true and no negative availability signal. Set replacement_for_unavailable=false in that case.
 - If the selected candidate is preorder, backorder, out_of_stock, discontinued, unknown, or otherwise not currently purchasable, do NOT return it as the promoted product. In the SAME request, search ${allowedDomain} for a different CURRENT product that is purchasable now and is a strong fit for the supplied product_family and campaign/product intent.
@@ -26283,6 +26403,7 @@ Return only the required JSON structure.`.trim();
                       enum: [
                         "in_stock",
                         "available",
+                        "catalog_current",
                         "preorder",
                         "backorder",
                         "out_of_stock",
@@ -26297,6 +26418,7 @@ Return only the required JSON structure.`.trim();
                       enum: [
                         "in_stock",
                         "available",
+                        "catalog_current",
                         "preorder",
                         "backorder",
                         "out_of_stock",
@@ -26409,8 +26531,10 @@ Return only the required JSON structure.`.trim();
     ).trim();
     const purchaseActionDetected = repairedProduct?.purchase_action_detected === true;
     const repairedProductConfirmedPurchasable = Boolean(
-      availabilityStatus === "in_stock" ||
-        (availabilityStatus === "available" && purchaseActionDetected)
+      manufacturerCatalogSource
+        ? ["catalog_current", "in_stock", "available"].includes(availabilityStatus)
+        : availabilityStatus === "in_stock" ||
+          (availabilityStatus === "available" && purchaseActionDetected)
     );
     const selectedCandidateAvailabilityStatus = normalizeProductAvailabilityStatus(
       repairedProduct?.selected_candidate_availability_status
@@ -26435,9 +26559,11 @@ Return only the required JSON structure.`.trim();
       recoveredProduct: repairedProduct,
     });
     const selectedCandidateConfirmedPurchasable = Boolean(
-      selectedCandidateAvailabilityStatus === "in_stock" ||
-        (selectedCandidateAvailabilityStatus === "available" &&
-          selectedCandidate?.purchase_action_detected === true)
+      manufacturerCatalogSource
+        ? ["catalog_current", "in_stock", "available"].includes(selectedCandidateAvailabilityStatus)
+        : selectedCandidateAvailabilityStatus === "in_stock" ||
+          (selectedCandidateAvailabilityStatus === "available" &&
+            selectedCandidate?.purchase_action_detected === true)
     );
     const safePurchasableReplacement = Boolean(
       allowPurchasableReplacements &&
@@ -26513,6 +26639,8 @@ Return only the required JSON structure.`.trim();
       product_image_page_bound_source: "gpt55_exact_repair_same_page",
       product_image_source_page_url: imageSourcePageUrl,
       product_identity_locked: true,
+      indexed_security_fallback_verified: true,
+      exact_page_verified: true,
       locked_product_source: "gpt55_main_product_block",
       locked_product_url: currentUrl,
       locked_product_title:
@@ -28473,6 +28601,7 @@ async function findProductUrlWithWebSearch({
 
   const isBackupAttempt = attempt === "backup_broad";
   const isDomainSearchAttempt = attempt === "domain_site_search";
+  const manufacturerCatalogSource = isManufacturerCatalogSource(rule, brandProfile);
   const productSearchQueries = normalizeStoreSearchQueries(
     splitStoreSearchQueryLine(rule?.product_search_queries),
     CAMPAIGN_STORE_SEARCH_QUERY_LIMIT
@@ -28537,9 +28666,14 @@ Reuse rule:
 - Actively search for different products first.
 - The goal is to avoid reusing the same product within the latest ${WEBSITE_PRODUCT_REUSE_LIMIT} product posts when the store has enough products.
 
+Product-source verification rule:
+${manufacturerCatalogSource
+  ? "This website is an official manufacturer catalog. A product is eligible when it is a current official product in this market with an exact official product page and exact bound product image. Do not require add-to-cart, checkout, inventory quantity or in-stock wording on the manufacturer website. Exclude discontinued, archived and obsolete products."
+  : "This website is a direct ecommerce/retailer source. Current purchasability/stock proof remains required."}
+
 Research mode:
 ${
-  attempt === "stock_first"
+  !manufacturerCatalogSource && attempt === "stock_first"
     ? `
 This is an AVAILABILITY-FIRST current-assortment attempt.
 
@@ -28551,7 +28685,7 @@ The retailer may have many old indexed product pages. Do NOT start from an exact
 - If the campaign mentions an obsolete model/spec, select the closest relevant current in-stock successor/product family instead.
 - Campaign relevance is secondary to current stock proof in this attempt.
 `.trim()
-    : attempt === "stock_broad"
+    : !manufacturerCatalogSource && attempt === "stock_broad"
       ? `
 This is the FINAL BROAD IN-STOCK DELIVERY attempt.
 
@@ -28567,7 +28701,7 @@ Earlier current-assortment research did not produce a safely verified product. S
 This is a domain-restricted web search attempt.
 
 The normal store/catalog search did not return enough usable products. Search the public web inside the customer's domain like a human researcher would.
-For a security-protected retailer, treat this as another CURRENT-ASSORTMENT / IN-STOCK attempt: prefer current category/listing pages and recently indexed official product pages with explicit positive stock evidence. Do not resurrect an obsolete exact model merely because its old page ranks well.
+For a security-protected retailer, treat this as another CURRENT-ASSORTMENT / IN-STOCK attempt. For a manufacturer_catalog, direct manufacturer stock is NOT required: instead prove that the exact product is part of the CURRENT official product range on the target market and is not discontinued/archived. Do not resurrect an obsolete exact model merely because its old page ranks well.
 Use domain-restricted queries such as:
 - site:${websiteHost} ${searchHintTerms.slice(0, 6).join(" ")}
 - site:${websiteHost} ${productSearchQueries.slice(0, 4).join(" OR ") || rule?.name || "products"}
@@ -28909,8 +29043,11 @@ async function findWebsiteProductWithWebSearch({
     ? await getWebsiteDomainFetchState(websiteUrl).catch(() => null)
     : null;
   const knownSecurityBlocked = isWebsiteAccessProtectedState(knownDomainState);
+  const manufacturerCatalogSource = isManufacturerCatalogSource(rule, brandProfile);
   const attempts = knownSecurityBlocked
-    ? ["stock_first", "stock_broad", "domain_site_search"]
+    ? manufacturerCatalogSource
+      ? ["stock_first", "domain_site_search"]
+      : ["stock_first", "stock_broad", "domain_site_search"]
     : ["best_match", "stock_first", "backup_broad"].slice(
         0,
         Math.max(1, Math.min(3, Number(maxAttempts || 3)))
@@ -28934,7 +29071,9 @@ async function findWebsiteProductWithWebSearch({
       .filter(Boolean);
     for (const key of keys) indexedSecurityRecoveredByUrl.set(key, recoveredItem);
   }
-  const MAX_INDEXED_SECURITY_FALLBACK_BATCHES = knownSecurityBlocked ? 3 : 1;
+  const MAX_INDEXED_SECURITY_FALLBACK_BATCHES = knownSecurityBlocked
+    ? manufacturerCatalogSource ? 1 : 2
+    : 1;
   let indexedSecurityFallbackBatches = Math.max(
     0,
     Number(
@@ -28958,7 +29097,7 @@ async function findWebsiteProductWithWebSearch({
           item?.url &&
           item?.title &&
           item?.image_url &&
-          isProductConfirmedPurchasable(item)
+          isProductEligibleForWebsiteSource(item, rule, brandProfile)
       )
     )
       .sort(
@@ -29044,13 +29183,13 @@ async function findWebsiteProductWithWebSearch({
       });
       if (!hydrated?.url || !hydrated?.title || !hydrated?.image_url) continue;
 
-      if (!isProductConfirmedPurchasable(hydrated)) {
+      if (!isProductEligibleForWebsiteSource(hydrated, rule, brandProfile)) {
         availabilityRejectedCandidates.push({
           title: hydrated?.title || repairedCandidate?.title || "",
           url: hydrated?.url || repairedCandidate?.url || "",
           availability: getProductPromotionAvailability(hydrated),
         });
-        console.info("Indexed security fallback rejected product that is not currently purchasable because it is not explicitly in stock", {
+        console.info("Indexed security fallback rejected product that is not eligible for the analyzed website source", {
           ruleId: rule?.id,
           brandProfileId: rule?.brand_profile_id,
           websiteUrl,
@@ -29300,7 +29439,7 @@ async function findWebsiteProductWithWebSearch({
                 return getIndexedFallbackItems();
               }
 
-              console.warn("Indexed security fallback batch returned no confirmed in-stock product; trying another bounded current-assortment research pass", {
+              console.warn("Indexed security fallback batch returned no confirmed current product; trying another bounded current-assortment research pass", {
                 ruleId: rule?.id,
                 brandProfileId: rule?.brand_profile_id,
                 websiteUrl,
@@ -29354,8 +29493,8 @@ async function findWebsiteProductWithWebSearch({
           continue;
         }
 
-        if (!isProductConfirmedPurchasable(websiteItem)) {
-          console.info("Product researcher rejected product without explicit current in-stock proof", {
+        if (!isProductEligibleForWebsiteSource(websiteItem, rule, brandProfile)) {
+          console.info("Product researcher rejected product without the required current source verification", {
             ruleId: rule?.id,
             productUrl: websiteItem.url,
             title: websiteItem.title,
@@ -29618,10 +29757,12 @@ async function prepareWebsiteContentForRule({
 
     if (
       isProductContentTypeRule(rule) &&
-      !isProductConfirmedPurchasable(exactProduct)
+      !isProductEligibleForWebsiteSource(exactProduct, rule, brandProfile)
     ) {
       throw new Error(
-        "The customer-selected exact product could be identified safely, but it is not explicitly confirmed in stock now. Spreelo will not promote an out-of-stock, preorder, backorder or unknown-stock product."
+        isManufacturerCatalogSource(rule, brandProfile)
+          ? "The customer-selected exact product could be identified safely, but it could not be confirmed as a current official product in this market."
+          : "The customer-selected exact product could be identified safely, but it is not explicitly confirmed in stock now. Spreelo will not promote an out-of-stock, preorder, backorder or unknown-stock product."
       );
     }
 
@@ -29650,6 +29791,20 @@ async function prepareWebsiteContentForRule({
   });
 
   if (contentSourceScope === "product_category" || contentSourceScope === "focus_page") {
+    if (websiteAccessProtected) {
+      console.info("Protected customer-selected category skipped direct crawling", {
+        ruleId: rule.id,
+        brandProfileId: rule.brand_profile_id,
+        websiteUrl,
+        sourceType: getWebsiteProductSourceTypeForRule(rule, brandProfile),
+      });
+      throw new ProtectedProductResearchRetryError(
+        isManufacturerCatalogSource(rule, brandProfile)
+          ? "The customer-selected manufacturer category is protected from direct crawling. Spreelo will wait before one bounded indexed retry and will not search outside the selected source."
+          : "The customer-selected product category is protected from direct crawling. Spreelo will wait before one bounded indexed retry and will not search outside the selected source.",
+        { url: websiteUrl }
+      );
+    }
     let focusedCategoryItems = await discoverProductsFromFocusedCategory({
       supabase,
       categoryUrl: websiteUrl,
@@ -29868,49 +30023,64 @@ async function prepareWebsiteContentForRule({
   }
 
   if (websiteAccessProtected) {
+    const manufacturerCatalogSource = isManufacturerCatalogSource(rule, brandProfile);
     const beforeFreshFilter = catalogItems.length;
-    catalogItems = catalogItems.filter((item) =>
-      isFreshProductStockVerification(item)
-    );
-    console.log("Protected retailer catalog filtered to fresh in-stock verification", {
-      ruleId: rule.id,
-      brandProfileId: rule.brand_profile_id,
-      websiteUrl,
-      beforeCount: beforeFreshFilter,
-      freshCount: catalogItems.length,
-      freshnessMs: PROTECTED_PRODUCT_STOCK_FRESH_MS,
-    });
 
-    const publicFeedItems = filterWebsiteCatalogItemsForRule(
-      await discoverPublicCommerceFeedCandidates({
-        websiteUrl,
-        campaignPrompt: buildCampaignResearchText(rule),
-      }),
-      rule
-    ).map((item) => ({
-      ...item,
-      selection_priority: Math.max(Number(item?.selection_priority || 0), 360),
-      campaign_fit_source:
-        item?.campaign_fit_source || "protected_public_commerce_feed",
-      campaign_fit_score:
-        Number(item?.campaign_fit_score || 0) +
-        scoreCampaignFitForRule(item, rule) +
-        45,
-    }));
-
-    if (publicFeedItems.length) {
-      catalogItems = dedupeWebsiteItemsByUrlTitleAndImage([
-        ...publicFeedItems,
-        ...catalogItems,
-      ]);
-      await upsertWebsiteProductCatalogItems({
-        supabase,
-        userId: rule.user_id,
+    if (manufacturerCatalogSource) {
+      catalogItems = catalogItems.filter((item) =>
+        isProductEligibleForWebsiteSource(item, rule, brandProfile)
+      );
+      console.log("Protected manufacturer catalog kept current official-product verification", {
+        ruleId: rule.id,
         brandProfileId: rule.brand_profile_id,
-        sourceUrl: websiteUrl,
-        items: publicFeedItems,
-        discoverySource: "protected_public_commerce_feed",
+        websiteUrl,
+        beforeCount: beforeFreshFilter,
+        verifiedCount: catalogItems.length,
       });
+    } else {
+      catalogItems = catalogItems.filter((item) =>
+        isFreshProductStockVerification(item)
+      );
+      console.log("Protected retailer catalog filtered to fresh in-stock verification", {
+        ruleId: rule.id,
+        brandProfileId: rule.brand_profile_id,
+        websiteUrl,
+        beforeCount: beforeFreshFilter,
+        freshCount: catalogItems.length,
+        freshnessMs: PROTECTED_PRODUCT_STOCK_FRESH_MS,
+      });
+
+      const publicFeedItems = filterWebsiteCatalogItemsForRule(
+        await discoverPublicCommerceFeedCandidates({
+          websiteUrl,
+          campaignPrompt: buildCampaignResearchText(rule),
+        }),
+        rule
+      ).map((item) => ({
+        ...item,
+        selection_priority: Math.max(Number(item?.selection_priority || 0), 360),
+        campaign_fit_source:
+          item?.campaign_fit_source || "protected_public_commerce_feed",
+        campaign_fit_score:
+          Number(item?.campaign_fit_score || 0) +
+          scoreCampaignFitForRule(item, rule) +
+          45,
+      }));
+
+      if (publicFeedItems.length) {
+        catalogItems = dedupeWebsiteItemsByUrlTitleAndImage([
+          ...publicFeedItems,
+          ...catalogItems,
+        ]);
+        await upsertWebsiteProductCatalogItems({
+          supabase,
+          userId: rule.user_id,
+          brandProfileId: rule.brand_profile_id,
+          sourceUrl: websiteUrl,
+          items: publicFeedItems,
+          discoverySource: "protected_public_commerce_feed",
+        });
+      }
     }
   }
 
@@ -30598,6 +30768,7 @@ async function prepareWebsiteContentForRule({
       }
     }
 
+    if (!websiteAccessProtected) {
     const discoveredCandidates = await discoverProductCandidatesFromWebsite({
       websiteUrl,
       campaignPrompt: buildCampaignResearchText(rule),
@@ -30683,6 +30854,15 @@ async function prepareWebsiteContentForRule({
       }
     }
 
+    } else {
+      console.info("Protected website direct discovery skipped after security state was established", {
+        ruleId: rule.id,
+        brandProfileId: rule.brand_profile_id,
+        websiteUrl,
+        sourceType: getWebsiteProductSourceTypeForRule(rule, brandProfile),
+      });
+    }
+
     const reusablePool = productIntentScoped
       ? [
           ...getSafeCampaignProductCandidates(sortedCatalogItems, rule),
@@ -30745,14 +30925,16 @@ async function prepareWebsiteContentForRule({
     websiteAccessState ||
     (await getWebsiteDomainFetchState(websiteUrl).catch(() => null));
   if (websiteAccessProtected || isWebsiteAccessProtectedState(finalWebsiteAccessState)) {
-    console.warn("Protected retailer product research exhausted this occurrence; requesting bounded retry instead of publishing an unverified product", {
+    console.warn("Protected product-source research exhausted this occurrence; requesting bounded retry instead of publishing an unverified product", {
       ruleId: rule.id,
       brandProfileId: rule.brand_profile_id,
       websiteUrl,
       domain: getWebsiteFetchDomain(websiteUrl),
     });
     throw new ProtectedProductResearchRetryError(
-      "The protected retailer did not expose enough fresh in-stock product evidence in this attempt. Spreelo will automatically retry the same occurrence using public commerce feeds, indexed current-assortment research and fresh stock verification.",
+      isManufacturerCatalogSource(rule, brandProfile)
+        ? "The protected manufacturer catalog did not expose enough current official product evidence in this attempt. Spreelo will defer this occurrence before one bounded retry; it will not direct-crawl the blocked website."
+        : "The protected retailer did not expose enough fresh in-stock product evidence in this attempt. Spreelo will defer this occurrence before one bounded retry using public commerce feeds and indexed current-assortment research.",
       { url: websiteUrl }
     );
   }
@@ -40831,6 +41013,14 @@ async function runAutomationCron(request, options = {}) {
           automationBrandProfile?.content_market || rule.content_market || "";
         rule.country_code =
           automationBrandProfile?.country_code || rule.country_code || "";
+        rule.website_product_source_type =
+          automationBrandProfile?.website_product_source_type ||
+          rule.website_product_source_type ||
+          "";
+        rule.website_product_mode_reason =
+          automationBrandProfile?.website_product_mode_reason ||
+          rule.website_product_mode_reason ||
+          "";
         rule.brand_profile = automationBrandProfile || rule.brand_profile || null;
         rule.product_market_code = getProductMarketCodeForRule(
           rule,
@@ -43253,7 +43443,7 @@ product_research_model_used: websitePreparedRule.uses_website_content
             const terminalTransientError = protectedProductResearchRetry
               ? Object.assign(
                   new Error(
-                    "Spreelo could not obtain enough fresh verified product evidence from the protected retailer after the bounded automatic retries. The occurrence has stopped and needs admin review; it will not claim that another retry is scheduled."
+                    "Spreelo could not obtain enough current verified product evidence from the protected product source after the bounded automatic retry. The occurrence has stopped and needs admin review; it will not claim that another retry is scheduled."
                   ),
                   { code: "PROTECTED_PRODUCT_RESEARCH_RETRY_EXHAUSTED" }
                 )

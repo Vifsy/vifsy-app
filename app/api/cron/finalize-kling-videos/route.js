@@ -169,13 +169,14 @@ async function persistKlingSourceCache(supabase, post, task) {
   return nextSelection;
 }
 
-async function setReviewCaseFailure(supabase, postId, stage, message) {
+async function setReviewCaseFailure(supabase, postId, stage, message, failureCode = null) {
   const nowIso = new Date().toISOString();
   const { error } = await supabase
     .from("admin_review_cases")
     .update({
       status: "needs_repair",
       needs_review: true,
+      failure_code: failureCode || (stage === "kling_finished_product_identity" ? "KLING_FINISHED_PRODUCT_IDENTITY_REJECTED" : null),
       failure_stage: stage,
       failure_message: truncate(message, 2000),
       updated_at: nowIso,
@@ -363,7 +364,7 @@ async function validateFinishedKlingProductIdentity({ openai, supabase, post, ta
         "For rigid products, explicitly compare the number, position, shape and size of visible buttons, switches, controls, openings, seams, joints and distinctive hardware; compare material boundaries, surface finish/texture, color blocking, silhouette/proportions, logos and printed design. " +
         "Reject if any frame visibly adds a button/control/detail, removes or relocates one, changes material or color regions, changes the visible geometry, substitutes a similar product, or exposes an unverified product side/surface. " +
         "Do NOT fail merely because a real detail is temporarily occluded by a hand, motion blur, perspective, glare or is too small to judge. Fail only for a visible contradiction/addition/redesign, or an unverified surface exposure. " +
-        "A plausible invented detail is still a failure. Return strict JSON only.",
+        "A plausible invented detail is still a failure. Every boolean must agree with the written reason: never set unverified_surface_exposed=true if the reason says no unverified surface was exposed, and never set a preservation field=true if the reason describes that property as changed. Return strict JSON only.",
     },
     { type: "input_text", text: "AUTHORITATIVE RETAILER PRODUCT REFERENCE" },
     { type: "input_image", image_url: referenceDataUrl, detail: "high" },
@@ -440,6 +441,14 @@ async function validateFinishedKlingProductIdentity({ openai, supabase, post, ta
       parsed?.invented_or_moved_identity_detail !== true &&
       confidence >= 0.9
   );
+  const violationCodes = [];
+  if (parsed?.same_product_all_auditable_frames !== true) violationCodes.push("product_identity_changed");
+  if (parsed?.verified_view_preserved !== true || parsed?.unverified_surface_exposed === true) violationCodes.push("verified_view_or_surface_changed");
+  if (parsed?.visible_controls_hardware_preserved !== true) violationCodes.push("controls_or_hardware_changed");
+  if (parsed?.visible_material_color_design_preserved !== true) violationCodes.push("material_color_or_print_changed");
+  if (parsed?.invented_or_moved_identity_detail === true) violationCodes.push("invented_or_moved_identity_detail");
+  if (!passed && !violationCodes.length) violationCodes.push("identity_audit_uncertain");
+
   const validation = {
     status: passed ? "passed" : "failed",
     checked_at: new Date().toISOString(),
@@ -452,6 +461,7 @@ async function validateFinishedKlingProductIdentity({ openai, supabase, post, ta
     visible_controls_hardware_preserved: parsed?.visible_controls_hardware_preserved === true,
     visible_material_color_design_preserved: parsed?.visible_material_color_design_preserved === true,
     invented_or_moved_identity_detail: parsed?.invented_or_moved_identity_detail === true,
+    violation_codes: violationCodes,
     reason: String(parsed?.reason || (passed ? "verified" : "product_identity_mismatch")).trim(),
   };
   const nextSelection = { ...selection, product_video_validation: validation };
@@ -476,6 +486,7 @@ async function validateFinishedKlingProductIdentity({ openai, supabase, post, ta
     materialColorDesignPreserved: validation.visible_material_color_design_preserved,
     inventedOrMovedIdentityDetail: validation.invented_or_moved_identity_detail,
     unverifiedSurfaceExposed: validation.unverified_surface_exposed,
+    violationCodes: validation.violation_codes,
     reason: truncate(validation.reason, 700),
   });
 

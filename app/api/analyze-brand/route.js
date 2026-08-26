@@ -740,6 +740,48 @@ function hasProductBasedWebsiteEvidence(evidenceText) {
   return score >= 4 && !isMostlyNonSellable;
 }
 
+function normalizeWebsiteProductSourceType(value, available = false) {
+  if (!available) return "";
+  const raw = String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const aliases = {
+    shop: "ecommerce",
+    webshop: "ecommerce",
+    ecommerce_store: "ecommerce",
+    retailer: "retailer_catalog",
+    retail_catalog: "retailer_catalog",
+    product_catalog: "manufacturer_catalog",
+    manufacturer: "manufacturer_catalog",
+    manufacturer_products: "manufacturer_catalog",
+    services: "service_catalog",
+    service: "service_catalog",
+    restaurant_menu: "menu",
+    bookable: "booking",
+    appointment: "booking",
+    listings: "listing",
+    course: "course_event",
+    event: "course_event",
+  };
+  const normalized = aliases[raw] || raw;
+  return new Set([
+    "ecommerce",
+    "retailer_catalog",
+    "manufacturer_catalog",
+    "service_catalog",
+    "menu",
+    "booking",
+    "listing",
+    "course_event",
+    "other",
+  ]).has(normalized) ? normalized : "other";
+}
+
+function formatWebsiteProductModeReasonWithSourceType(mode) {
+  const reason = String(mode?.reason || "").trim();
+  const sourceType = normalizeWebsiteProductSourceType(mode?.source_type, Boolean(mode?.available));
+  if (!sourceType) return reason;
+  return `[source_type=${sourceType}] ${reason}`.trim();
+}
+
 function normalizeWebsiteProductMode(rawValue, fallbackWebsiteUrl = "", evidenceText = "") {
   const rawMode = rawValue || {};
 
@@ -755,9 +797,11 @@ function normalizeWebsiteProductMode(rawValue, fallbackWebsiteUrl = "", evidence
   const normalizedSourceUrl = rawSourceUrl
     ? normalizeWebsiteUrl(rawSourceUrl)
     : "";
+  const sourceType = normalizeWebsiteProductSourceType(rawMode.source_type, available);
 
   return {
     available,
+    source_type: sourceType,
     reason:
       reason ||
       (available
@@ -1193,7 +1237,7 @@ async function saveBrandProfile({
       website_product_mode_checked_at: websiteUrl
         ? new Date().toISOString()
         : null,
-      website_product_mode_reason: websiteProductMode?.reason || "",
+      website_product_mode_reason: formatWebsiteProductModeReasonWithSourceType(websiteProductMode),
       website_product_source_url: websiteProductMode?.available
   ? websiteProductMode?.source_url || websiteUrl || ""
   : "",
@@ -1419,6 +1463,7 @@ Return JSON only in this exact shape:
   },
   "website_product_mode": {
     "available": true,
+    "source_type": "ecommerce | retailer_catalog | manufacturer_catalog | service_catalog | menu | booking | listing | course_event | other",
     "reason": "Short internal explanation. True only if the provided website content or checked candidate source pages clearly contain stable individual items suitable for website-based posts.",
     "source_url": "The exact URL where the best product/service/listing/menu/treatment/course/event/offer items were found. Empty string when available is false."
   },
@@ -1612,6 +1657,8 @@ Rules:
 
 Website product mode rule:
 - website_product_mode.available means Spreelo is allowed to use the website product/service research flow for this brand. It does not mean the first brand-analysis scrape already found the final product to post.
+- website_product_mode.source_type must classify how those items are offered: ecommerce for direct checkout; retailer_catalog for retailer assortments; manufacturer_catalog for an official manufacturer's product range typically sold through dealers; service_catalog, menu, booking, listing, course_event, or other as appropriate.
+- manufacturer_catalog is fully eligible even without direct checkout or stock counters on the manufacturer site.
 - Set website_product_mode.available to true when the website appears product-based, ecommerce, retail, catalog-based, service-menu-based, bookable, listing-based, restaurant/menu-based, course/event-based or otherwise likely to contain concrete sellable/selectable website items.
 - For obvious ecommerce, online stores, product catalogs, retail chains with online assortment, electronics stores, fashion stores, pet stores, toy stores, gift stores, grocery/supermarket sites with product/offer pages, or similar product-led businesses, prefer true even if the first fetched page mostly shows categories, campaign areas or navigation.
 - Large stores and retail chains must NOT be set to false just because they are large, have many categories, use campaign pages, or require deeper product discovery. Spreelo verifies concrete product pages later when a product post is generated.

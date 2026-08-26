@@ -1469,6 +1469,48 @@ export function hasProductBasedWebsiteEvidence(evidenceText) {
   return score >= 4;
 }
 
+function normalizeWebsiteProductSourceType(value, available = false) {
+  if (!available) return "";
+  const raw = String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const aliases = {
+    shop: "ecommerce",
+    webshop: "ecommerce",
+    ecommerce_store: "ecommerce",
+    retailer: "retailer_catalog",
+    retail_catalog: "retailer_catalog",
+    product_catalog: "manufacturer_catalog",
+    manufacturer: "manufacturer_catalog",
+    manufacturer_products: "manufacturer_catalog",
+    services: "service_catalog",
+    service: "service_catalog",
+    restaurant_menu: "menu",
+    bookable: "booking",
+    appointment: "booking",
+    listings: "listing",
+    course: "course_event",
+    event: "course_event",
+  };
+  const normalized = aliases[raw] || raw;
+  return new Set([
+    "ecommerce",
+    "retailer_catalog",
+    "manufacturer_catalog",
+    "service_catalog",
+    "menu",
+    "booking",
+    "listing",
+    "course_event",
+    "other",
+  ]).has(normalized) ? normalized : "other";
+}
+
+function formatWebsiteProductModeReasonWithSourceType(mode) {
+  const reason = String(mode?.reason || "").trim();
+  const sourceType = normalizeWebsiteProductSourceType(mode?.source_type, Boolean(mode?.available));
+  if (!sourceType) return reason;
+  return `[source_type=${sourceType}] ${reason}`.trim();
+}
+
 function normalizeWebsiteProductMode(rawValue, fallbackWebsiteUrl = "", evidenceText = "") {
   const rawMode = rawValue || {};
 
@@ -1484,9 +1526,11 @@ function normalizeWebsiteProductMode(rawValue, fallbackWebsiteUrl = "", evidence
   const normalizedSourceUrl = rawSourceUrl
     ? normalizeWebsiteUrl(rawSourceUrl)
     : "";
+  const sourceType = normalizeWebsiteProductSourceType(rawMode.source_type, available);
 
   return {
     available,
+    source_type: sourceType,
     reason:
       reason ||
       (available
@@ -1929,6 +1973,7 @@ Return JSON only in this exact shape:
   },
   "website_product_mode": {
     "available": true,
+    "source_type": "ecommerce | retailer_catalog | manufacturer_catalog | service_catalog | menu | booking | listing | course_event | other",
     "reason": "Short internal explanation. True only if the provided website content or checked candidate pages clearly contain stable individual items suitable for website-based posts.",
     "source_url": "The exact URL where the best item-level evidence was found. Empty string when available is false."
   },
@@ -2050,6 +2095,8 @@ Campaign strategy:
 - Choose recommended_post_count from the actual campaign complexity and commercial value, not from a fixed template. A minor awareness moment may need 1-2 posts, a strong sales/booking period may need 3-5, and a major lead-time campaign may need 5-7.
 
 Website product mode:
+- Set website_product_mode.source_type independently from available. Use ecommerce for direct online checkout stores; retailer_catalog for retailer assortments; manufacturer_catalog for an official manufacturer product range where customers may buy through dealers; service_catalog for named services; menu for food/drink menus; booking for bookable activities/appointments; listing for property/vehicle/marketplace-style listings; course_event for courses/events; other only when none fit.
+- A manufacturer_catalog is still fully eligible for product posts even when the manufacturer's own site has no add-to-cart or stock counter. Later product verification should prove that the product is current in the official catalog, not that it is directly purchasable from the manufacturer.
 - Set website_product_mode.available to true when the website appears product-based, ecommerce, retail, catalog-based, service-menu-based, bookable, listing-based, restaurant/menu-based, course/event-based or otherwise likely to contain concrete sellable/selectable website items. For obvious ecommerce/retail/product-catalog websites, prefer true even if the first fetched pages only show categories, campaign areas or navigation; concrete product pages are verified later during product-post generation.
 - A suitable website item should normally have several of these signals:
   1. clear item name/title,
@@ -2400,6 +2447,7 @@ Website-content rules:
     },
     website_product_mode: {
       available: false,
+      source_type: "",
       reason:
         "No website was provided, so website product mode is not available.",
       source_url: "",
@@ -2488,7 +2536,7 @@ export async function saveBrandProfile({
       website_product_mode_checked_at: websiteUrl
         ? new Date().toISOString()
         : null,
-      website_product_mode_reason: websiteProductMode?.reason || "",
+      website_product_mode_reason: formatWebsiteProductModeReasonWithSourceType(websiteProductMode),
       website_product_source_url: websiteProductMode?.available
         ? websiteProductMode?.source_url || websiteUrl || ""
         : "",

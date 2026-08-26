@@ -9,12 +9,12 @@ import {
 import { validateGeneratedUiTranslation } from "../../../lib/i18n/translationValidation.js";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const MAX_NAMESPACES_PER_REQUEST = 4;
-const TRANSLATION_CHUNK_SIZE = 80;
-const TRANSLATION_CONCURRENCY = 4;
-const TRANSLATION_FETCH_TIMEOUT_MS = 12000;
+const TRANSLATION_CHUNK_SIZE = 32;
+const TRANSLATION_CONCURRENCY = 2;
+const TRANSLATION_FETCH_TIMEOUT_MS = 24000;
 const TRANSLATION_DEFER_MS = 5 * 60 * 1000;
 const TRANSLATION_META_KEY = "__spreelo_translation_meta";
 
@@ -300,6 +300,7 @@ async function translateMissingLabels({
   languageName,
   namespace,
   missingLabels,
+  onChunkTranslated = null,
 }) {
   const chunks = chunkLabelEntries(missingLabels);
   if (!chunks.length) {
@@ -322,11 +323,19 @@ async function translateMissingLabels({
         const failedKeys = Object.keys(chunk).filter(
           (key) => !String(translated?.[key] || "").trim()
         );
+        const intentionalUnchangedKeys = translatedResult?.intentionalUnchangedKeys || [];
+        if (typeof onChunkTranslated === "function" && Object.keys(translated).length) {
+          await onChunkTranslated({
+            translated,
+            intentionalUnchangedKeys,
+            chunkIndex,
+          });
+        }
         return {
           translated,
           failedKeys,
           repairableFailedKeys: failedKeys,
-          intentionalUnchangedKeys: translatedResult?.intentionalUnchangedKeys || [],
+          intentionalUnchangedKeys,
         };
       } catch (error) {
         console.warn("UI translation chunk deferred", {
@@ -374,6 +383,13 @@ async function translateMissingLabels({
       });
       Object.assign(translatedLabels, repair?.labels || {});
       intentionalUnchangedKeys.push(...(repair?.intentionalUnchangedKeys || []));
+      if (typeof onChunkTranslated === "function" && Object.keys(repair?.labels || {}).length) {
+        await onChunkTranslated({
+          translated: repair.labels,
+          intentionalUnchangedKeys: repair?.intentionalUnchangedKeys || [],
+          chunkIndex: chunks.length,
+        });
+      }
       failedKeys = failedKeys.filter((key) => !String(repair?.labels?.[key] || "").trim());
       repairableFailedKeys = repairableFailedKeys.filter((key) => !String(repair?.labels?.[key] || "").trim());
     } catch (error) {
@@ -452,6 +468,48 @@ async function getOrCreateNamespaceLabels({ supabaseAdmin, locale, namespace }) 
     );
   }
 
+  let progressiveLabels = stripTranslationMetadata(existingLabels);
+  const progressiveIntentionalKeys = new Set(existingIntentionalUnchangedKeys);
+  const progressiveDeferredKeys = { ...getDeferredTranslationKeys(existingLabels) };
+  let progressWriteChain = Promise.resolve();
+
+  const persistSuccessfulChunk = async ({ translated, intentionalUnchangedKeys = [] }) => {
+    progressWriteChain = progressWriteChain.then(async () => {
+      for (const [key, value] of Object.entries(translated || {})) {
+        progressiveLabels[key] = value;
+        delete progressiveDeferredKeys[String(key)];
+        if (String(value || "").trim() !== String(defaultLabels?.[key] || "").trim()) {
+          progressiveIntentionalKeys.delete(String(key));
+        }
+      }
+      for (const key of intentionalUnchangedKeys || []) {
+        progressiveIntentionalKeys.add(String(key));
+      }
+      const progressPayload = {
+        ...progressiveLabels,
+        [TRANSLATION_META_KEY]: {
+          intentional_unchanged_keys: Array.from(progressiveIntentionalKeys).sort(),
+          deferred_keys: progressiveDeferredKeys,
+        },
+      };
+      const { error: progressError } = await supabaseAdmin
+        .from("ui_translation_packs")
+        .upsert(
+          {
+            locale,
+            language: languageName,
+            namespace,
+            labels: progressPayload,
+            status: "updating",
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "locale,namespace" }
+        );
+      if (progressError) throw progressError;
+    });
+    return progressWriteChain;
+  };
+
   const {
     translatedLabels: translatedMissingLabels,
     failedKeys,
@@ -461,7 +519,9 @@ async function getOrCreateNamespaceLabels({ supabaseAdmin, locale, namespace }) 
       languageName,
       namespace,
       missingLabels,
+      onChunkTranslated: persistSuccessfulChunk,
     });
+  await progressWriteChain;
 
   const mergedIntentionalUnchangedKeys = new Set(existingIntentionalUnchangedKeys);
   const mergedDeferredKeys = { ...getDeferredTranslationKeys(existingLabels) };
@@ -482,7 +542,7 @@ async function getOrCreateNamespaceLabels({ supabaseAdmin, locale, namespace }) 
     };
   }
   const mergedLabels = {
-    ...stripTranslationMetadata(existingLabels),
+    ...progressiveLabels,
     ...translatedMissingLabels,
     [TRANSLATION_META_KEY]: {
       intentional_unchanged_keys: Array.from(mergedIntentionalUnchangedKeys).sort(),

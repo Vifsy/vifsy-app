@@ -17,7 +17,7 @@ export async function GET(request) {
   let query = context.admin
     .from("posts")
     .select(
-      "id, user_id, brand_profile_id, automation_rule_id, status, content, platform, post_type, content_format, image_url, video_url, image_status, video_status, video_error, scheduled_for, created_at, updated_at, approved_at, approval_token, approval_email_sent_at, admin_review_status, admin_reviewed_at, admin_review_note, admin_product_items, admin_archived_at, website_url"
+      "id, user_id, brand_profile_id, automation_rule_id, status, content, platform, post_type, content_type_id, content_format, image_url, image_storage_path, image_status, image_prompt, video_url, video_status, video_error, video_provider, video_duration_seconds, video_background_selection, kling_prompt, kling_reference_image_url, kling_task_id, scheduled_for, created_at, updated_at, approved_at, approval_token, approval_email_sent_at, admin_review_status, admin_reviewed_at, admin_review_note, admin_product_items, admin_archived_at, website_url"
     )
     .in("status", Array.from(VISIBLE_STATUSES))
     .is("admin_archived_at", null)
@@ -128,6 +128,11 @@ export async function GET(request) {
     reviewCaseRows
       .filter((item) => item.occurrence_id)
       .map((item) => [item.occurrence_id, item])
+  );
+  const reviewCaseByPost = new Map(
+    reviewCaseRows
+      .filter((item) => item.post_id)
+      .map((item) => [item.post_id, item])
   );
 
   const orphanFailures = occurrenceRows.filter(
@@ -348,6 +353,13 @@ export async function GET(request) {
       slides: slidesMap[item.id] || [],
       outro_slide: getOutroSlide(item.id),
       versions: versionsMap[item.id] || [],
+      failure: reviewCaseByPost.get(item.id)
+        ? {
+            ...reviewCaseByPost.get(item.id),
+            review_case_id: reviewCaseByPost.get(item.id).id,
+            failure_message_internal: reviewCaseByPost.get(item.id).failure_message || item.video_error || null,
+          }
+        : null,
     })), ...orphanFailures.map((occurrence) => ({
       id: `occurrence-${occurrence.id}`,
       occurrence_id: occurrence.id,

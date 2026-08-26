@@ -3022,6 +3022,35 @@ html body .workspace-loader-progress span {
 .admin-generation-error-card small {
   color: #9f3a32;
 }
+.admin-kling-rejection-summary {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0 8px;
+}
+.admin-kling-rejection-summary div {
+  display: grid;
+  grid-template-columns: minmax(110px,.75fr) minmax(0,1.25fr);
+  gap: 10px;
+}
+.admin-kling-rejection-summary dt {
+  font-weight: 800;
+  color: #8b3a2d;
+}
+.admin-kling-rejection-summary dd {
+  margin: 0;
+  color: #6f2f25;
+  overflow-wrap: anywhere;
+}
+.admin-kling-rejection-violations {
+  margin: 8px 0 14px 18px;
+  padding: 0;
+  color: #7f1d1d;
+  line-height: 1.45;
+}
+.admin-generation-error-card .admin-primary-button {
+  margin-top: 6px;
+  width: fit-content;
+}
 .admin-generation-error-details {
   margin-top: 14px;
   border-top: 1px solid rgba(151,71,40,.18);

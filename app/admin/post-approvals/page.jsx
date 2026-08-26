@@ -126,6 +126,32 @@ function isSyntheticAdminCaseId(id) {
   const value = String(id || "");
   return value.startsWith("occurrence-") || value.startsWith("review-case-");
 }
+
+function getKlingRejectedAudit(post) {
+  const audit = post?.video_background_selection?.product_video_validation;
+  const failureStage = String(post?.failure?.failure_stage || "");
+  const failureCode = String(post?.failure?.failure_code || "");
+  const rejected =
+    String(post?.video_provider || "").toLowerCase() === "kling" &&
+    String(post?.video_status || "").toLowerCase() === "failed" &&
+    (String(audit?.status || "").toLowerCase() === "failed" ||
+      failureStage === "kling_finished_product_identity" ||
+      failureCode === "KLING_FINISHED_PRODUCT_IDENTITY_REJECTED");
+  return rejected ? (audit || {}) : null;
+}
+
+function getKlingAuditViolationLabels(audit, t) {
+  const codes = Array.isArray(audit?.violation_codes) ? audit.violation_codes : [];
+  const labelKeys = {
+    product_identity_changed: "admin.approvals.klingViolationIdentity",
+    verified_view_or_surface_changed: "admin.approvals.klingViolationSurface",
+    controls_or_hardware_changed: "admin.approvals.klingViolationHardware",
+    material_color_or_print_changed: "admin.approvals.klingViolationPrint",
+    invented_or_moved_identity_detail: "admin.approvals.klingViolationInventedDetail",
+    identity_audit_uncertain: "admin.approvals.klingViolationUncertain",
+  };
+  return codes.map((code) => t(labelKeys[code] || "admin.approvals.klingViolationGeneric", { code }));
+}
 function getFiveCarouselProducts(items) {
   return Array.from({ length: CAROUSEL_PRODUCT_COUNT }, (_, index) => ({
     ...emptyCarouselProduct(),
@@ -224,6 +250,7 @@ export default function AdminPostApprovalsPage() {
   const [materials, setMaterials] = useState([]);
   const [postCopy, setPostCopy] = useState("");
   const [regenerating, setRegenerating] = useState(false);
+  const [retryingKling, setRetryingKling] = useState(false);
   const [regenerationError, setRegenerationError] = useState("");
   const [regenerationSuccess, setRegenerationSuccess] = useState("");
   const [outroSlide, setOutroSlide] = useState(null);
@@ -243,6 +270,10 @@ export default function AdminPostApprovalsPage() {
   const selectedPost = useMemo(
     () => posts.find((post) => post.id === selectedPostId) || null,
     [posts, selectedPostId]
+  );
+  const selectedKlingRejectedAudit = useMemo(
+    () => getKlingRejectedAudit(selectedPost),
+    [selectedPost]
   );
   const lightboxItems = useMemo(() => getPostMediaItems(selectedPost), [selectedPost]);
   const availableFormats = useMemo(() => Array.from(new Set(
@@ -642,6 +673,33 @@ export default function AdminPostApprovalsPage() {
       setError(message);
     } finally {
       setRegenerating(false);
+    }
+  }
+
+  async function retryRejectedKlingVideo() {
+    if (!selectedPost || !selectedKlingRejectedAudit) return;
+    setRetryingKling(true);
+    setError("");
+    setRegenerationError("");
+    setRegenerationSuccess("");
+    try {
+      const headers = await getHeaders();
+      const response = await fetch("/api/admin/post-approvals/retry-kling", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ post_id: selectedPost.id }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || t("admin.approvals.klingRetryError"));
+      await loadPosts(result.post_id);
+      setSelectedPostId(result.post_id);
+      setRegenerationSuccess(t("admin.approvals.klingRetryQueued"));
+    } catch (actionError) {
+      const message = actionError.message || t("admin.approvals.klingRetryError");
+      setRegenerationError(message);
+      setError(message);
+    } finally {
+      setRetryingKling(false);
     }
   }
 
@@ -1138,9 +1196,31 @@ export default function AdminPostApprovalsPage() {
                     <div className="admin-generation-error-card">
                       <AlertTriangle size={20} />
                       <div>
-                        <strong>{t("admin.approvals.generationFailedTitle")}</strong>
-                        <p>{selectedPost.video_error || `${t("admin.approvals.imageStatus")}: ${selectedPost.image_status || "—"}. ${t("admin.approvals.videoStatus")}: ${selectedPost.video_status || "—"}.`}</p>
-                        <small>{t("admin.approvals.generationFailedHelp")}</small>
+                        <strong>{selectedKlingRejectedAudit ? t("admin.approvals.klingRejectedTitle") : t("admin.approvals.generationFailedTitle")}</strong>
+                        {selectedKlingRejectedAudit ? (
+                          <>
+                            <p>{selectedKlingRejectedAudit.reason || selectedPost.failure?.failure_message_internal || selectedPost.video_error || t("admin.approvals.klingRejectedHelp")}</p>
+                            <small>{t("admin.approvals.klingRejectedHelp")}</small>
+                            <dl className="admin-kling-rejection-summary">
+                              <div><dt>{t("admin.approvals.product")}</dt><dd>{selectedPost.video_background_selection?.verified_product_title || selectedPost.admin_product_items?.[0]?.title || "—"}</dd></div>
+                              <div><dt>{t("admin.approvals.auditConfidence")}</dt><dd>{Number.isFinite(Number(selectedKlingRejectedAudit.confidence)) ? `${Math.round(Number(selectedKlingRejectedAudit.confidence) * 100)}%` : "—"}</dd></div>
+                            </dl>
+                            {getKlingAuditViolationLabels(selectedKlingRejectedAudit, t).length ? (
+                              <ul className="admin-kling-rejection-violations">
+                                {getKlingAuditViolationLabels(selectedKlingRejectedAudit, t).map((label, index) => <li key={`${label}-${index}`}>{label}</li>)}
+                              </ul>
+                            ) : null}
+                            <button type="button" className="admin-primary-button" disabled={retryingKling} onClick={retryRejectedKlingVideo}>
+                              {retryingKling ? <LoaderCircle className="admin-spin" size={16} /> : <RefreshCw size={16} />}
+                              {t("admin.approvals.klingRetry")}
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <p>{selectedPost.video_error || `${t("admin.approvals.imageStatus")}: ${selectedPost.image_status || "—"}. ${t("admin.approvals.videoStatus")}: ${selectedPost.video_status || "—"}.`}</p>
+                            <small>{t("admin.approvals.generationFailedHelp")}</small>
+                          </>
+                        )}
                         {selectedPost.failure ? (
                           <details className="admin-generation-error-details">
                             <summary>{t("admin.approvals.failureDetails")}</summary>
@@ -1180,11 +1260,13 @@ export default function AdminPostApprovalsPage() {
                       {t("admin.approvals.saveChanges")}
                     </button>
                   ) : null}
-                  <button type="button" className="admin-review-secondary-action admin-review-regenerate-action admin-v14401-regenerate-main" disabled={regenerating || (isCarouselPost(selectedPost) ? !carouselReady : materials.length ? !singleProductReady : false)} onClick={() => regenerateCurrent("all")}>
-                    {regenerating ? <LoaderCircle className="admin-spin" size={16} /> : <RefreshCw size={16} />}
-                    Regenerera inlägg
-                  </button>
-                  {!isCarouselPost(selectedPost) && !materials.length ? (
+                  {!selectedKlingRejectedAudit ? (
+                    <button type="button" className="admin-review-secondary-action admin-review-regenerate-action admin-v14401-regenerate-main" disabled={regenerating || (isCarouselPost(selectedPost) ? !carouselReady : materials.length ? !singleProductReady : false)} onClick={() => regenerateCurrent("all")}>
+                      {regenerating ? <LoaderCircle className="admin-spin" size={16} /> : <RefreshCw size={16} />}
+                      Regenerera inlägg
+                    </button>
+                  ) : null}
+                  {!selectedKlingRejectedAudit && !isCarouselPost(selectedPost) && !materials.length ? (
                     <div className="admin-v14401-partial-actions">
                       <button type="button" disabled={regenerating} onClick={() => regenerateCurrent("text")}>Bara text</button>
                       <button type="button" disabled={regenerating} onClick={() => regenerateCurrent("media")}>Bara bild</button>
