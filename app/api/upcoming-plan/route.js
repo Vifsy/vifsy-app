@@ -16,6 +16,60 @@ const WEEKDAYS = [
 
 const ADAPTIVE_PLAN_PREFIX = "SPREELO_ADAPTIVE_V1:";
 
+const SMART_SLOTS_BY_WEEKDAY = {
+  Monday: ["08:30", "10:30", "13:30", "18:30"],
+  Tuesday: ["09:30", "10:30", "12:15", "18:30"],
+  Wednesday: ["09:30", "11:30", "13:30", "19:00"],
+  Thursday: ["10:30", "12:15", "16:30", "18:30"],
+  Friday: ["09:30", "11:30", "16:30", "18:30"],
+  Saturday: ["10:30", "14:30", "16:30", "19:00"],
+  Sunday: ["10:30", "16:30", "18:30", "19:30"],
+};
+const TYPE_TIME_PREFERENCES = {
+  website_item: ["11:30", "12:15", "16:30", "18:30"],
+  website_item_text_ad: ["11:30", "12:15", "16:30", "18:30"],
+  animated_website_item: ["16:30", "18:30", "19:00", "12:15"],
+  kling_ai_video: ["16:30", "18:30", "19:00", "12:15"],
+  carousel_website_item: ["12:15", "16:30", "18:30", "19:00"],
+  problem_solution: ["08:30", "12:15", "16:30", "18:30"],
+  tips: ["10:30", "12:15", "18:30", "19:30"],
+  mistakes: ["10:30", "12:15", "18:30", "19:30"],
+  faq: ["12:15", "16:30", "18:30", "10:30"],
+  checklist: ["08:30", "12:15", "18:30", "19:30"],
+  mini_guide: ["12:15", "18:30", "19:30", "10:30"],
+  seasonal: ["10:30", "12:15", "16:30", "18:30"],
+  manual_prompt: ["10:30", "12:15", "16:30"],
+};
+
+function stableScheduleHash(value) {
+  let hash = 2166136261;
+  for (const character of String(value || "")) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function minutesToTime(value) {
+  const safe = Math.max(0, Math.min(23 * 60 + 59, Number(value) || 0));
+  return `${String(Math.floor(safe / 60)).padStart(2, "0")}:${String(safe % 60).padStart(2, "0")}`;
+}
+
+function distributeInsideDaypart(baseTime, seed) {
+  const [hour, minute] = String(baseTime || "10:30").split(":").map(Number);
+  const value = (Number(hour) || 0) * 60 + (Number(minute) || 0);
+  const range = value < 630 ? [480, 620] : value < 780 ? [630, 770] : value < 1050 ? [780, 1040] : [1050, 1250];
+  const step = 5;
+  const slots = Math.max(1, Math.floor((range[1] - range[0]) / step) + 1);
+  return minutesToTime(range[0] + (stableScheduleHash(seed) % slots) * step);
+}
+
+function getPreferredTime(contentTypeId, weekday) {
+  const allowed = SMART_SLOTS_BY_WEEKDAY[weekday] || SMART_SLOTS_BY_WEEKDAY.Monday;
+  const preferred = TYPE_TIME_PREFERENCES[contentTypeId] || TYPE_TIME_PREFERENCES.manual_prompt;
+  return preferred.find((time) => allowed.includes(time)) || allowed[0] || "10:30";
+}
+
 function parseAdaptivePlanConfig(rule) {
   if (rule?.schedule_type !== "weekly") return null;
   const notes = String(rule?.strategy_notes || "");
@@ -50,9 +104,12 @@ function resolveAdaptiveWeeklyRule(rule, scheduledPublishAtIso) {
   if (!config) return rule;
   const cycle = getAdaptiveWeeklyCycle(rule, scheduledPublishAtIso, config);
   const slotIndex = Math.max(0, Number(config.slotIndex || 0));
+  const slotCount = Math.max(1, Number(config.slotCount || 1));
   const variantIndex = config.selectionMode === "cycle"
     ? cycle % config.variants.length
-    : (cycle + slotIndex) % config.variants.length;
+    : config.selectionMode === "history_balanced"
+      ? (cycle * slotCount + slotIndex) % config.variants.length
+      : (cycle + slotIndex) % config.variants.length;
   const variant = config.variants[variantIndex];
   if (!variant || typeof variant !== "object") return rule;
   return {
@@ -143,6 +200,28 @@ function formatLocalParts(value, timeZone) {
   };
 }
 
+function localDateNumber(dateValue) {
+  const match = String(dateValue || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return NaN;
+  return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])) / (24 * 60 * 60 * 1000);
+}
+
+function startOfLocalWeek(dateValue) {
+  const number = localDateNumber(dateValue);
+  if (!Number.isFinite(number)) return "";
+  const date = new Date(number * 24 * 60 * 60 * 1000);
+  const mondayOffset = (date.getUTCDay() + 6) % 7;
+  const monday = new Date((number - mondayOffset) * 24 * 60 * 60 * 1000);
+  return `${monday.getUTCFullYear()}-${String(monday.getUTCMonth() + 1).padStart(2, "0")}-${String(monday.getUTCDate()).padStart(2, "0")}`;
+}
+
+function getLocalWeekday(dateValue, timeZone) {
+  const date = localDateAndTimeToUtc(dateValue, "12:00", timeZone || DEFAULT_TIME_ZONE);
+  return date
+    ? new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: timeZone || DEFAULT_TIME_ZONE }).format(date)
+    : "Monday";
+}
+
 function getToken(request) {
   const url = new URL(request.url);
   return String(url.searchParams.get("token") || "").trim();
@@ -168,17 +247,37 @@ async function loadPlan(admin, payload) {
     .eq("user_id", payload.userId)
     .maybeSingle();
 
+  const ruleIds = (rules || []).map((rule) => rule.id);
+  const { data: overrides, error: overridesError } = ruleIds.length
+    ? await admin.from("automation_schedule_overrides")
+        .select("automation_rule_id, base_run_date, override_run_date, override_publish_time, status")
+        .in("automation_rule_id", ruleIds)
+        .eq("status", "active")
+    : { data: [], error: null };
+  if (overridesError && !/automation_schedule_overrides|schema cache|does not exist/i.test(String(overridesError.message || ""))) throw overridesError;
+
   const resolvedRules = (rules || []).map((rule) => {
+    const timeZone = rule.timezone || DEFAULT_TIME_ZONE;
+    const baseParts = formatLocalParts(rule.next_run_at, timeZone);
+    const override = (overrides || []).find((item) =>
+      item.automation_rule_id === rule.id && item.base_run_date === baseParts.date
+    );
+    const overrideTime = String(override?.override_publish_time || rule.publish_time || baseParts.time).slice(0, 5);
+    const effectiveDate = override?.override_run_date || baseParts.date;
+    const effectiveIso = localDateAndTimeToUtc(effectiveDate, overrideTime, timeZone)?.toISOString() || rule.next_run_at;
     const resolvedRule = resolveAdaptiveWeeklyRule(rule, rule.next_run_at);
     return {
       ...resolvedRule,
-      ...formatLocalParts(rule.next_run_at, rule.timezone || DEFAULT_TIME_ZONE),
+      ...formatLocalParts(effectiveIso, timeZone),
     };
   });
 
+  const planTimeZone = resolvedRules[0]?.timezone || rules?.[0]?.timezone || DEFAULT_TIME_ZONE;
   return {
     brandName: brand?.business_name || "",
     planName: payload.planName,
+    timezone: planTimeZone,
+    today: formatLocalParts(new Date().toISOString(), planTimeZone).date,
     totalCredits: resolvedRules.reduce(
       (total, rule) => total + Math.max(1, Number(rule.credit_cost || 1)),
       0
@@ -216,7 +315,7 @@ export async function PATCH(request) {
 
   const { data: ownedRules, error: ownedRulesError } = await admin
     .from("automation_rules")
-    .select("id, timezone")
+    .select("id, timezone, next_run_at, publish_time, content_type_id, content_type_label, content_format, credit_cost, strategy_notes, created_at, updated_at")
     .eq("user_id", payload.userId)
     .eq("brand_profile_id", payload.brandId)
     .eq("name", payload.planName)
@@ -230,38 +329,108 @@ export async function PATCH(request) {
     return Response.json({ ok: false, error: "One or more plan items could not be verified." }, { status: 403 });
   }
 
+  const ruleIds = Array.from(ruleMap.keys());
+  const { data: existingOverrides, error: existingOverridesError } = ruleIds.length
+    ? await admin.from("automation_schedule_overrides")
+        .select("automation_rule_id, base_run_date, override_run_date, override_publish_time, status")
+        .in("automation_rule_id", ruleIds)
+        .eq("status", "active")
+    : { data: [], error: null };
+  if (existingOverridesError && !/automation_schedule_overrides|schema cache|does not exist/i.test(String(existingOverridesError.message || ""))) {
+    return Response.json({ ok: false, error: existingOverridesError.message }, { status: 500 });
+  }
+  const existingOverrideMap = new Map(
+    (existingOverrides || []).map((item) => [`${item.automation_rule_id}|${item.base_run_date}`, item])
+  );
+
   const updates = [];
   for (const change of changes) {
     const id = String(change?.id || "");
     const rule = ruleMap.get(id);
     const timeZone = rule?.timezone || DEFAULT_TIME_ZONE;
-    const nextDate = localDateAndTimeToUtc(change?.date, change?.time, timeZone);
-    if (!nextDate) return Response.json({ ok: false, error: "Use a valid date and time for every post." }, { status: 400 });
-    if (nextDate.getTime() < Date.now() - 60_000) {
-      return Response.json({ ok: false, error: "Upcoming posts cannot be moved to a time that has already passed." }, { status: 400 });
+    const baseParts = formatLocalParts(rule?.next_run_at, timeZone);
+    const nextDateValue = String(change?.date || "").slice(0, 10);
+    const todayValue = formatLocalParts(new Date().toISOString(), timeZone).date;
+    const existingOverride = existingOverrideMap.get(`${id}|${baseParts.date}`) || null;
+    const currentEffectiveDate = String(existingOverride?.override_run_date || baseParts.date).slice(0, 10);
+
+    if (!Number.isFinite(localDateNumber(nextDateValue))) {
+      return Response.json({ ok: false, error: "Use a valid date for every post." }, { status: 400 });
     }
-    updates.push({
-      id,
-      nextRunAt: nextDate.toISOString(),
-      runDate: String(change.date),
-      publishTime: `${String(change.time).slice(0, 5)}:00`,
-      weekday: new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone }).format(nextDate),
-    });
+    if (nextDateValue === currentEffectiveDate) {
+      continue;
+    }
+    if (nextDateValue <= todayValue) {
+      return Response.json({ ok: false, error: "Recurring posts can only be moved to a future day." }, { status: 400 });
+    }
+    if (startOfLocalWeek(nextDateValue) !== startOfLocalWeek(baseParts.date)) {
+      return Response.json({ ok: false, error: "Move the post within the same week so the weekly frequency stays intact." }, { status: 400 });
+    }
+
+    const occurrenceRangeStartDate = currentEffectiveDate < baseParts.date ? currentEffectiveDate : baseParts.date;
+    const occurrenceRangeEndBase = currentEffectiveDate > baseParts.date ? currentEffectiveDate : baseParts.date;
+    const occurrenceRangeStart = localDateAndTimeToUtc(occurrenceRangeStartDate, "00:00", timeZone);
+    const occurrenceRangeEndNumber = localDateNumber(occurrenceRangeEndBase) + 1;
+    const occurrenceRangeEndUtc = new Date(occurrenceRangeEndNumber * 24 * 60 * 60 * 1000);
+    const occurrenceRangeEndValue = `${occurrenceRangeEndUtc.getUTCFullYear()}-${String(occurrenceRangeEndUtc.getUTCMonth() + 1).padStart(2, "0")}-${String(occurrenceRangeEndUtc.getUTCDate()).padStart(2, "0")}`;
+    const occurrenceRangeEnd = localDateAndTimeToUtc(occurrenceRangeEndValue, "00:00", timeZone);
+    const { data: occurrence, error: occurrenceError } = await admin
+      .from("automation_occurrences")
+      .select("id")
+      .eq("user_id", payload.userId)
+      .eq("automation_rule_id", id)
+      .gte("scheduled_for", occurrenceRangeStart.toISOString())
+      .lt("scheduled_for", occurrenceRangeEnd.toISOString())
+      .limit(1)
+      .maybeSingle();
+    if (occurrenceError) return Response.json({ ok: false, error: occurrenceError.message }, { status: 500 });
+    if (occurrence) {
+      return Response.json({ ok: false, error: "This post has already started generating and is locked." }, { status: 409 });
+    }
+
+    const effectiveRule = resolveAdaptiveWeeklyRule(rule, rule.next_run_at);
+    const effectiveContentTypeId = effectiveRule?.content_type_id || rule.content_type_id || "manual_prompt";
+    const targetWeekday = getLocalWeekday(nextDateValue, timeZone);
+    const basePreferredTime = getPreferredTime(effectiveContentTypeId, targetWeekday);
+    const overridePublishTime = distributeInsideDaypart(
+      basePreferredTime,
+      `${payload.userId}:${id}:${nextDateValue}:${effectiveContentTypeId}`
+    );
+
+    updates.push({ id, rule, baseDate: baseParts.date, overrideDate: nextDateValue, overridePublishTime });
+  }
+
+  // Keep the weekly contract intact even from the email-link editor: no more
+  // than two occurrences may land on the same calendar day.
+  const proposedDates = new Map();
+  for (const rule of ownedRules || []) {
+    const timeZone = rule?.timezone || DEFAULT_TIME_ZONE;
+    const baseParts = formatLocalParts(rule?.next_run_at, timeZone);
+    const override = existingOverrideMap.get(`${rule.id}|${baseParts.date}`) || null;
+    proposedDates.set(rule.id, String(override?.override_run_date || baseParts.date).slice(0, 10));
+  }
+  for (const update of updates) proposedDates.set(update.id, update.overrideDate);
+  const dateCounts = new Map();
+  for (const dateValue of proposedDates.values()) {
+    dateCounts.set(dateValue, (dateCounts.get(dateValue) || 0) + 1);
+  }
+  if (Array.from(dateCounts.values()).some((count) => count > 2)) {
+    return Response.json({ ok: false, error: "A recurring plan can contain at most two posts on the same day." }, { status: 400 });
   }
 
   for (const update of updates) {
     const { error } = await admin
-      .from("automation_rules")
-      .update({
-        run_date: update.runDate,
-        publish_time: update.publishTime,
-        weekday: update.weekday,
-        next_run_at: update.nextRunAt,
+      .from("automation_schedule_overrides")
+      .upsert({
+        user_id: payload.userId,
+        brand_profile_id: payload.brandId,
+        automation_rule_id: update.id,
+        base_run_date: update.baseDate,
+        override_run_date: update.overrideDate,
+        override_publish_time: update.overridePublishTime,
+        status: "active",
         updated_at: new Date().toISOString(),
-      })
-      .eq("id", update.id)
-      .eq("user_id", payload.userId)
-      .eq("brand_profile_id", payload.brandId);
+      }, { onConflict: "automation_rule_id,base_run_date" });
     if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
   }
 

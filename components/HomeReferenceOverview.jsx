@@ -65,6 +65,7 @@ export default function HomeReferenceOverview({
   campaignSchedules = [],
   scheduleActionLoading = "",
   onSetRecurringScheduleState,
+  openPlanLabel = "Open plan",
 }) {
   const [showRecurringSchedules, setShowRecurringSchedules] = useState(false);
   const [showScheduledItems, setShowScheduledItems] = useState(false);
@@ -134,6 +135,7 @@ export default function HomeReferenceOverview({
                       </div>
 
                       <div className="home-reference-recurring-actions">
+                        {plan?.rules?.[0]?.id ? <a className="home-reference-open-item" href={`/plans/${plan.rules[0].id}`}>{openPlanLabel}<ArrowRight /></a> : null}
                         <button
                           type="button"
                           className="pause"

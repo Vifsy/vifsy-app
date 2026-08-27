@@ -1091,6 +1091,10 @@ async function getKlingFinalVideoSource({ openai, supabase, post, task, costTrac
         subheadline: postprocess.text_overlay_copy?.subheadline || null,
       },
       targetDurationSeconds: deliveredDurationSeconds,
+      userId: post.user_id || null,
+      brandProfileId: post.brand_profile_id || null,
+      excludePostId: post.id,
+      selectionSeed: post.id,
     });
     const edit = buildVideoOverlayEdit({
       videoUrl: task.videoUrl,
@@ -1121,6 +1125,9 @@ async function getKlingFinalVideoSource({ openai, supabase, post, task, costTrac
       music_volume: musicSelection?.volume ?? null,
       music_selection_score: musicSelection?.score ?? null,
       music_selection_reasons: musicSelection?.reasons || [],
+      music_recent_use_penalty: musicSelection?.recentUsePenalty ?? null,
+      music_variety_bonus: musicSelection?.varietyBonus ?? null,
+      music_eligible_track_count: musicSelection?.eligibleTrackCount ?? null,
       shotstack_closing_hero_applied: Boolean(postprocess.closing_hero_frame_url),
       shotstack_render_id: renderId,
       shotstack_status: "rendering",
@@ -1147,6 +1154,11 @@ async function getKlingFinalVideoSource({ openai, supabase, post, task, costTrac
       musicAssetId: musicSelection?.id || null,
       musicAssetName: musicSelection?.name || null,
       musicTrimStartSeconds: musicSelection?.trimStartSeconds ?? null,
+      musicSelectionScore: musicSelection?.score ?? null,
+      recentUsePenalty: musicSelection?.recentUsePenalty ?? null,
+      varietyBonus: musicSelection?.varietyBonus ?? null,
+      eligibleTrackCount: musicSelection?.eligibleTrackCount ?? null,
+      musicSelectionReasons: musicSelection?.reasons || [],
     });
   }
 
@@ -1290,7 +1302,7 @@ export async function GET(request) {
     const { data: posts, error } = await supabase
       .from("posts")
       .select(
-        "id, user_id, status, video_provider, video_status, video_duration_seconds, video_error, video_background_selection, kling_generation_count, kling_task_id, kling_task_status, kling_submitted_at, kling_last_polled_at, kling_model, kling_resolution, kling_audio, updated_at"
+        "id, user_id, brand_profile_id, status, video_provider, video_status, video_duration_seconds, video_error, video_background_selection, kling_generation_count, kling_task_id, kling_task_status, kling_submitted_at, kling_last_polled_at, kling_model, kling_resolution, kling_audio, updated_at"
       )
       .eq("video_provider", "kling")
       .in("video_status", pendingStatuses)

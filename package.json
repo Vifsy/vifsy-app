@@ -141,7 +141,9 @@
     "test:v144.48": "node scripts/test-v144-48-video-music-library.mjs",
     "test:v144.49": "node scripts/test-v144-49-admin-music-library.mjs",
     "test:v144.52": "node scripts/test-v144-52-market-assortment-language-separation.mjs",
-    "test:v144.54": "node scripts/test-v144-54-kling-scene-continuity.mjs"
+    "test:v144.54": "node scripts/test-v144-54-kling-scene-continuity.mjs",
+    "test:v144.56": "node scripts/test-v144-56-public-product-copy-music-variety.mjs",
+    "test:v144.57": "node scripts/test-v144-57-weekly-schedule-manager.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

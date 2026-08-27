@@ -81,7 +81,13 @@ export async function POST(request) {
     return Response.json({ ok: false, error: "The customer account for this failed generation is missing." }, { status: 400 });
   }
   const language = post?.language || rule?.language || brandProfile?.content_language || "English";
-  const campaign = occurrence?.campaign_title || reviewCase?.campaign_title || rule?.name || "campaign";
+  // Internal automation/plan names and occurrence titles are planning metadata.
+  // They must never leak into regenerated customer-facing carousel copy.
+  const campaign = String(
+    rule?.campaign_theme ||
+      rule?.campaign_opportunity_title ||
+      ""
+  ).trim() || "the selected products";
   const enhancedRule = { ...(rule || {}), brand_profile: brandProfile || null, language, campaign_theme: campaign };
   const includeLogo = shouldUseLogoForRule(enhancedRule, brandProfile);
   let content = String(body?.content || "").trim();

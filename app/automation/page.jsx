@@ -342,6 +342,60 @@ function createTimeOptions() {
 
 const timeOptions = createTimeOptions();
 
+function getNextDateForWeekdayAfterStart({
+  weekday,
+  startDate,
+  timeZone = DEFAULT_TIME_ZONE,
+  excludeStartDate = true,
+}) {
+  const firstOffset = excludeStartDate ? 1 : 0;
+  for (let offset = firstOffset; offset <= 14; offset += 1) {
+    const candidateDate = addDaysToDateString(startDate, offset);
+    if (getWeekdayFromDateString(candidateDate, timeZone) === weekday) {
+      return candidateDate;
+    }
+  }
+  return addDaysToDateString(startDate, 7);
+}
+
+function getPreferredTimeForContentWeekday(contentTypeId, weekday) {
+  const typePreference =
+    smartPostingTypePreferences[contentTypeId] || smartPostingTypePreferences.manual_prompt;
+  const allowed = smartPostingSlotsByWeekday[weekday] || [];
+  const preferred = (typePreference?.preferredTimes || []).find((time) => allowed.includes(time));
+  return preferred || allowed[0] || getRecommendedTimeForWeekday(weekday);
+}
+
+function stableScheduleHash(value) {
+  let hash = 2166136261;
+  const text = String(value || "");
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function distributePublishTimeInsideDaypart(basePublishTime, seed) {
+  const daypart = getPostingDaypart(basePublishTime);
+  const ranges = {
+    morning: [8 * 60, 10 * 60 + 20],
+    lateMorning: [10 * 60 + 30, 12 * 60 + 50],
+    afternoon: [13 * 60, 17 * 60 + 20],
+    evening: [17 * 60 + 30, 20 * 60 + 50],
+  };
+  const [start, end] = ranges[daypart] || ranges.lateMorning;
+  const stepMinutes = 5;
+  const slots = Math.max(1, Math.floor((end - start) / stepMinutes) + 1);
+  const minuteValue = start + (stableScheduleHash(seed) % slots) * stepMinutes;
+  return minutesToPublishTime(minuteValue);
+}
+
+function isSlotScheduledInPast(slot, timeZone = DEFAULT_TIME_ZONE, now = new Date()) {
+  const scheduledIso = getOneTimeRunAtIso(slot?.startDate, slot?.publishTime, timeZone);
+  return Boolean(scheduledIso && new Date(scheduledIso).getTime() <= now.getTime());
+}
+
 const commonTimeZones = [
   "Europe/Stockholm",
   "Europe/Copenhagen",
@@ -2292,7 +2346,7 @@ function buildSmartSlotSchedule({
       timeZone,
       contentTypeId,
       goalId: normalizedGoalId,
-      horizonDays: count >= 7 ? 14 : 10,
+      horizonDays: 7,
     });
 
     const availableCandidates = candidates
@@ -2390,7 +2444,7 @@ function applySmartScheduleToSlots(
   return currentSlots.map((slot, index) => {
     const schedule = smartSchedule[index];
 
-    if (!schedule || slot.dateLocked) {
+    if (!schedule || slot.dateLocked || slot.weekdayLocked) {
       return slot;
     }
 
@@ -2489,6 +2543,7 @@ contentSourceTitle: overrides.contentSourceTitle || "",
 contentSourceSummary: overrides.contentSourceSummary || "",
 contentSourceVerifiedAt: overrides.contentSourceVerifiedAt || null,
 dateLocked: Boolean(overrides.dateLocked),
+weekdayLocked: Boolean(overrides.weekdayLocked),
   };
 }
 
@@ -2565,7 +2620,7 @@ function createRecommendedSlots(options = {}) {
   const types = repeatedTypeIds.map(getContentTypeById).filter(Boolean);
 
   const smartSchedule = buildSmartSlotSchedule({
-    startDate,
+    startDate: addDaysToDateString(startDate, 1),
     count: types.length,
     timeZone,
     contentTypeIds: repeatedTypeIds,
@@ -2749,7 +2804,7 @@ function createDynamicRecommendedSlots(options = {}) {
   });
   const contentTypeIds = planningSteps.map((step) => step.contentTypeId);
   const smartSchedule = buildSmartSlotSchedule({
-    startDate,
+    startDate: addDaysToDateString(startDate, 1),
     count: planningSteps.length,
     timeZone,
     contentTypeIds,
@@ -3330,6 +3385,8 @@ function DatePickerField({
   locale = "en",
   previousMonthLabel = "Previous month",
   nextMonthLabel = "Next month",
+  minDate = null,
+  disabled = false,
 }) {
   const [visibleMonth, setVisibleMonth] = useState(() =>
     getMonthStartDateString(value)
@@ -3352,7 +3409,8 @@ function DatePickerField({
           type="button"
           className="custom-picker-button"
           aria-label={ariaLabel || label || undefined}
-          onClick={() => setOpenPickerId(isOpen ? null : pickerId)}
+          onClick={() => { if (!disabled) setOpenPickerId(isOpen ? null : pickerId); }}
+          disabled={disabled}
         >
           <span>{formatStartDateLabel(value, timeZone, locale)}</span>
           <strong aria-hidden="true"><CalendarDays size={16} /></strong>
@@ -3390,6 +3448,7 @@ function DatePickerField({
               {calendarDays.map((day) => {
                 const isSelected = day.dateString === value;
                 const isToday = day.dateString === todayDateString;
+                const isTooEarly = Boolean(minDate && day.dateString < minDate);
 
                 return (
                   <button
@@ -3403,7 +3462,9 @@ function DatePickerField({
                     ]
                       .filter(Boolean)
                       .join(" ")}
+                    disabled={disabled || isTooEarly}
                     onClick={() => {
+                      if (disabled || isTooEarly) return;
                       onChange(day.dateString);
                       setOpenPickerId(null);
                     }}
@@ -4525,10 +4586,7 @@ function buildFixedEventCampaignSchedule({
   const total = normalizedPostPlan.length;
   const todayDateString = getDateInputValueInTimeZone(new Date(), timeZone);
   const eventDate = campaign?.event_date || todayDateString;
-  const safeMinDate = getLaterDateString(
-    todayDateString,
-    addDaysToDateString(eventDate, -365)
-  );
+  const safeMinDate = campaign?.start_date || addDaysToDateString(eventDate, -365);
   const leadTimeProfile = getCampaignLeadTimeProfile(campaign);
   const purchaseDeadlineDate = leadTimeProfile.isLeadTimeSensitive
     ? getLaterDateString(
@@ -4598,7 +4656,9 @@ function buildDateRangeCampaignSchedule({
   const todayDateString = getDateInputValueInTimeZone(new Date(), timeZone);
   const periodStartDate = campaign?.start_date || campaign?.event_date || todayDateString;
   const periodEndDate = campaign?.end_date || campaign?.event_date || periodStartDate;
-  const safePeriodStartDate = getClampedFutureDateString(periodStartDate, timeZone);
+  // Preserve already-passed planned campaign posts so the customer can see
+  // what was skipped when activating a campaign late.
+  const safePeriodStartDate = periodStartDate;
   const safePeriodEndDate = getLaterDateString(periodEndDate, safePeriodStartDate);
   const periodLengthDays = Math.max(
     getDaysBetweenDateStrings(safePeriodStartDate, safePeriodEndDate) || 0,
@@ -6293,6 +6353,7 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
     useState(null);
   const [deletingRules, setDeletingRules] = useState(false);
   const [openPickerId, setOpenPickerId] = useState(null);
+  const [weekdayMoveSourceSlotId, setWeekdayMoveSourceSlotId] = useState("");
 
   useEffect(() => {
     const browserTimeZone = getBrowserTimeZone();
@@ -6313,7 +6374,7 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
     setSlots((currentSlots) =>
       applySmartScheduleToSlots(
         currentSlots,
-        browserStartDate,
+        addDaysToDateString(browserStartDate, 1),
         resolvedTimeZone,
         browserRecommendedTime,
         autoPlanGoal
@@ -6350,12 +6411,27 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
     return Array.from(options).filter(Boolean);
   }, [timeZone, locale]);
 
+  const executableSlots = useMemo(() =>
+    slots.filter((slot) => !(
+      planCreationMode === "campaign" &&
+      isSlotScheduledInPast(slot, timeZone)
+    )),
+    [slots, planCreationMode, timeZone]
+  );
+
+  const skippedPastCampaignSlots = useMemo(() =>
+    planCreationMode === "campaign"
+      ? slots.filter((slot) => isSlotScheduledInPast(slot, timeZone))
+      : [],
+    [slots, planCreationMode, timeZone]
+  );
+
   const plannedCredits = useMemo(() => {
-    return slots.reduce(
+    return executableSlots.reduce(
       (total, slot) => total + getCurrentCreditCost(slot),
       0
     );
-  }, [slots, getCurrentCreditCost]);
+  }, [executableSlots, getCurrentCreditCost]);
 
   const textOnlyCount = useMemo(() => {
     return slots.filter((slot) => !slot.generateImage).length;
@@ -7393,7 +7469,9 @@ function buildFocusedRangeCampaignSchedule({
   const count = postPlan.length;
   const rawStartDate = campaign?.start_date || todayDateString;
   const rawEndDate = campaign?.end_date || "";
-  const safeStartDate = getLaterDateString(rawStartDate, todayDateString);
+  // Keep the campaign's original timeline visible. Past campaign slots are
+  // rendered as skipped/locked instead of being silently moved to today.
+  const safeStartDate = rawStartDate;
   const rangeEndDate = rawEndDate
     ? getLaterDateString(rawEndDate, safeStartDate)
     : addDaysToDateString(safeStartDate, getFocusedCampaignWindowDays(count, 999));
@@ -8155,19 +8233,87 @@ const { data, error } = await supabase
         }
 
         if (field === "startDate") {
+          const today = getDateInputValueInTimeZone(new Date(), timeZone);
+          if (value < today) return slot;
           const nextWeekday = getWeekdayFromDateString(value, timeZone);
 
           return {
             ...slot,
             startDate: value,
             weekday: nextWeekday,
-            publishTime: getRecommendedTimeForWeekday(nextWeekday),
+            weekdayLocked: true,
+            publishTime: getPreferredTimeForContentWeekday(slot.contentTypeId, nextWeekday),
           };
         }
 
         return { ...slot, [field]: value };
       })
     );
+  }
+
+  const weeklyDayCounts = useMemo(() => {
+    const counts = Object.fromEntries(weekdays.map((weekday) => [weekday, 0]));
+    for (const slot of slots) {
+      const weekday = slot.weekday || getWeekdayFromDateString(slot.startDate, timeZone);
+      if (weekday in counts) counts[weekday] += 1;
+    }
+    return counts;
+  }, [slots, timeZone]);
+
+  function handleWeeklyDayClick(targetWeekday) {
+    if (scheduleType !== "weekly" || planCreationMode === "campaign") return;
+    const targetCount = weeklyDayCounts[targetWeekday] || 0;
+
+    if (!weekdayMoveSourceSlotId) {
+      if (!targetCount) {
+        setMessage(t("automation.weekRhythm.chooseMarkedFirst"));
+        return;
+      }
+      const sourceSlots = slots.filter((slot) =>
+        (slot.weekday || getWeekdayFromDateString(slot.startDate, timeZone)) === targetWeekday
+      );
+      if (sourceSlots.length > 1) {
+        setMessage(t("automation.weekRhythm.chooseSpecificDouble"));
+        return;
+      }
+      setWeekdayMoveSourceSlotId(sourceSlots[0]?.id || "");
+      setMessage(t("automation.weekRhythm.chooseTargetDay"));
+      return;
+    }
+
+    const sourceSlot = slots.find((slot) => slot.id === weekdayMoveSourceSlotId);
+    const sourceWeekday = sourceSlot?.weekday || getWeekdayFromDateString(sourceSlot?.startDate, timeZone);
+    if (!sourceSlot) {
+      setWeekdayMoveSourceSlotId("");
+      return;
+    }
+    if (sourceWeekday === targetWeekday) {
+      setWeekdayMoveSourceSlotId("");
+      setMessage("");
+      return;
+    }
+
+    if (targetCount >= 2) {
+      setMessage(t("automation.weekRhythm.maxTwo"));
+      return;
+    }
+
+    setSlots((currentSlots) =>
+      currentSlots.map((slot) => slot.id !== weekdayMoveSourceSlotId ? slot : ({
+        ...slot,
+        weekday: targetWeekday,
+        weekdayLocked: true,
+        startDate: getNextDateForWeekdayAfterStart({
+          weekday: targetWeekday,
+          startDate: planStartDate,
+          timeZone,
+          excludeStartDate: true,
+        }),
+        publishTime: getPreferredTimeForContentWeekday(slot.contentTypeId, targetWeekday),
+      }))
+    );
+    setWeekdayMoveSourceSlotId("");
+    setMessage("");
   }
 
   function handleManualImageModeChange(slotId, nextMode) {
@@ -8255,16 +8401,33 @@ const { data, error } = await supabase
   }
 
   function updatePlanStartDate(value) {
-    setPlanStartDate(value);
-    setSlots((currentSlots) =>
-      applySmartScheduleToSlots(
+    const today = getDateInputValueInTimeZone(new Date(), timeZone);
+    const safeValue = value < today ? today : value;
+    setPlanStartDate(safeValue);
+    setSlots((currentSlots) => {
+      if (scheduleType === "weekly" && planCreationMode !== "campaign") {
+        return currentSlots.map((slot) => {
+          const weekday = slot.weekday || getWeekdayFromDateString(slot.startDate, timeZone);
+          return {
+            ...slot,
+            weekday,
+            startDate: getNextDateForWeekdayAfterStart({
+              weekday,
+              startDate: safeValue,
+              timeZone,
+              excludeStartDate: true,
+            }),
+          };
+        });
+      }
+      return applySmartScheduleToSlots(
         currentSlots,
-        value,
+        safeValue,
         timeZone,
         defaultPublishTime,
         autoPlanGoal
-      )
-    );
+      );
+    });
   }
 
   function updateDefaultPublishTime(value) {
@@ -8575,7 +8738,7 @@ function addSlot() {
         selectedType.id,
       ];
       const smartSchedule = buildSmartSlotSchedule({
-        startDate: planStartDate,
+        startDate: scheduleType === "weekly" ? addDaysToDateString(planStartDate, 1) : planStartDate,
         count: currentSlots.length + 1,
         timeZone,
         contentTypeIds: nextContentTypeIds,
@@ -9464,33 +9627,60 @@ function toggleContentType(typeId) {
   return;
 }
 
+    const slotsToSave = slots.filter((slot) => !(
+      planCreationMode === "campaign" && isSlotScheduledInPast(slot, timeZone)
+    ));
+
+    if (!slotsToSave.length) {
+      setMessage(t("automation.campaignExperience.noFuturePosts"));
+      return;
+    }
+
     if (scheduleType === "weekly" && creditBalance && !currentPlanKey) {
       setMessage(t("automation.recurringRequiresPaidPlan"));
       return;
     }
 
-    const invalidDateSlot = slots.find((slot) => !slot.startDate);
+    const invalidDateSlot = slotsToSave.find((slot) => !slot.startDate);
 
     if (invalidDateSlot) {
       setMessage(t("automation.errorStartDate"));
       return;
     }
 
-    const invalidTimeSlot = slots.find((slot) => !slot.publishTime);
+    const todayDate = getDateInputValueInTimeZone(new Date(), timeZone);
+    const pastDateSlot = slotsToSave.find((slot) => String(slot.startDate || "") < todayDate);
+    if (pastDateSlot) {
+      setMessage(t("automation.errorPastDate"));
+      return;
+    }
+
+    const pastDateTimeSlot = scheduleType === "once"
+      ? slotsToSave.find((slot) => {
+          const scheduledIso = getOneTimeRunAtIso(slot.startDate, slot.publishTime, timeZone);
+          return Boolean(scheduledIso && new Date(scheduledIso).getTime() <= Date.now());
+        })
+      : null;
+    if (pastDateTimeSlot) {
+      setMessage(t("automation.errorPastDateTime"));
+      return;
+    }
+
+    const invalidTimeSlot = slotsToSave.find((slot) => !slot.publishTime);
 
     if (invalidTimeSlot) {
       setMessage(t("automation.errorPublishTime"));
       return;
     }
 
-    const invalidSlot = slots.find((slot) => !slot.prompt.trim());
+    const invalidSlot = slotsToSave.find((slot) => !slot.prompt.trim());
 
     if (invalidSlot) {
       setMessage(t("automation.errorPostTopic"));
       return;
     }
 
-    const invalidUploadedImageSlot = slots.find(
+    const invalidUploadedImageSlot = slotsToSave.find(
       (slot) =>
         slot.contentTypeId === "manual_prompt" &&
         slot.manualImageMode === "uploaded" &&
@@ -9513,7 +9703,7 @@ function toggleContentType(typeId) {
       return;
     }
 
-    const invalidDestinationSlot = slots.find(
+    const invalidDestinationSlot = slotsToSave.find(
       (slot) => getSlotDestinationPlatformKeys(slot, selectedPlatformKeys).length === 0
     );
 
@@ -9547,7 +9737,7 @@ if (!selectedBrandId) {
 setCurrentBrandId(selectedBrandId);
 
 const selectedTimeZone = timeZone || DEFAULT_TIME_ZONE;
-const sortedPlanSlots = slots
+const sortedPlanSlots = slotsToSave
   .slice()
   .sort((a, b) =>
     `${a.startDate || ""} ${a.publishTime || ""}`.localeCompare(
@@ -9569,12 +9759,12 @@ const sharedGeneratedPlanName =
 
 const newlyUploadedManualImagePaths = [];
 const replacedManualImagePaths = [];
-let preparedSlots = slots;
+let preparedSlots = slotsToSave;
 
 try {
   preparedSlots = [];
 
-  for (const slot of slots) {
+  for (const slot of slotsToSave) {
     const finalImageSource = getRuleImageSource(slot);
     const originalStoragePath = slot.originalUploadedImageStoragePath || "";
 
@@ -9647,10 +9837,27 @@ const editingRuleSnapshot = editingRuleId
   : null;
 
 const rows = preparedSlots.map((slot, slotIndex) => {
+      const declaredWeekday = slot.weekday || getWeekdayFromDateString(slot.startDate, selectedTimeZone);
+      const normalizedStartDate =
+        scheduleType === "weekly" && planCreationMode !== "campaign"
+          ? getNextDateForWeekdayAfterStart({
+              weekday: declaredWeekday,
+              startDate: planStartDate,
+              timeZone: selectedTimeZone,
+              excludeStartDate: true,
+            })
+          : slot.startDate;
       const slotWeekday = getWeekdayFromDateString(
-        slot.startDate,
+        normalizedStartDate,
         selectedTimeZone
       );
+      const distributedPublishTime =
+        planCreationMode !== "manual"
+          ? distributePublishTimeInsideDaypart(
+              slot.publishTime,
+              `${user.id}:${selectedBrandId}:${slot.id}:${slotWeekday}`
+            )
+          : slot.publishTime;
       const productMetadata = getSlotProductMetadata(slot);
       const slotDestinationKeys = getSlotDestinationPlatformKeys(
         slot,
@@ -9667,7 +9874,7 @@ const rows = preparedSlots.map((slot, slotIndex) => {
         brand_profile_id: selectedBrandId,
         name: sharedGeneratedPlanName,
         weekday: slotWeekday,
-        publish_time: slot.publishTime,
+        publish_time: distributedPublishTime,
         prompt:
   slot.isCampaignSlot && slot.campaignSummary
     ? `${slot.prompt}
@@ -9706,12 +9913,12 @@ ${slot.campaignSummary}`
             : Boolean(currentBrandProfile?.logo_url) && currentBrandProfile?.logo_enabled_by_default !== false,
         credit_cost: getCurrentCreditCost(slot),
         schedule_type: scheduleType,
-        run_date: slot.startDate,
+        run_date: normalizedStartDate,
         timezone: selectedTimeZone,
         next_run_at: getInitialNextRunAtIso({
           scheduleType,
-          publishTime: slot.publishTime,
-          startDate: slot.startDate,
+          publishTime: distributedPublishTime,
+          startDate: normalizedStartDate,
           timeZone: selectedTimeZone,
         }),
         approval_required: true,
@@ -10009,7 +10216,7 @@ ${slot.campaignSummary}`
         .filter(Boolean)
         .sort((a, b) => new Date(a) - new Date(b));
 
-      const firstSlot = slots
+      const firstSlot = slotsToSave
         .slice()
         .sort((a, b) =>
           `${a.startDate || ""} ${a.publishTime || ""}`.localeCompare(
@@ -10029,7 +10236,7 @@ ${slot.campaignSummary}`
       setMessage("");
 
       const actualPlanPlatformKeys = normalizeSpreeloPlatformList(
-        slots.flatMap((slot) => getSlotDestinationPlatformKeys(slot, selectedPlatformKeys))
+        slotsToSave.flatMap((slot) => getSlotDestinationPlatformKeys(slot, selectedPlatformKeys))
       );
       const actualPlanChannelsLabel =
         formatPlatformSelectionFromKeys(actualPlanPlatformKeys, connectedPlatformOptions) ||
@@ -10075,7 +10282,7 @@ ${slot.campaignSummary}`
         credits: `${plannedCredits} ${t("automation.credits")}`,
         formats: Array.from(
           new Set(
-            slots.map((slot) =>
+            slotsToSave.map((slot) =>
               getUnifiedContentTypeLabel(slot.contentTypeId, slot.contentTypeLabel)
             )
           )
@@ -10482,6 +10689,7 @@ function blockFormatCardClickAfterDrag(event) {
                         locale={locale}
                         previousMonthLabel={t("automation.previousMonth")}
                         nextMonthLabel={t("automation.nextMonth")}
+                        minDate={getDateInputValueInTimeZone(new Date(), timeZone)}
                       />
                     </div>
                   </div>
@@ -10591,6 +10799,41 @@ function blockFormatCardClickAfterDrag(event) {
                     )}
                   </div>
                 </div>
+
+                {scheduleType === "weekly" && planCreationMode !== "campaign" && slots.length ? (
+                  <div className="plan-v14457-week-rhythm">
+                    <div className="plan-v14457-week-rhythm-head">
+                      <div>
+                        <strong>{t("automation.weekRhythm.title")}</strong>
+                        <span>{t("automation.weekRhythm.help")}</span>
+                      </div>
+                      <span className="plan-v14457-week-rhythm-note">{t("automation.weekRhythm.timeHelp")}</span>
+                    </div>
+                    <div className="plan-v14457-week-days">
+                      {weekdays.map((weekday, index) => {
+                        const count = weeklyDayCounts[weekday] || 0;
+                        return (
+                          <button
+                            type="button"
+                            key={weekday}
+                            className={[
+                              "plan-v14457-week-day",
+                              count ? "selected" : "",
+                              count > 1 ? "double" : "",
+                              slots.some((slot) => slot.id === weekdayMoveSourceSlotId && (slot.weekday || getWeekdayFromDateString(slot.startDate, timeZone)) === weekday) ? "moving" : "",
+                            ].filter(Boolean).join(" ")}
+                            onClick={() => handleWeeklyDayClick(weekday)}
+                          >
+                            <span>{weekdayLabels[index]}</span>
+                            <strong>{count ? t(count === 1 ? "automation.weekRhythm.postCountOne" : "automation.weekRhythm.postCountMany", { count }) : "—"}</strong>
+                            {count ? <b>{count}</b> : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+
                 {selectedPlatformKeys.length > 0 ? (
                   <div className="plan-v14380-platform-note">
                     <Sparkles size={13} aria-hidden="true" />
@@ -10780,6 +11023,7 @@ function blockFormatCardClickAfterDrag(event) {
                     previousMonthLabel={t("automation.previousMonth")}
                     nextMonthLabel={t("automation.nextMonth")}
                           ariaLabel={t("automation.offerPlan.startLabel")}
+                          minDate={getDateInputValueInTimeZone(new Date(), timeZone)}
                         />
                       </div>
                       <div className="plan-v101-offer-date-field">
@@ -10797,6 +11041,7 @@ function blockFormatCardClickAfterDrag(event) {
                     previousMonthLabel={t("automation.previousMonth")}
                     nextMonthLabel={t("automation.nextMonth")}
                           ariaLabel={t("automation.offerPlan.endLabel")}
+                          minDate={getLaterDateString(offerStartDate, getDateInputValueInTimeZone(new Date(), timeZone))}
                         />
                       </div>
                     </div>
@@ -10864,6 +11109,7 @@ function blockFormatCardClickAfterDrag(event) {
                     previousMonthLabel={t("automation.previousMonth")}
                     nextMonthLabel={t("automation.nextMonth")}
                         ariaLabel={t("automation.giveaway.endDateLabel")}
+                        minDate={getDateInputValueInTimeZone(new Date(), timeZone)}
                       />
                     </div>
                   </div>
@@ -10996,13 +11242,14 @@ function blockFormatCardClickAfterDrag(event) {
 
                     {slots.map((slot, index) => {
                       const rowExpanded = expandedInstructionSlotIds.includes(slot.id);
+                      const isPastCampaignSlot = planCreationMode === "campaign" && isSlotScheduledInPast(slot, timeZone);
                       const slotPlatformOptions = getSlotPlatformOptions(slot);
                       const platformLabel = slotPlatformOptions[0]?.label || platform || t("automation.choosePlatform");
                       const formatItem = getExploreFormatItem(slot.contentTypeId);
                       const campaignCode = getCampaignCodeFromSlot(slot);
 
                       return (
-                        <article className={`plan-v70-planned-row plan-v86-planned-row${rowExpanded ? " expanded" : ""}`} key={`v70-row-${slot.id}`}>
+                        <article className={`plan-v70-planned-row plan-v86-planned-row${rowExpanded ? " expanded" : ""}${isPastCampaignSlot ? " is-past-campaign" : ""}`} key={`v70-row-${slot.id}`}>
                           <div className={`plan-v86-planned-visual tone-${(index % 4) + 1}`} aria-hidden="true">
                             <span className={slot.isCampaignSlot ? "plan-v100-combined-format-icon" : ""}>
                               <ContentFormatIconVisual
@@ -11016,7 +11263,8 @@ function blockFormatCardClickAfterDrag(event) {
                           </div>
                           <div className="plan-v70-planned-date">
                             <strong>{formatStartDateLabel(slot.startDate, timeZone, locale)}</strong>
-                            <span>{normalizeTime(slot.publishTime)}</span>
+                            <span className="plan-v14457-daypart"><Clock3 size={13} />{getCampaignTimeWindowDisplay(slot.publishTime, locale)} · {t("automation.weekRhythm.exactTimeAutomatic")}</span>
+                            {isPastCampaignSlot ? <em className="plan-v14457-skipped-label">{t("automation.campaignExperience.skippedPast")}</em> : null}
                           </div>
                           <div className="plan-v70-planned-post">
                             <div>
@@ -11057,12 +11305,15 @@ function blockFormatCardClickAfterDrag(event) {
                             )}
                           </div>
                           <div className="plan-v143-planned-cost">
-                            <strong>{getCurrentSlotCreditLabel(slot)}</strong>
+                            {isPastCampaignSlot
+                              ? <strong className="skipped-credit">0 {t("automation.credits")}</strong>
+                              : <strong>{getCurrentSlotCreditLabel(slot)}</strong>}
                           </div>
                           <button
                             type="button"
                             className="plan-v70-row-menu"
                             aria-label={t("automation.redesign.editPlannedPost")}
+                            disabled={isPastCampaignSlot}
                             onClick={() => {
                               setExpandedInstructionSlotIds((current) =>
                                 current.includes(slot.id)
@@ -11074,29 +11325,45 @@ function blockFormatCardClickAfterDrag(event) {
                             ···
                           </button>
 
-                          {rowExpanded ? (
+                          {rowExpanded && !isPastCampaignSlot ? (
                             <div className="plan-v70-row-editor">
-                              <DatePickerField
-                                value={slot.startDate}
-                                onChange={(value) => updateSlot(slot.id, "startDate", value)}
-                                pickerId={`v70-row-date-${slot.id}`}
-                                openPickerId={openPickerId}
-                                setOpenPickerId={setOpenPickerId}
-                                timeZone={timeZone}
-                                compact
-                                weekdayLabels={weekdayLabels}
-                                locale={locale}
-                    previousMonthLabel={t("automation.previousMonth")}
-                    nextMonthLabel={t("automation.nextMonth")}
-                              />
-                              <TimePickerField
-                                value={slot.publishTime}
-                                onChange={(value) => updateSlot(slot.id, "publishTime", value)}
-                                pickerId={`v70-row-time-${slot.id}`}
-                                openPickerId={openPickerId}
-                                setOpenPickerId={setOpenPickerId}
-                                compact
-                              />
+                              {scheduleType === "weekly" && planCreationMode !== "campaign" ? (
+                                <button
+                                  type="button"
+                                  className="plan-v14457-move-slot"
+                                  onClick={() => {
+                                    setWeekdayMoveSourceSlotId(slot.id);
+                                    setMessage(t("automation.weekRhythm.chooseTargetDay"));
+                                  }}
+                                >
+                                  <CalendarDays size={14} />{t("automation.weekRhythm.moveThisPost")}
+                                </button>
+                              ) : (
+                                <DatePickerField
+                                  value={slot.startDate}
+                                  onChange={(value) => updateSlot(slot.id, "startDate", value)}
+                                  pickerId={`v70-row-date-${slot.id}`}
+                                  openPickerId={openPickerId}
+                                  setOpenPickerId={setOpenPickerId}
+                                  timeZone={timeZone}
+                                  compact
+                                  weekdayLabels={weekdayLabels}
+                                  locale={locale}
+                                  previousMonthLabel={t("automation.previousMonth")}
+                                  nextMonthLabel={t("automation.nextMonth")}
+                                  minDate={getDateInputValueInTimeZone(new Date(), timeZone)}
+                                />
+                              )}
+                              {scheduleType !== "weekly" && planCreationMode === "manual" ? (
+                                <TimePickerField
+                                  value={slot.publishTime}
+                                  onChange={(value) => updateSlot(slot.id, "publishTime", value)}
+                                  pickerId={`v70-row-time-${slot.id}`}
+                                  openPickerId={openPickerId}
+                                  setOpenPickerId={setOpenPickerId}
+                                  compact
+                                />
+                              ) : null}
                               <button type="button" onClick={() => duplicateSlot(slot.id)}>
                                 {t("automation.duplicate")}
                               </button>
@@ -11235,7 +11502,7 @@ function blockFormatCardClickAfterDrag(event) {
                       {savedPlanSummary ? (
                         <a className="campaign-v14335-primary" href="/calendar"><CheckCircle2 /> {t("automation.planSaved")}</a>
                       ) : (
-                        <button type="button" className="campaign-v14335-primary" onClick={savePlan} disabled={saving || !hasEnoughCredits || !slots.length}>
+                        <button type="button" className="campaign-v14335-primary" onClick={savePlan} disabled={saving || !hasEnoughCredits || !executableSlots.length}>
                           <Sparkles /> {saving ? t("automation.saving") : t("automation.campaignExperience.activate")}
                         </button>
                       )}
@@ -11307,13 +11574,19 @@ function blockFormatCardClickAfterDrag(event) {
                     </div>
                   </div>
 
+                  {skippedPastCampaignSlots.length ? (
+                    <div className="plan-v14457-skipped-summary">
+                      {t("automation.campaignExperience.skippedPastSummary", { count: skippedPastCampaignSlots.length })}
+                    </div>
+                  ) : null}
                   <div className="campaign-v14335-slot-list">
                     {slots.map((slot, index) => {
-                      const scheduleUnlocked = slot.dateLocked === false;
+                      const isPastCampaignSlot = isSlotScheduledInPast(slot, timeZone);
+                      const scheduleUnlocked = !isPastCampaignSlot && slot.dateLocked === false;
                       const slotPlatformOptions = getSlotPlatformOptions(slot);
 
                       return (
-                      <article key={slot.id} className={scheduleUnlocked ? "is-schedule-unlocked" : ""}>
+                      <article key={slot.id} className={[scheduleUnlocked ? "is-schedule-unlocked" : "", isPastCampaignSlot ? "is-past-campaign" : ""].filter(Boolean).join(" ")}>
                         <div className={`campaign-v14335-slot-art art-${index % 5}`}><SlotTypeGlyph slot={slot} /></div>
                         <div className="campaign-v14335-slot-copy"><h3>{getCustomerSlotLabel(slot)}</h3><p>{getCustomerSlotPurpose(slot)}</p></div>
                         <div className="campaign-v14350-schedule-block">
@@ -11331,36 +11604,29 @@ function blockFormatCardClickAfterDrag(event) {
                                 locale={locale}
                     previousMonthLabel={t("automation.previousMonth")}
                     nextMonthLabel={t("automation.nextMonth")}
+                                minDate={getDateInputValueInTimeZone(new Date(), timeZone)}
                               />
                             ) : (
                               <>
                                 <strong>{formatStartDateLabel(slot.startDate, timeZone, locale)}</strong>
-                                <span>{t("automation.lockedCampaignDate")}</span>
-                                <button
-                                  type="button"
-                                  className="campaign-v14346-unlock-schedule"
-                                  onClick={() => updateSlot(slot.id, "dateLocked", false)}
-                                >
-                                  {t("automation.unlock")}
-                                </button>
+                                <span>{isPastCampaignSlot ? t("automation.campaignExperience.skippedPast") : t("automation.lockedCampaignDate")}</span>
+                                {!isPastCampaignSlot ? (
+                                  <button
+                                    type="button"
+                                    className="campaign-v14346-unlock-schedule"
+                                    onClick={() => updateSlot(slot.id, "dateLocked", false)}
+                                  >
+                                    {t("automation.unlock")}
+                                  </button>
+                                ) : null}
                               </>
                             )}
                           </div>
                           <div className="campaign-v14350-time-line">
-                            {scheduleUnlocked ? (
-                              <div className="campaign-v14346-time-picker">
-                                <TimePickerField
-                                  value={slot.publishTime}
-                                  onChange={(value) => updateSlot(slot.id, "publishTime", value)}
-                                  pickerId={`campaign-slot-time-${slot.id}`}
-                                  openPickerId={openPickerId}
-                                  setOpenPickerId={setOpenPickerId}
-                                  compact
-                                />
-                              </div>
-                            ) : (
-                              <time>{normalizeTime(slot.publishTime)}</time>
-                            )}
+                            <div className="fixed-campaign-time">
+                              <strong>{getCampaignTimeWindowDisplay(slot.publishTime, locale)}</strong>
+                              <span>{t("automation.weekRhythm.exactTimeAutomatic")}</span>
+                            </div>
                           </div>
                         </div>
                         <div className="campaign-v14350-delivery-block">
@@ -11384,6 +11650,7 @@ function blockFormatCardClickAfterDrag(event) {
                             aria-label={t("automation.postActions")}
                             aria-haspopup="menu"
                             aria-expanded={openCampaignSlotMenuId === slot.id}
+                            disabled={isPastCampaignSlot}
                             onClick={() =>
                               setOpenCampaignSlotMenuId((current) =>
                                 current === slot.id ? null : slot.id
@@ -11440,7 +11707,7 @@ function blockFormatCardClickAfterDrag(event) {
 
                 <section className="campaign-v14335-activate">
                   <div><h2>{savedPlanSummary ? t("automation.planSaved") : t("automation.campaignExperience.readyTitle")}</h2><p>{savedPlanSummary ? t("automation.automationPlanReady") : t("automation.campaignExperience.readyText")}</p></div>
-                  {savedPlanSummary ? <a href="/calendar"><CheckCircle2 /> {t("automation.viewContentPlans")}</a> : <button type="button" onClick={savePlan} disabled={saving || !hasEnoughCredits || !slots.length}><Sparkles /> {saving ? t("automation.saving") : t("automation.campaignExperience.activateNow")}</button>}
+                  {savedPlanSummary ? <a href="/calendar"><CheckCircle2 /> {t("automation.viewContentPlans")}</a> : <button type="button" onClick={savePlan} disabled={saving || !hasEnoughCredits || !executableSlots.length}><Sparkles /> {saving ? t("automation.saving") : t("automation.campaignExperience.activateNow")}</button>}
                   {message ? <p className="campaign-v14335-message">{message}</p> : null}
                 </section>
 
@@ -11706,16 +11973,24 @@ function blockFormatCardClickAfterDrag(event) {
                     locale={locale}
                     previousMonthLabel={t("automation.previousMonth")}
                     nextMonthLabel={t("automation.nextMonth")}
+                    minDate={getDateInputValueInTimeZone(new Date(), timeZone)}
                   />
 
-                  <TimePickerField
-                    value={defaultPublishTime}
-                    onChange={updateDefaultPublishTime}
-                    pickerId="top-start-time"
-                    openPickerId={openPickerId}
-                    setOpenPickerId={setOpenPickerId}
-                    compact
-                  />
+                  {planCreationMode === "manual" && scheduleType !== "weekly" ? (
+                    <TimePickerField
+                      value={defaultPublishTime}
+                      onChange={updateDefaultPublishTime}
+                      pickerId="top-start-time"
+                      openPickerId={openPickerId}
+                      setOpenPickerId={setOpenPickerId}
+                      compact
+                    />
+                  ) : (
+                    <div className="fixed-campaign-time">
+                      <strong>{getCampaignTimeWindowDisplay(defaultPublishTime, locale)}</strong>
+                      <span>{t("automation.weekRhythm.exactTimeAutomatic")}</span>
+                    </div>
+                  )}
                 </div>
 
                 <SetupHelperNote
@@ -12008,6 +12283,8 @@ function blockFormatCardClickAfterDrag(event) {
           !slot.isCampaignSlot && slot.contentTypeId === "manual_prompt";
         const canEditTechnicalCampaignPrompt =
           slot.isCampaignSlot && canManuallyEditCampaignPlan;
+        const isPastCampaignSlot =
+          planCreationMode === "campaign" && isSlotScheduledInPast(slot, timeZone);
         const includedLogo =
           Boolean(currentBrandProfile?.logo_url) &&
           (typeof slot.includeLogo === "boolean"
@@ -12020,7 +12297,7 @@ function blockFormatCardClickAfterDrag(event) {
           <article
           className={`planner-post-row type-${slot.contentTypeId || "custom"} ${
   instructionsAreExpanded ? "expanded" : ""
-}`}
+}${isPastCampaignSlot ? " is-past-campaign" : ""}`}
             key={slot.id}
           >
             <div className="planner-post-mainline">
@@ -12086,7 +12363,27 @@ function blockFormatCardClickAfterDrag(event) {
                 )}
               </div>
               <div className="planner-post-date">
-                {slot.isCampaignSlot && slot.dateLocked !== false ? (
+                {isPastCampaignSlot ? (
+                  <div className="locked-campaign-date">
+                    <strong>{formatStartDateLabel(slot.startDate, timeZone, locale)}</strong>
+                    <span>{t("automation.campaignExperience.skippedPast")}</span>
+                  </div>
+                ) : scheduleType === "weekly" && planCreationMode !== "campaign" ? (
+                  <div className="locked-campaign-date">
+                    <strong>{formatStartDateLabel(slot.startDate, timeZone, locale)}</strong>
+                    <span>{t("automation.weekRhythm.changeDayAbove")}</span>
+                    <button
+                      type="button"
+                      className="unlock-campaign-date-button"
+                      onClick={() => {
+                        setWeekdayMoveSourceSlotId(slot.id);
+                        setMessage(t("automation.weekRhythm.chooseTargetDay"));
+                      }}
+                    >
+                      {t("automation.weekRhythm.moveThisPost")}
+                    </button>
+                  </div>
+                ) : slot.isCampaignSlot && slot.dateLocked !== false ? (
                   <div className="locked-campaign-date">
                     <strong>{formatStartDateLabel(slot.startDate, timeZone, locale)}</strong>
                     <span>{t("automation.lockedCampaignDate")}</span>
@@ -12113,22 +12410,21 @@ function blockFormatCardClickAfterDrag(event) {
                     locale={locale}
                     previousMonthLabel={t("automation.previousMonth")}
                     nextMonthLabel={t("automation.nextMonth")}
+                    minDate={getDateInputValueInTimeZone(new Date(), timeZone)}
                   />
                 )}
               </div>
 
               <div className="planner-post-time">
-                {slot.isCampaignSlot && slot.dateLocked !== false ? (
+                {planCreationMode !== "manual" || scheduleType === "weekly" ? (
                   <div className="fixed-campaign-time">
                     <strong>{getCampaignTimeWindowDisplay(slot.publishTime, locale)}</strong>
-                    <span>{t("automation.queuedBySpreelo")}</span>
+                    <span>{t("automation.weekRhythm.exactTimeAutomatic")}</span>
                   </div>
                 ) : (
                   <TimePickerField
                     value={slot.publishTime}
-                    onChange={(value) =>
-                      updateSlot(slot.id, "publishTime", value)
-                    }
+                    onChange={(value) => updateSlot(slot.id, "publishTime", value)}
                     pickerId={`slot-time-${slot.id}`}
                     openPickerId={openPickerId}
                     setOpenPickerId={setOpenPickerId}
@@ -12141,12 +12437,12 @@ function blockFormatCardClickAfterDrag(event) {
                 <span>▧</span>
                 <div>
                   <strong>{formatLabel}</strong>
-                  <small>{getCurrentSlotCreditLabel(slot)}</small>
+                  <small>{isPastCampaignSlot ? `0 ${t("automation.credits")}` : getCurrentSlotCreditLabel(slot)}</small>
                 </div>
               </div>
 
               <div className="planner-post-actions">
-                {(!slot.isCampaignSlot || canManuallyEditCampaignPlan) && (
+                {!isPastCampaignSlot && (!slot.isCampaignSlot || canManuallyEditCampaignPlan) && (
                   <>
                     {!isCustomPost && (
                     <button
@@ -12202,7 +12498,7 @@ function blockFormatCardClickAfterDrag(event) {
               </div>
             </div>
 
-            {(instructionsAreExpanded || isCustomPost) && (
+            {!isPastCampaignSlot && (instructionsAreExpanded || isCustomPost) && (
               <div className="planner-post-expanded">
                 <div className="planner-post-expanded-copy">
                   {isCustomPost ? (

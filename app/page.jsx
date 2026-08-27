@@ -1073,6 +1073,11 @@ export default function Home() {
           </div>
         </div>
         <div className="home-v14369-operation-actions">
+          {kind === "recurring" && plan?.rules?.[0]?.id ? (
+            <a className="home-reference-open-item" href={`/plans/${plan.rules[0].id}`}>
+              {t("planManager.openPlan")} <ArrowRight />
+            </a>
+          ) : null}
           <button
             type="button"
             className="home-v14369-pause"
@@ -1300,6 +1305,7 @@ export default function Home() {
         campaignSchedules={calendarCampaignPlans}
         scheduleActionLoading={scheduleActionLoading}
         onSetRecurringScheduleState={setOperationalPlanState}
+        openPlanLabel={t("planManager.openPlan")}
         suggestedCampaign={suggestedCampaign ? {
           id: suggestedCampaign.id,
           title: dashboardText(suggestedCampaign.title, t("dashboard.suggestedCampaign")),

@@ -16,13 +16,22 @@ function platformLabels(value) {
     .filter(Boolean);
 }
 
+function getDaypartLabel(time, t) {
+  const [hour, minute] = String(time || "10:30").split(":").map(Number);
+  const value = (Number(hour) || 0) * 60 + (Number(minute) || 0);
+  if (value < 630) return t("planManager.daypartMorning");
+  if (value < 780) return t("planManager.daypartLateMorning");
+  if (value < 1050) return t("planManager.daypartAfternoon");
+  return t("planManager.daypartEvening");
+}
+
 export default function UpcomingPlanPage() {
-  const { t } = useUiText(["upcomingPlan"]);
+  const { t } = useUiText(["upcomingPlan", "planManager"]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [plan, setPlan] = useState({ brandName: "", planName: "", totalCredits: 0, rules: [] });
+  const [plan, setPlan] = useState({ brandName: "", planName: "", totalCredits: 0, rules: [], today: "" });
   const token = useMemo(() => getToken(), []);
 
   useEffect(() => {
@@ -41,7 +50,7 @@ export default function UpcomingPlanPage() {
       const response = await fetch(`/api/upcoming-plan?token=${encodeURIComponent(token)}`, { cache: "no-store" });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(response.status === 401 ? t("upcomingPlan.invalid") : payload?.error || t("upcomingPlan.loadError"));
-      setPlan({ brandName: payload.brandName || "", planName: payload.planName || "", totalCredits: Number(payload.totalCredits || 0), rules: payload.rules || [] });
+      setPlan({ brandName: payload.brandName || "", planName: payload.planName || "", totalCredits: Number(payload.totalCredits || 0), rules: payload.rules || [], today: payload.today || "" });
     } catch (loadError) {
       setError(loadError.message || t("upcomingPlan.loadError"));
     } finally {
@@ -65,11 +74,11 @@ export default function UpcomingPlanPage() {
       const response = await fetch(`/api/upcoming-plan?token=${encodeURIComponent(token)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ changes: plan.rules.map((rule) => ({ id: rule.id, date: rule.date, time: rule.time })) }),
+        body: JSON.stringify({ changes: plan.rules.map((rule) => ({ id: rule.id, date: rule.date })) }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.error || t("upcomingPlan.saveError"));
-      setPlan({ brandName: payload.brandName || plan.brandName, planName: payload.planName || plan.planName, totalCredits: Number(payload.totalCredits || plan.totalCredits || 0), rules: payload.rules || plan.rules });
+      setPlan({ brandName: payload.brandName || plan.brandName, planName: payload.planName || plan.planName, totalCredits: Number(payload.totalCredits || plan.totalCredits || 0), rules: payload.rules || plan.rules, today: payload.today || plan.today || "" });
       setSuccess(t("upcomingPlan.saved"));
     } catch (saveError) {
       setError(saveError.message || t("upcomingPlan.saveError"));
@@ -113,8 +122,8 @@ export default function UpcomingPlanPage() {
                       <span>{platformLabels(rule.platform).join(" · ") || "—"}</span>
                       <small>{t("upcomingPlan.creditCost", { credits: Math.max(1, Number(rule.credit_cost || 1)) })}</small>
                     </div>
-                    <label><span><CalendarDays size={15} />{t("upcomingPlan.date")}</span><input type="date" value={rule.date || ""} onChange={(event) => updateRule(rule.id, "date", event.target.value)} /></label>
-                    <label><span><Clock3 size={15} />{t("upcomingPlan.time")}</span><input type="time" value={rule.time || ""} onChange={(event) => updateRule(rule.id, "time", event.target.value)} /></label>
+                    <label><span><CalendarDays size={15} />{t("upcomingPlan.date")}</span><input type="date" min={plan.today || new Date().toISOString().slice(0, 10)} value={rule.date || ""} disabled={Boolean(plan.today && rule.date <= plan.today)} onChange={(event) => updateRule(rule.id, "date", event.target.value)} /></label>
+                    <label><span><Clock3 size={15} />{t("upcomingPlan.time")}</span><div className="upcoming-v14457-daypart"><strong>{getDaypartLabel(rule.time, t)}</strong><small>{t("planManager.spreeloChoosesTime")}</small></div></label>
                   </article>
                 ))}
               </div>

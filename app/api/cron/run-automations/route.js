@@ -1779,11 +1779,108 @@ function chooseLeastObstructiveProductLabelPlacement(productCanvasBox, { include
     .sort((left, right) => left.overlap - right.overlap)[0]?.placement || "top_left";
 }
 
+function isExplicitCalendarCampaignRule(rule) {
+  return String(rule?.queue_source || "").trim().toLowerCase() === "campaign";
+}
+
+function getCustomerFacingCampaignTheme(rule) {
+  const themeContract = getCampaignThemeContract(rule);
+  const strategy = normalizeCampaignMarketingStrategy(
+    rule?.campaign_marketing_strategy
+  );
+  const explicitCampaignFromPrompt =
+    extractPromptLineValue(rule?.prompt, "Campaign") ||
+    extractPromptLineValue(rule?.image_prompt, "Campaign");
+
+  const candidates = [
+    themeContract?.primaryTheme,
+    strategy?.primaryTheme,
+    rule?.campaign_theme,
+    isExplicitCalendarCampaignRule(rule) ? explicitCampaignFromPrompt : "",
+    isExplicitCalendarCampaignRule(rule) ? rule?.campaign_opportunity_title : "",
+    isExplicitCalendarCampaignRule(rule) ? rule?.campaign_title : "",
+    isExplicitCalendarCampaignRule(rule) ? rule?.campaign_name : "",
+  ];
+
+  return (
+    candidates
+      .map((value) => String(value || "").replace(/\s+/gu, " ").trim())
+      .find(Boolean) || ""
+  );
+}
+
+function extractSafeSeasonOrOccasionLabel(value) {
+  const text = String(value || "").replace(/\s+/gu, " ").trim();
+  if (!text) return "";
+
+  // Only a recognized season/occasion may become a visible product-image
+  // eyebrow. Internal plan names, goals, weekdays and arbitrary campaign names
+  // are deliberately excluded.
+  const patterns = [
+    /\bblack friday\b/iu,
+    /\bcyber monday\b/iu,
+    /\bsingles day\b/iu,
+    /\bback to school\b/iu,
+    /\bskolstart\b/iu,
+    /\bchristmas\b/iu,
+    /\bxmas\b/iu,
+    /\bjul\b/iu,
+    /\bhalloween\b/iu,
+    /\bnew year\b/iu,
+    /\bnyår\b/iu,
+    /\bvalentine(?:'s day)?\b/iu,
+    /\balla hjärtans dag\b/iu,
+    /\bmother(?:'s)? day\b/iu,
+    /\bmors dag\b/iu,
+    /\bfather(?:'s)? day\b/iu,
+    /\bfars dag\b/iu,
+    /\beaster\b/iu,
+    /\bpåsk\b/iu,
+    /\bmidsummer\b/iu,
+    /\bmidsommar\b/iu,
+    /\bsummer\b/iu,
+    /\bsommar\b/iu,
+    /\bspring\b/iu,
+    /\bvår\b/iu,
+    /\bautumn\b/iu,
+    /\bfall\b/iu,
+    /\bhöst\b/iu,
+    /\bwinter\b/iu,
+    /\bvinter\b/iu,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (!match?.[0]) continue;
+    const label = String(match[0]).trim();
+    return label
+      .split(/\s+/u)
+      .map((word) => {
+        if (/^(black|cyber|back|new|mother|father|valentine|alla)$/i.test(word)) {
+          return word.charAt(0).toLocaleUpperCase() + word.slice(1).toLocaleLowerCase();
+        }
+        return word.charAt(0).toLocaleUpperCase() + word.slice(1);
+      })
+      .join(" ");
+  }
+
+  return "";
+}
+
 function getProductLabelEyebrow(rule) {
-  const raw = String(getApprovalCampaignTitle(rule) || "").trim();
-  if (!raw) return "";
-  const firstPhrase = raw.split(/\s+[–—-]\s+/u)[0].replace(/\s+/gu, " ").trim();
-  return firstPhrase.split(" ").filter(Boolean).slice(0, 4).join(" ");
+  const candidates = [
+    getCustomerFacingCampaignTheme(rule),
+    ...(getCampaignThemeContract(rule)?.approvedThemeTerms || []),
+  ];
+
+  for (const candidate of candidates) {
+    const safeLabel = extractSafeSeasonOrOccasionLabel(candidate);
+    if (safeLabel) {
+      return safeLabel.split(" ").filter(Boolean).slice(0, 4).join(" ");
+    }
+  }
+
+  return "";
 }
 
 function stripBrandPrefixFromProductTitle(titleValue, brandValue) {
@@ -1798,6 +1895,24 @@ function stripBrandPrefixFromProductTitle(titleValue, brandValue) {
   const titleWords = title.split(/\s+/u);
   const brandWords = brand.split(/\s+/u);
   return titleWords.slice(brandWords.length).join(" ").trim() || title;
+}
+
+function normalizeProductLabelComparisonText(value) {
+  return String(value || "")
+    .normalize("NFKD")
+    .toLocaleLowerCase()
+    .replace(/[\u0300-\u036f]/gu, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+function isProductLabelTextRedundant(existingText, candidateText) {
+  const existing = normalizeProductLabelComparisonText(existingText);
+  const candidate = normalizeProductLabelComparisonText(candidateText);
+  if (!existing || !candidate) return false;
+  if (existing === candidate) return true;
+  return ` ${existing} `.includes(` ${candidate} `);
 }
 
 export function getCarouselProductLabelPresentation(product, fallbackTitle = "") {
@@ -1821,10 +1936,22 @@ export function getCarouselProductLabelPresentation(product, fallbackTitle = "")
   const color = String(titleColor || product?.locked_product_color || product?.product_color || "")
     .replace(/\s+/gu, " ")
     .trim();
-  const descriptorWithColor = [displayType, color].filter(Boolean).join(" · ");
+
+  // Supporting copy must add information. Never repeat a generic category that
+  // already appears inside the main product/model name.
+  const descriptorParts = [
+    displayType && !isProductLabelTextRedundant(modelTitle, displayType)
+      ? displayType
+      : "",
+    color && !isProductLabelTextRedundant(modelTitle, color)
+      ? color
+      : "",
+  ].filter(Boolean);
+  const descriptorWithColor = descriptorParts.join(" · ");
   const descriptor = Array.from(descriptorWithColor).length <= 44
     ? descriptorWithColor
-    : displayType || color;
+    : descriptorParts[0] || descriptorParts[1] || "";
+
   return {
     brand,
     title: modelTitle,
@@ -1832,6 +1959,7 @@ export function getCarouselProductLabelPresentation(product, fallbackTitle = "")
     rawTitle,
   };
 }
+
 
 async function deriveLocalPackshotLabelAnalysis(sourceBuffer, { includeLogo = false } = {}) {
   const sampleSize = 180;
@@ -1996,7 +2124,7 @@ function buildTransparentProductTypographyPrompt({
   const descriptor = String(productDescriptor || "").trim();
   const campaignContext = truncateText(
     [
-      rule?.campaign_name,
+      getCustomerFacingCampaignTheme(rule),
       rule?.campaign_phase,
       rule?.content_type_label,
       rule?.prompt,
@@ -2030,7 +2158,9 @@ ${exactTextLines}
 - Use only the supplied text above. Do not invent slogans, features, prices, discounts, claims, calls to action or extra words.
 - Do not translate, rename, abbreviate, omit or replace product-name words.
 - Balanced capitalization and line breaks are allowed, but spelling must remain exact.
-- The main product name must be immediately readable on a phone.
+- The main product name must be immediately readable on a phone and must be the visually dominant text element.
+- Make the main product name clearly larger and heavier than the brand, optional eyebrow or descriptor; do not make it look like tiny metadata.
+- Keep the hierarchy editorial and confident rather than stacking several equally small text lines. If only brand + product name are supplied, use the available space generously.
 
 Placement:
 - ${getTransparentTypographyPlacementGuidance(placement)}
@@ -2818,7 +2948,7 @@ function getRuleUpdatePayloadAfterSuccess(
   if (rule.schedule_type === "weekly") {
     payload.next_run_at = getNextWeeklyRunAtIsoAfterScheduled(
       rule,
-      scheduledPublishAtIso || getScheduledPublishAtIso(rule, now)
+      rule?._base_scheduled_publish_at || scheduledPublishAtIso || getScheduledPublishAtIso(rule, now)
     );
   }
 
@@ -2847,6 +2977,78 @@ function getStableQueueHash(value) {
   }
 
   return hash >>> 0;
+}
+
+const WEEKLY_SMART_SLOTS_BY_WEEKDAY = {
+  Monday: ["08:30", "10:30", "13:30", "18:30"],
+  Tuesday: ["09:30", "10:30", "12:15", "18:30"],
+  Wednesday: ["09:30", "11:30", "13:30", "19:00"],
+  Thursday: ["10:30", "12:15", "16:30", "18:30"],
+  Friday: ["09:30", "11:30", "16:30", "18:30"],
+  Saturday: ["10:30", "14:30", "16:30", "19:00"],
+  Sunday: ["10:30", "16:30", "18:30", "19:30"],
+};
+
+const WEEKLY_TYPE_TIME_PREFERENCES = {
+  website_item: ["11:30", "12:15", "16:30", "18:30"],
+  website_item_text_ad: ["11:30", "12:15", "16:30", "18:30"],
+  animated_website_item: ["16:30", "18:30", "19:00", "12:15"],
+  kling_ai_video: ["16:30", "18:30", "19:00", "12:15"],
+  carousel_website_item: ["12:15", "16:30", "18:30", "19:00"],
+  problem_solution: ["08:30", "12:15", "16:30", "18:30"],
+  tips: ["10:30", "12:15", "18:30", "19:30"],
+  mistakes: ["10:30", "12:15", "18:30", "19:30"],
+  faq: ["12:15", "16:30", "18:30", "10:30"],
+  checklist: ["08:30", "12:15", "18:30", "19:30"],
+  mini_guide: ["12:15", "18:30", "19:30", "10:30"],
+  seasonal: ["10:30", "12:15", "16:30", "18:30"],
+  manual_prompt: ["10:30", "12:15", "16:30"],
+};
+
+function getWeeklyPreferredWindowTime(contentTypeId, weekday) {
+  const allowed = WEEKLY_SMART_SLOTS_BY_WEEKDAY[weekday] || WEEKLY_SMART_SLOTS_BY_WEEKDAY.Monday;
+  const preferred = WEEKLY_TYPE_TIME_PREFERENCES[contentTypeId] || WEEKLY_TYPE_TIME_PREFERENCES.manual_prompt;
+  return preferred.find((time) => allowed.includes(time)) || allowed[0] || "10:30";
+}
+
+function distributeWeeklyTimeInsideDaypart(baseTime, seed) {
+  const [hour, minute] = String(baseTime || "10:30").split(":").map(Number);
+  const minutes = (Number(hour) || 0) * 60 + (Number(minute) || 0);
+  const range = minutes < 630
+    ? [480, 620]
+    : minutes < 780
+      ? [630, 770]
+      : minutes < 1050
+        ? [780, 1040]
+        : [1050, 1250];
+  const step = 5;
+  const slotCount = Math.max(1, Math.floor((range[1] - range[0]) / step) + 1);
+  const selectedMinutes = range[0] + (getStableQueueHash(seed) % slotCount) * step;
+  return `${String(Math.floor(selectedMinutes / 60)).padStart(2, "0")}:${String(selectedMinutes % 60).padStart(2, "0")}`;
+}
+
+function optimizeNextWeeklyPublishTime({ baseRule, selectedRule, nextRunAtIso }) {
+  const nextDate = new Date(nextRunAtIso);
+  if (!Number.isFinite(nextDate.getTime())) return null;
+  const timeZone = getRuleTimeZone(baseRule);
+  const localParts = getDatePartsInTimeZone(nextDate, timeZone);
+  const weekday = getWeekdayInTimeZone(nextDate, timeZone);
+  const contentTypeId = String(selectedRule?.content_type_id || baseRule?.content_type_id || "manual_prompt");
+  const preferred = getWeeklyPreferredWindowTime(contentTypeId, weekday);
+  const localDate = `${localParts.year}-${String(localParts.month).padStart(2, "0")}-${String(localParts.day).padStart(2, "0")}`;
+  const exactTime = distributeWeeklyTimeInsideDaypart(
+    preferred,
+    `${baseRule?.user_id || ""}:${baseRule?.brand_profile_id || ""}:${baseRule?.id || ""}:${localDate}:${contentTypeId}`
+  );
+  const [hour, minute] = exactTime.split(":").map(Number);
+  return {
+    publishTime: exactTime,
+    weekday,
+    nextRunAt: zonedLocalToUtcDate({
+      year: localParts.year, month: localParts.month, day: localParts.day,
+      hour, minute, second: 0, timeZone,
+    }).toISOString(),
+  };
 }
 
 function getGenerationLeadHours(rule) {
@@ -2952,7 +3154,8 @@ function getNextWeeklyRunAtIsoAfterScheduled(rule, scheduledPublishAtIso) {
 
   const timeZone = getRuleTimeZone(rule);
   const localParts = getDatePartsInTimeZone(scheduled, timeZone);
-  const publishTime = normalizeTime(rule.publish_time);
+  // A one-week override must never move the permanent weekly template.
+  const publishTime = normalizeTime(rule?._base_publish_time || rule.publish_time);
   const [hourValue, minuteValue] = publishTime.split(":");
 
   return zonedLocalToUtcDate({
@@ -2964,6 +3167,136 @@ function getNextWeeklyRunAtIsoAfterScheduled(rule, scheduledPublishAtIso) {
     second: 0,
     timeZone,
   }).toISOString();
+}
+
+function getRuleLocalDateString(value, timeZone = "UTC") {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  const parts = getDatePartsInTimeZone(date, timeZone);
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+}
+
+function getWeekdayForLocalDateString(dateValue, timeZone = "UTC") {
+  const [year, month, day] = String(dateValue || "").split("-").map(Number);
+  if (![year, month, day].every(Number.isFinite)) return "";
+  const midday = zonedLocalToUtcDate({ year, month, day, hour: 12, minute: 0, second: 0, timeZone });
+  return getWeekdayInTimeZone(midday, timeZone);
+}
+
+function getOverrideScheduledIso(rule, override) {
+  const dateValue = String(override?.override_run_date || "").slice(0, 10);
+  const publishTime = normalizeTime(override?.override_publish_time || rule?.publish_time);
+  const [year, month, day] = dateValue.split("-").map(Number);
+  const [hour, minute] = String(publishTime || "00:00").split(":").map(Number);
+  if (![year, month, day, hour, minute].every(Number.isFinite)) return null;
+  return zonedLocalToUtcDate({
+    year, month, day, hour, minute, second: 0, timeZone: getRuleTimeZone(rule),
+  }).toISOString();
+}
+
+async function applyActiveScheduleOverrides({ supabase, rules }) {
+  const weeklyRules = (rules || []).filter((rule) => rule?.schedule_type === "weekly" && rule?.id && rule?.next_run_at);
+  if (!weeklyRules.length) return rules || [];
+
+  const relevantBaseDates = weeklyRules
+    .map((rule) => getRuleLocalDateString(rule.next_run_at, getRuleTimeZone(rule)))
+    .filter(Boolean)
+    .sort();
+  const minBaseDate = relevantBaseDates[0] || null;
+  const maxBaseDate = relevantBaseDates[relevantBaseDates.length - 1] || null;
+
+  let overrideQuery = supabase
+    .from("automation_schedule_overrides")
+    .select("automation_rule_id, base_run_date, override_run_date, override_publish_time, override_content_type_id, override_content_type_label, override_content_format, override_credit_cost, status")
+    .in("automation_rule_id", weeklyRules.map((rule) => rule.id))
+    .eq("status", "active");
+  if (minBaseDate) overrideQuery = overrideQuery.gte("base_run_date", minBaseDate);
+  if (maxBaseDate) overrideQuery = overrideQuery.lte("base_run_date", maxBaseDate);
+  const { data, error } = await overrideQuery.limit(1000);
+
+  if (error) {
+    if (/automation_schedule_overrides|schema cache|does not exist/i.test(String(error.message || ""))) {
+      return rules || [];
+    }
+    throw new Error(error.message);
+  }
+
+  const byKey = new Map((data || []).map((item) => [`${item.automation_rule_id}|${item.base_run_date}`, item]));
+  return (rules || []).map((rule) => {
+    if (rule?.schedule_type !== "weekly" || !rule?.next_run_at) return rule;
+    const timeZone = getRuleTimeZone(rule);
+    const baseDate = getRuleLocalDateString(rule.next_run_at, timeZone);
+    const override = byKey.get(`${rule.id}|${baseDate}`);
+    if (!override) return rule;
+    const effectiveIso = getOverrideScheduledIso(rule, override);
+    if (!effectiveIso) return rule;
+    return {
+      ...rule,
+      _schedule_override: override,
+      _base_scheduled_publish_at: rule.next_run_at,
+      _base_publish_time: rule.publish_time,
+      next_run_at: effectiveIso,
+      publish_time: normalizeTime(override.override_publish_time || rule.publish_time),
+      weekday: getWeekdayForLocalDateString(override.override_run_date, timeZone) || rule.weekday,
+    };
+  });
+}
+
+function applyScheduleOverrideContent(rule, queuedRule) {
+  const override = queuedRule?._schedule_override;
+  const requestedType = String(override?.override_content_type_id || "").trim();
+  if (!requestedType) return rule;
+
+  const config = parseAdaptivePlanConfig(queuedRule);
+  const variant = (config?.variants || []).find(
+    (item) => String(item?.contentTypeId || "").trim() === requestedType
+  );
+  if (!variant) {
+    return {
+      ...rule,
+      content_type_id: requestedType,
+      content_type_label: override?.override_content_type_label || rule.content_type_label,
+      content_format: override?.override_content_format || rule.content_format,
+      credit_cost: Math.max(1, Number(override?.override_credit_cost || rule.credit_cost || 1)),
+      schedule_override_applied: true,
+    };
+  }
+
+  return {
+    ...rule,
+    content_type_id: variant.contentTypeId || requestedType,
+    content_type_label: variant.contentTypeLabel || override?.override_content_type_label || rule.content_type_label,
+    prompt: variant.prompt || rule.prompt,
+    image_prompt: variant.imagePrompt || rule.image_prompt,
+    generate_image: typeof variant.generateImage === "boolean" ? variant.generateImage : rule.generate_image,
+    image_source: variant.imageSource || rule.image_source,
+    uses_website_content: typeof variant.usesWebsiteContent === "boolean" ? variant.usesWebsiteContent : rule.uses_website_content,
+    content_format: variant.contentFormat || override?.override_content_format || rule.content_format,
+    animation_style: variant.animationStyle || rule.animation_style || null,
+    credit_cost: Math.max(1, Number(override?.override_credit_cost || variant.creditCost || rule.credit_cost || 1)),
+    marketing_angle: variant.marketingAngle || rule.marketing_angle,
+    customer_stage: variant.customerStage || rule.customer_stage,
+    cta_strength: variant.ctaStrength || rule.cta_strength,
+    schedule_override_applied: true,
+  };
+}
+
+async function loadScheduleOverrideForBaseRun({ supabase, rule, scheduledPublishAtIso }) {
+  if (rule?.schedule_type !== "weekly" || !rule?.id || !scheduledPublishAtIso) return null;
+  const baseRunDate = getRuleLocalDateString(scheduledPublishAtIso, getRuleTimeZone(rule));
+  if (!baseRunDate) return null;
+  const { data, error } = await supabase
+    .from("automation_schedule_overrides")
+    .select("automation_rule_id, base_run_date, override_run_date, override_publish_time, override_content_type_id, override_content_type_label, override_content_format, override_credit_cost, status")
+    .eq("automation_rule_id", rule.id)
+    .eq("base_run_date", baseRunDate)
+    .eq("status", "active")
+    .maybeSingle();
+  if (error) {
+    if (/automation_schedule_overrides|schema cache|does not exist/i.test(String(error.message || ""))) return null;
+    throw new Error(error.message);
+  }
+  return data || null;
 }
 
 async function claimAutomationRuleForProcessing({ supabase, rule, now }) {
@@ -2982,8 +3315,9 @@ async function claimAutomationRuleForProcessing({ supabase, rule, now }) {
     .eq("is_active", true)
     .or(`queue_locked_until.is.null,queue_locked_until.lte.${claimStartedIso}`);
 
-  if (rule.next_run_at) {
-    query = query.eq("next_run_at", rule.next_run_at);
+  const storedNextRunAt = rule?._base_scheduled_publish_at || rule.next_run_at;
+  if (storedNextRunAt) {
+    query = query.eq("next_run_at", storedNextRunAt);
   } else {
     query = query.is("next_run_at", null);
   }
@@ -10473,6 +10807,7 @@ Critical brand relevance rules:
 - Keep the content useful, specific and trustworthy.
 - If Campaign strategy is provided, follow it carefully.
 - If a CAMPAIGN IDENTITY LOCK is provided, it is authoritative. Never introduce or blend in a different named campaign, holiday, theme day, season, shopping event or occasion, even if another supplied context mentions one.
+- Internal automation names, plan names, goal labels, slot labels, weekdays, dates used only for scheduling, worker names and queue metadata are never customer-facing copy. Do not mention them in the post unless the User instruction explicitly makes that exact wording part of a real public campaign.
 - If the strategy says marketing_angle "awareness", focus on interest, recognition, timing or inspiration before selling.
 - If the strategy says marketing_angle "engagement", make the post easy to react to, comment on or relate to.
 - If the strategy says marketing_angle "product_discovery", help the audience discover a suitable product, service, idea or option.
@@ -11748,9 +12083,7 @@ function buildDeterministicDeliveryCopy(rule) {
       rule?.brand_name ||
       ""
   ).trim();
-  const campaignName = String(
-    rule?.name || rule?.campaign_theme || rule?.content_type_label || ""
-  ).trim();
+  const campaignName = String(getProductLabelEyebrow(rule) || "").trim();
 
   const lines = [];
   if (campaignName) lines.push(campaignName);
@@ -14539,7 +14872,12 @@ function getKlingProductPromptFallback({ rule, postContent, referenceSafety = nu
     500
   );
   const campaignContext = truncateText(
-    String(rule?.campaign_theme || rule?.strategy_notes || rule?.name || "").replace(/\s+/g, " ").trim(),
+    [
+      getCustomerFacingCampaignTheme(rule),
+      rule?.strategy_notes,
+      rule?.campaign_goal,
+      rule?.target_customer_need,
+    ].filter(Boolean).join(" | ").replace(/\s+/g, " ").trim(),
     300
   );
   const captionContext = truncateText(
@@ -14574,7 +14912,12 @@ async function buildKlingProductVideoPrompt({ openai, rule, postContent, referen
   );
   const brandName = String(rule?.brand_profile?.business_name || "").trim();
   const campaignContext = truncateText(
-    String(rule?.campaign_theme || rule?.strategy_notes || rule?.name || "").replace(/\s+/g, " ").trim(),
+    [
+      getCustomerFacingCampaignTheme(rule),
+      rule?.strategy_notes,
+      rule?.campaign_goal,
+      rule?.target_customer_need,
+    ].filter(Boolean).join(" | ").replace(/\s+/g, " ").trim(),
     500
   );
 
@@ -16059,28 +16402,44 @@ function getCampaignIdentityLock(rule) {
   const strategy = normalizeCampaignMarketingStrategy(
     rule?.campaign_marketing_strategy
   );
-  const prompt = String(rule?.prompt || "");
-  const imagePrompt = String(rule?.image_prompt || "");
-  const activeCampaignCandidates = [
-    themeContract?.primaryTheme,
-    strategy?.primaryTheme,
-    extractPromptLineValue(prompt, "Campaign"),
-    extractPromptLineValue(prompt, "Campaign title"),
-    extractPromptLineValue(prompt, "Campaign name"),
-    extractPromptLineValue(imagePrompt, "Campaign"),
-    extractPromptLineValue(imagePrompt, "Campaign title"),
-    extractPromptLineValue(imagePrompt, "Campaign name"),
-    rule?.campaign_title,
-    rule?.campaign_name,
-    rule?.campaign_opportunity_title,
-    rule?.name,
-  ]
-    .map((value) => normalizeCampaignStrategyText(value, 120))
-    .filter(Boolean);
+  const explicitCalendarCampaign =
+    String(rule?.queue_source || "").trim().toLowerCase() === "campaign";
+  const explicitCampaignFromPrompt =
+    extractPromptLineValue(rule?.prompt, "Campaign") ||
+    extractPromptLineValue(rule?.image_prompt, "Campaign");
+  const structuredTheme = normalizeCampaignStrategyText(
+    themeContract?.primaryTheme ||
+      strategy?.primaryTheme ||
+      rule?.campaign_theme ||
+      (explicitCalendarCampaign ? explicitCampaignFromPrompt : "") ||
+      (explicitCalendarCampaign ? rule?.campaign_opportunity_title : "") ||
+      (explicitCalendarCampaign ? rule?.campaign_title : "") ||
+      (explicitCalendarCampaign ? rule?.campaign_name : ""),
+    120
+  );
 
-  const activeCampaign = activeCampaignCandidates[0] || "";
+  // Internal Content Studio names such as "Sell more · Thu" are scheduling
+  // metadata, not campaign identities. For ordinary strategic plans, activate
+  // the hard identity lock only when the structured theme actually contains a
+  // recognized season/occasion. Explicit calendar campaigns may keep their
+  // real customer-facing named campaign.
+  const seasonOrOccasionMatch = String(structuredTheme || "").match(
+    /\b(?:black friday|cyber monday|singles day|back to school|skolstart|christmas|xmas|jul|halloween|new year|nyår|valentine(?:'s day)?|alla hjärtans dag|mother(?:'s)? day|mors dag|father(?:'s)? day|fars dag|easter|påsk|midsummer|midsommar|summer|sommar|spring|vår|autumn|fall|höst|winter|vinter)\b/iu
+  );
+  const activeCampaign = normalizeCampaignStrategyText(
+    explicitCalendarCampaign
+      ? structuredTheme
+      : seasonOrOccasionMatch?.[0] || "",
+    120
+  );
+
+  if (!activeCampaign) {
+    return null;
+  }
+
   const approvedThemeTerms = collectUniqueTerms(
     [
+      activeCampaign,
       ...(themeContract?.approvedThemeTerms || []),
       ...(themeContract?.essentialThemeTerms || []),
       ...(strategy?.themeAnchorTerms || []),
@@ -16104,12 +16463,8 @@ function getCampaignIdentityLock(rule) {
     (term) => !normalizedApprovedTerms.has(normalizeSearchText(term).trim())
   );
 
-  if (!activeCampaign && !approvedThemeTerms.length) {
-    return null;
-  }
-
   return {
-    activeCampaign: activeCampaign || approvedThemeTerms[0],
+    activeCampaign,
     approvedThemeTerms,
     competingThemeTerms,
   };
@@ -16141,12 +16496,11 @@ function formatCampaignVisualContextForPrompt(rule) {
 
   const matchTerms = extractExplicitCampaignMatchTerms(rule).slice(0, 16);
   const avoidTerms = extractCampaignAvoidTerms(rule).slice(0, 12);
-  const campaignTheme = [
-    rule?.name,
+  const campaignTheme = getCustomerFacingCampaignTheme(rule);
+  const strategicContext = [
     rule?.campaign_goal,
     rule?.target_customer_need,
     rule?.marketing_angle,
-    extractPromptLineValue(rule?.prompt, "Campaign"),
     extractPromptLineValue(rule?.prompt, "Campaign context"),
   ]
     .filter(Boolean)
@@ -16155,7 +16509,9 @@ function formatCampaignVisualContextForPrompt(rule) {
   const campaignIdentityLock = formatCampaignIdentityLockForPrompt(rule);
 
   return `${campaignIdentityLock ? `${campaignIdentityLock}\n\n` : ""}Campaign visual context:
-${campaignTheme || "Campaign theme not explicitly named."}
+Named customer-facing theme: ${campaignTheme || "No named campaign/season."}
+Strategic context: ${strategicContext || "Use the product and post angle only."}
+Internal automation names, plan names, goal labels, weekdays and scheduling labels are planning metadata only. Never render them as customer-facing text.
 Authorized campaign offer: ${authorizedOffer || "Not provided"}
 Product/theme match terms: ${matchTerms.length ? matchTerms.join(", ") : "Not provided"}
 Avoid visual/product terms: ${avoidTerms.length ? avoidTerms.join(", ") : "Not provided"}`;
@@ -16203,7 +16559,9 @@ function buildCampaignResearchText(rule) {
   );
 
   return [
-    rule?.name,
+    getCustomerFacingCampaignTheme(rule)
+      ? `Customer-facing campaign/theme: ${getCustomerFacingCampaignTheme(rule)}`
+      : "",
     themeContract?.primaryTheme
       ? `Primary campaign theme: ${themeContract.primaryTheme}`
       : "",
@@ -17317,8 +17675,8 @@ ${formatCampaignMarketingStrategyForPrompt(strategy) || "No senior strategy avai
 Brand profile:
 ${formatBrandProfileForPrompt(brandProfile)}
 
-Campaign name:
-${rule?.name || ""}
+Customer-facing campaign/theme:
+${getCustomerFacingCampaignTheme(rule) || "No named public campaign"}
 
 Campaign prompt:
 ${truncateText(rule?.prompt || "", 7000)}
@@ -17778,7 +18136,7 @@ function getWebsiteTextIntentSourceText(rule) {
   const imagePrompt = String(rule?.image_prompt || "");
 
   return [
-    rule?.name,
+    getCustomerFacingCampaignTheme(rule),
     stripDefaultWebsiteTextPromptNoise(prompt),
     stripDefaultWebsiteTextPromptNoise(imagePrompt),
     extractPromptLineValue(prompt, "Campaign"),
@@ -17933,8 +18291,10 @@ Rules:
 Brand profile:
 ${formatBrandProfileForPrompt(brandProfile)}
 
-Automation name:
-${rule?.name || ""}
+Customer-facing campaign/theme:
+${getCustomerFacingCampaignTheme(rule) || "None"}
+
+Internal automation/plan names are scheduling metadata and must not be treated as product intent.
 
 Automation prompt:
 ${stripDefaultWebsiteTextPromptNoise(rule?.prompt || "")}
@@ -18027,7 +18387,7 @@ function getCampaignThemeSourceText(rule) {
   const prompt = String(rule?.prompt || "");
 
   return normalizeSearchText([
-    rule?.name,
+    getCustomerFacingCampaignTheme(rule),
     extractPromptLineValue(prompt, "Campaign"),
     extractPromptLineValue(prompt, "Campaign context"),
     extractPromptLineValue(prompt, "Product selection hint"),
@@ -18214,7 +18574,7 @@ function extractCampaignTerms(rule) {
   const explicitTerms = extractExplicitCampaignMatchTerms(rule);
   const prompt = String(rule?.prompt || "");
   const source = [
-    rule?.name,
+    getCustomerFacingCampaignTheme(rule),
     extractPromptLineValue(prompt, "Campaign"),
     extractPromptLineValue(prompt, "Product selection hint"),
     extractPromptLineValue(prompt, "Campaign context"),
@@ -18359,7 +18719,7 @@ function extractPrimaryCampaignTerms(rule) {
   const compactPrimaryRoots = extractCompactPrimaryCampaignRoots(explicitTerms);
   const prompt = String(rule?.prompt || "");
   const source = [
-    rule?.name,
+    getCustomerFacingCampaignTheme(rule),
     extractPromptLineValue(prompt, "Campaign"),
     extractPromptLineValue(prompt, "Campaign context"),
     rule?.campaign_goal,
@@ -18450,7 +18810,7 @@ function getCampaignTitleCandidates(rule) {
 
   return collectUniqueTerms(
     [
-      rule?.name,
+      getCustomerFacingCampaignTheme(rule),
       extractPromptLineValue(prompt, "Campaign"),
       extractPromptLineValue(prompt, "Campaign title"),
       extractPromptLineValue(prompt, "Campaign name"),
@@ -18779,7 +19139,7 @@ function getCampaignAnchorSourceText(rule) {
   const imagePrompt = String(rule?.image_prompt || "");
 
   return [
-    rule?.name,
+    getCustomerFacingCampaignTheme(rule),
     extractPromptLineValue(prompt, "Campaign"),
     extractPromptLineValue(prompt, "Campaign title"),
     extractPromptLineValue(prompt, "Campaign name"),
@@ -25784,9 +26144,8 @@ function getPrimaryCampaignWebResearchTheme(rule) {
   const themeContract = getCampaignThemeContract(rule);
   const candidates = [
     themeContract?.primaryTheme,
-    rule?.name,
-    rule?.campaign_name,
-    rule?.campaign_title,
+    getCustomerFacingCampaignTheme(rule),
+    rule?.target_customer_need,
     rule?.campaign_goal,
     rule?.marketing_angle,
     rule?.prompt,
@@ -28613,7 +28972,7 @@ async function findProductUrlWithWebSearch({
   );
   const searchHintTerms = collectUniqueTerms(
     [
-      rule?.name,
+      getCustomerFacingCampaignTheme(rule),
       ...productSearchQueries,
       ...productMatchTerms,
       rule?.product_search_intent,
@@ -28705,8 +29064,8 @@ The normal store/catalog search did not return enough usable products. Search th
 For a security-protected retailer, treat this as another CURRENT-ASSORTMENT / IN-STOCK attempt. For a manufacturer_catalog, direct manufacturer stock is NOT required: instead prove that the exact product is part of the CURRENT official product range on the target market and is not discontinued/archived. Do not resurrect an obsolete exact model merely because its old page ranks well.
 Use domain-restricted queries such as:
 - site:${websiteHost} ${searchHintTerms.slice(0, 6).join(" ")}
-- site:${websiteHost} ${productSearchQueries.slice(0, 4).join(" OR ") || rule?.name || "products"}
-- site:${websiteHost} ${productMatchTerms.slice(0, 6).join(" OR ") || rule?.name || "products"}
+- site:${websiteHost} ${productSearchQueries.slice(0, 4).join(" OR ") || getCustomerFacingCampaignTheme(rule) || "products"}
+- site:${websiteHost} ${productMatchTerms.slice(0, 6).join(" OR ") || getCustomerFacingCampaignTheme(rule) || "products"}
 
 If the campaign terms appear to be in a different language than the website, infer the website/store language and also try the local-language equivalents a shopper would type on that site.
 Return concrete product pages only. Use category/search/campaign pages only as discovery_pages.
@@ -32439,6 +32798,8 @@ Rules:
 - Preserve existing printed words or graphics on the product as accurately as possible.
 - Keep the layout clean, simple, and spacious with fewer text elements and larger typography.
 - Use one strong headline, one very short supporting line, and one short CTA.
+- Never use internal automation/plan names, goal labels, slot labels, weekdays or scheduling metadata as visible ad copy.
+- Do not repeat the product name or generic product category in multiple text elements. Every supporting line or callout must add distinct, verified information; if it adds nothing new, omit it.
 - You may add up to 3 very short callout points or badges only if they are clearly supported by the website item and if they fit the selected layout family.
 - If the selected layout family is more minimal, premium, or lifestyle-focused, prefer fewer callouts or no callouts at all.
 - Do not write long paragraphs, dense body copy, or small filler text.
@@ -32537,7 +32898,7 @@ const response = await openai.images.generate({
 async function renderEmergencySocialCard({ rule, brandProfile, content }) {
   const productTitle = String(rule?.website_item?.title || "").trim();
   const headline = truncateText(
-    productTitle || rule?.name || brandProfile?.business_name || "Spreelo",
+    productTitle || getProductLabelEyebrow(rule) || brandProfile?.business_name || rule?.content_type_label || "Spreelo",
     92
   );
   const brandName = truncateText(
@@ -33685,7 +34046,7 @@ function chooseAnimatedOverlayChroma(dominantColor) {
 
 function getAnimatedOverlayThemeContext(rule, postContent) {
   return [
-    rule?.campaign_name,
+    getCustomerFacingCampaignTheme(rule),
     rule?.campaign_phase,
     rule?.campaign_goal,
     rule?.content_type_label,
@@ -33958,7 +34319,7 @@ function getPremiumFallbackTextStyle({
     rule?.website_item?.title,
     rule?.website_item?.url,
     rule?.brand_profile?.business_name,
-    rule?.campaign_name,
+    getCustomerFacingCampaignTheme(rule),
     rule?.prompt,
   ]
     .filter(Boolean)
@@ -34938,7 +35299,12 @@ function buildKlingAdvertisingOverlayCopy({ postContent, websiteItem }) {
   let subheadline = "";
   for (const line of captionLines.slice(1, 4)) {
     const candidate = cleanKlingOverlayTextLine(line, 5, 42);
-    if (candidate && candidate.toLocaleLowerCase() !== headline.toLocaleLowerCase()) {
+    if (
+      candidate &&
+      candidate.toLocaleLowerCase() !== headline.toLocaleLowerCase() &&
+      !isProductLabelTextRedundant(headline, candidate) &&
+      !isProductLabelTextRedundant(candidate, headline)
+    ) {
       subheadline = candidate;
       break;
     }
@@ -35665,8 +36031,8 @@ export async function generateAnimatedProductVideo({
       content_type_id: rule?.content_type_id || null,
       content_type_label: rule?.content_type_label || rule?.post_type || null,
       content_format: rule?.content_format || "animated_video",
-      campaign_name: rule?.name || null,
-      goal: rule?.goal || rule?.content_goal || rule?.objective || null,
+      campaign_name: getCustomerFacingCampaignTheme(rule) || null,
+      goal: rule?.campaign_goal || rule?.goal || rule?.content_goal || rule?.objective || null,
       business_name: rule?.brand_profile?.business_name || null,
       industry: rule?.brand_profile?.industry || rule?.brand_profile?.business_category || null,
       product_title: rule?.website_item?.title || rule?.website_item?.item_title || null,
@@ -35674,7 +36040,22 @@ export async function generateAnimatedProductVideo({
       post_copy: String(postContent || "").slice(0, 600),
     },
     targetDurationSeconds: ANIMATED_VIDEO_DURATION_SECONDS,
+    userId: rule?.user_id || null,
+    brandProfileId: rule?.brand_profile_id || null,
+    excludePostId: postId,
+    selectionSeed: postId,
   });
+  console.info("Animated product video music selected", {
+    postId,
+    musicAssetId: musicSelection?.id || null,
+    musicAssetName: musicSelection?.name || null,
+    musicSelectionScore: musicSelection?.score ?? null,
+    recentUsePenalty: musicSelection?.recentUsePenalty ?? null,
+    varietyBonus: musicSelection?.varietyBonus ?? null,
+    eligibleTrackCount: musicSelection?.eligibleTrackCount ?? null,
+    reasons: musicSelection?.reasons || [],
+  });
+
   const edit = buildProductPushEdit({
     backgroundVideoUrl: assets.backgroundVideoUrl,
     productDataUri: assets.productDataUri,
@@ -35708,6 +36089,9 @@ export async function generateAnimatedProductVideo({
         music_volume: musicSelection?.volume ?? null,
         music_selection_score: musicSelection?.score ?? null,
         music_selection_reasons: musicSelection?.reasons || [],
+        music_recent_use_penalty: musicSelection?.recentUsePenalty ?? null,
+        music_variety_bonus: musicSelection?.varietyBonus ?? null,
+        music_eligible_track_count: musicSelection?.eligibleTrackCount ?? null,
       },
       updated_at: new Date().toISOString(),
     })
@@ -40438,7 +40822,10 @@ async function getRulesToProcess({
   batchSize = SMART_QUEUE_BATCH_SIZE,
   workerCount = SMART_QUEUE_WORKER_COUNT,
 }) {
-  const horizonIso = addHoursIso(now, SMART_QUEUE_HORIZON_HOURS);
+  // Weekly slots may be moved earlier inside their week. Scan one extra week so
+  // a valid one-week override is not missed merely because its template date
+  // sits outside the normal generation horizon.
+  const horizonIso = addHoursIso(now, SMART_QUEUE_HORIZON_HOURS + 7 * 24);
   const claimScanLimit = Math.max(
     batchSize,
     Math.min(
@@ -40463,7 +40850,12 @@ async function getRulesToProcess({
     throw new Error(upcomingRulesError.message);
   }
 
-  const readyRules = (upcomingRules || [])
+  const upcomingRulesWithOverrides = await applyActiveScheduleOverrides({
+    supabase,
+    rules: upcomingRules || [],
+  });
+
+  const readyRules = (upcomingRulesWithOverrides || [])
     .filter(
       (rule) => isRuleReadyForGeneration(rule, now) && isRuleRetryGateOpen(rule, now)
     )
@@ -40717,14 +41109,16 @@ async function runAutomationCron(request, options = {}) {
       }
 
       const scheduledPublishAtIso = getScheduledPublishAtIso(queuedRule, now);
-      const rule = resolveAdaptiveWeeklyRule(
+      const adaptiveScheduleAtIso = queuedRule?._base_scheduled_publish_at || scheduledPublishAtIso;
+      const adaptiveRule = resolveAdaptiveWeeklyRule(
         queuedRule,
-        scheduledPublishAtIso,
+        adaptiveScheduleAtIso,
         {
           historyByOwner: adaptiveHistoryByOwner,
           usedTypesByOwner: adaptiveTypesUsedThisRun,
         }
       );
+      const rule = applyScheduleOverrideContent(adaptiveRule, queuedRule);
 
       if (
         isAnimatedVideoRule(rule) &&
@@ -41321,6 +41715,24 @@ async function runAutomationCron(request, options = {}) {
             now,
             scheduledPublishAtIso
           );
+          if (rule.schedule_type === "weekly" && ruleUpdatePayload.next_run_at) {
+            const recoveredNextRule = resolveAdaptiveWeeklyRule(queuedRule, ruleUpdatePayload.next_run_at);
+            const recoveredNextOverride = await loadScheduleOverrideForBaseRun({
+              supabase, rule: queuedRule, scheduledPublishAtIso: ruleUpdatePayload.next_run_at,
+            });
+            const recoveredRuleForReservation = recoveredNextOverride
+              ? applyScheduleOverrideContent(recoveredNextRule, { ...queuedRule, _schedule_override: recoveredNextOverride })
+              : recoveredNextRule;
+            const optimizedRecoveredSchedule = optimizeNextWeeklyPublishTime({
+              baseRule: queuedRule, selectedRule: recoveredRuleForReservation, nextRunAtIso: ruleUpdatePayload.next_run_at,
+            });
+            if (optimizedRecoveredSchedule) {
+              ruleUpdatePayload.next_run_at = optimizedRecoveredSchedule.nextRunAt;
+              ruleUpdatePayload.publish_time = `${optimizedRecoveredSchedule.publishTime}:00`;
+              ruleUpdatePayload.weekday = optimizedRecoveredSchedule.weekday;
+            }
+            ruleUpdatePayload.credit_cost = Number(recoveredRuleForReservation?.credit_cost || queuedRule.credit_cost || rule.credit_cost || 1);
+          }
           const { error: recoveredRuleUpdateError } = await supabase
             .from("automation_rules")
             .update(ruleUpdatePayload)
@@ -42379,8 +42791,8 @@ product_research_model_used: websitePreparedRule.uses_website_content
                   content_type_id: rule.content_type_id || null,
                   content_type_label: rule.content_type_label || rule.post_type || null,
                   content_format: rule.content_format || "animated_video",
-                  campaign_name: rule.name || null,
-                  goal: rule.goal || rule.content_goal || rule.objective || null,
+                  campaign_name: getCustomerFacingCampaignTheme(rule) || null,
+                  goal: rule.campaign_goal || rule.goal || rule.content_goal || rule.objective || null,
                   business_name: rule.brand_profile?.business_name || null,
                   industry: rule.brand_profile?.industry || rule.brand_profile?.business_category || null,
                   product_title: candidate.item?.title || candidate.item?.item_title || null,
@@ -43283,8 +43695,24 @@ product_research_model_used: websitePreparedRule.uses_website_content
               usedTypesByOwner: adaptiveTypesUsedThisRun,
             }
           );
+          const nextScheduleOverride = await loadScheduleOverrideForBaseRun({
+            supabase, rule: queuedRule, scheduledPublishAtIso: ruleUpdatePayload.next_run_at,
+          });
+          const nextRuleForReservation = nextScheduleOverride
+            ? applyScheduleOverrideContent(nextAdaptiveRule, { ...queuedRule, _schedule_override: nextScheduleOverride })
+            : nextAdaptiveRule;
+          const optimizedNextSchedule = optimizeNextWeeklyPublishTime({
+            baseRule: queuedRule,
+            selectedRule: nextRuleForReservation,
+            nextRunAtIso: ruleUpdatePayload.next_run_at,
+          });
+          if (optimizedNextSchedule) {
+            ruleUpdatePayload.next_run_at = optimizedNextSchedule.nextRunAt;
+            ruleUpdatePayload.publish_time = `${optimizedNextSchedule.publishTime}:00`;
+            ruleUpdatePayload.weekday = optimizedNextSchedule.weekday;
+          }
           ruleUpdatePayload.credit_cost = Number(
-            nextAdaptiveRule?.credit_cost || queuedRule.credit_cost || rule.credit_cost || 1
+            nextRuleForReservation?.credit_cost || queuedRule.credit_cost || rule.credit_cost || 1
           );
           ruleUpdatePayload.strategy_notes = writeAdaptiveVariantLockToStrategyNotes({
             rule: queuedRule,
