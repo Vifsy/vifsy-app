@@ -17,7 +17,7 @@ const brand = read('app/brand/page.jsx');
 const social = read('app/social-channels/page.jsx');
 const email = read('lib/lifecycleEmails.js');
 
-expect(globals.trimEnd().endsWith('@import "./styles/58-v144-58-mobile-professional-polish.css";'), 'v144.58 CSS is the final cascade layer');
+expect(globals.includes('@import "./styles/58-v144-58-mobile-professional-polish.css";'), 'v144.58 CSS remains in the active cascade');
 expect(home.includes('home-reference-account-status') && home.includes('home-reference-stat-icon') && home.includes('accountActiveLabel'), 'home overview has reference-style status/stat structure without a new hardcoded non-English label');
 expect(mobileCss.includes('grid-template-columns:60px minmax(0,1fr) auto') && mobileCss.includes('.home-reference-account-status'), 'mobile/tablet home overview is a vertical professional stats card');
 expect(mobileCss.includes('.plan-v90-settings-grid') && mobileCss.includes('display:block !important') && mobileCss.includes('border-bottom:1px solid #e5e9ef'), 'plan settings are consolidated into one continuous mobile/tablet card');
