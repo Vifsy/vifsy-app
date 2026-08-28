@@ -90,7 +90,7 @@ export default function HomeReferenceOverview({
         <div><h1>{currentBrandName} översikt</h1><p>Planera, granska och publicera ditt innehåll.</p></div>
         <div className="home-reference-credits">
           <span className="home-reference-credit-check"><CheckCircle2 aria-hidden="true" /></span>
-          <div><small>Nuvarande krediter</small><strong>{creditsRemaining} <em>/ {monthlyCreditLimit || "—"} krediter kvar</em></strong></div>
+          <div><small>Nuvarande krediter</small><strong>{creditsRemaining} <em>/ {monthlyCreditLimit || "—"}<span className="home-reference-credit-desktop-suffix"> krediter kvar</span></em></strong><span className="home-reference-credit-mobile-label">krediter kvar</span></div>
           <span className="home-reference-account-status"><i />{accountActiveLabel}</span>
         </div>
       </header>
@@ -122,7 +122,7 @@ export default function HomeReferenceOverview({
         <ClipboardCheck />
         <div><strong>{pendingCount} inlägg väntar på ditt godkännande</strong><small>Granska och godkänn innan innehållet skickas vidare.</small></div>
         <a className="primary" href="/review?view=queue">Granska inlägg</a>
-        <a href="/review?view=history"><History />Inläggshistorik<ArrowRight /></a>
+        <a href="/calendar"><History /><span className="home-reference-review-desktop-label">Inläggshistorik</span><span className="home-reference-review-mobile-label">Visa innehållskalender</span><ArrowRight /></a>
       </section>
 
       <div className="home-reference-workspace">

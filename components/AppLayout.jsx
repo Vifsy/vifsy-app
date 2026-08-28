@@ -669,6 +669,7 @@ export default function AppLayout({ active, children }) {
                 : currentBrand?.business_name || t("common.noBrand")}
             </strong>
           </div>
+          <ChevronDown className="spreelo-mobile-brand-chevron" size={20} aria-hidden="true" />
         </div>
       </header>
 

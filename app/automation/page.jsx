@@ -32,6 +32,7 @@ import {
   GalleryHorizontalEnd,
   Gift,
   Languages,
+  LayoutGrid,
   PenLine,
   PlayCircle,
   Plus,
@@ -6326,6 +6327,12 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
   const [openCampaignSlotMenuId, setOpenCampaignSlotMenuId] = useState(null);
   const [showCreditDetails, setShowCreditDetails] = useState(false);
   const [guideExpanded, setGuideExpanded] = useState(true);
+
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 900px)").matches) {
+      setGuideExpanded(false);
+    }
+  }, []);
   const [guideInitialized, setGuideInitialized] = useState(false);
   const [showGuideInfoModal, setShowGuideInfoModal] = useState(false);
   const [showVariationInfoModal, setShowVariationInfoModal] = useState(false);
@@ -10711,9 +10718,27 @@ function blockFormatCardClickAfterDrag(event) {
                     </select>
                   </label>
 
-                  <div className="plan-v70-field plan-v73-platform-field plan-v83-setting-tile plan-v90-setting-tile plan-v14459-platform-setting-row">
+                  <label className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile plan-v14459-publishing-tile">
                     <div className="plan-v90-setting-head">
                       <span className="plan-v90-setting-icon"><Send size={20} aria-hidden="true" /></span>
+                      <div className="plan-v90-setting-copy">
+                        <span className="plan-v90-setting-title">{t("automation.redesign.publishing")}</span>
+                        <small>{plannerSectionCopy.publishingHelp}</small>
+                      </div>
+                    </div>
+                    <select
+                      value={scheduleType}
+                      onChange={(event) => setScheduleType(event.target.value)}
+                      disabled={planCreationMode === "campaign"}
+                    >
+                      <option value="weekly">{t("automation.weekly")}</option>
+                      <option value="once">{t("automation.once")}</option>
+                    </select>
+                  </label>
+
+                  <div className="plan-v70-field plan-v73-platform-field plan-v83-setting-tile plan-v90-setting-tile plan-v14459-platform-tile">
+                    <div className="plan-v90-setting-head">
+                      <span className="plan-v90-setting-icon"><LayoutGrid size={20} aria-hidden="true" /></span>
                       <div className="plan-v90-setting-copy">
                         <span className="plan-v90-setting-title">{t("automation.platform")}</span>
                         <small>{plannerSectionCopy.platformHelp}</small>
@@ -10731,13 +10756,6 @@ function blockFormatCardClickAfterDrag(event) {
                             setPlatformDropdownOpen((current) => !current);
                           }}
                         >
-                          <span className="plan-v14459-platform-value">
-                            {selectedPlatformOptions.length === 0
-                              ? t("automation.choosePlatform")
-                              : selectedPlatformOptions.length === 1
-                                ? selectedPlatformOptions[0].label
-                                : `${selectedPlatformOptions[0]?.label || ""} +${selectedPlatformOptions.length - 1}`}
-                          </span>
                           <span className="platform-selected-icons">
                             {selectedPlatformOptions.length > 0 ? (
                               selectedPlatformOptions.map((item) => (
@@ -10754,12 +10772,16 @@ function blockFormatCardClickAfterDrag(event) {
                               <span className="platform-placeholder">{t("automation.choosePlatform")}</span>
                             )}
                           </span>
+                          <span className="plan-v14459-platform-value">
+                            {selectedPlatformOptions.length > 0
+                              ? selectedPlatformOptions.map((item) => item.label).join(" + ")
+                              : t("automation.choosePlatform")}
+                          </span>
                           <ChevronDown size={15} aria-hidden="true" />
                         </button>
 
-                        {platformDropdownOpen ? (
-                          <div className="platform-multiselect-menu" onClick={(event) => event.stopPropagation()}>
-                            <span className="plan-v14459-platform-menu-label">{t("automation.choosePlatform")}</span>
+                        <div className={`platform-multiselect-menu plan-v14459-platform-menu${platformDropdownOpen ? " is-open" : ""}`} onClick={(event) => event.stopPropagation()}>
+                            <span className="plan-v14459-platform-chooser-label">{t("automation.choosePlatform")}</span>
                             {connectedPlatformOptions.map((item) => {
                               const checked = selectedPlatformKeys.includes(item.value);
                               return (
@@ -10779,8 +10801,7 @@ function blockFormatCardClickAfterDrag(event) {
                                 </label>
                               );
                             })}
-                          </div>
-                        ) : null}
+                        </div>
                       </div>
                     ) : (
                       <a className="plan-v73-connect-platform" href="/social-channels">
@@ -10788,24 +10809,6 @@ function blockFormatCardClickAfterDrag(event) {
                       </a>
                     )}
                   </div>
-
-                  <label className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile plan-v14459-publishing-setting-row">
-                    <div className="plan-v90-setting-head">
-                      <span className="plan-v90-setting-icon"><Clock3 size={20} aria-hidden="true" /></span>
-                      <div className="plan-v90-setting-copy">
-                        <span className="plan-v90-setting-title">{t("automation.redesign.publishing")}</span>
-                        <small>{plannerSectionCopy.publishingHelp}</small>
-                      </div>
-                    </div>
-                    <select
-                      value={scheduleType}
-                      onChange={(event) => setScheduleType(event.target.value)}
-                      disabled={planCreationMode === "campaign"}
-                    >
-                      <option value="weekly">{t("automation.weekly")}</option>
-                      <option value="once">{t("automation.once")}</option>
-                    </select>
-                  </label>
                 </div>
 
                 {scheduleType === "weekly" && planCreationMode !== "campaign" && slots.length ? (
