@@ -23,6 +23,7 @@ import {
   Lightbulb,
   Link2,
   ListChecks,
+  LoaderCircle,
   MailCheck,
   MessageCircleHeart,
   MapPin,
@@ -11473,8 +11474,9 @@ function blockFormatCardClickAfterDrag(event) {
                       onClick={savePlan}
                       disabled={saving || !hasEnoughCredits || !slots.length}
                     >
-                      <Rocket size={17} />
-                      {saving ? t("automation.saving") : t("automation.startActivatePlan")}
+                      {saving ? <LoaderCircle size={17} className="spreelo-saving-spinner" aria-hidden="true" /> : <Rocket size={17} />}
+                      <span>{saving ? t("automation.savingWorkingV14458") : t("automation.startActivatePlan")}</span>
+                      {saving ? <span className="spreelo-saving-dots" aria-hidden="true"><i /><i /><i /></span> : null}
                     </button>
                     <span><ShieldCheck size={14} /> {t("automation.redesign.pauseOrEndAnytime")}</span>
                   </div>
@@ -11503,7 +11505,7 @@ function blockFormatCardClickAfterDrag(event) {
                         <a className="campaign-v14335-primary" href="/calendar"><CheckCircle2 /> {t("automation.planSaved")}</a>
                       ) : (
                         <button type="button" className="campaign-v14335-primary" onClick={savePlan} disabled={saving || !hasEnoughCredits || !executableSlots.length}>
-                          <Sparkles /> {saving ? t("automation.saving") : t("automation.campaignExperience.activate")}
+                          {saving ? <LoaderCircle className="spreelo-saving-spinner" aria-hidden="true" /> : <Sparkles />} <span>{saving ? t("automation.savingWorkingV14458") : t("automation.campaignExperience.activate")}</span>{saving ? <span className="spreelo-saving-dots" aria-hidden="true"><i /><i /><i /></span> : null}
                         </button>
                       )}
                       <button type="button" className="campaign-v14335-secondary" onClick={() => document.getElementById("campaign-v14335-preview")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
@@ -11707,7 +11709,7 @@ function blockFormatCardClickAfterDrag(event) {
 
                 <section className="campaign-v14335-activate">
                   <div><h2>{savedPlanSummary ? t("automation.planSaved") : t("automation.campaignExperience.readyTitle")}</h2><p>{savedPlanSummary ? t("automation.automationPlanReady") : t("automation.campaignExperience.readyText")}</p></div>
-                  {savedPlanSummary ? <a href="/calendar"><CheckCircle2 /> {t("automation.viewContentPlans")}</a> : <button type="button" onClick={savePlan} disabled={saving || !hasEnoughCredits || !executableSlots.length}><Sparkles /> {saving ? t("automation.saving") : t("automation.campaignExperience.activateNow")}</button>}
+                  {savedPlanSummary ? <a href="/calendar"><CheckCircle2 /> {t("automation.viewContentPlans")}</a> : <button type="button" onClick={savePlan} disabled={saving || !hasEnoughCredits || !executableSlots.length}>{saving ? <LoaderCircle className="spreelo-saving-spinner" aria-hidden="true" /> : <Sparkles />} <span>{saving ? t("automation.savingWorkingV14458") : t("automation.campaignExperience.activateNow")}</span>{saving ? <span className="spreelo-saving-dots" aria-hidden="true"><i /><i /><i /></span> : null}</button>}
                   {message ? <p className="campaign-v14335-message">{message}</p> : null}
                 </section>
 
@@ -12934,7 +12936,9 @@ function blockFormatCardClickAfterDrag(event) {
         onClick={savePlan}
         disabled={saving || !hasEnoughCredits}
       >
-        {saving ? t("automation.saving") : t("automation.startActivatePlan")}
+        {saving ? <LoaderCircle size={17} className="spreelo-saving-spinner" aria-hidden="true" /> : null}
+        <span>{saving ? t("automation.savingWorkingV14458") : t("automation.startActivatePlan")}</span>
+        {saving ? <span className="spreelo-saving-dots" aria-hidden="true"><i /><i /><i /></span> : null}
       </button>
       <p className="planner-save-trust">🔒 {t("automation.startAutomaticPlanTrust")}</p>
     </div>
@@ -13514,7 +13518,7 @@ function blockFormatCardClickAfterDrag(event) {
                 {t("automation.planActivated.title")}
               </h2>
               <p className="campaign-v14348-activated-copy">
-                {t("automation.planActivated.text")}
+                {t("automation.planActivated.textHomeV14458")}
               </p>
 
               <div className="campaign-v14348-activated-summary">
@@ -13546,10 +13550,10 @@ function blockFormatCardClickAfterDrag(event) {
                   type="button"
                   className="is-primary"
                   onClick={() => {
-                    window.location.href = "/calendar";
+                    window.location.href = "/";
                   }}
                 >
-                  {t("automation.planActivated.viewCalendar")}
+                  {t("automation.planActivated.homeV14458")}
                 </button>
                 <button
                   type="button"

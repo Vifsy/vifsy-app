@@ -1306,6 +1306,7 @@ export default function Home() {
         scheduleActionLoading={scheduleActionLoading}
         onSetRecurringScheduleState={setOperationalPlanState}
         openPlanLabel={t("planManager.openPlan")}
+        accountActiveLabel={t("dashboard.accountActiveV14458")}
         suggestedCampaign={suggestedCampaign ? {
           id: suggestedCampaign.id,
           title: dashboardText(suggestedCampaign.title, t("dashboard.suggestedCampaign")),

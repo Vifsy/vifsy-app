@@ -1,0 +1,617 @@
+/* v144.58 — mobile/tablet professional polish from live-device QA.
+   Scoped overrides only; desktop layouts stay stable unless explicitly noted. */
+
+/* Home overview keeps the existing desktop information order after the JSX gains mobile icons. */
+html body .home-reference-page .home-reference-stats article {
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+}
+html body .home-reference-page .home-reference-stats article > div { display:contents; }
+html body .home-reference-page .home-reference-stats h2 { order:1; }
+html body .home-reference-page .home-reference-stats article > strong { order:2; }
+html body .home-reference-page .home-reference-stats p { order:3; }
+html body .home-reference-page .home-reference-stat-icon { display:none; }
+html body .home-reference-page .home-reference-credit-check {
+  width:11px !important;
+  height:11px !important;
+  min-width:11px !important;
+  border-radius:50% !important;
+  color:#36ad5b !important;
+  background:#36ad5b !important;
+  box-shadow:0 0 0 4px #e4f6e9 !important;
+}
+html body .home-reference-page .home-reference-credit-check svg { display:none; }
+html body .home-reference-page .home-reference-account-status { display:none; }
+
+/* Plan activation: make waiting visibly active instead of a static button. */
+html body .spreelo-saving-spinner {
+  flex:0 0 auto;
+  animation:spreelo-v14458-spin .78s linear infinite;
+}
+html body .spreelo-saving-dots {
+  display:inline-flex !important;
+  align-items:center;
+  gap:3px;
+  margin-left:1px;
+}
+html body .spreelo-saving-dots i {
+  width:4px;
+  height:4px;
+  border-radius:50%;
+  background:currentColor;
+  opacity:.32;
+  animation:spreelo-v14458-dot 1s ease-in-out infinite;
+}
+html body .spreelo-saving-dots i:nth-child(2) { animation-delay:.14s; }
+html body .spreelo-saving-dots i:nth-child(3) { animation-delay:.28s; }
+html body .automation-page.plan-v70-active .plan-v70-activate-actions > button:has(.spreelo-saving-spinner),
+html body .campaign-v14335-primary:has(.spreelo-saving-spinner) {
+  position:relative;
+  overflow:hidden;
+}
+html body .automation-page.plan-v70-active .plan-v70-activate-actions > button:has(.spreelo-saving-spinner)::before,
+html body .campaign-v14335-primary:has(.spreelo-saving-spinner)::before {
+  content:"";
+  position:absolute;
+  inset:0;
+  transform:translateX(-115%);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.16),transparent);
+  animation:spreelo-v14458-shimmer 1.35s ease-in-out infinite;
+  pointer-events:none;
+}
+@keyframes spreelo-v14458-spin { to { transform:rotate(360deg); } }
+@keyframes spreelo-v14458-dot { 0%,60%,100%{opacity:.28;transform:translateY(0)} 30%{opacity:1;transform:translateY(-2px)} }
+@keyframes spreelo-v14458-shimmer { 60%,100%{transform:translateX(115%)} }
+
+/* Brand analysis: one coherent progress module; no detached percentage tile. */
+html body .brand-analysis-heading {
+  display:block !important;
+}
+html body .brand-result-analysis-progress {
+  grid-template-columns:58px minmax(0,1fr) !important;
+  background:linear-gradient(135deg,#fffaf7 0%,#f8f9ff 100%) !important;
+  border:1px solid #e3e7ef !important;
+  border-left:4px solid #f15d42 !important;
+  box-shadow:0 14px 34px rgba(18,31,49,.07) !important;
+}
+html body .brand-analysis-current-copy { min-width:0; }
+html body .brand-analysis-current-line {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  min-width:0;
+}
+html body .brand-analysis-current-line > strong {
+  min-width:0;
+  color:#101e32 !important;
+  font-size:18px !important;
+  line-height:1.25 !important;
+}
+html body .brand-analysis-progress-percent {
+  flex:0 0 auto;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:58px;
+  min-height:32px;
+  padding:0 10px;
+  border:1px solid #ded9ff;
+  border-radius:999px;
+  color:#493bb0;
+  background:#f3f0ff;
+  font-size:14px;
+  font-weight:850;
+  letter-spacing:-.02em;
+}
+html body .brand-result-analysis-progress .brand-profile-progress-track {
+  height:9px !important;
+  background:#e8ebf1 !important;
+  box-shadow:inset 0 1px 2px rgba(10,24,42,.05) !important;
+}
+html body .brand-result-analysis-progress .brand-profile-progress-fill {
+  background:linear-gradient(90deg,#f15d42 0%,#ff8a70 48%,#7c67e8 100%) !important;
+}
+
+/* Generic campaign art is a deliberate visual fallback, never an empty/glyph-only slot. */
+html body .campaign-calendar-visual.is-fallback {
+  background:linear-gradient(145deg,#fff2eb,#f1efff) !important;
+}
+html body .campaign-calendar-visual.is-fallback img {
+  object-fit:cover !important;
+  transform:scale(1.015);
+}
+
+@media (max-width:900px) {
+  /* Home reference 3506: full-width credit card + one vertical stats card. */
+  html body .content.spreelo-content:has(.home-reference-page) {
+    padding:24px 20px 40px !important;
+  }
+  html body .home-reference-page .home-reference-header {
+    display:block !important;
+    min-height:0 !important;
+  }
+  html body .home-reference-page .home-reference-header h1 {
+    font-size:clamp(31px,6.2vw,44px) !important;
+    line-height:1.04 !important;
+  }
+  html body .home-reference-page .home-reference-header p {
+    margin-top:10px !important;
+    font-size:15px !important;
+    line-height:1.45 !important;
+  }
+  html body .home-reference-page .home-reference-credits {
+    display:grid !important;
+    grid-template-columns:58px minmax(0,1fr) auto !important;
+    align-items:center !important;
+    gap:14px !important;
+    width:100% !important;
+    min-width:0 !important;
+    min-height:92px !important;
+    margin-top:24px !important;
+    padding:16px 20px !important;
+    border:1px solid #e1e5eb !important;
+    border-radius:18px !important;
+    background:#fff !important;
+    box-shadow:0 12px 30px rgba(14,28,47,.08) !important;
+  }
+  html body .home-reference-page .home-reference-credit-check {
+    display:grid !important;
+    place-items:center !important;
+    width:54px !important;
+    height:54px !important;
+    min-width:54px !important;
+    border-radius:50% !important;
+    color:#26a652 !important;
+    background:#e9f8ee !important;
+    box-shadow:0 0 0 9px rgba(60,190,100,.10) !important;
+  }
+  html body .home-reference-page .home-reference-credit-check svg {
+    display:block !important;
+    width:28px !important;
+    height:28px !important;
+    stroke-width:3 !important;
+  }
+  html body .home-reference-page .home-reference-credits > div small { display:none !important; }
+  html body .home-reference-page .home-reference-credits > div strong {
+    margin:0 !important;
+    color:#0b182a !important;
+    font-size:21px !important;
+    line-height:1.25 !important;
+  }
+  html body .home-reference-page .home-reference-credits > div strong em {
+    color:#647188 !important;
+    font-size:17px !important;
+    font-weight:500 !important;
+  }
+  html body .home-reference-page .home-reference-account-status {
+    display:inline-flex !important;
+    align-items:center !important;
+    gap:8px !important;
+    width:auto !important;
+    height:auto !important;
+    min-width:0 !important;
+    padding:8px 12px !important;
+    border-radius:999px !important;
+    color:#238d43 !important;
+    background:#eaf8ec !important;
+    box-shadow:none !important;
+    font-size:13px !important;
+    font-weight:750 !important;
+    white-space:nowrap !important;
+  }
+  html body .home-reference-page .home-reference-account-status i {
+    width:9px;
+    height:9px;
+    border-radius:50%;
+    background:#2bad50;
+    box-shadow:0 0 0 4px rgba(43,173,80,.10);
+  }
+  html body .home-reference-page .home-reference-stats {
+    display:block !important;
+    margin-top:18px !important;
+    overflow:hidden !important;
+    border:1px solid #e0e5eb !important;
+    border-radius:19px !important;
+    background:#fff !important;
+    box-shadow:0 12px 30px rgba(14,28,47,.07) !important;
+  }
+  html body .home-reference-page .home-reference-stats article {
+    display:grid !important;
+    grid-template-columns:60px minmax(0,1fr) auto !important;
+    align-items:center !important;
+    gap:16px !important;
+    min-height:108px !important;
+    padding:17px 22px !important;
+    border:0 !important;
+    border-bottom:1px solid #e6e9ee !important;
+  }
+  html body .home-reference-page .home-reference-stats article:last-child { border-bottom:0 !important; }
+  html body .home-reference-page .home-reference-stats article > div {
+    display:block !important;
+    min-width:0 !important;
+  }
+  html body .home-reference-page .home-reference-stat-icon {
+    display:grid !important;
+    place-items:center !important;
+    width:56px !important;
+    height:56px !important;
+    border-radius:14px !important;
+    color:#10213a !important;
+    background:linear-gradient(145deg,#f8f9fb,#eef1f5) !important;
+  }
+  html body .home-reference-page .home-reference-stat-icon svg { width:29px !important; height:29px !important; stroke-width:2 !important; }
+  html body .home-reference-page .home-reference-stats h2 {
+    margin:0 !important;
+    color:#101d30 !important;
+    font-size:17px !important;
+    line-height:1.25 !important;
+  }
+  html body .home-reference-page .home-reference-stats p {
+    margin:5px 0 0 !important;
+    color:#6b778b !important;
+    font-size:14px !important;
+    line-height:1.35 !important;
+  }
+  html body .home-reference-page .home-reference-stats article > strong {
+    min-width:34px !important;
+    justify-self:end !important;
+    color:#071629 !important;
+    font-size:39px !important;
+    font-weight:650 !important;
+    line-height:1 !important;
+    text-align:right !important;
+  }
+
+  /* Reference 4810: six settings become one calm, continuous settings surface. */
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid {
+    display:block !important;
+    overflow:visible !important;
+    padding:0 !important;
+    border:1px solid #dde3eb !important;
+    border-radius:19px !important;
+    background:#fff !important;
+    box-shadow:0 12px 30px rgba(20,34,54,.07) !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile {
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) minmax(155px,38%) !important;
+    grid-template-rows:none !important;
+    align-items:center !important;
+    gap:14px !important;
+    width:100% !important;
+    height:auto !important;
+    min-height:78px !important;
+    margin:0 !important;
+    padding:12px 16px !important;
+    overflow:visible !important;
+    border:0 !important;
+    border-bottom:1px solid #e5e9ef !important;
+    border-radius:0 !important;
+    background:transparent !important;
+    box-shadow:none !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile:first-child { border-radius:18px 18px 0 0 !important; }
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile:last-child { border-bottom:0 !important; border-radius:0 0 18px 18px !important; }
+  html body .automation-page.plan-v70-active .plan-v90-setting-head {
+    display:grid !important;
+    grid-template-columns:38px minmax(0,1fr) !important;
+    align-items:center !important;
+    gap:11px !important;
+    min-width:0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v90-setting-icon {
+    display:grid !important;
+    place-items:center !important;
+    width:36px !important;
+    height:36px !important;
+    border-radius:12px !important;
+    color:#ef6045 !important;
+    background:#fff3ef !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v90-setting-copy { min-width:0 !important; }
+  html body .automation-page.plan-v70-active .plan-v90-setting-title {
+    font-size:14px !important;
+    line-height:1.2 !important;
+    font-weight:800 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v90-setting-copy small {
+    display:block !important;
+    margin-top:3px !important;
+    color:#738096 !important;
+    font-size:11px !important;
+    line-height:1.35 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid select,
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid input,
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .custom-picker-button,
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .platform-multiselect-button,
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v73-platform-loading,
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v73-connect-platform {
+    width:100% !important;
+    height:44px !important;
+    min-height:44px !important;
+    margin:0 !important;
+    padding:0 12px !important;
+    border:0 !important;
+    border-radius:10px !important;
+    color:#142039 !important;
+    background:#f8fafc !important;
+    box-shadow:inset 0 0 0 1px #e8ebf0 !important;
+    font-size:13px !important;
+    font-weight:700 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid select { text-align-last:right !important; }
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .custom-picker-button,
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .platform-multiselect-button { justify-content:flex-end !important; }
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .platform-multiselect { min-width:0 !important; }
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .platform-multiselect-menu {
+    z-index:90 !important;
+    right:0 !important;
+    left:auto !important;
+    width:min(360px,calc(100vw - 44px)) !important;
+  }
+
+  /* Saved state: balanced card, no narrow left-aligned action stack. */
+  html body .automation-page.plan-v70-active .plan-v70-activate-card.saved {
+    display:grid !important;
+    grid-template-columns:58px minmax(0,1fr) !important;
+    grid-template-areas:"visual copy" "actions actions" "message message" !important;
+    align-items:center !important;
+    gap:14px 16px !important;
+    min-height:0 !important;
+    padding:22px !important;
+    border:1px solid #e1e6ed !important;
+    border-radius:22px !important;
+    background:linear-gradient(145deg,#fff,#f8fafc) !important;
+    box-shadow:0 14px 34px rgba(18,31,49,.08) !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-activate-card.saved .plan-v70-activate-visual {
+    grid-area:visual !important;
+    width:56px !important;
+    height:56px !important;
+    margin:0 !important;
+    border-radius:17px !important;
+    color:#fff !important;
+    background:linear-gradient(145deg,#f27a5e,#e9573c) !important;
+    box-shadow:0 10px 24px rgba(225,82,55,.20) !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-activate-card.saved .plan-v70-activate-copy {
+    grid-area:copy !important;
+    min-width:0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-activate-card.saved .plan-v70-activate-copy h2 {
+    margin:0 !important;
+    font-size:22px !important;
+    line-height:1.1 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-activate-card.saved .plan-v70-activate-copy p {
+    max-width:520px !important;
+    margin:5px 0 0 !important;
+    font-size:13px !important;
+    line-height:1.45 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-activate-card.saved .plan-v70-success-actions {
+    grid-area:actions !important;
+    display:grid !important;
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+    gap:10px !important;
+    width:100% !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-activate-card.saved .plan-v70-success-actions > button,
+  html body .automation-page.plan-v70-active .plan-v70-activate-card.saved .plan-v70-success-actions > a {
+    width:100% !important;
+    min-height:50px !important;
+    margin:0 !important;
+    border-radius:13px !important;
+    font-size:14px !important;
+    font-weight:800 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-activate-card.saved .plan-v70-success-actions > a {
+    border-color:#dbe1e9 !important;
+    color:#142039 !important;
+    background:#fff !important;
+    box-shadow:none !important;
+  }
+
+  /* Planned posts: keep all metadata in normal flow and away from the visual strip. */
+  html body .automation-page.plan-v70-active .plan-v70-planned-row,
+  html body .automation-page.plan-v70-active .plan-v86-planned-row {
+    grid-template-columns:68px minmax(0,1fr) !important;
+    grid-template-areas:
+      "visual date"
+      "visual post"
+      "visual purpose"
+      "visual cost"
+      "visual channel"
+      "editor editor" !important;
+    gap:5px 15px !important;
+    min-height:168px !important;
+    padding:0 50px 13px 0 !important;
+    overflow:hidden !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v86-planned-visual {
+    grid-area:visual !important;
+    width:68px !important;
+    min-width:68px !important;
+    height:100% !important;
+    min-height:168px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-planned-date {
+    grid-area:date !important;
+    display:flex !important;
+    flex-wrap:wrap !important;
+    align-items:center !important;
+    gap:5px 8px !important;
+    min-width:0 !important;
+    padding-top:13px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-planned-date strong {
+    font-size:13px !important;
+    line-height:1.3 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14457-daypart {
+    min-width:0 !important;
+    color:#8490a2 !important;
+    font-size:10.5px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-planned-post {
+    grid-area:post !important;
+    min-width:0 !important;
+    padding-right:2px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v100-planned-title-line strong {
+    font-size:16px !important;
+    line-height:1.16 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-planned-post > div > span {
+    display:-webkit-box !important;
+    -webkit-line-clamp:2 !important;
+    -webkit-box-orient:vertical !important;
+    overflow:hidden !important;
+    white-space:normal !important;
+    text-overflow:clip !important;
+    font-size:11.5px !important;
+    line-height:1.4 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v143-planned-purpose {
+    position:static !important;
+    grid-area:purpose !important;
+    justify-self:start !important;
+    width:auto !important;
+    max-width:100% !important;
+    margin:2px 0 0 !important;
+    padding:0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v143-planned-purpose strong {
+    display:inline-flex !important;
+    max-width:100% !important;
+    padding:6px 10px !important;
+    overflow:hidden !important;
+    border-radius:999px !important;
+    font-size:10.5px !important;
+    line-height:1.1 !important;
+    text-overflow:ellipsis !important;
+    white-space:nowrap !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v143-planned-cost {
+    position:static !important;
+    grid-area:cost !important;
+    justify-content:flex-start !important;
+    padding:2px 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v143-planned-cost strong { font-size:10.5px !important; }
+  html body .automation-page.plan-v70-active .plan-v74-planned-channels {
+    position:static !important;
+    grid-area:channel !important;
+    padding:1px 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-row-menu {
+    top:12px !important;
+    right:10px !important;
+  }
+
+  /* Brand analysis is compact but still readable on phones/tablets. */
+  html body .brand-result-modal:has(.brand-result-analysis) {
+    width:calc(100vw - 24px) !important;
+    padding:0 20px 28px !important;
+    border-radius:23px !important;
+  }
+  html body .brand-analysis-heading h2 { font-size:clamp(30px,7vw,38px) !important; }
+  html body .brand-result-analysis-progress {
+    grid-template-columns:46px minmax(0,1fr) !important;
+    gap:14px !important;
+    margin:22px 0 !important;
+    padding:18px !important;
+    border-left-width:4px !important;
+    border-radius:18px !important;
+  }
+  html body .brand-analysis-current-icon {
+    width:44px !important;
+    height:44px !important;
+    border-radius:13px !important;
+  }
+  html body .brand-analysis-current-line { gap:10px !important; }
+  html body .brand-analysis-current-line > strong { font-size:16px !important; }
+  html body .brand-analysis-progress-percent {
+    min-width:52px !important;
+    min-height:30px !important;
+    padding:0 9px !important;
+    font-size:13px !important;
+  }
+  html body .brand-analysis-current-copy > p {
+    color:#66758a !important;
+    font-size:12.5px !important;
+    line-height:1.45 !important;
+  }
+}
+
+@media (max-width:600px) {
+  html body .content.spreelo-content:has(.home-reference-page) { padding-inline:14px !important; }
+  html body .home-reference-page .home-reference-credits {
+    grid-template-columns:52px minmax(0,1fr) !important;
+    gap:13px !important;
+    padding:15px 16px !important;
+  }
+  html body .home-reference-page .home-reference-account-status {
+    grid-column:2 !important;
+    justify-self:start !important;
+    margin-top:-2px !important;
+    padding:6px 10px !important;
+    font-size:11.5px !important;
+  }
+  html body .home-reference-page .home-reference-credit-check { width:48px !important; height:48px !important; min-width:48px !important; }
+  html body .home-reference-page .home-reference-credit-check svg { width:25px !important; height:25px !important; }
+  html body .home-reference-page .home-reference-credits > div strong { font-size:18px !important; }
+  html body .home-reference-page .home-reference-credits > div strong em { font-size:14px !important; }
+  html body .home-reference-page .home-reference-stats article {
+    grid-template-columns:52px minmax(0,1fr) auto !important;
+    gap:13px !important;
+    min-height:96px !important;
+    padding:15px 16px !important;
+  }
+  html body .home-reference-page .home-reference-stat-icon { width:48px !important; height:48px !important; border-radius:13px !important; }
+  html body .home-reference-page .home-reference-stat-icon svg { width:25px !important; height:25px !important; }
+  html body .home-reference-page .home-reference-stats h2 { font-size:15px !important; }
+  html body .home-reference-page .home-reference-stats p { font-size:12.5px !important; }
+  html body .home-reference-page .home-reference-stats article > strong { font-size:34px !important; }
+
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile {
+    grid-template-columns:minmax(0,1fr) minmax(128px,42%) !important;
+    gap:10px !important;
+    min-height:74px !important;
+    padding:11px 12px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v90-setting-head { grid-template-columns:32px minmax(0,1fr) !important; gap:8px !important; }
+  html body .automation-page.plan-v70-active .plan-v90-setting-icon { width:31px !important; height:31px !important; border-radius:10px !important; }
+  html body .automation-page.plan-v70-active .plan-v90-setting-title { font-size:13px !important; }
+  html body .automation-page.plan-v70-active .plan-v90-setting-copy small { font-size:10px !important; }
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid select,
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid input,
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .custom-picker-button,
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .platform-multiselect-button {
+    min-height:42px !important;
+    height:42px !important;
+    padding-inline:9px !important;
+    font-size:11.5px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-activate-card.saved {
+    grid-template-columns:50px minmax(0,1fr) !important;
+    padding:18px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-activate-card.saved .plan-v70-activate-visual { width:48px !important; height:48px !important; }
+  html body .automation-page.plan-v70-active .plan-v70-activate-card.saved .plan-v70-activate-copy h2 { font-size:19px !important; }
+  html body .automation-page.plan-v70-active .plan-v70-activate-card.saved .plan-v70-success-actions { grid-template-columns:1fr !important; }
+
+  html body .brand-analysis-current-line { align-items:flex-start !important; }
+  html body .brand-analysis-current-line > strong { font-size:15px !important; }
+}
+
+@media (prefers-reduced-motion:reduce) {
+  html body .spreelo-saving-spinner,
+  html body .spreelo-saving-dots i,
+  html body .automation-page.plan-v70-active .plan-v70-activate-actions > button:has(.spreelo-saving-spinner)::before,
+  html body .campaign-v14335-primary:has(.spreelo-saving-spinner)::before { animation:none !important; }
+}

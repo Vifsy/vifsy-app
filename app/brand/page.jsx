@@ -1755,14 +1755,14 @@ export default function BrandProfile() {
                       <h2>{t("brand.analysisTitle")}</h2>
                       <p className="brand-result-lead">{t("brand.analysisText")}</p>
                     </div>
-                    <div className="brand-analysis-percent" aria-live="polite">
-                      <strong>{Math.min(99, Math.floor(analysisProgress))}<span>%</span></strong>
-                    </div>
                   </div>
                   <div className="brand-result-analysis-progress">
                     <div className="brand-analysis-current-icon"><Sparkles size={22} /></div>
                     <div className="brand-analysis-current-copy">
-                      <strong>{t(getCurrentAnalysisStage(analysisProgress).titleKey)}</strong>
+                      <div className="brand-analysis-current-line">
+                        <strong>{t(getCurrentAnalysisStage(analysisProgress).titleKey)}</strong>
+                        <span className="brand-analysis-progress-percent" aria-live="polite">{Math.min(99, Math.floor(analysisProgress))}%</span>
+                      </div>
                       <p>{t(getCurrentAnalysisStage(analysisProgress).descriptionKey)}</p>
                       <div className="brand-profile-progress-track"><div className="brand-profile-progress-fill" style={{ width: `${Math.min(analysisProgress, 99)}%` }} /></div>
                     </div>

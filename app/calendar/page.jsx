@@ -9,7 +9,6 @@ import {
   Sparkles,
 } from "lucide-react";
 import AppLayout from "../../components/AppLayout";
-import { CampaignGlyph } from "../../components/SpreeloIcons";
 import { supabase } from "../../lib/supabaseClient";
 import { useUiText } from "../../lib/i18n/useUiText";
 import { getCreditCostForCampaignSourceMode } from "../../lib/credits";
@@ -1353,9 +1352,16 @@ export default function Calendar() {
                           }
                           aria-expanded={isSelected}
                         >
-                          {campaign.visual_image_url && !campaign.visual_image_url.endsWith("/calendar-generic.svg") ? (
-                            <span className="campaign-calendar-visual"><img src={campaign.visual_image_url} alt="" /></span>
-                          ) : <CampaignGlyph campaign={campaign} />}
+                          <span className={`campaign-calendar-visual${campaign.visual_image_url && !campaign.visual_image_url.endsWith("/calendar-generic.svg") ? "" : " is-fallback"}`}>
+                            <img
+                              src={campaign.visual_image_url || "/calendar-generic.svg"}
+                              alt=""
+                              onError={(event) => {
+                                const image = event.currentTarget;
+                                if (!image.src.endsWith("/calendar-generic.svg")) image.src = "/calendar-generic.svg";
+                              }}
+                            />
+                          </span>
 
                           <div className="campaign-calendar-v132-row-copy campaign-calendar-v133-row-copy">
                             <div>

@@ -4,14 +4,17 @@ import { useState } from "react";
 import {
   ArrowRight,
   CalendarDays,
+  CheckCircle2,
   ChevronDown,
   ClipboardCheck,
+  Clock3,
   Gift,
   History,
   Pause,
   Play,
   Plus,
   RefreshCw,
+  Send,
   Trash2,
 } from "lucide-react";
 
@@ -66,6 +69,7 @@ export default function HomeReferenceOverview({
   scheduleActionLoading = "",
   onSetRecurringScheduleState,
   openPlanLabel = "Open plan",
+  accountActiveLabel = "Account is active",
 }) {
   const [showRecurringSchedules, setShowRecurringSchedules] = useState(false);
   const [showScheduledItems, setShowScheduledItems] = useState(false);
@@ -84,14 +88,34 @@ export default function HomeReferenceOverview({
       {message ? <p className="home-reference-message">{message}</p> : null}
       <header className="home-reference-header">
         <div><h1>{currentBrandName} översikt</h1><p>Planera, granska och publicera ditt innehåll.</p></div>
-        <div className="home-reference-credits"><span /><div><small>Nuvarande krediter</small><strong>{creditsRemaining} <em>/ {monthlyCreditLimit || "—"} krediter kvar</em></strong></div></div>
+        <div className="home-reference-credits">
+          <span className="home-reference-credit-check"><CheckCircle2 aria-hidden="true" /></span>
+          <div><small>Nuvarande krediter</small><strong>{creditsRemaining} <em>/ {monthlyCreditLimit || "—"} krediter kvar</em></strong></div>
+          <span className="home-reference-account-status"><i />{accountActiveLabel}</span>
+        </div>
       </header>
 
       <section className="home-reference-stats" aria-label="Översikt">
-        <article><h2>Planerade inlägg</h2><strong>{plannedCount}</strong><p>Kommande</p></article>
-        <article><h2>Väntar på godkännande</h2><strong className={pendingCount ? "attention" : ""}>{pendingCount}</strong><p>Behöver granskas</p></article>
-        <article><h2>Publicerat denna månad</h2><strong>{publishedCount}</strong><p>Publicerade inlägg</p></article>
-        <article><h2>Aktiva scheman</h2><strong>{activeSchedulesCount}</strong><p>Rullande planer</p></article>
+        <article>
+          <span className="home-reference-stat-icon"><CalendarDays aria-hidden="true" /></span>
+          <div><h2>Planerade inlägg</h2><p>Kommande</p></div>
+          <strong>{plannedCount}</strong>
+        </article>
+        <article>
+          <span className="home-reference-stat-icon"><Clock3 aria-hidden="true" /></span>
+          <div><h2>Väntar på godkännande</h2><p>Behöver granskas</p></div>
+          <strong className={pendingCount ? "attention" : ""}>{pendingCount}</strong>
+        </article>
+        <article>
+          <span className="home-reference-stat-icon"><Send aria-hidden="true" /></span>
+          <div><h2>Publicerat denna månad</h2><p>Publicerade inlägg</p></div>
+          <strong>{publishedCount}</strong>
+        </article>
+        <article>
+          <span className="home-reference-stat-icon"><RefreshCw aria-hidden="true" /></span>
+          <div><h2>Aktiva scheman</h2><p>Rullande planer</p></div>
+          <strong>{activeSchedulesCount}</strong>
+        </article>
       </section>
 
       <section className="home-reference-review">

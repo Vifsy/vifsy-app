@@ -575,7 +575,7 @@ export default function SocialChannelsPage() {
     if (popup && !reusePopup) {
       try {
         popup.document.title = "Spreelo";
-        popup.document.body.innerHTML = `<div style="font-family:Arial,sans-serif;display:grid;place-items:center;min-height:80vh;color:#222"><div style="text-align:center"><strong>Spreelo</strong><p style="color:#666">Preparing secure sign-in…</p></div></div>`;
+        popup.document.body.innerHTML = `<style>@keyframes spreeloSpin{to{transform:rotate(360deg)}}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% 42%,#f7f9fc 0,#fff 46%);font-family:Arial,sans-serif;color:#0b1b2f}</style><main style="min-height:100vh;display:grid;place-items:center;padding:28px"><div style="width:min(360px,100%);text-align:center"><div style="display:inline-grid;place-items:center;width:58px;height:58px;margin-bottom:18px;border-radius:18px;background:linear-gradient(145deg,#ff7255,#cc482d);color:#fff;font-size:30px;font-weight:800;box-shadow:0 14px 32px rgba(219,76,45,.22)">S</div><strong style="display:block;font-size:24px;line-height:1.15;letter-spacing:-.02em">Spreelo</strong><div style="width:28px;height:28px;margin:22px auto 16px;border:3px solid #dbe3ec;border-top-color:#ef5f43;border-radius:50%;animation:spreeloSpin .8s linear infinite"></div><p style="margin:0;color:#53637a;font-size:17px;line-height:1.5;font-weight:600">Preparing secure sign-in…</p><small style="display:block;margin-top:8px;color:#8a96a7;font-size:13px;line-height:1.45">You will be redirected automatically.</small></div></main>`;
       } catch {}
     }
 
