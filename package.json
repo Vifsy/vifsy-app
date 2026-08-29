@@ -150,7 +150,8 @@
     "test:v144.61": "node scripts/test-v144-61-responsive-breakpoint-fix.mjs",
     "test:v144.62": "node scripts/test-v144-62-home-detail-polish.mjs",
     "test:v144.63": "node scripts/test-v144-63-home-admin-responsive.mjs",
-    "test:v144.64": "node scripts/test-v144-64-settings-review-social.mjs"
+    "test:v144.64": "node scripts/test-v144-64-settings-review-social.mjs",
+    "test:v144.65": "node scripts/test-v144-65-settings-vertical-alignment.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
