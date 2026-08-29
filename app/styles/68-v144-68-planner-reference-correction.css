@@ -1,0 +1,452 @@
+/* v144.68 — specificity-safe correction against legacy planner rules */
+
+html body .automation-page.plan-v70-active .plan-v14467-settings-group {
+  padding: 13px 16px 5px !important;
+  border-radius: 18px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14467-group-title {
+  min-height: 26px !important;
+  margin: 0 0 2px !important;
+  gap: 8px !important;
+  font-size: 11px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14467-group-title > span {
+  width: 26px !important;
+  height: 26px !important;
+  flex-basis: 26px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v90-setting-tile {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(128px, 43%) !important;
+  align-items: center !important;
+  gap: 12px !important;
+  min-height: 72px !important;
+  height: 72px !important;
+  padding: 8px 0 !important;
+  margin: 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v90-setting-head {
+  display: flex !important;
+  align-items: center !important;
+  align-self: center !important;
+  gap: 9px !important;
+  min-height: 42px !important;
+  height: 42px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v90-setting-icon {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v90-setting-icon svg {
+  width: 17px !important;
+  height: 17px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v90-setting-copy {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-self: center !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v90-setting-title {
+  margin: 0 0 2px !important;
+  font-size: 13px !important;
+  line-height: 1.15 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v90-setting-copy small {
+  font-size: 10px !important;
+  line-height: 1.25 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v90-setting-tile > select,
+html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v143-date-time-row,
+html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v73-connect-platform,
+html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v73-platform-loading,
+html body .automation-page.plan-v70-active .plan-v14467-value-button {
+  min-height: 42px !important;
+  height: 42px !important;
+  border-radius: 11px !important;
+  font-size: 12px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v143-date-time-row .custom-picker-field,
+html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v143-date-time-row button {
+  min-height: 40px !important;
+  height: 40px !important;
+  padding: 0 10px !important;
+}
+
+/* Exact, compact planned-card skeleton. */
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-table {
+  display: grid !important;
+  gap: 12px !important;
+  padding: 12px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-row {
+  position: relative !important;
+  display: grid !important;
+  grid-template-columns: 126px minmax(0, 1fr) !important;
+  grid-template-rows: auto auto auto auto !important;
+  grid-template-areas:
+    "visual date"
+    "visual post"
+    "visual channel"
+    "visual meta" !important;
+  column-gap: 0 !important;
+  row-gap: 0 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 248px !important;
+  height: auto !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  border: 1px solid #dbe3ec !important;
+  border-radius: 20px !important;
+  background: #fff !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-row > * {
+  position: static;
+  inset: auto;
+  min-width: 0 !important;
+  max-width: none !important;
+  width: auto;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v86-planned-visual {
+  position: relative !important;
+  grid-area: visual !important;
+  grid-column: 1 !important;
+  grid-row: 1 / 5 !important;
+  align-self: stretch !important;
+  justify-self: stretch !important;
+  display: grid !important;
+  place-items: center !important;
+  width: 126px !important;
+  height: 100% !important;
+  min-height: 248px !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-left: 6px solid #a47cff !important;
+  border-radius: 0 !important;
+  color: #7658f6 !important;
+  background: linear-gradient(145deg, #efe9ff, #fbf9ff) !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v86-planned-visual.tone-2 {
+  border-left-color: #43bfc6 !important;
+  color: #22a7b1 !important;
+  background: linear-gradient(145deg, #e3f8f7, #fbffff) !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v86-planned-visual.tone-3 {
+  border-left-color: #ffad67 !important;
+  color: #ee8b37 !important;
+  background: linear-gradient(145deg, #fff0e3, #fffaf6) !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v86-planned-visual.tone-4 {
+  border-left-color: #e385d6 !important;
+  color: #c862b9 !important;
+  background: linear-gradient(145deg, #fbe8f7, #fffaff) !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v86-planned-visual::before,
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v86-planned-visual::after {
+  display: none !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v86-planned-visual > span {
+  position: relative !important;
+  z-index: 1;
+  display: grid !important;
+  place-items: center !important;
+  width: 64px !important;
+  height: 64px !important;
+  border-radius: 50% !important;
+  color: inherit !important;
+  background: rgba(255,255,255,.62) !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-date {
+  grid-area: date !important;
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  display: block !important;
+  width: 100% !important;
+  padding: 22px 84px 0 34px !important;
+  margin: 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-date > strong {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  width: auto !important;
+  max-width: none !important;
+  margin: 0 !important;
+  font-size: 17px !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v14457-daypart {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  width: auto !important;
+  max-width: none !important;
+  margin: 5px 0 0 !important;
+  font-size: 12px !important;
+  line-height: 1.3 !important;
+  white-space: normal !important;
+  overflow: visible !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-post {
+  grid-area: post !important;
+  grid-column: 2 !important;
+  grid-row: 2 !important;
+  display: block !important;
+  width: 100% !important;
+  padding: 13px 34px 0 !important;
+  margin: 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-post > div,
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v100-planned-title-line {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v100-planned-title-line > strong {
+  display: block !important;
+  width: auto !important;
+  max-width: none !important;
+  font-size: 19px !important;
+  line-height: 1.2 !important;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-post > div > span {
+  display: block !important;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 4px 0 0 !important;
+  font-size: 12.5px !important;
+  line-height: 1.35 !important;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  -webkit-line-clamp: 2 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-channel {
+  grid-area: channel !important;
+  grid-column: 2 !important;
+  grid-row: 3 !important;
+  display: block !important;
+  width: 100% !important;
+  padding: 13px 34px 0 !important;
+  margin: 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v74-channel-stack {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  width: 100% !important;
+  gap: 6px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v74-channel-chip {
+  min-width: 112px !important;
+  min-height: 31px !important;
+  padding: 4px 10px !important;
+  font-size: 11.5px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v143-planned-purpose,
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v143-planned-cost,
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v14467-platform-count {
+  position: static !important;
+  grid-area: meta !important;
+  grid-column: 2 !important;
+  grid-row: 4 !important;
+  align-self: end !important;
+  width: auto !important;
+  min-width: 0 !important;
+  padding: 14px 0 20px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v143-planned-purpose {
+  justify-self: start !important;
+  margin: 0 0 0 34px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v143-planned-cost {
+  justify-self: center !important;
+  margin: 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v14467-platform-count {
+  justify-self: end !important;
+  margin: 0 34px 0 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v143-planned-purpose strong,
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v143-planned-cost strong,
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v14467-platform-count {
+  min-height: 32px !important;
+  padding: 5px 10px !important;
+  font-size: 11px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-row-menu {
+  position: absolute !important;
+  inset: 18px 20px auto auto !important;
+  z-index: 5 !important;
+  width: 42px !important;
+  height: 42px !important;
+  min-width: 42px !important;
+  min-height: 42px !important;
+  margin: 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-row-editor {
+  position: static !important;
+  grid-column: 2 !important;
+  grid-row: 5 !important;
+  width: 100% !important;
+  padding: 12px 34px 18px !important;
+}
+
+@media (max-width: 1180px) {
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v90-setting-tile {
+    grid-template-columns: minmax(0, 1fr) minmax(210px, 38%) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  html body .automation-page.plan-v70-active .plan-v14467-settings-group {
+    padding: 11px 12px 4px !important;
+    border-radius: 16px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v90-setting-tile {
+    grid-template-columns: minmax(0, 1fr) minmax(116px, 43%) !important;
+    gap: 8px !important;
+    min-height: 66px !important;
+    height: 66px !important;
+    padding: 6px 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v90-setting-head {
+    min-height: 38px !important;
+    height: 38px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v90-setting-icon {
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v90-setting-title { font-size: 12px !important; }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v90-setting-copy small { font-size: 9.5px !important; }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v90-setting-tile > select,
+  html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v143-date-time-row,
+  html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v73-connect-platform,
+  html body .automation-page.plan-v70-active .plan-v14467-settings-group .plan-v73-platform-loading,
+  html body .automation-page.plan-v70-active .plan-v14467-value-button {
+    min-height: 38px !important;
+    height: 38px !important;
+    font-size: 11px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-row {
+    grid-template-columns: 56px minmax(0, 1fr) !important;
+    min-height: 166px !important;
+    border-radius: 16px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v86-planned-visual {
+    width: 56px !important;
+    min-width: 56px !important;
+    min-height: 166px !important;
+    border-left-width: 4px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v86-planned-visual > span {
+    width: 38px !important;
+    height: 38px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-date {
+    padding: 11px 48px 0 12px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-date > strong { font-size: 13px !important; }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v14457-daypart { margin-top: 3px !important; font-size: 10.5px !important; }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-post { padding: 8px 12px 0 !important; }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v100-planned-title-line > strong { font-size: 15.5px !important; }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-post > div > span { margin-top: 2px !important; font-size: 11px !important; line-height: 1.3 !important; }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-channel { padding: 7px 12px 0 !important; }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v14467-destinations-label { margin-bottom: 4px !important; font-size: 10.5px !important; }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v74-channel-chip {
+    min-width: 0 !important;
+    min-height: 25px !important;
+    padding: 3px 7px !important;
+    font-size: 10px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v143-planned-purpose,
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v143-planned-cost,
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v14467-platform-count { padding: 8px 0 10px !important; }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v143-planned-purpose { margin-left: 12px !important; }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v14467-platform-count { margin-right: 12px !important; }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v143-planned-purpose strong,
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v143-planned-cost strong,
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v14467-platform-count {
+    min-height: 25px !important;
+    padding: 3px 6px !important;
+    font-size: 9.5px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-row-menu {
+    inset: 9px 9px auto auto !important;
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+    min-height: 34px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-row-editor {
+    grid-column: 2 !important;
+    padding: 9px 12px 12px !important;
+  }
+}
+
+@media (max-width: 430px) {
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v143-planned-cost {
+    justify-self: center !important;
+    margin: 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v14467-platform-count {
+    display: inline-flex !important;
+  }
+}

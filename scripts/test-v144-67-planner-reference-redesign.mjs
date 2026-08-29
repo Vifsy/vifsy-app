@@ -13,7 +13,7 @@ const plannedSection = page.slice(
 );
 
 const checks = [
-  [globals.trimEnd().endsWith('@import "./styles/67-v144-67-planner-reference-redesign.css";'), "stylesheet is the final override"],
+  [globals.includes('@import "./styles/67-v144-67-planner-reference-redesign.css";'), "reference stylesheet remains imported"],
   [page.includes("plan-v14467-settings-groups") && page.includes("plan-v14467-settings-group"), "settings are grouped"],
   [page.includes("STRATEGI") && page.includes("SCHEMA") && page.includes("KANALER & SPRÅK"), "settings groups match the reference information architecture"],
   [page.includes("platformDropdownOpen ? (") && page.includes("plan-v14467-platform-options"), "platform choices only render when opened"],
