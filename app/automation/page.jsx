@@ -10881,32 +10881,10 @@ function blockFormatCardClickAfterDrag(event) {
                 <div className="plan-v70-formats-head">
                   <div>
                     <h2>{t("automation.redesign.contentTypesTitleV2")}</h2>
-                    <p>{t("automation.redesign.contentTypesTextV3")}</p>
-                    <span className="plan-v74-content-types-note">
-                      {t("automation.redesign.contentTypesNoteV2")}
-                    </span>
+                    <p>{locale.startsWith("sv")
+                      ? "Din plan innehåller format som passar företagets mål och kan justeras när du vill."
+                      : "Your plan includes formats suited to your goals and can be adjusted at any time."}</p>
                   </div>
-                </div>
-
-                <div className="plan-v70-filter-row" aria-label={t("automation.redesign.formatFilters") }>
-                  {[
-                    ["all", t("automation.redesign.allFormats")],
-                    ["popular", t("automation.redesign.popular")],
-                    ["text", t("automation.redesign.text")],
-                    ["image_ads", t("automation.redesign.imageAds")],
-                    ["video", t("automation.redesign.video")],
-                    ["educational", t("automation.redesign.educational")],
-                    ["sales", t("automation.format.sales")],
-                  ].map(([value, label]) => (
-                    <button
-                      type="button"
-                      className={formatFilter === value ? "active" : ""}
-                      key={`format-filter-${value}`}
-                      onClick={() => setFormatFilter(value)}
-                    >
-                      {label}
-                    </button>
-                  ))}
                 </div>
 
                 {formatGuardMessage ? (
@@ -10943,12 +10921,13 @@ function blockFormatCardClickAfterDrag(event) {
                   <p className="plan-v72-format-empty">{t("automation.format.noMatches")}</p>
                 ) : null}
 
-                <button
-                  type="button"
-                  className="plan-v70-more-formats"
-                  onClick={openAllFormats}
-                >
-                  {t("automation.redesign.showMoreFormats")} <ChevronDown size={16} />
+                <button type="button" className="plan-v14470-format-browser" onClick={openAllFormats}>
+                  <span><LayoutGrid size={18} aria-hidden="true" /></span>
+                  <span>
+                    <strong>{locale.startsWith("sv") ? `${exploreFormatItems.length} tillgängliga format` : `${exploreFormatItems.length} available formats`}</strong>
+                    <small>{locale.startsWith("sv") ? "Visa och välj bland alla innehållsformat" : "View and choose from every content format"}</small>
+                  </span>
+                  <ChevronRight size={18} aria-hidden="true" />
                 </button>
               </section>
 
@@ -11315,9 +11294,6 @@ function blockFormatCardClickAfterDrag(event) {
                               <span>{getCustomerSlotPurpose(slot)}</span>
                             </div>
                           </div>
-                          <div className="plan-v70-planned-format plan-v143-planned-purpose">
-                            <strong><Target size={16} aria-hidden="true" />{getCustomerSlotMarketingPurpose(slot)}</strong>
-                          </div>
                           <div className="plan-v70-planned-channel plan-v74-planned-channels">
                             <strong className="plan-v14467-destinations-label">{locale.startsWith("sv") ? "Publiceras till" : "Published to"}</strong>
                             {slotPlatformOptions.length > 0 ? (
@@ -11339,16 +11315,20 @@ function blockFormatCardClickAfterDrag(event) {
                               <span>{platformLabel}</span>
                             )}
                           </div>
-                          <div className="plan-v143-planned-cost">
-                            {isPastCampaignSlot
-                              ? <strong className="skipped-credit"><CreditCard size={16} aria-hidden="true" />0 {t("automation.credits")}</strong>
-                              : <strong><CreditCard size={16} aria-hidden="true" />{getCurrentSlotCreditLabel(slot)}</strong>}
-                          </div>
-                          <div className="plan-v14467-platform-count">
-                            <LayoutGrid size={16} aria-hidden="true" />
-                            <strong>{slotPlatformOptions.length} {locale.startsWith("sv")
-                              ? (slotPlatformOptions.length === 1 ? "plattform" : "plattformar")
-                              : (slotPlatformOptions.length === 1 ? "platform" : "platforms")}</strong>
+                          <div className="plan-v14470-planned-meta">
+                            <div className="plan-v70-planned-format plan-v143-planned-purpose">
+                              <strong><Target size={16} aria-hidden="true" />{getCustomerSlotMarketingPurpose(slot)}</strong>
+                            </div>
+                            <div className="plan-v143-planned-cost">
+                              {isPastCampaignSlot
+                                ? <strong className="skipped-credit"><CreditCard size={16} aria-hidden="true" />0 {t("automation.credits")}</strong>
+                                : <strong><CreditCard size={16} aria-hidden="true" />{getCurrentSlotCreditLabel(slot)}</strong>}
+                            </div>
+                            <div className="plan-v14467-platform-count">
+                              <strong>{slotPlatformOptions.length} {locale.startsWith("sv")
+                                ? (slotPlatformOptions.length === 1 ? "plattform" : "plattformar")
+                                : (slotPlatformOptions.length === 1 ? "platform" : "platforms")}</strong>
+                            </div>
                           </div>
                           <button
                             type="button"
@@ -11420,20 +11400,20 @@ function blockFormatCardClickAfterDrag(event) {
 
               <div
                 className={`plan-v107-bottom-grid${
-                  shouldShowPlannerDetails &&
-                  scheduleType === "weekly" &&
-                  planCreationMode !== "campaign"
+                  shouldShowPlannerDetails && planCreationMode !== "campaign"
                     ? ""
                     : " single"
                 }`}
               >
-              {shouldShowPlannerDetails && scheduleType === "weekly" && planCreationMode !== "campaign" ? (
-                <section className="plan-v83-continuation-card">
+              {shouldShowPlannerDetails && planCreationMode !== "campaign" ? (
+                <section className={`plan-v83-continuation-card${scheduleType === "weekly" ? "" : " is-inactive"}`}>
                   <div className="plan-v83-continuation-head">
                     <span className="plan-v70-icon lavender"><Repeat2 size={19} /></span>
                     <div>
                       <h2>{t("automation.redesign.ongoingTitle")}</h2>
-                      <p>{t("automation.redesign.ongoingTextV3")}</p>
+                      <p>{scheduleType === "weekly"
+                        ? (locale.startsWith("sv") ? "Planen fortsätter automatiskt varje vecka och kan pausas när du vill." : "The plan continues automatically each week and can be paused at any time.")
+                        : (locale.startsWith("sv") ? "Aktivera för att låta planen fortsätta automatiskt varje vecka." : "Activate to continue the plan automatically each week.")}</p>
                     </div>
                     <label className="plan-v70-inline-toggle">
                       <input
@@ -11446,7 +11426,7 @@ function blockFormatCardClickAfterDrag(event) {
                     </label>
                   </div>
 
-                  <div className="plan-v83-variation-row">
+                  {scheduleType === "weekly" ? <div className="plan-v83-variation-row">
                     <label>
                       <input
                         type="checkbox"
@@ -11467,9 +11447,9 @@ function blockFormatCardClickAfterDrag(event) {
                     >
                       <Info size={17} aria-hidden="true" />
                     </button>
-                  </div>
+                  </div> : null}
 
-                  <div className="plan-v83-next-cycle">
+                  {scheduleType === "weekly" ? <div className="plan-v83-next-cycle">
                     <Info size={18} aria-hidden="true" />
                     <div>
                       <strong>
@@ -11479,7 +11459,7 @@ function blockFormatCardClickAfterDrag(event) {
                       </strong>
                       <span>{t("automation.redesign.nextWeekPreviewNote")}</span>
                     </div>
-                  </div>
+                  </div> : null}
                 </section>
               ) : null}
 

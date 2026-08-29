@@ -155,7 +155,8 @@
     "test:v144.66": "node scripts/test-v144-66-planner-mobile-clarity.mjs",
     "test:v144.67": "node scripts/test-v144-67-planner-reference-redesign.mjs",
     "test:v144.68": "node scripts/test-v144-68-planner-reference-correction.mjs",
-    "test:v144.69": "node scripts/test-v144-69-exact-reference-calibration.mjs"
+    "test:v144.69": "node scripts/test-v144-69-exact-reference-calibration.mjs",
+    "test:v144.70": "node scripts/test-v144-70-section-corrections.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
