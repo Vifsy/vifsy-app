@@ -10747,41 +10747,14 @@ function blockFormatCardClickAfterDrag(event) {
                     {loadingConnectedPlatforms ? (
                       <div className="plan-v73-platform-loading">{t("automation.loadingConnectedChannels")}</div>
                     ) : connectedPlatformOptions.length > 0 ? (
-                      <div className={`platform-multiselect plan-v73-platform-multiselect ${platformDropdownOpen ? "open" : ""}`}>
-                        <button
-                          type="button"
-                          className="platform-multiselect-button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setPlatformDropdownOpen((current) => !current);
-                          }}
-                        >
-                          <span className="platform-selected-icons">
-                            {selectedPlatformOptions.length > 0 ? (
-                              selectedPlatformOptions.map((item) => (
-                                <span
-                                  className="plan-v73-selected-platform plan-v85-selected-platform-icon"
-                                  key={item.value}
-                                  title={item.label}
-                                  aria-label={item.label}
-                                >
-                                  <img src={item.icon} alt="" className="platform-icon-img" />
-                                </span>
-                              ))
-                            ) : (
-                              <span className="platform-placeholder">{t("automation.choosePlatform")}</span>
-                            )}
-                          </span>
-                          <span className="plan-v14459-platform-value">
-                            {selectedPlatformOptions.length > 0
-                              ? selectedPlatformOptions.map((item) => item.label).join(" + ")
-                              : t("automation.choosePlatform")}
-                          </span>
-                          <ChevronDown size={15} aria-hidden="true" />
-                        </button>
-
-                        <div className={`platform-multiselect-menu plan-v14459-platform-menu${platformDropdownOpen ? " is-open" : ""}`} onClick={(event) => event.stopPropagation()}>
-                            <span className="plan-v14459-platform-chooser-label">{t("automation.choosePlatform")}</span>
+                      <div className="plan-v14464-platform-selector">
+                        <div className="plan-v14464-platform-summary">
+                          <strong>{t("automation.choosePlatform")}</strong>
+                          <span>{selectedPlatformOptions.length > 0
+                            ? selectedPlatformOptions.map((item) => item.label).join(" + ")
+                            : t("automation.choosePlatform")}</span>
+                        </div>
+                        <div className="platform-multiselect-menu plan-v14459-platform-menu plan-v14464-platform-options is-open" onClick={(event) => event.stopPropagation()}>
                             {connectedPlatformOptions.map((item) => {
                               const checked = selectedPlatformKeys.includes(item.value);
                               return (
@@ -10798,6 +10771,7 @@ function blockFormatCardClickAfterDrag(event) {
                                   />
                                   <img src={item.icon} alt="" className="platform-icon-img" />
                                   <span>{item.label}</span>
+                                  <CheckCircle2 className="plan-v14464-platform-check" size={17} aria-hidden="true" />
                                 </label>
                               );
                             })}

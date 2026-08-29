@@ -7,7 +7,7 @@ const css = await readFile(new URL("app/styles/63-v144-63-home-admin-responsive.
 const home = await readFile(new URL("components/HomeReferenceOverview.jsx", root), "utf8");
 const approvals = await readFile(new URL("app/admin/post-approvals/page.jsx", root), "utf8");
 
-assert.ok(globals.trimEnd().endsWith('@import "./styles/63-v144-63-home-admin-responsive.css";'));
+assert.ok(globals.includes('@import "./styles/63-v144-63-home-admin-responsive.css";'));
 assert.match(home, /is-empty-status/);
 assert.match(home, /recurringCount \|\| "Inga aktiva"/);
 assert.match(home, /scheduledCount \|\| "Inget planerat"/);

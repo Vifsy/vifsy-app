@@ -1,0 +1,535 @@
+/* v144.64 — clear plan controls, overflow-safe review actions and compact social connection flows. */
+
+/* Every plan value should read as a control, not as passive text. */
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > select,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v143-date-time-row .custom-picker-button {
+  min-height:40px !important;
+  padding:0 35px 0 12px !important;
+  border:1px solid #dce3ec !important;
+  border-radius:11px !important;
+  color:#13223a !important;
+  background-color:#f8fafc !important;
+  box-shadow:0 1px 2px rgba(18,34,58,.025) !important;
+  font-weight:800 !important;
+  cursor:pointer !important;
+  transition:border-color .18s ease, background .18s ease, box-shadow .18s ease !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > select:hover,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v143-date-time-row .custom-picker-button:hover {
+  border-color:#c8d2df !important;
+  background-color:#fff !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > select:focus-visible,
+html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v143-date-time-row .custom-picker-button:focus-visible {
+  outline:0 !important;
+  border-color:#f07a5d !important;
+  box-shadow:0 0 0 3px rgba(240,102,70,.12) !important;
+}
+
+html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v89-settings-section .plan-v90-settings-grid .plan-v90-setting-tile > select,
+html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v89-settings-section .plan-v90-settings-grid .plan-v143-date-time-row .custom-picker-button {
+  min-height:40px !important;
+  padding:0 35px 0 12px !important;
+  border:1px solid #dce3ec !important;
+  border-radius:11px !important;
+  background-color:#f8fafc !important;
+  box-shadow:0 1px 2px rgba(18,34,58,.025) !important;
+  text-align-last:left !important;
+  cursor:pointer !important;
+}
+
+/* Platform selection is intentionally always visible: no collapsing, checkbox corners or horizontal scrolling. */
+html body .automation-page.plan-v70-active .plan-v14459-platform-tile {
+  grid-template-columns:minmax(0,1fr) !important;
+  grid-template-rows:auto auto !important;
+  align-items:start !important;
+  height:auto !important;
+  min-height:0 !important;
+  padding-bottom:14px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14459-platform-tile > .plan-v90-setting-head {
+  grid-column:1 !important;
+  grid-row:1 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14464-platform-selector {
+  grid-column:1 !important;
+  grid-row:2 !important;
+  display:grid !important;
+  gap:9px !important;
+  width:100% !important;
+  min-width:0 !important;
+  margin-top:11px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14464-platform-summary {
+  display:flex !important;
+  align-items:center !important;
+  justify-content:space-between !important;
+  gap:12px !important;
+  color:#6d798c !important;
+  font-size:11px !important;
+  line-height:1.35 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14464-platform-summary strong {
+  color:#26364f !important;
+  font-size:12px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14464-platform-summary span {
+  min-width:0 !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  white-space:nowrap !important;
+  text-align:right !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14464-platform-options,
+html body .automation-page.plan-v70-active .plan-v14464-platform-options:not(.is-open) {
+  position:static !important;
+  z-index:auto !important;
+  display:grid !important;
+  grid-template-columns:repeat(auto-fit,minmax(132px,1fr)) !important;
+  gap:8px !important;
+  width:100% !important;
+  min-width:0 !important;
+  max-width:none !important;
+  max-height:none !important;
+  margin:0 !important;
+  padding:0 !important;
+  overflow:visible !important;
+  border:0 !important;
+  border-radius:0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14464-platform-options .platform-multiselect-option {
+  position:relative !important;
+  display:grid !important;
+  grid-template-columns:31px minmax(0,1fr) 17px !important;
+  align-items:center !important;
+  gap:9px !important;
+  width:100% !important;
+  min-width:0 !important;
+  min-height:50px !important;
+  padding:8px 10px !important;
+  overflow:hidden !important;
+  border:1px solid #dfe5ed !important;
+  border-radius:12px !important;
+  color:#26364f !important;
+  background:#fff !important;
+  box-shadow:0 2px 7px rgba(18,34,58,.025) !important;
+  cursor:pointer !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14464-platform-options .platform-multiselect-option:hover {
+  border-color:#cbd5e2 !important;
+  background:#f9fbfd !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14464-platform-options .platform-multiselect-option:has(input:checked) {
+  border-color:#f0a18d !important;
+  color:#9d402d !important;
+  background:#fff6f2 !important;
+  box-shadow:0 0 0 2px rgba(241,90,55,.08) !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14464-platform-options .platform-multiselect-option input {
+  position:absolute !important;
+  width:1px !important;
+  height:1px !important;
+  min-height:0 !important;
+  padding:0 !important;
+  margin:-1px !important;
+  overflow:hidden !important;
+  clip:rect(0,0,0,0) !important;
+  white-space:nowrap !important;
+  border:0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14464-platform-options .platform-icon-img {
+  width:28px !important;
+  height:28px !important;
+  object-fit:contain !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14464-platform-options .platform-multiselect-option > span {
+  display:block !important;
+  min-width:0 !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  white-space:nowrap !important;
+  font-size:12px !important;
+  font-weight:800 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14464-platform-check {
+  color:#d8dee7 !important;
+  opacity:.6 !important;
+}
+
+html body .automation-page.plan-v70-active .platform-multiselect-option:has(input:checked) .plan-v14464-platform-check {
+  color:#ef603f !important;
+  opacity:1 !important;
+}
+
+/* The detail body and sticky action area must never create a second horizontal page. */
+html body .admin-v14401-workbench .admin-v74-detail-modal,
+html body .admin-v14401-workbench .admin-v74-detail-body,
+html body .admin-v14401-workbench .admin-review-workspace-main,
+html body .admin-v14401-workbench .admin-v74-detail-meta,
+html body .admin-v14401-workbench .admin-review-actionbar,
+html body .admin-v14401-workbench .admin-review-actionbar > div {
+  min-width:0 !important;
+  max-width:100% !important;
+  box-sizing:border-box !important;
+}
+
+html body .admin-v14401-workbench .admin-v74-detail-body { overflow-x:hidden !important; }
+html body .admin-v14401-workbench .admin-v74-detail-body * { min-width:0; }
+html body .admin-v14401-workbench .admin-v14412-cost-events > div { grid-template-columns:minmax(0,1fr) auto !important; }
+html body .admin-v14401-workbench .admin-v14412-cost-events span,
+html body .admin-v14401-workbench .admin-v14412-cost-events strong,
+html body .admin-v14401-workbench .admin-v14401-source-card input { overflow-wrap:anywhere !important; }
+
+/* Channel cards already provide the surface; the connection controls do not need another box. */
+html body .social-v14339-grid .social-v74-connect-panel {
+  padding:12px 0 0 !important;
+  border:0 !important;
+  border-top:1px solid #e7ebf1 !important;
+  border-radius:0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+}
+
+html body .social-v14339-grid .social-v74-brand-chip {
+  padding:0 !important;
+  border:0 !important;
+  border-radius:0 !important;
+  background:transparent !important;
+}
+
+/* Facebook and Pinterest destination pickers: one focused Spreelo workspace with real gutters. */
+html body .content.spreelo-content:has(.facebook-select-page) {
+  padding-top:clamp(28px,4vw,54px) !important;
+  padding-right:clamp(20px,4vw,54px) !important;
+  padding-bottom:54px !important;
+  padding-left:clamp(20px,4vw,54px) !important;
+  background:#f4f7fb !important;
+}
+
+html body .facebook-select-page {
+  width:min(920px,100%) !important;
+  max-width:920px !important;
+  margin:0 auto !important;
+}
+
+html body .facebook-select-hero {
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) auto !important;
+  align-items:center !important;
+  gap:20px !important;
+  margin:0 0 14px !important;
+  padding:24px 26px !important;
+  border:1px solid #e1e6ee !important;
+  border-radius:22px !important;
+  background:#fff !important;
+  box-shadow:0 16px 42px rgba(18,35,59,.07) !important;
+}
+
+html body .facebook-select-badge {
+  margin-bottom:10px !important;
+  padding:6px 9px !important;
+  font-size:10px !important;
+}
+
+html body .facebook-select-hero h2 {
+  font-size:clamp(30px,4vw,40px) !important;
+  letter-spacing:-.045em !important;
+}
+
+html body .facebook-select-hero p {
+  max-width:620px !important;
+  margin-top:8px !important;
+  font-size:14px !important;
+  line-height:1.5 !important;
+}
+
+html body .facebook-selected-brand-card {
+  min-width:190px !important;
+  padding:11px 13px !important;
+  border:1px solid #eadfd9 !important;
+  border-radius:13px !important;
+  background:#fff8f4 !important;
+  box-shadow:none !important;
+}
+
+html body .facebook-selected-brand-card span { margin-bottom:3px !important; font-size:10px !important; }
+html body .facebook-selected-brand-card strong { font-size:14px !important; }
+
+html body .facebook-select-card {
+  display:grid !important;
+  grid-template-columns:220px minmax(0,1fr) !important;
+  gap:14px !important;
+  align-items:start !important;
+  padding:16px !important;
+  border:1px solid #e1e6ee !important;
+  border-radius:22px !important;
+  background:#fff !important;
+  box-shadow:0 16px 42px rgba(18,35,59,.055) !important;
+}
+
+html body .facebook-select-info {
+  padding:0 !important;
+}
+
+html body .facebook-select-info > .facebook-large-icon,
+html body .facebook-select-info > .eyebrow,
+html body .facebook-select-info > h3,
+html body .facebook-select-info > p { display:none !important; }
+
+html body .facebook-select-note {
+  margin:0 !important;
+  padding:14px !important;
+  border:1px solid #e1e6ee !important;
+  border-radius:14px !important;
+  background:#f7f9fc !important;
+}
+
+html body .facebook-select-note::before {
+  content:"Bra att veta";
+  color:#ee633f;
+  font-size:10px;
+  font-weight:900;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+
+html body .facebook-page-picker-card {
+  min-width:0 !important;
+  min-height:0 !important;
+  padding:17px !important;
+  border:1px solid #e2e7ee !important;
+  border-radius:16px !important;
+  background:#f8fafc !important;
+}
+
+html body .facebook-page-option {
+  min-width:0 !important;
+  border-radius:13px !important;
+  box-shadow:none !important;
+}
+
+@media (max-width:760px) {
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile > select,
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v143-date-time-row .custom-picker-button {
+    height:38px !important;
+    min-height:38px !important;
+    padding-left:10px !important;
+    border:1px solid #dce3ec !important;
+    border-radius:10px !important;
+    background-color:#f8fafc !important;
+    text-align-last:left !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile {
+    grid-template-columns:minmax(0,1fr) minmax(150px,44%) !important;
+    gap:11px !important;
+    padding:10px 12px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v14459-platform-tile,
+  html body .automation-page.plan-v70-active.plan-v14380-polish .plan-v89-settings-section .plan-v90-settings-grid .plan-v14459-platform-tile {
+    grid-template-columns:minmax(0,1fr) !important;
+    grid-template-rows:auto auto !important;
+    min-height:0 !important;
+    padding:12px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v14464-platform-options,
+  html body .automation-page.plan-v70-active .plan-v14464-platform-options:not(.is-open) {
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+  }
+
+  html body .admin-v14401-workbench .admin-v74-detail-modal {
+    width:calc(100vw - 12px) !important;
+    height:calc(100dvh - 12px) !important;
+    max-height:calc(100dvh - 12px) !important;
+    border-radius:16px !important;
+  }
+
+  html body .admin-v14401-workbench .admin-v74-detail-modal > header {
+    padding:14px 15px !important;
+  }
+
+  html body .admin-v14401-workbench .admin-v74-detail-modal > header h2 {
+    font-size:clamp(22px,6vw,30px) !important;
+    overflow-wrap:anywhere !important;
+  }
+
+  html body .admin-v14401-workbench .admin-v74-detail-body {
+    display:block !important;
+    width:100% !important;
+    overflow-x:hidden !important;
+    overflow-y:auto !important;
+  }
+
+  html body .admin-v14401-workbench .admin-v74-detail-body > div:first-child,
+  html body .admin-v14401-workbench .admin-review-workspace-main,
+  html body .admin-v14401-workbench .admin-v74-detail-meta {
+    width:100% !important;
+    padding:14px !important;
+  }
+
+  html body .admin-v14401-workbench .admin-v74-detail-meta {
+    position:relative !important;
+    top:auto !important;
+    max-height:none !important;
+    overflow:visible !important;
+    border-left:0 !important;
+    border-top:1px solid #e2e7ee !important;
+  }
+
+  html body .admin-v14401-workbench .admin-v14412-cost-events > div {
+    grid-template-columns:minmax(0,1fr) !important;
+    gap:3px !important;
+  }
+
+  html body .admin-v14401-workbench .admin-v14412-cost-events strong {
+    justify-self:start !important;
+  }
+
+  html body .admin-v14401-workbench .admin-review-actionbar {
+    position:sticky !important;
+    bottom:0 !important;
+    z-index:20 !important;
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) !important;
+    gap:9px !important;
+    width:100% !important;
+    padding:11px !important;
+    overflow:hidden !important;
+  }
+
+  html body .admin-v14401-workbench .admin-review-actionbar > button {
+    width:100% !important;
+  }
+
+  html body .admin-v14401-workbench .admin-review-actionbar > div {
+    display:grid !important;
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+    gap:8px !important;
+    width:100% !important;
+  }
+
+  html body .admin-v14401-workbench .admin-review-actionbar button {
+    width:100% !important;
+    min-width:0 !important;
+    min-height:44px !important;
+    height:auto !important;
+    padding:8px 9px !important;
+    white-space:normal !important;
+    line-height:1.2 !important;
+  }
+
+  html body .admin-v14401-workbench .admin-v14401-partial-actions {
+    display:contents !important;
+  }
+
+  html body .admin-v14401-workbench .admin-review-regeneration-required,
+  html body .admin-v14401-workbench .admin-review-approve-action {
+    grid-column:1 / -1 !important;
+  }
+
+  html body .social-v14339-grid .social-v74-connect-panel {
+    padding:11px 0 0 !important;
+    border-right:0 !important;
+    border-bottom:0 !important;
+    border-left:0 !important;
+    border-radius:0 !important;
+    background:transparent !important;
+  }
+
+  html body .content.spreelo-content:has(.facebook-select-page) {
+    padding-top:calc(var(--spreelo-mobile-header-total,106px) + 18px) !important;
+    padding-right:16px !important;
+    padding-bottom:34px !important;
+    padding-left:16px !important;
+  }
+
+  html body .facebook-select-page { width:100% !important; }
+
+  html body .facebook-select-hero {
+    grid-template-columns:minmax(0,1fr) !important;
+    gap:14px !important;
+    padding:19px !important;
+    border-radius:18px !important;
+  }
+
+  html body .facebook-select-hero h2 {
+    font-size:clamp(28px,8vw,34px) !important;
+    line-height:1.05 !important;
+  }
+
+  html body .facebook-select-hero p { font-size:13px !important; }
+
+  html body .facebook-selected-brand-card {
+    width:100% !important;
+    min-width:0 !important;
+    padding:10px 12px !important;
+  }
+
+  html body .facebook-select-card {
+    grid-template-columns:minmax(0,1fr) !important;
+    gap:10px !important;
+    padding:12px !important;
+    border-radius:18px !important;
+  }
+
+  html body .facebook-select-note {
+    padding:12px !important;
+  }
+
+  html body .facebook-page-picker-card {
+    padding:13px !important;
+    border-radius:14px !important;
+  }
+
+  html body .facebook-page-option {
+    grid-template-columns:40px minmax(0,1fr) auto !important;
+    gap:10px !important;
+    min-height:68px !important;
+    padding:10px !important;
+  }
+
+  html body .facebook-page-option-action {
+    grid-column:auto !important;
+    min-width:68px !important;
+  }
+}
+
+@media (max-width:430px) {
+  html body .automation-page.plan-v70-active .plan-v90-settings-grid .plan-v90-setting-tile {
+    grid-template-columns:minmax(0,1fr) minmax(142px,43%) !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v14464-platform-options,
+  html body .automation-page.plan-v70-active .plan-v14464-platform-options:not(.is-open) {
+    grid-template-columns:minmax(0,1fr) !important;
+  }
+
+  html body .facebook-page-option {
+    grid-template-columns:38px minmax(0,1fr) !important;
+  }
+
+  html body .facebook-page-option-action {
+    grid-column:2 !important;
+    justify-self:start !important;
+    width:auto !important;
+  }
+}
