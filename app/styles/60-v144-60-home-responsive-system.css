@@ -62,7 +62,7 @@ html body .home-reference-focus > span strong {
 }
 
 /* Wide desktop keeps the efficient two-column workspace. */
-@media (min-width:1251px) {
+@media (min-width:1451px) {
   html body .home-reference-stats { overflow:hidden; }
   html body .home-reference-stats article { padding-inline:36px; }
   html body .home-reference-workspace { grid-template-columns:minmax(0,1fr) 320px; gap:22px; }
@@ -84,7 +84,7 @@ html body .home-reference-focus > span strong {
 }
 
 /* Tablet and narrow desktop: never compress the coach into competing columns. */
-@media (min-width:901px) and (max-width:1250px) {
+@media (min-width:901px) and (max-width:1450px) {
   html body .content.spreelo-content:has(.home-reference-page) { padding:32px 28px 42px !important; }
   html body .home-reference-page { max-width:920px; }
   html body .home-reference-header {

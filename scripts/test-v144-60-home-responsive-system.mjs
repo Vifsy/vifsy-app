@@ -11,9 +11,9 @@ const globals = read("app/globals.css");
 const css = read("app/styles/60-v144-60-home-responsive-system.css");
 const home = read("components/HomeReferenceOverview.jsx");
 
-expect(globals.trimEnd().endsWith('@import "./styles/60-v144-60-home-responsive-system.css";'), "v144.60 is the final cascade layer");
-expect(css.includes("@media (min-width:1251px)"), "wide desktop has an explicit layout mode");
-expect(css.includes("@media (min-width:901px) and (max-width:1250px)"), "tablet has an explicit non-overlapping layout mode");
+expect(globals.includes('@import "./styles/60-v144-60-home-responsive-system.css";'), "v144.60 responsive system remains imported");
+expect(css.includes("@media (min-width:1451px)"), "wide desktop has an explicit layout mode");
+expect(css.includes("@media (min-width:901px) and (max-width:1450px)"), "tablet has an explicit non-overlapping layout mode");
 expect(css.includes("@media (max-width:900px)"), "mobile has a dedicated card layout mode");
 expect(css.includes(".home-reference-workspace {\n    display:block"), "tablet and mobile stack plans and coach instead of squeezing columns");
 expect(css.includes("grid-template-columns:repeat(2,minmax(0,1fr))"), "tablet statistics use a stable two-by-two grid");

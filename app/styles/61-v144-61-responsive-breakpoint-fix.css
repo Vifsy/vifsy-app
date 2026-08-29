@@ -1,0 +1,26 @@
+/* v144.61 — closes the narrow-desktop gap and removes the mobile-only calendar link. */
+
+/* Wide desktop: reserve the same title height so all statistic values share a baseline. */
+@media (min-width:1451px) {
+  html body .home-reference-stats h2 {
+    display:flex;
+    align-items:flex-end;
+    min-height:38px;
+  }
+}
+
+/* Tablet/narrow desktop: keep focus icons legible at the expanded stable breakpoint. */
+@media (min-width:901px) and (max-width:1450px) {
+  html body .home-reference-page .home-reference-focus > span svg {
+    width:20px !important;
+    height:20px !important;
+    flex:0 0 20px;
+  }
+}
+
+/* Mobile only: the calendar is a separate destination, not a secondary review action. */
+@media (max-width:900px) {
+  html body .home-reference-page .home-reference-review a:not(.primary) {
+    display:none !important;
+  }
+}
