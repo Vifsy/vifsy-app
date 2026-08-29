@@ -13,7 +13,7 @@ const home = read("components/HomeReferenceOverview.jsx");
 const layout = read("components/AppLayout.jsx");
 const automation = read("app/automation/page.jsx");
 
-expect(globals.trimEnd().endsWith('@import "./styles/59-v144-59-mobile-reference-match.css";'), "v144.59 is the final cascade layer");
+expect(globals.includes('@import "./styles/59-v144-59-mobile-reference-match.css";'), "v144.59 remains in the active cascade");
 expect(css.includes("@media (max-width:900px)") && css.includes(".plan-v14341-studio-hero { display:none"), "mobile plan view removes the desktop studio hero");
 expect(css.includes(".plan-v14459-platform-tile { order:5") && css.includes(".plan-v14459-publishing-tile { order:6"), "platform appears before publishing on mobile");
 expect(css.includes(".plan-v14459-platform-menu:not(.is-open)") && css.includes("display:grid !important"), "mobile platform chooser stays visibly expanded");

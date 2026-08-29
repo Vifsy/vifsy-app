@@ -145,7 +145,8 @@
     "test:v144.56": "node scripts/test-v144-56-public-product-copy-music-variety.mjs",
     "test:v144.57": "node scripts/test-v144-57-weekly-schedule-manager.mjs",
     "test:v144.58": "node scripts/test-v144-58-mobile-professional-polish.mjs",
-    "test:v144.59": "node scripts/test-v144-59-mobile-reference-match.mjs"
+    "test:v144.59": "node scripts/test-v144-59-mobile-reference-match.mjs",
+    "test:v144.60": "node scripts/test-v144-60-home-responsive-system.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
