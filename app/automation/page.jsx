@@ -8267,6 +8267,17 @@ const { data, error } = await supabase
     return counts;
   }, [slots, timeZone]);
 
+  const chronologicalSlots = useMemo(
+    () => [...slots].sort((left, right) => {
+      const dateOrder = String(left.startDate || "").localeCompare(String(right.startDate || ""));
+      if (dateOrder !== 0) return dateOrder;
+      const timeOrder = String(left.publishTime || "").localeCompare(String(right.publishTime || ""));
+      if (timeOrder !== 0) return timeOrder;
+      return String(left.id || "").localeCompare(String(right.id || ""));
+    }),
+    [slots]
+  );
+
   function handleWeeklyDayClick(targetWeekday) {
     if (scheduleType !== "weekly" || planCreationMode === "campaign") return;
     const targetCount = weeklyDayCounts[targetWeekday] || 0;
@@ -10608,7 +10619,13 @@ function blockFormatCardClickAfterDrag(event) {
                   </div>
                 </div>
 
-                <div className="plan-v70-settings-grid plan-v84-settings-grid plan-v89-settings-grid plan-v90-settings-grid">
+                <div className="plan-v14467-settings-groups">
+                  <section className="plan-v14467-settings-group">
+                    <header className="plan-v14467-group-title">
+                      <span><Target size={18} aria-hidden="true" /></span>
+                      <strong>{locale.startsWith("sv") ? "STRATEGI" : "STRATEGY"}</strong>
+                    </header>
+                    <div className="plan-v14467-settings-rows">
                   <label className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile">
                     <div className="plan-v90-setting-head">
                       <span className="plan-v90-setting-icon"><Target size={20} aria-hidden="true" /></span>
@@ -10674,7 +10691,15 @@ function blockFormatCardClickAfterDrag(event) {
                       ))}
                     </select>
                   </label>
+                    </div>
+                  </section>
 
+                  <section className="plan-v14467-settings-group">
+                    <header className="plan-v14467-group-title">
+                      <span><CalendarDays size={18} aria-hidden="true" /></span>
+                      <strong>{locale.startsWith("sv") ? "SCHEMA" : "SCHEDULE"}</strong>
+                    </header>
+                    <div className="plan-v14467-settings-rows">
                   <div className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile plan-v14341-date-tile">
                     <div className="plan-v90-setting-head">
                       <span className="plan-v90-setting-icon"><CalendarDays size={20} aria-hidden="true" /></span>
@@ -10701,23 +10726,6 @@ function blockFormatCardClickAfterDrag(event) {
                     </div>
                   </div>
 
-                  <label className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile">
-                    <div className="plan-v90-setting-head">
-                      <span className="plan-v90-setting-icon"><Globe2 size={20} aria-hidden="true" /></span>
-                      <div className="plan-v90-setting-copy">
-                        <span className="plan-v90-setting-title">{t("automation.redesign.postLanguage")}</span>
-                        <small>{plannerSectionCopy.languageHelp}</small>
-                      </div>
-                    </div>
-                    <select value={language} onChange={(event) => setLanguage(event.target.value)}>
-                      {languageOptions.map((option) => (
-                        <option value={option.value} key={`${option.value}-${option.label}`}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
                   <label className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile plan-v14459-publishing-tile">
                     <div className="plan-v90-setting-head">
                       <span className="plan-v90-setting-icon"><Send size={20} aria-hidden="true" /></span>
@@ -10735,6 +10743,31 @@ function blockFormatCardClickAfterDrag(event) {
                       <option value="once">{t("automation.once")}</option>
                     </select>
                   </label>
+                    </div>
+                  </section>
+
+                  <section className="plan-v14467-settings-group">
+                    <header className="plan-v14467-group-title">
+                      <span><Globe2 size={18} aria-hidden="true" /></span>
+                      <strong>{locale.startsWith("sv") ? "KANALER & SPRÅK" : "CHANNELS & LANGUAGE"}</strong>
+                    </header>
+                    <div className="plan-v14467-settings-rows">
+                  <label className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile">
+                    <div className="plan-v90-setting-head">
+                      <span className="plan-v90-setting-icon"><Globe2 size={20} aria-hidden="true" /></span>
+                      <div className="plan-v90-setting-copy">
+                        <span className="plan-v90-setting-title">{t("automation.redesign.postLanguage")}</span>
+                        <small>{plannerSectionCopy.languageHelp}</small>
+                      </div>
+                    </div>
+                    <select value={language} onChange={(event) => setLanguage(event.target.value)}>
+                      {languageOptions.map((option) => (
+                        <option value={option.value} key={`${option.value}-${option.label}`}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
 
                   <div className="plan-v70-field plan-v73-platform-field plan-v83-setting-tile plan-v90-setting-tile plan-v14459-platform-tile">
                     <div className="plan-v90-setting-head">
@@ -10747,14 +10780,25 @@ function blockFormatCardClickAfterDrag(event) {
                     {loadingConnectedPlatforms ? (
                       <div className="plan-v73-platform-loading">{t("automation.loadingConnectedChannels")}</div>
                     ) : connectedPlatformOptions.length > 0 ? (
-                      <div className="plan-v14464-platform-selector">
-                        <div className="plan-v14464-platform-summary">
-                          <strong>{t("automation.choosePlatform")}</strong>
-                          <span>{selectedPlatformOptions.length > 0
-                            ? selectedPlatformOptions.map((item) => item.label).join(" + ")
-                            : t("automation.choosePlatform")}</span>
-                        </div>
-                        <div className="platform-multiselect-menu plan-v14459-platform-menu plan-v14464-platform-options is-open" onClick={(event) => event.stopPropagation()}>
+                      <div className={`platform-multiselect plan-v14467-platform-picker${platformDropdownOpen ? " is-open" : ""}`}>
+                        <button
+                          type="button"
+                          className="plan-v14467-value-button"
+                          aria-expanded={platformDropdownOpen}
+                          onClick={() => setPlatformDropdownOpen((open) => !open)}
+                        >
+                          <span className="plan-v14467-selected-platforms">
+                            {selectedPlatformOptions.slice(0, 3).map((item) => (
+                              <img src={item.icon} alt="" className="platform-icon-img" key={`selected-${item.value}`} />
+                            ))}
+                            <strong>{selectedPlatformOptions.length > 0
+                              ? selectedPlatformOptions.map((item) => item.label).join(" + ")
+                              : t("automation.choosePlatform")}</strong>
+                          </span>
+                          {platformDropdownOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                        </button>
+                        {platformDropdownOpen ? (
+                          <div className="platform-multiselect-menu plan-v14467-platform-options" onClick={(event) => event.stopPropagation()}>
                             {connectedPlatformOptions.map((item) => {
                               const checked = selectedPlatformKeys.includes(item.value);
                               return (
@@ -10771,11 +10815,12 @@ function blockFormatCardClickAfterDrag(event) {
                                   />
                                   <img src={item.icon} alt="" className="platform-icon-img" />
                                   <span>{item.label}</span>
-                                  <CheckCircle2 className="plan-v14464-platform-check" size={17} aria-hidden="true" />
+                                  {checked ? <CheckCircle2 className="plan-v14467-platform-check" size={17} aria-hidden="true" /> : null}
                                 </label>
                               );
                             })}
-                        </div>
+                          </div>
+                        ) : null}
                       </div>
                     ) : (
                       <a className="plan-v73-connect-platform" href="/social-channels">
@@ -10783,18 +10828,22 @@ function blockFormatCardClickAfterDrag(event) {
                       </a>
                     )}
                   </div>
+                    </div>
+                  </section>
                 </div>
 
                 {scheduleType === "weekly" && planCreationMode !== "campaign" && slots.length ? (
-                  <div className="plan-v14457-week-rhythm">
-                    <div className="plan-v14457-week-rhythm-head">
-                      <div>
-                        <strong>{t("automation.weekRhythm.title")}</strong>
-                        <span>{t("automation.weekRhythm.help")}</span>
+                  <div className="plan-v14457-week-rhythm plan-v14467-week-rhythm">
+                    <span className="plan-v14467-week-visual" aria-hidden="true"><CalendarDays size={32} /></span>
+                    <div className="plan-v14467-week-content">
+                      <div className="plan-v14457-week-rhythm-head">
+                        <div>
+                          <strong>{t("automation.weekRhythm.title")}</strong>
+                          <span>{t("automation.weekRhythm.help")}</span>
+                        </div>
                       </div>
-                      <span className="plan-v14457-week-rhythm-note">{t("automation.weekRhythm.timeHelp")}</span>
-                    </div>
-                    <div className="plan-v14457-week-days">
+                      <span className="plan-v14457-week-rhythm-note"><Info size={18} aria-hidden="true" />{t("automation.weekRhythm.timeHelp")}</span>
+                      <div className="plan-v14457-week-days">
                       {weekdays.map((weekday, index) => {
                         const count = weeklyDayCounts[weekday] || 0;
                         return (
@@ -10811,10 +10860,10 @@ function blockFormatCardClickAfterDrag(event) {
                           >
                             <span>{weekdayLabels[index]}</span>
                             <strong>{count ? t(count === 1 ? "automation.weekRhythm.postCountOne" : "automation.weekRhythm.postCountMany", { count }) : "—"}</strong>
-                            {count ? <b>{count}</b> : null}
                           </button>
                         );
                       })}
+                      </div>
                     </div>
                   </div>
                 ) : null}
@@ -11225,7 +11274,7 @@ function blockFormatCardClickAfterDrag(event) {
                       <span />
                     </div>
 
-                    {slots.map((slot, index) => {
+                    {chronologicalSlots.map((slot, index) => {
                       const rowExpanded = expandedInstructionSlotIds.includes(slot.id);
                       const isPastCampaignSlot = planCreationMode === "campaign" && isSlotScheduledInPast(slot, timeZone);
                       const slotPlatformOptions = getSlotPlatformOptions(slot);
@@ -11247,7 +11296,7 @@ function blockFormatCardClickAfterDrag(event) {
                             </span>
                           </div>
                           <div className="plan-v70-planned-date">
-                            <strong>{formatStartDateLabel(slot.startDate, timeZone, locale)}</strong>
+                            <strong><CalendarDays size={17} aria-hidden="true" />{formatStartDateLabel(slot.startDate, timeZone, locale)}</strong>
                             <span className="plan-v14457-daypart"><Clock3 size={13} />{getCampaignTimeWindowDisplay(slot.publishTime, locale)} · {t("automation.weekRhythm.exactTimeAutomatic")}</span>
                             {isPastCampaignSlot ? <em className="plan-v14457-skipped-label">{t("automation.campaignExperience.skippedPast")}</em> : null}
                           </div>
@@ -11267,9 +11316,10 @@ function blockFormatCardClickAfterDrag(event) {
                             </div>
                           </div>
                           <div className="plan-v70-planned-format plan-v143-planned-purpose">
-                            <strong>{getCustomerSlotMarketingPurpose(slot)}</strong>
+                            <strong><Target size={16} aria-hidden="true" />{getCustomerSlotMarketingPurpose(slot)}</strong>
                           </div>
                           <div className="plan-v70-planned-channel plan-v74-planned-channels">
+                            <strong className="plan-v14467-destinations-label">{locale.startsWith("sv") ? "Publiceras till" : "Published to"}</strong>
                             {slotPlatformOptions.length > 0 ? (
                               <span className="plan-v74-channel-stack" aria-label={slotPlatformOptions.map((item) => item.label).join(", ")}>
                                 {slotPlatformOptions.map((item) => (
@@ -11291,8 +11341,14 @@ function blockFormatCardClickAfterDrag(event) {
                           </div>
                           <div className="plan-v143-planned-cost">
                             {isPastCampaignSlot
-                              ? <strong className="skipped-credit">0 {t("automation.credits")}</strong>
-                              : <strong>{getCurrentSlotCreditLabel(slot)}</strong>}
+                              ? <strong className="skipped-credit"><CreditCard size={16} aria-hidden="true" />0 {t("automation.credits")}</strong>
+                              : <strong><CreditCard size={16} aria-hidden="true" />{getCurrentSlotCreditLabel(slot)}</strong>}
+                          </div>
+                          <div className="plan-v14467-platform-count">
+                            <LayoutGrid size={16} aria-hidden="true" />
+                            <strong>{slotPlatformOptions.length} {locale.startsWith("sv")
+                              ? (slotPlatformOptions.length === 1 ? "plattform" : "plattformar")
+                              : (slotPlatformOptions.length === 1 ? "platform" : "platforms")}</strong>
                           </div>
                           <button
                             type="button"
@@ -11349,9 +11405,6 @@ function blockFormatCardClickAfterDrag(event) {
                                   compact
                                 />
                               ) : null}
-                              <button type="button" onClick={() => duplicateSlot(slot.id)}>
-                                {t("automation.duplicate")}
-                              </button>
                               <button type="button" className="danger" onClick={() => removeSlot(slot.id)}>
                                 {t("automation.delete")}
                               </button>

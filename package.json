@@ -152,7 +152,8 @@
     "test:v144.63": "node scripts/test-v144-63-home-admin-responsive.mjs",
     "test:v144.64": "node scripts/test-v144-64-settings-review-social.mjs",
     "test:v144.65": "node scripts/test-v144-65-settings-vertical-alignment.mjs",
-    "test:v144.66": "node scripts/test-v144-66-planner-mobile-clarity.mjs"
+    "test:v144.66": "node scripts/test-v144-66-planner-mobile-clarity.mjs",
+    "test:v144.67": "node scripts/test-v144-67-planner-reference-redesign.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

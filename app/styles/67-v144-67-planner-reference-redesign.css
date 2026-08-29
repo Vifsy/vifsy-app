@@ -1,0 +1,641 @@
+/* v144.67 — reference-led planner settings, weekly rhythm and planned posts */
+
+.plan-v14467-settings-groups {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.plan-v14467-settings-group {
+  min-width: 0;
+  border: 1px solid #dbe3ec;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(15, 34, 56, .07);
+  padding: 18px 22px 8px;
+}
+
+.plan-v14467-group-title {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 32px;
+  margin: 0 0 4px;
+  color: #0b1a32;
+  letter-spacing: .13em;
+  font-size: 13px;
+}
+
+.plan-v14467-group-title > span {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 50%;
+  color: #ff6248;
+  background: #fff0eb;
+}
+
+.plan-v14467-settings-rows {
+  display: grid;
+}
+
+.plan-v14467-settings-group .plan-v90-setting-tile {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 42%) !important;
+  align-items: center !important;
+  gap: 18px !important;
+  min-height: 104px !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 18px 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+
+.plan-v14467-settings-group .plan-v90-setting-tile + .plan-v90-setting-tile {
+  border-top: 1px solid #e1e7ee !important;
+}
+
+.plan-v14467-settings-group .plan-v90-setting-head {
+  display: flex !important;
+  align-items: center !important;
+  align-self: center !important;
+  gap: 14px !important;
+  min-width: 0;
+  min-height: 58px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  transform: none !important;
+}
+
+.plan-v14467-settings-group .plan-v90-setting-icon {
+  display: grid !important;
+  place-items: center !important;
+  align-self: center !important;
+  width: 48px !important;
+  height: 48px !important;
+  min-width: 48px !important;
+  margin: 0 !important;
+  border-radius: 50% !important;
+  color: #ff6248 !important;
+  background: #fff0eb !important;
+}
+
+.plan-v14467-settings-group .plan-v90-setting-copy {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-self: stretch !important;
+  min-width: 0;
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: normal !important;
+}
+
+.plan-v14467-settings-group .plan-v90-setting-title {
+  display: block !important;
+  margin: 0 0 4px !important;
+  color: #0b1a32 !important;
+  font-size: 16px !important;
+  font-weight: 800 !important;
+  line-height: 1.2 !important;
+}
+
+.plan-v14467-settings-group .plan-v90-setting-copy small {
+  display: block !important;
+  margin: 0 !important;
+  color: #687a93 !important;
+  font-size: 13px !important;
+  line-height: 1.35 !important;
+}
+
+.plan-v14467-settings-group .plan-v90-setting-tile > select,
+.plan-v14467-settings-group .plan-v143-date-time-row,
+.plan-v14467-settings-group .plan-v73-platform-loading,
+.plan-v14467-settings-group .plan-v73-connect-platform,
+.plan-v14467-value-button {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 54px !important;
+  height: 54px !important;
+  align-self: center !important;
+  margin: 0 !important;
+  border: 1px solid #d5deea !important;
+  border-radius: 14px !important;
+  background: #fbfcfe !important;
+  color: #0b1a32 !important;
+  box-shadow: none !important;
+  font-size: 15px !important;
+  font-weight: 800 !important;
+}
+
+.plan-v14467-settings-group .plan-v143-date-time-row,
+.plan-v14467-settings-group .plan-v14341-date-only-row {
+  display: block !important;
+  padding: 0 !important;
+}
+
+.plan-v14467-settings-group .plan-v143-date-time-row .custom-picker-field,
+.plan-v14467-settings-group .plan-v143-date-time-row button {
+  width: 100% !important;
+  min-height: 52px !important;
+  height: 52px !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+
+.plan-v14467-platform-picker {
+  position: relative;
+  align-self: center;
+  min-width: 0;
+}
+
+.plan-v14467-value-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 15px;
+  cursor: pointer;
+}
+
+.plan-v14467-selected-platforms {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.plan-v14467-selected-platforms img {
+  width: 23px !important;
+  height: 23px !important;
+  flex: 0 0 23px;
+}
+
+.plan-v14467-selected-platforms strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-v14467-platform-options {
+  position: absolute !important;
+  z-index: 30;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  display: grid !important;
+  gap: 5px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 8px !important;
+  border: 1px solid #d5deea !important;
+  border-radius: 14px !important;
+  background: #fff !important;
+  box-shadow: 0 18px 42px rgba(15, 34, 56, .16) !important;
+}
+
+.plan-v14467-platform-options .platform-multiselect-option {
+  display: grid !important;
+  grid-template-columns: 28px 1fr 20px;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 7px 9px !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+}
+
+.plan-v14467-platform-options .platform-multiselect-option:hover {
+  background: #f4f7fb !important;
+}
+
+.plan-v14467-platform-options input { position: absolute; opacity: 0; pointer-events: none; }
+.plan-v14467-platform-check { color: #ff6248; }
+
+/* Weekly rhythm */
+.plan-v14467-week-rhythm {
+  display: grid !important;
+  grid-template-columns: 150px minmax(0, 1fr) !important;
+  gap: 0 !important;
+  min-height: 330px;
+  padding: 0 !important;
+  overflow: hidden;
+  border: 1px solid #dbe3ec !important;
+  border-radius: 24px !important;
+  background: #fff !important;
+  box-shadow: 0 14px 34px rgba(15, 34, 56, .07) !important;
+}
+
+.plan-v14467-week-visual {
+  display: grid;
+  place-items: center;
+  color: #7658ff;
+  background: linear-gradient(145deg, #f1ebff 0%, #faf8ff 72%);
+  border-left: 7px solid #b99bff;
+}
+
+.plan-v14467-week-visual svg {
+  width: 68px;
+  height: 68px;
+  padding: 17px;
+  border-radius: 50%;
+  background: #e9dfff;
+}
+
+.plan-v14467-week-content {
+  display: grid;
+  align-content: center;
+  gap: 22px;
+  min-width: 0;
+  padding: 34px 44px;
+}
+
+.plan-v14467-week-rhythm .plan-v14457-week-rhythm-head {
+  display: block !important;
+  margin: 0 !important;
+}
+
+.plan-v14467-week-rhythm .plan-v14457-week-rhythm-head strong {
+  font-size: 28px !important;
+  line-height: 1.15 !important;
+}
+
+.plan-v14467-week-rhythm .plan-v14457-week-rhythm-head span {
+  max-width: 760px;
+  margin-top: 8px !important;
+  font-size: 15px !important;
+  line-height: 1.5 !important;
+}
+
+.plan-v14467-week-rhythm .plan-v14457-week-rhythm-note {
+  display: flex !important;
+  align-items: center;
+  gap: 12px;
+  width: 100% !important;
+  padding: 15px 18px !important;
+  border: 0 !important;
+  border-radius: 14px !important;
+  color: #22324c !important;
+  background: linear-gradient(90deg, #f5f1ff, #fff8f4) !important;
+  font-size: 15px !important;
+  text-align: left !important;
+}
+
+.plan-v14467-week-rhythm .plan-v14457-week-days {
+  display: grid !important;
+  grid-template-columns: repeat(7, minmax(76px, 1fr)) !important;
+  gap: 12px !important;
+}
+
+.plan-v14467-week-rhythm .plan-v14457-week-day {
+  position: relative;
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 0 !important;
+  min-height: 112px !important;
+  padding: 12px 8px !important;
+  border: 1px solid #d9e1eb !important;
+  border-radius: 14px !important;
+  color: #55647a !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+.plan-v14467-week-rhythm .plan-v14457-week-day span,
+.plan-v14467-week-rhythm .plan-v14457-week-day strong {
+  margin: 0 !important;
+  font-size: 15px !important;
+  line-height: 1.2 !important;
+  text-align: center;
+}
+
+.plan-v14467-week-rhythm .plan-v14457-week-day.selected {
+  border-color: #ff8d79 !important;
+  color: #ba371e !important;
+  background: #fffaf8 !important;
+}
+
+.plan-v14467-week-rhythm .plan-v14457-week-day.selected:nth-child(2) {
+  border-color: #9a7cff !important;
+  color: #6945ef !important;
+  background: #fbf9ff !important;
+}
+
+.plan-v14467-week-rhythm .plan-v14457-week-day.moving {
+  outline: 3px solid rgba(118, 88, 255, .18) !important;
+}
+
+/* Planned posts */
+.plan-v70-planned-card .plan-v70-planned-table-head { display: none !important; }
+.plan-v70-planned-card .plan-v70-planned-table {
+  display: grid !important;
+  gap: 16px !important;
+  padding: 16px !important;
+  background: #f5f7fb !important;
+}
+
+.plan-v70-planned-card .plan-v70-planned-row {
+  position: relative !important;
+  display: grid !important;
+  grid-template-columns: 150px minmax(0, 1fr) !important;
+  grid-template-areas:
+    "visual date"
+    "visual post"
+    "visual channel"
+    "visual meta" !important;
+  column-gap: 0 !important;
+  row-gap: 0 !important;
+  min-height: 330px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border: 1px solid #dbe3ec !important;
+  border-radius: 22px !important;
+  background: #fff !important;
+  box-shadow: 0 10px 26px rgba(15, 34, 56, .06) !important;
+}
+
+.plan-v70-planned-card .plan-v86-planned-visual {
+  grid-area: visual !important;
+  align-self: stretch !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  border-left: 7px solid currentColor;
+  background: linear-gradient(145deg, color-mix(in srgb, currentColor 12%, white), white) !important;
+}
+
+.plan-v70-planned-card .plan-v86-planned-visual > span {
+  display: grid;
+  place-items: center;
+  width: 74px !important;
+  height: 74px !important;
+  border-radius: 50%;
+  background: color-mix(in srgb, currentColor 13%, white);
+}
+
+.plan-v70-planned-card .plan-v70-planned-date {
+  grid-area: date !important;
+  padding: 28px 100px 0 44px !important;
+}
+
+.plan-v70-planned-card .plan-v70-planned-date > strong {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+  font-size: 21px !important;
+  line-height: 1.2 !important;
+}
+
+.plan-v70-planned-card .plan-v14457-daypart {
+  display: flex !important;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px !important;
+  color: #6d7d96 !important;
+  font-size: 15px !important;
+}
+
+.plan-v70-planned-card .plan-v70-planned-post {
+  grid-area: post !important;
+  align-self: start !important;
+  padding: 20px 44px 0 !important;
+}
+
+.plan-v70-planned-card .plan-v100-planned-title-line > strong {
+  font-size: 22px !important;
+  line-height: 1.2 !important;
+}
+
+.plan-v70-planned-card .plan-v70-planned-post > div > span {
+  display: block !important;
+  margin-top: 7px !important;
+  color: #647590 !important;
+  font-size: 15px !important;
+  line-height: 1.45 !important;
+}
+
+.plan-v70-planned-card .plan-v70-planned-channel {
+  grid-area: channel !important;
+  align-self: start !important;
+  display: block !important;
+  padding: 20px 44px 0 !important;
+}
+
+.plan-v14467-destinations-label {
+  display: block;
+  margin-bottom: 10px;
+  color: #0b1a32;
+  font-size: 14px;
+}
+
+.plan-v70-planned-card .plan-v74-channel-stack {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+}
+
+.plan-v70-planned-card .plan-v74-channel-chip {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 7px 14px !important;
+  border: 1px solid #dfe5ed !important;
+  border-radius: 999px !important;
+  background: #fff !important;
+  font-size: 14px !important;
+}
+
+.plan-v70-planned-card .plan-v74-channel-chip img { width: 22px !important; height: 22px !important; }
+
+.plan-v70-planned-card .plan-v143-planned-purpose,
+.plan-v70-planned-card .plan-v143-planned-cost,
+.plan-v70-planned-card .plan-v14467-platform-count {
+  grid-area: meta !important;
+  align-self: end !important;
+  display: flex !important;
+  align-items: center;
+  padding: 22px 0 28px !important;
+}
+
+.plan-v70-planned-card .plan-v143-planned-purpose { margin-left: 44px; justify-self: start; }
+.plan-v70-planned-card .plan-v143-planned-cost { justify-self: center; }
+.plan-v70-planned-card .plan-v14467-platform-count { margin-right: 44px; justify-self: end; }
+
+.plan-v70-planned-card .plan-v143-planned-purpose strong,
+.plan-v70-planned-card .plan-v143-planned-cost strong,
+.plan-v70-planned-card .plan-v14467-platform-count {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  margin: 0 !important;
+  padding: 8px 15px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  color: #152541 !important;
+  background: #f3f5f8 !important;
+  font-size: 14px !important;
+}
+
+.plan-v70-planned-card .plan-v143-planned-purpose strong {
+  color: #6743de !important;
+  background: #f0eaff !important;
+}
+
+.plan-v70-planned-card .plan-v70-row-menu {
+  position: absolute !important;
+  z-index: 4;
+  top: 24px !important;
+  right: 26px !important;
+  display: grid !important;
+  place-items: center;
+  width: 48px !important;
+  height: 48px !important;
+  min-width: 48px !important;
+  margin: 0 !important;
+  padding: 0 0 8px !important;
+  border: 1px solid #d9e1eb !important;
+  border-radius: 14px !important;
+  background: #fff !important;
+  color: #0b1a32 !important;
+  font-size: 24px !important;
+  letter-spacing: 3px;
+}
+
+.plan-v70-planned-card .plan-v70-row-editor {
+  grid-column: 2 !important;
+  grid-row: 5 !important;
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 10px !important;
+  padding: 16px 44px 24px !important;
+  border-top: 1px solid #e1e7ee !important;
+  background: #fbfcfe !important;
+}
+
+.plan-v70-planned-card .plan-v70-row-editor > button,
+.plan-v70-planned-card .plan-v70-row-editor .custom-picker-field {
+  min-height: 42px !important;
+  padding: 9px 15px !important;
+  border: 1px solid #d5deea !important;
+  border-radius: 11px !important;
+  background: #fff !important;
+  color: #152541 !important;
+  font-weight: 750 !important;
+}
+
+.plan-v70-planned-card .plan-v70-row-editor > button.danger {
+  color: #b52f2f !important;
+  border-color: #f0c7c7 !important;
+  background: #fff7f7 !important;
+}
+
+@media (max-width: 1180px) {
+  .plan-v14467-settings-groups { grid-template-columns: 1fr; }
+  .plan-v14467-settings-group .plan-v90-setting-tile { grid-template-columns: minmax(0, 1fr) minmax(230px, 38%) !important; }
+  .plan-v14467-week-rhythm { grid-template-columns: 100px minmax(0, 1fr) !important; }
+  .plan-v14467-week-content { padding: 28px 30px; }
+  .plan-v14467-week-rhythm .plan-v14457-week-days { gap: 8px !important; }
+  .plan-v70-planned-card .plan-v70-planned-row { grid-template-columns: 100px minmax(0, 1fr) !important; }
+}
+
+@media (max-width: 760px) {
+  .plan-v14467-settings-groups { gap: 14px; }
+  .plan-v14467-settings-group { padding: 15px 14px 4px; border-radius: 18px; }
+  .plan-v14467-group-title { margin-left: 2px; font-size: 12px; }
+  .plan-v14467-settings-group .plan-v90-setting-tile {
+    grid-template-columns: minmax(0, 1fr) minmax(118px, 43%) !important;
+    gap: 10px !important;
+    min-height: 92px !important;
+    padding: 14px 0 !important;
+  }
+  .plan-v14467-settings-group .plan-v90-setting-head { gap: 10px !important; min-height: 54px !important; }
+  .plan-v14467-settings-group .plan-v90-setting-icon { width: 38px !important; height: 38px !important; min-width: 38px !important; }
+  .plan-v14467-settings-group .plan-v90-setting-title { font-size: 14px !important; }
+  .plan-v14467-settings-group .plan-v90-setting-copy small { font-size: 11.5px !important; }
+  .plan-v14467-settings-group .plan-v90-setting-tile > select,
+  .plan-v14467-settings-group .plan-v143-date-time-row,
+  .plan-v14467-settings-group .plan-v73-platform-loading,
+  .plan-v14467-settings-group .plan-v73-connect-platform,
+  .plan-v14467-value-button { min-height: 48px !important; height: 48px !important; padding-inline: 11px !important; font-size: 13px !important; }
+  .plan-v14467-settings-group .plan-v143-date-time-row .custom-picker-field,
+  .plan-v14467-settings-group .plan-v143-date-time-row button { min-height: 46px !important; height: 46px !important; }
+  .plan-v14467-selected-platforms img:nth-of-type(n+2) { display: none; }
+  .plan-v14467-platform-options { position: fixed !important; left: 16px !important; right: 16px !important; top: auto !important; bottom: 20px !important; max-height: 55vh; }
+
+  .plan-v14467-week-rhythm {
+    grid-template-columns: 58px minmax(0, 1fr) !important;
+    min-height: 0;
+    border-radius: 18px !important;
+  }
+  .plan-v14467-week-visual { border-left-width: 4px; }
+  .plan-v14467-week-visual svg { width: 42px; height: 42px; padding: 10px; }
+  .plan-v14467-week-content { gap: 14px; padding: 18px 12px; }
+  .plan-v14467-week-rhythm .plan-v14457-week-rhythm-head strong { font-size: 18px !important; }
+  .plan-v14467-week-rhythm .plan-v14457-week-rhythm-head span { font-size: 12px !important; }
+  .plan-v14467-week-rhythm .plan-v14457-week-rhythm-note { gap: 8px; padding: 10px 11px !important; font-size: 11.5px !important; }
+  .plan-v14467-week-rhythm .plan-v14457-week-days { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; gap: 5px !important; }
+  .plan-v14467-week-rhythm .plan-v14457-week-day { min-height: 70px !important; gap: 6px; padding: 7px 2px !important; border-radius: 10px !important; }
+  .plan-v14467-week-rhythm .plan-v14457-week-day span { font-size: 10px !important; }
+  .plan-v14467-week-rhythm .plan-v14457-week-day strong { font-size: 10px !important; }
+
+  .plan-v70-planned-card .plan-v70-planned-table { gap: 12px !important; padding: 10px !important; }
+  .plan-v70-planned-card .plan-v70-planned-row {
+    grid-template-columns: 58px minmax(0, 1fr) !important;
+    min-height: 250px !important;
+    border-radius: 17px !important;
+  }
+  .plan-v70-planned-card .plan-v86-planned-visual { border-left-width: 4px; }
+  .plan-v70-planned-card .plan-v86-planned-visual > span { width: 42px !important; height: 42px !important; }
+  .plan-v70-planned-card .plan-v70-planned-date { padding: 15px 54px 0 14px !important; }
+  .plan-v70-planned-card .plan-v70-planned-date > strong { gap: 6px; font-size: 14px !important; }
+  .plan-v70-planned-card .plan-v14457-daypart { margin-top: 5px !important; font-size: 10.5px !important; }
+  .plan-v70-planned-card .plan-v70-planned-post { padding: 12px 14px 0 !important; }
+  .plan-v70-planned-card .plan-v100-planned-title-line > strong { font-size: 16px !important; }
+  .plan-v70-planned-card .plan-v70-planned-post > div > span { margin-top: 4px !important; font-size: 11.5px !important; }
+  .plan-v70-planned-card .plan-v70-planned-channel { padding: 12px 14px 0 !important; }
+  .plan-v14467-destinations-label { margin-bottom: 7px; font-size: 11.5px; }
+  .plan-v70-planned-card .plan-v74-channel-stack { gap: 5px !important; }
+  .plan-v70-planned-card .plan-v74-channel-chip { min-height: 30px; padding: 4px 8px !important; font-size: 10.5px !important; }
+  .plan-v70-planned-card .plan-v74-channel-chip img { width: 18px !important; height: 18px !important; }
+  .plan-v70-planned-card .plan-v143-planned-purpose,
+  .plan-v70-planned-card .plan-v143-planned-cost,
+  .plan-v70-planned-card .plan-v14467-platform-count { padding: 14px 0 15px !important; }
+  .plan-v70-planned-card .plan-v143-planned-purpose { margin-left: 14px; }
+  .plan-v70-planned-card .plan-v14467-platform-count { margin-right: 14px; }
+  .plan-v70-planned-card .plan-v143-planned-purpose strong,
+  .plan-v70-planned-card .plan-v143-planned-cost strong,
+  .plan-v70-planned-card .plan-v14467-platform-count { min-height: 30px; gap: 5px; padding: 5px 8px !important; font-size: 10px !important; }
+  .plan-v70-planned-card .plan-v70-row-menu { top: 12px !important; right: 11px !important; width: 38px !important; height: 38px !important; min-width: 38px !important; border-radius: 11px !important; font-size: 19px !important; }
+  .plan-v70-planned-card .plan-v70-row-editor { grid-column: 2 !important; padding: 12px 14px 16px !important; }
+  .plan-v70-planned-card .plan-v70-row-editor > button,
+  .plan-v70-planned-card .plan-v70-row-editor .custom-picker-field { flex: 1 1 150px; min-height: 40px !important; white-space: normal; }
+}
+
+@media (max-width: 430px) {
+  .plan-v14467-settings-group .plan-v90-setting-tile { grid-template-columns: minmax(0, 1fr) 42% !important; }
+  .plan-v14467-week-rhythm { grid-template-columns: 46px minmax(0, 1fr) !important; }
+  .plan-v14467-week-visual svg { width: 34px; height: 34px; padding: 8px; }
+  .plan-v14467-week-content { padding: 16px 8px; }
+  .plan-v14467-week-rhythm .plan-v14457-week-days { gap: 3px !important; }
+  .plan-v14467-week-rhythm .plan-v14457-week-day { min-height: 66px !important; }
+  .plan-v70-planned-card .plan-v70-planned-row { grid-template-columns: 46px minmax(0, 1fr) !important; }
+  .plan-v70-planned-card .plan-v86-planned-visual > span { width: 34px !important; height: 34px !important; }
+  .plan-v70-planned-card .plan-v143-planned-cost { justify-self: start; margin-left: 130px; }
+  .plan-v70-planned-card .plan-v14467-platform-count { display: none !important; }
+}
