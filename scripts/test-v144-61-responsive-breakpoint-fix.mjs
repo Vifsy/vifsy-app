@@ -6,8 +6,8 @@ const globals = await readFile(new URL("app/globals.css", root), "utf8");
 const css = await readFile(new URL("app/styles/61-v144-61-responsive-breakpoint-fix.css", root), "utf8");
 
 assert.ok(
-  globals.trimEnd().endsWith('@import "./styles/61-v144-61-responsive-breakpoint-fix.css";'),
-  "v144.61 must remain the final CSS layer",
+  globals.includes('@import "./styles/61-v144-61-responsive-breakpoint-fix.css";'),
+  "v144.61 breakpoint fix must remain imported",
 );
 assert.match(css, /@media \(min-width:1451px\)/);
 assert.match(css, /min-height:38px/);

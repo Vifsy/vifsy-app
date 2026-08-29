@@ -122,7 +122,7 @@ export default function HomeReferenceOverview({
         <ClipboardCheck />
         <div><strong>{pendingCount} inlägg väntar på ditt godkännande</strong><small>Granska och godkänn innan innehållet skickas vidare.</small></div>
         <a className="primary" href="/review?view=queue">Granska inlägg</a>
-        <a href="/calendar"><History /><span className="home-reference-review-desktop-label">Inläggshistorik</span><span className="home-reference-review-mobile-label">Visa innehållskalender</span><ArrowRight /></a>
+        <a href="/review?view=history"><History /><span className="home-reference-review-desktop-label">Inläggshistorik</span><span className="home-reference-review-mobile-label">Visa innehållskalender</span><ArrowRight /></a>
       </section>
 
       <div className="home-reference-workspace">

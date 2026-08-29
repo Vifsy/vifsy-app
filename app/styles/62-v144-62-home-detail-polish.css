@@ -1,0 +1,114 @@
+/* v144.62 — Home navigation correctness and final responsive detail polish. */
+
+html body .home-reference-plans article.recurring { --home-plan-accent:#ff5b3b; }
+html body .home-reference-plans article.scheduled { --home-plan-accent:#7656f5; }
+html body .home-reference-plans article.campaign { --home-plan-accent:#2cb46f; }
+
+html body .home-reference-suggestion a {
+  white-space:nowrap;
+}
+
+/* Wide desktop: align title tops and keep the first plan marker inside its own row. */
+@media (min-width:1451px) {
+  html body .home-reference-stats h2 {
+    align-items:flex-start;
+  }
+
+  html body .home-reference-plans {
+    grid-template-rows:auto !important;
+  }
+
+  html body .home-reference-plans > header {
+    position:relative;
+    z-index:1;
+    min-height:59px;
+  }
+
+  html body .home-reference-plans article {
+    overflow:hidden;
+  }
+
+  html body .home-reference-plans article::before {
+    inset:0 auto 0 0;
+    width:3px;
+    height:auto;
+    border:0;
+    border-radius:0;
+    background:var(--home-plan-accent);
+  }
+}
+
+/* Tablet and mobile: a rounded corner accent that fades to a point. */
+@media (max-width:1450px) {
+  html body .home-reference-plans {
+    row-gap:12px !important;
+  }
+
+  html body .home-reference-plans > header {
+    margin-bottom:0 !important;
+  }
+
+  html body .home-reference-plans article {
+    overflow:hidden !important;
+    margin-top:0 !important;
+  }
+
+  html body .home-reference-plans article + article {
+    margin-top:0 !important;
+  }
+
+  html body .home-reference-plans article::before {
+    inset:-1px auto auto -1px !important;
+    width:38px !important;
+    height:31px !important;
+    border-top:2px solid var(--home-plan-accent);
+    border-left:2px solid var(--home-plan-accent);
+    border-radius:14px 0 0 0;
+    background:transparent !important;
+    -webkit-mask-image:linear-gradient(to bottom,#000 0%,#000 48%,transparent 100%);
+    mask-image:linear-gradient(to bottom,#000 0%,#000 48%,transparent 100%);
+  }
+
+  html body .home-reference-page .home-reference-focus > span {
+    font-size:13px !important;
+  }
+
+  html body .home-reference-suggestion a {
+    min-width:154px;
+    padding-inline:16px;
+  }
+}
+
+@media (max-width:900px) {
+  html body .home-reference-plans {
+    row-gap:8px !important;
+  }
+
+  html body .home-reference-plans article,
+  html body .home-reference-plans article + article {
+    margin-top:8px !important;
+  }
+
+  html body .home-reference-plans article::before {
+    width:31px !important;
+    height:27px !important;
+    border-radius:11px 0 0 0;
+  }
+
+  html body .home-reference-page .home-reference-focus > span {
+    font-size:11.5px !important;
+  }
+
+  html body .home-reference-suggestion a {
+    width:auto !important;
+    min-width:142px !important;
+    padding-inline:13px !important;
+  }
+}
+
+@media (max-width:340px) {
+  html body .home-reference-suggestion a {
+    width:100% !important;
+    min-width:0 !important;
+  }
+}
