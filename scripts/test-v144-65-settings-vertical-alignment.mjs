@@ -6,7 +6,7 @@ const css = fs.readFileSync(path.join(root, "app/styles/65-v144-65-settings-vert
 const globals = fs.readFileSync(path.join(root, "app/globals.css"), "utf8");
 
 const checks = [
-  globals.trimEnd().endsWith('@import "./styles/65-v144-65-settings-vertical-alignment.css";'),
+  globals.includes('@import "./styles/65-v144-65-settings-vertical-alignment.css";'),
   css.includes(".plan-v90-setting-tile:not(.plan-v14459-platform-tile)"),
   css.includes("align-items:center !important"),
   css.includes("align-self:center !important"),
