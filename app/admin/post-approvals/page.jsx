@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -83,6 +83,7 @@ function statusMeta(status, t) {
 }
 
 const CAROUSEL_PRODUCT_COUNT = 5;
+const POSTS_PER_PAGE = 15;
 const emptyCarouselProduct = () => ({
   title: "",
   description: "",
@@ -269,6 +270,9 @@ export default function AdminPostApprovalsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [formatFilter, setFormatFilter] = useState("all");
   const [restoringVersionId, setRestoringVersionId] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageInput, setPageInput] = useState("1");
+  const postCopyRef = useRef(null);
 
   const selectedPost = useMemo(
     () => posts.find((post) => post.id === selectedPostId) || null,
@@ -292,6 +296,19 @@ export default function AdminPostApprovalsPage() {
         .some((value) => String(value || "").toLowerCase().includes(query));
     });
   }, [posts, searchQuery, formatFilter]);
+  const totalPages = Math.max(1, Math.ceil(filteredPosts.length / POSTS_PER_PAGE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedPosts = useMemo(
+    () => filteredPosts.slice((currentPage - 1) * POSTS_PER_PAGE, currentPage * POSTS_PER_PAGE),
+    [filteredPosts, currentPage]
+  );
+  const visiblePages = useMemo(() => {
+    const values = new Set([1, totalPages]);
+    for (let value = currentPage - 2; value <= currentPage + 2; value += 1) {
+      if (value >= 1 && value <= totalPages) values.add(value);
+    }
+    return Array.from(values).sort((a, b) => a - b);
+  }, [currentPage, totalPages]);
   const carouselReady =
     isCarouselPost(selectedPost) &&
     materials.length === CAROUSEL_PRODUCT_COUNT &&
@@ -311,6 +328,17 @@ export default function AdminPostApprovalsPage() {
   }).length;
 
   useEffect(() => { loadPosts(); }, [filter]);
+  useEffect(() => { setPage(1); }, [filter, searchQuery, formatFilter]);
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+  useEffect(() => { setPageInput(String(currentPage)); }, [currentPage]);
+  useEffect(() => {
+    const textarea = postCopyRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [postCopy, selectedPostId]);
   useEffect(() => {
     const refresh = () => fetchPosts("", true);
     const intervalId = window.setInterval(refresh, 15000);
@@ -915,7 +943,7 @@ export default function AdminPostApprovalsPage() {
           <div className="admin-empty-state"><FileCheck2 size={28} /><strong>{t("admin.approvals.empty")}</strong></div>
         ) : (
           <section className="admin-v74-approval-table admin-v14370-review-list">
-            {filteredPosts.map((post) => {
+            {paginatedPosts.map((post) => {
               const displayStatus = post.admin_review_status === "approved_by_spreelo"
                 ? "approved_by_spreelo"
                 : post.admin_review_status === "not_required" && post.approval_email_sent_at
@@ -951,6 +979,26 @@ export default function AdminPostApprovalsPage() {
             })}
           </section>
         )}
+
+        {!loading && filteredPosts.length > POSTS_PER_PAGE ? (
+          <nav className="admin-review-pagination" aria-label="Sidnavigering för granskningsinlägg">
+            <button type="button" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft size={16} /> Föregående</button>
+            <div className="admin-review-page-numbers">
+              {visiblePages.map((value, index) => (
+                <span key={value}>
+                  {index > 0 && value - visiblePages[index - 1] > 1 ? <i>…</i> : null}
+                  <button type="button" className={value === currentPage ? "active" : ""} aria-current={value === currentPage ? "page" : undefined} onClick={() => setPage(value)}>{value}</button>
+                </span>
+              ))}
+            </div>
+            <form onSubmit={(event) => { event.preventDefault(); const requested = Math.min(totalPages, Math.max(1, Number.parseInt(pageInput, 10) || 1)); setPage(requested); }}>
+              <label htmlFor="admin-review-page-input">Gå till sida</label>
+              <input id="admin-review-page-input" type="number" min="1" max={totalPages} inputMode="numeric" value={pageInput} onChange={(event) => setPageInput(event.target.value)} />
+              <button type="submit">Gå</button>
+            </form>
+            <button type="button" disabled={currentPage === totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Nästa <ChevronRight size={16} /></button>
+          </nav>
+        ) : null}
 
         {selectedPost ? (
           <div className="admin-v74-detail-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedPostId(""); }}>
@@ -1010,7 +1058,7 @@ export default function AdminPostApprovalsPage() {
                       <div><span>{t("admin.approvals.caption")}</span><strong>{t("admin.approvals.postCopy")}</strong></div>
                       <small>{t("admin.approvals.editCaptionHelp")}</small>
                     </div>
-                    <textarea value={postCopy} onChange={(event) => { setPostCopy(event.target.value); markEditorDirty(); }} placeholder={t("admin.approvals.noContent")} />
+                    <textarea ref={postCopyRef} rows={8} value={postCopy} onChange={(event) => { setPostCopy(event.target.value); markEditorDirty(); }} placeholder={t("admin.approvals.noContent")} />
                   </section>
 
                   {isCarouselPost(selectedPost) ? (

@@ -6,7 +6,7 @@ const globals = await readFile(new URL("app/globals.css", root), "utf8");
 const css = await readFile(new URL("app/styles/62-v144-62-home-detail-polish.css", root), "utf8");
 const home = await readFile(new URL("components/HomeReferenceOverview.jsx", root), "utf8");
 
-assert.ok(globals.trimEnd().endsWith('@import "./styles/62-v144-62-home-detail-polish.css";'));
+assert.ok(globals.includes('@import "./styles/62-v144-62-home-detail-polish.css";'));
 assert.match(home, /href="\/review\?view=history"/);
 assert.doesNotMatch(home, /href="\/calendar"><History/);
 assert.match(css, /--home-plan-accent/);

@@ -1,0 +1,370 @@
+/* v144.63 — stable Home plan rows and a readable responsive admin system. */
+
+/* Home: description height must never move status or action controls. */
+@media (max-width:1450px) {
+  html body .home-reference-plans article {
+    position:relative !important;
+    padding-right:178px !important;
+  }
+
+  html body .home-reference-plans article > div {
+    min-width:0 !important;
+  }
+
+  html body .home-reference-plans article > strong {
+    position:absolute !important;
+    top:15px !important;
+    right:18px !important;
+    width:auto !important;
+    max-width:148px;
+    margin:0 !important;
+    text-align:right !important;
+    white-space:nowrap;
+  }
+
+  html body .home-reference-plans article > strong.is-empty-status {
+    color:#5f6b7d !important;
+    font-size:12px !important;
+    font-weight:750 !important;
+    letter-spacing:0 !important;
+  }
+
+  html body .home-reference-plans article > a,
+  html body .home-reference-plans article > button {
+    position:absolute !important;
+    right:17px !important;
+    bottom:15px !important;
+    margin:0 !important;
+    white-space:nowrap !important;
+  }
+}
+
+@media (max-width:900px) {
+  html body .home-reference-plans article {
+    grid-template-columns:39px minmax(0,1fr) !important;
+    padding-right:12px !important;
+  }
+
+  html body .home-reference-plans article > strong {
+    top:12px !important;
+    right:12px !important;
+    max-width:116px;
+  }
+
+  html body .home-reference-plans article > strong.is-empty-status {
+    font-size:10px !important;
+  }
+
+  html body .home-reference-plans article h3 {
+    padding-right:78px;
+  }
+
+  html body .home-reference-plans article > a,
+  html body .home-reference-plans article > button {
+    right:12px !important;
+    bottom:12px !important;
+  }
+}
+
+/* Shared admin foundation: constrain wide internals instead of shrinking the whole page. */
+html body .content.spreelo-content:has(.admin-page) {
+  min-width:0 !important;
+  overflow-x:hidden !important;
+}
+
+html body .admin-page {
+  box-sizing:border-box;
+  width:100% !important;
+  min-width:0 !important;
+  overflow-x:clip;
+  grid-template-columns:minmax(0,1fr) !important;
+}
+
+html body .admin-page *,
+html body .admin-page *::before,
+html body .admin-page *::after {
+  box-sizing:border-box;
+}
+
+html body .admin-page img,
+html body .admin-page video,
+html body .admin-page canvas,
+html body .admin-page svg {
+  max-width:100%;
+}
+
+html body .admin-page input,
+html body .admin-page select,
+html body .admin-page textarea {
+  max-width:100%;
+  font-size:max(13px,1em);
+}
+
+html body .admin-page p,
+html body .admin-page li,
+html body .admin-page dd,
+html body .admin-page label {
+  font-size:max(12.5px,1em);
+}
+
+html body .admin-page small {
+  font-size:max(11.5px,.86em);
+  line-height:1.45;
+}
+
+html body .admin-page .admin-tool-card p,
+html body .admin-page .admin-panel-copy,
+html body .admin-page .admin-panel-heading p,
+html body .admin-page .admin-hero p {
+  font-size:14px !important;
+  line-height:1.6 !important;
+}
+
+/* "Vad händer i Spreelo" must use the same readable standard as the rest of Admin. */
+html body .admin-insight-metrics span { font-size:12.5px !important; line-height:1.4; }
+html body .admin-insight-card h3 { font-size:14px !important; }
+html body .admin-insight-name strong { font-size:13px !important; }
+html body .admin-insight-name small { margin-top:3px; font-size:12px !important; }
+html body .admin-insight-list b { font-size:13px !important; }
+html body .admin-insight-list b small { font-size:12px !important; line-height:1.4; }
+html body .admin-insight-empty { font-size:13px !important; }
+html body .admin-insight-list a { min-height:44px; padding:8px 9px !important; }
+
+html body .admin-table-wrap,
+html body .admin-econ-table-wrap,
+html body .admin-v140-customer-list {
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  overflow-x:auto;
+  overscroll-behavior-inline:contain;
+  -webkit-overflow-scrolling:touch;
+}
+
+html body .admin-stat-grid,
+html body .admin-tool-grid,
+html body .admin-v74-approval-table,
+html body .admin-v14370-review-list,
+html body .admin-review-pagination,
+html body .admin-v74-approval-row,
+html body .admin-v14370-review-row {
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
+}
+
+html body .admin-stat-card,
+html body .admin-tool-card {
+  min-width:0 !important;
+}
+
+html body .admin-page > .admin-stat-grid,
+html body .admin-page > .admin-tool-grid,
+html body .admin-page > .admin-v74-approval-table,
+html body .admin-page > .admin-v14370-review-list,
+html body .admin-page > .admin-review-pagination,
+html body .admin-page .admin-v74-approval-row,
+html body .admin-page .admin-v14370-review-row {
+  width:auto !important;
+  max-width:100% !important;
+  min-width:0 !important;
+  justify-self:stretch;
+}
+
+/* Review list pagination. */
+html body .admin-review-pagination {
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto auto;
+  align-items:center;
+  gap:12px;
+  padding:14px 16px;
+  border:1px solid #e1e6ed;
+  border-radius:16px;
+  background:#fff;
+  box-shadow:0 8px 24px rgba(20,32,50,.045);
+}
+
+html body .admin-review-pagination button,
+html body .admin-review-pagination input {
+  min-height:40px;
+  border:1px solid #dce2ea;
+  border-radius:10px;
+  background:#fff;
+  color:#334155;
+  font:800 12px/1 inherit;
+}
+
+html body .admin-review-pagination > button {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  padding:0 13px;
+  cursor:pointer;
+}
+
+html body .admin-review-pagination button:disabled { opacity:.42; cursor:not-allowed; }
+html body .admin-review-page-numbers { display:flex; align-items:center; justify-content:center; gap:6px; }
+html body .admin-review-page-numbers > span { display:inline-flex; align-items:center; gap:6px; }
+html body .admin-review-page-numbers i { color:#8b95a5; font-style:normal; }
+html body .admin-review-page-numbers button { width:40px; padding:0; cursor:pointer; }
+html body .admin-review-page-numbers button.active { border-color:#23344d; background:#23344d; color:#fff; }
+html body .admin-review-pagination form { display:flex; align-items:center; gap:7px; }
+html body .admin-review-pagination form label { color:#6b7688; font-size:11px; font-weight:800; white-space:nowrap; }
+html body .admin-review-pagination form input { width:66px; padding:0 8px; text-align:center; }
+html body .admin-review-pagination form button { padding:0 11px; cursor:pointer; }
+
+/* Review copy grows with its complete content; scrolling belongs to the workspace. */
+html body .admin-review-copy-editor textarea {
+  field-sizing:content;
+  height:auto !important;
+  min-height:240px !important;
+  max-height:none !important;
+  overflow:hidden !important;
+  resize:none !important;
+  font-size:15px !important;
+  line-height:1.65 !important;
+}
+
+/* Large tablet and narrow desktop. */
+@media (max-width:1200px) {
+  html body .admin-page { padding:24px !important; gap:20px !important; }
+  html body .admin-stat-grid { grid-template-columns:repeat(3,minmax(0,1fr)) !important; }
+  html body .admin-tool-grid { grid-template-columns:repeat(2,minmax(0,1fr)) !important; }
+  html body .admin-insight-grid { grid-template-columns:repeat(2,minmax(0,1fr)) !important; }
+  html body .admin-format-grid,
+  html body .admin-icon-library-grid,
+  html body .admin-background-grid,
+  html body .music-library-grid { grid-template-columns:repeat(2,minmax(0,1fr)) !important; }
+  html body .admin-review-pagination { grid-template-columns:auto minmax(0,1fr) auto; }
+  html body .admin-review-pagination form { grid-column:1 / -1; justify-content:center; }
+}
+
+/* Tablet: all compound headers/forms stack or wrap before they can force page width. */
+@media (max-width:900px) {
+  html body .admin-page { padding:20px !important; gap:18px !important; }
+  html body .admin-page .admin-hero { align-items:flex-start !important; flex-direction:column !important; gap:18px !important; padding:24px !important; }
+  html body .admin-page .admin-hero > div,
+  html body .admin-page .admin-hero-badge { width:100% !important; min-width:0 !important; }
+  html body .admin-stat-grid { grid-template-columns:repeat(2,minmax(0,1fr)) !important; }
+  html body .admin-tool-grid,
+  html body .admin-credit-layout,
+  html body .admin-insight-grid,
+  html body .admin-format-grid,
+  html body .admin-icon-library-grid,
+  html body .admin-background-grid,
+  html body .music-library-grid,
+  html body .admin-econ-summary-grid,
+  html body .admin-v140-two-column,
+  html body .admin-v140-brand-grid,
+  html body .music-library-workspace,
+  html body .music-edit-grid,
+  html body .admin-econ-modal-grid { grid-template-columns:1fr !important; }
+  html body .admin-insight-metrics { grid-template-columns:repeat(2,minmax(0,1fr)) !important; }
+  html body .admin-panel-heading,
+  html body .admin-translation-actions,
+  html body .admin-econ-reference-panel,
+  html body .admin-v140-controls,
+  html body .admin-v14401-toolbar { flex-wrap:wrap !important; }
+  html body .admin-search-form,
+  html body .admin-adjust-form,
+  html body .admin-v140-controls,
+  html body .admin-v14401-toolbar { grid-template-columns:1fr !important; }
+  html body .admin-v140-toolbar,
+  html body .admin-v140-filter-row,
+  html body .admin-v140-tabs,
+  html body .music-library-toolbar,
+  html body .music-library-filter-row,
+  html body .music-field-row,
+  html body .admin-econ-toolbar,
+  html body .admin-econ-bulk,
+  html body .admin-format-actions,
+  html body .admin-icon-actions { flex-wrap:wrap !important; }
+  html body .admin-format-fields,
+  html body .admin-product-manual-fields { grid-template-columns:1fr !important; }
+  html body .admin-econ-search { min-width:0 !important; width:100%; }
+  html body .admin-econ-table { min-width:1180px; }
+  html body .admin-v140-customer-head,
+  html body .admin-v140-customer-row { min-width:780px; }
+
+  html body .admin-v14401-workbench .admin-v14370-review-row {
+    grid-template-columns:auto 54px minmax(0,1fr) auto !important;
+    gap:10px !important;
+  }
+  html body .admin-v14401-workbench .admin-v14370-review-time,
+  html body .admin-v14401-workbench .admin-v14412-review-cost { display:none !important; }
+
+  html body .admin-v74-detail-modal {
+    width:100vw !important;
+    max-width:none !important;
+    height:100dvh !important;
+    max-height:none !important;
+    border-radius:0 !important;
+  }
+  html body .admin-v74-detail-body { display:block !important; overflow-y:auto !important; }
+  html body .admin-v74-detail-meta { position:relative !important; top:auto !important; max-height:none !important; border-left:0 !important; border-top:1px solid #e2e7ee !important; }
+  html body .admin-review-title-row { flex-direction:column; }
+  html body .admin-review-title-actions { width:100%; flex-wrap:wrap; }
+  html body .admin-review-quality-strip { grid-template-columns:repeat(2,minmax(0,1fr)) !important; }
+  html body .admin-review-slide-grid { grid-template-columns:repeat(2,minmax(0,1fr)) !important; }
+  html body .admin-review-product-grid > article,
+  html body .admin-review-single-product-editor { grid-template-columns:1fr !important; }
+  html body .admin-review-actionbar { position:relative !important; flex-wrap:wrap !important; }
+  html body .admin-review-actionbar > div { flex:1 1 100%; flex-wrap:wrap; }
+}
+
+/* Mobile admin. */
+@media (max-width:600px) {
+  html body .admin-page { padding:14px !important; gap:14px !important; }
+  html body .admin-page .admin-hero,
+  html body .admin-page .admin-panel,
+  html body .admin-page .admin-loading-card { padding:18px !important; border-radius:16px !important; }
+  html body .admin-page .admin-hero h1 { font-size:clamp(28px,9vw,38px) !important; line-height:1.08; overflow-wrap:anywhere; }
+  html body .admin-page .admin-hero p { font-size:14px !important; }
+  html body .admin-stat-grid { grid-template-columns:1fr 1fr !important; gap:10px !important; }
+  html body .admin-stat-card { min-height:122px !important; padding:15px !important; }
+  html body .admin-stat-card strong { margin-top:13px !important; font-size:27px !important; }
+  html body .admin-tool-card { grid-template-columns:42px minmax(0,1fr) !important; gap:13px !important; padding:18px !important; }
+  html body .admin-tool-card > strong { grid-column:2 !important; }
+  html body .admin-insight-metrics { grid-template-columns:1fr 1fr !important; }
+  html body .admin-insight-grid { grid-template-columns:1fr !important; }
+  html body .admin-panel-heading { align-items:flex-start !important; flex-direction:column !important; }
+  html body .admin-panel-heading > * { max-width:100%; }
+
+  html body .admin-v14401-workbench .admin-v14370-review-row {
+    grid-template-columns:38px minmax(0,1fr) auto !important;
+    padding:12px !important;
+  }
+  html body .admin-v14401-workbench .admin-v14370-review-row > input { grid-column:1; grid-row:1; }
+  html body .admin-v14401-workbench .admin-v14370-review-thumb { grid-column:1; grid-row:2; width:38px !important; height:38px !important; }
+  html body .admin-v14401-workbench .admin-v14370-review-main { grid-column:2 / -1; grid-row:1 / 3; }
+  html body .admin-v14401-workbench .admin-approval-status { grid-column:2; grid-row:3; justify-self:start; }
+  html body .admin-v14401-workbench .admin-v14370-review-open { grid-column:3; grid-row:3; }
+
+  html body .admin-review-quality-strip { grid-template-columns:1fr !important; }
+  html body .admin-review-slide-grid { grid-template-columns:1fr !important; }
+  html body .admin-review-workspace-main { padding:14px !important; }
+  html body .admin-review-media-section,
+  html body .admin-review-copy-editor,
+  html body .admin-review-single-product,
+  html body .admin-review-product-workspace { padding:14px !important; border-radius:14px !important; }
+  html body .admin-review-copy-editor textarea { min-height:220px !important; font-size:15px !important; }
+  html body .admin-review-actionbar { display:grid !important; grid-template-columns:1fr !important; padding:12px !important; }
+  html body .admin-review-actionbar > div { display:grid !important; grid-template-columns:1fr 1fr; width:100%; }
+  html body .admin-review-actionbar button { width:100%; min-height:46px; }
+
+  html body .admin-review-pagination { grid-template-columns:1fr 1fr; gap:9px; padding:12px; }
+  html body .admin-review-pagination > button { width:100%; }
+  html body .admin-review-page-numbers { grid-column:1 / -1; grid-row:1; flex-wrap:wrap; }
+  html body .admin-review-pagination form { grid-column:1 / -1; grid-row:3; flex-wrap:wrap; }
+  html body .admin-review-pagination form label { flex:1 1 100%; text-align:center; }
+
+  html body .admin-table { min-width:680px; }
+  html body .admin-page button,
+  html body .admin-page a.admin-primary-button { min-height:42px; }
+}
+
+@media (max-width:380px) {
+  html body .admin-stat-grid,
+  html body .admin-insight-metrics { grid-template-columns:1fr !important; }
+}

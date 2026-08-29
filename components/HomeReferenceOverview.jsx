@@ -128,7 +128,7 @@ export default function HomeReferenceOverview({
       <div className="home-reference-workspace">
         <section className="home-reference-plans">
           <header><h2>Innehållsplaner</h2></header>
-          <article className="recurring"><RefreshCw /><div><h3>Återkommande scheman</h3><p>Veckoscheman som fortsätter skapa innehåll tills du pausar eller avslutar dem.</p></div><strong>{recurringCount}</strong><span>{recurringCount ? "Aktiva" : "Inga aktiva"}</span>{recurringCount ? <button type="button" className={`home-reference-manage-link${showRecurringSchedules ? " open" : ""}`} onClick={() => setShowRecurringSchedules((current) => !current)}>{showRecurringSchedules ? "Dölj scheman" : "Hantera scheman"}<ChevronDown /></button> : <a href="/automation">Skapa schema<ArrowRight /></a>}</article>
+          <article className="recurring"><RefreshCw /><div><h3>Återkommande scheman</h3><p>Veckoscheman som fortsätter skapa innehåll tills du pausar eller avslutar dem.</p></div><strong className={recurringCount ? "" : "is-empty-status"}>{recurringCount || "Inga aktiva"}</strong>{recurringCount ? <button type="button" className={`home-reference-manage-link${showRecurringSchedules ? " open" : ""}`} onClick={() => setShowRecurringSchedules((current) => !current)}>{showRecurringSchedules ? "Dölj scheman" : "Hantera scheman"}<ChevronDown /></button> : <a href="/automation">Skapa schema<ArrowRight /></a>}</article>
 
           {recurringCount > 0 && showRecurringSchedules ? (
             <div className="home-reference-recurring-manager home-reference-plan-manager recurring-manager">
@@ -189,7 +189,7 @@ export default function HomeReferenceOverview({
             </div>
           ) : null}
 
-          <article className="scheduled"><CalendarDays /><div><h3>Planerade inlägg</h3><p>Engångsinlägg som ska skapas eller publiceras vid ett bestämt datum.</p></div><strong>{scheduledCount}</strong><span>{scheduledCount ? "Planerade" : "Inget planerat"}</span>{scheduledCount ? <button type="button" className={`home-reference-manage-link${showScheduledItems ? " open" : ""}`} onClick={() => setShowScheduledItems((current) => !current)}>{showScheduledItems ? "Dölj inlägg" : "Visa inlägg"}<ChevronDown /></button> : <a href="/automation">Planera inlägg<ArrowRight /></a>}</article>
+          <article className="scheduled"><CalendarDays /><div><h3>Planerade inlägg</h3><p>Engångsinlägg som ska skapas eller publiceras vid ett bestämt datum.</p></div><strong className={scheduledCount ? "" : "is-empty-status"}>{scheduledCount || "Inget planerat"}</strong>{scheduledCount ? <button type="button" className={`home-reference-manage-link${showScheduledItems ? " open" : ""}`} onClick={() => setShowScheduledItems((current) => !current)}>{showScheduledItems ? "Dölj inlägg" : "Visa inlägg"}<ChevronDown /></button> : <a href="/automation">Planera inlägg<ArrowRight /></a>}</article>
 
           {scheduledCount > 0 && showScheduledItems ? (
             <div className="home-reference-recurring-manager home-reference-plan-manager scheduled-manager">
@@ -243,7 +243,7 @@ export default function HomeReferenceOverview({
             </div>
           ) : null}
 
-          <article className="campaign"><Gift /><div><h3>Kalenderkampanjer</h3><p>Aktiva kampanjplaner som skapats från din AI-kalender.</p></div><strong>{campaignCount}</strong><span>{campaignCount ? "Aktiva" : "Inga aktiva"}</span>{campaignCount ? <button type="button" className={`home-reference-manage-link${showCampaignSchedules ? " open" : ""}`} onClick={() => setShowCampaignSchedules((current) => !current)}>{showCampaignSchedules ? "Dölj kampanjer" : "Hantera kampanjer"}<ChevronDown /></button> : <a href="/calendar">Skapa kampanj<ArrowRight /></a>}</article>
+          <article className="campaign"><Gift /><div><h3>Kalenderkampanjer</h3><p>Aktiva kampanjplaner som skapats från din AI-kalender.</p></div><strong className={campaignCount ? "" : "is-empty-status"}>{campaignCount || "Inga aktiva"}</strong>{campaignCount ? <button type="button" className={`home-reference-manage-link${showCampaignSchedules ? " open" : ""}`} onClick={() => setShowCampaignSchedules((current) => !current)}>{showCampaignSchedules ? "Dölj kampanjer" : "Hantera kampanjer"}<ChevronDown /></button> : <a href="/calendar">Skapa kampanj<ArrowRight /></a>}</article>
 
           {campaignCount > 0 && showCampaignSchedules ? (
             <div className="home-reference-recurring-manager home-reference-plan-manager campaign-manager">
