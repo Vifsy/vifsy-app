@@ -11280,6 +11280,10 @@ function blockFormatCardClickAfterDrag(event) {
                                 <span className="plan-v100-campaign-icon"><Tag size={11} /></span>
                               ) : null}
                             </span>
+                            <small className="plan-v14472-visual-credit">
+                              <strong>{isPastCampaignSlot ? 0 : getCurrentCreditCost(slot)}</strong>
+                              <span>{t("automation.credits")}</span>
+                            </small>
                           </div>
                           <div className="plan-v70-planned-date">
                             <strong><CalendarDays size={17} aria-hidden="true" />{formatStartDateLabel(slot.startDate, timeZone, locale)}</strong>
@@ -11321,21 +11325,6 @@ function blockFormatCardClickAfterDrag(event) {
                             ) : (
                               <span>{platformLabel}</span>
                             )}
-                          </div>
-                          <div className="plan-v14470-planned-meta">
-                            <div className="plan-v70-planned-format plan-v143-planned-purpose">
-                              <strong><Target size={16} aria-hidden="true" />{getCustomerSlotMarketingPurpose(slot)}</strong>
-                            </div>
-                            <div className="plan-v143-planned-cost">
-                              {isPastCampaignSlot
-                                ? <strong className="skipped-credit"><CreditCard size={16} aria-hidden="true" />0 {t("automation.credits")}</strong>
-                                : <strong><CreditCard size={16} aria-hidden="true" />{getCurrentSlotCreditLabel(slot)}</strong>}
-                            </div>
-                            <div className="plan-v14467-platform-count">
-                              <strong>{slotPlatformOptions.length} {locale.startsWith("sv")
-                                ? (slotPlatformOptions.length === 1 ? "plattform" : "plattformar")
-                                : (slotPlatformOptions.length === 1 ? "platform" : "platforms")}</strong>
-                            </div>
                           </div>
                           <button
                             type="button"
