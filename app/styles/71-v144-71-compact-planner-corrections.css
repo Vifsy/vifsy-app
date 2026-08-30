@@ -1,0 +1,243 @@
+/* v144.71 — compact planned posts and final written-brief corrections */
+
+/* The expanded guide must always have an obvious close control and breathing room below. */
+html body .automation-page.plan-v70-active .plan-v89-guide-banner {
+  position: relative !important;
+  margin-bottom: 22px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v89-guide-collapse {
+  position: absolute !important;
+  top: 12px !important;
+  right: 12px !important;
+  z-index: 20 !important;
+  display: grid !important;
+  place-items: center !important;
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  min-height: 34px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 1px solid #dce3ec !important;
+  border-radius: 10px !important;
+  color: #17243b !important;
+  background: rgba(255,255,255,.96) !important;
+  box-shadow: 0 5px 14px rgba(24,35,54,.08) !important;
+  transform: rotate(180deg) !important;
+}
+
+/* Start date: identical field treatment to the other choices. */
+html body .automation-page.plan-v70-active .plan-v14341-date-tile .custom-picker-field,
+html body .automation-page.plan-v70-active .plan-v14341-date-tile .custom-picker-anchor {
+  width: 100% !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14341-date-tile .plan-v143-date-time-row {
+  width: 100% !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14341-date-tile .custom-picker-button {
+  justify-content: flex-start !important;
+  padding: 0 14px !important;
+  border: 1px solid #dbe3ec !important;
+  border-radius: 11px !important;
+  color: #18243a !important;
+  background: #fffaf7 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14341-date-tile .custom-picker-button > span {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  text-align: left !important;
+}
+
+/* Weekly rhythm: retain only the rounded purple outer edge. */
+html body .automation-page.plan-v70-active .plan-v14467-week-visual {
+  display: none !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14467-week-content {
+  display: grid !important;
+  justify-items: stretch !important;
+  width: 100% !important;
+  margin-left: 0 !important;
+  padding: 22px 28px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-rhythm-head,
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-rhythm-note,
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-days {
+  width: 100% !important;
+  max-width: 980px !important;
+  margin-inline: auto !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-days {
+  grid-template-columns: repeat(7, minmax(58px, 84px)) !important;
+  justify-content: center !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-day {
+  grid-template-rows: 16px 1px 18px !important;
+  gap: 4px !important;
+  min-height: 58px !important;
+  height: 58px !important;
+  padding: 7px 4px !important;
+  border-radius: 10px !important;
+}
+
+/* Content types is an optional adjustment after the already planned posts. */
+html body .automation-page.plan-v70-active .plan-v70-planned-card { order: 5 !important; }
+html body .automation-page.plan-v70-active .plan-v70-formats-card { order: 6 !important; }
+html body .automation-page.plan-v70-active .plan-v107-bottom-grid { order: 7 !important; }
+
+/* Planned cards: content determines height; no empty flexible row remains below channels. */
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-row {
+  grid-template-rows: auto auto auto auto !important;
+  align-content: start !important;
+  min-height: 0 !important;
+  height: auto !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v86-planned-visual {
+  min-height: 0 !important;
+  height: 100% !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-date {
+  padding: 11px 70px 0 26px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v14457-daypart {
+  margin-top: 2px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-post {
+  padding: 5px 26px 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-post > div > span {
+  margin-top: 2px !important;
+  font-size: 13.5px !important;
+  line-height: 1.4 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-channel {
+  padding: 5px 26px 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v74-channel-chip {
+  min-height: 28px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14470-planned-meta {
+  align-self: start !important;
+  padding: 5px 26px 7px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14470-planned-meta > div,
+html body .automation-page.plan-v70-active .plan-v14470-planned-meta > div > strong {
+  height: 30px !important;
+  min-height: 30px !important;
+}
+
+html body .automation-page.plan-v70-active article.plan-v70-planned-row > button.plan-v70-row-menu {
+  position: absolute !important;
+  top: 14px !important;
+  right: 14px !important;
+  bottom: auto !important;
+  left: auto !important;
+  grid-area: unset !important;
+  align-self: auto !important;
+  justify-self: auto !important;
+  width: 38px !important;
+  height: 38px !important;
+  min-width: 38px !important;
+  min-height: 38px !important;
+  margin: 0 !important;
+  transform: none !important;
+}
+
+@media (min-width: 761px) and (max-width: 1180px) {
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-row {
+    min-height: 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v86-planned-visual {
+    min-height: 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14470-planned-meta {
+    padding-top: 5px !important;
+    padding-bottom: 8px !important;
+  }
+}
+
+@media (max-width: 760px) {
+  html body .automation-page.plan-v70-active .plan-v89-guide-banner {
+    margin-bottom: 18px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-guide-collapse {
+    top: 8px !important;
+    right: 8px !important;
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    min-height: 30px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14341-date-tile .custom-picker-button > span {
+    font-size: 11px !important;
+    font-weight: 600 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-week-content {
+    margin-left: 0 !important;
+    padding: 16px 10px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-days {
+    grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+    gap: 4px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-day {
+    grid-template-rows: 14px 1px 17px !important;
+    gap: 3px !important;
+    min-height: 52px !important;
+    height: 52px !important;
+    padding: 6px 2px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-row {
+    min-height: 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v86-planned-visual {
+    min-height: 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-date {
+    padding: 8px 46px 0 12px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-post {
+    padding: 4px 12px 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-planned-channel {
+    padding: 4px 12px 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14470-planned-meta {
+    padding: 4px 12px 7px !important;
+  }
+  html body .automation-page.plan-v70-active article.plan-v70-planned-row > button.plan-v70-row-menu {
+    top: 9px !important;
+    right: 9px !important;
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+    min-height: 34px !important;
+  }
+}

@@ -6667,7 +6667,14 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
             platformCapabilities: runtimePlatformCapabilities,
           })
         : [];
-      const nextVariant = variants.length > 1 ? variants[1] : null;
+      // The recurring runner uses history_balanced selection:
+      // (cycle * slotCount + slotIndex) % variants.length.
+      // Mirror its next-cycle (cycle 1) index here so the displayed credit
+      // total is calculated from the exact variants that will be charged.
+      const nextVariantIndex = variants.length
+        ? (slots.length + slotIndex) % variants.length
+        : -1;
+      const nextVariant = nextVariantIndex >= 0 ? variants[nextVariantIndex] : null;
 
       return {
         contentTypeId: nextVariant?.contentTypeId || slot.contentTypeId,
@@ -10882,8 +10889,8 @@ function blockFormatCardClickAfterDrag(event) {
                   <div>
                     <h2>{t("automation.redesign.contentTypesTitleV2")}</h2>
                     <p>{locale.startsWith("sv")
-                      ? "Din plan innehåller format som passar företagets mål och kan justeras när du vill."
-                      : "Your plan includes formats suited to your goals and can be adjusted at any time."}</p>
+                      ? "Planen är redan optimerad med den innehållsmix som passar ditt mål bäst. Här kan du vid behov lägga till eller byta ut format i den befintliga planen."
+                      : "Your plan is already optimized with the content mix best suited to your goal. Use this section only if you want to add or replace formats in the existing plan."}</p>
                   </div>
                 </div>
 
@@ -10925,7 +10932,7 @@ function blockFormatCardClickAfterDrag(event) {
                   <span><LayoutGrid size={18} aria-hidden="true" /></span>
                   <span>
                     <strong>{locale.startsWith("sv") ? `${exploreFormatItems.length} tillgängliga format` : `${exploreFormatItems.length} available formats`}</strong>
-                    <small>{locale.startsWith("sv") ? "Visa och välj bland alla innehållsformat" : "View and choose from every content format"}</small>
+                    <small>{locale.startsWith("sv") ? "Valfritt: lägg till eller byt format i den optimerade planen" : "Optional: add or replace formats in the optimized plan"}</small>
                   </span>
                   <ChevronRight size={18} aria-hidden="true" />
                 </button>
