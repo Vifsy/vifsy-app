@@ -1,7 +1,27 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarClock, Check, CreditCard, Crown, ExternalLink, Leaf, LoaderCircle, Plus, Rocket, ShieldCheck, Sparkles, XCircle } from "lucide-react";
+import {
+  CalendarClock,
+  CalendarDays,
+  Check,
+  Clapperboard,
+  Coins,
+  CreditCard,
+  Crown,
+  ExternalLink,
+  GalleryHorizontalEnd,
+  Layers,
+  Leaf,
+  LoaderCircle,
+  Megaphone,
+  Plus,
+  RefreshCw,
+  Rocket,
+  ShieldCheck,
+  Sparkles,
+  XCircle,
+} from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useUiText } from "../lib/i18n/useUiText";
 
@@ -236,20 +256,16 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
   return (
     <section id="spreelo-plans" className="stripe-reference-billing">
       <div className="stripe-reference-controls">
-        <div className="stripe-reference-status">
-          <span className={hasStripeSubscription ? "active" : ""} />
-          <div><small>{t("billing.subscriptionStatus")}</small><strong>{loading ? t("billing.loading") : statusLabel}</strong></div>
-        </div>
         <div className="stripe-reference-interval" role="group" aria-label={t("billing.billingPeriod")}>
-          <button type="button" className={interval === "month" ? "active" : ""} onClick={() => { setIntervalTouched(true); setInterval("month"); }}>{t("billing.monthly")}</button>
-          <button type="button" className={interval === "year" ? "active" : ""} onClick={() => { setIntervalTouched(true); setInterval("year"); }}>{t("billing.yearly")}<span>{t("billing.twoMonthsFree")}</span></button>
-        </div>
-        {hasStripeSubscription ? (
-          <button type="button" className="stripe-reference-cancel" disabled={Boolean(busyAction)} onClick={() => toggleCancellation(cancelScheduled)}>
-            {busyAction ? <LoaderCircle className="billing-spin" size={14} /> : cancelScheduled ? <ShieldCheck size={14} /> : <XCircle size={14} />}
-            {cancelScheduled ? t("billing.keepSubscription") : t("billing.cancelSubscription")}
+          <button type="button" className={interval === "month" ? "active" : ""} onClick={() => { setIntervalTouched(true); setInterval("month"); }}>
+            <strong>{t("billing.monthly")}</strong>
+            <small>{t("billing.priceBilledMonthly")}</small>
           </button>
-        ) : null}
+          <button type="button" className={interval === "year" ? "active" : ""} onClick={() => { setIntervalTouched(true); setInterval("year"); }}>
+            <strong>{t("billing.yearly")} <span>{t("billing.twoMonthsFree")}</span></strong>
+            <small>{t("billing.priceBilledYearly")}</small>
+          </button>
+        </div>
       </div>
       {billing?.pending_subscription_plan ? (
         <div className="stripe-reference-notice"><CalendarClock size={16} /><span>{t("billing.pendingPlanText", { plan: String(billing.pending_subscription_plan).replace(/^./, (c) => c.toUpperCase()), date: formatDate(billing?.pending_subscription_effective_at) || "—" })}</span></div>
@@ -304,12 +320,34 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
           <a href="#spreelo-credit-info">{t("billing.learnMoreCredits")} →</a>
         </aside>
       </div>
-      <div className="stripe-reference-benefits"><span><Check />{t("billing.includedAllPlans")}</span><span>{t("billing.allContentTypes")}</span><span>{t("billing.aiImages")}</span><span>{t("billing.aiVideoReels")}</span><span>{t("billing.campaignsIncluded")}</span><span>{t("billing.automaticPublishing")}</span></div>
+      <div className="stripe-reference-benefits">
+        <span><Check />{t("billing.includedAllPlans")}</span>
+        <span><Layers />{t("billing.allContentTypes")}</span>
+        <span><GalleryHorizontalEnd />{t("billing.aiImages")}</span>
+        <span><Clapperboard />{t("billing.aiVideoReels")}</span>
+        <span><Megaphone />{t("billing.campaignsIncluded")}</span>
+        <span><CalendarDays />{t("billing.automaticPublishing")}</span>
+      </div>
       <section id="spreelo-credit-info" className="stripe-reference-credit-info">
-        <header><Sparkles /><div><h2>{t("billing.howCreditsWorkTitle")}</h2><p>{t("billing.howCreditsWorkText")}</p></div></header>
-        <div><article><strong>{t("billing.creditInfoRefreshTitle")}</strong><span>{t("billing.creditInfoRefreshText")}</span></article><article><strong>{t("billing.creditInfoPurchasedTitle")}</strong><span>{t("billing.creditInfoPurchasedText")}</span></article><article><strong>{t("billing.creditInfoUsageTitle")}</strong><span>{t("billing.creditInfoUsageText")}</span></article></div>
+        <header><span className="credit-info-main-icon"><Sparkles /></span><div><h2>{t("billing.howCreditsWorkTitle")}</h2><p>{t("billing.howCreditsWorkText")}</p></div></header>
+        <div>
+          <article><span className="credit-info-icon"><RefreshCw /></span><div><strong>{t("billing.creditInfoRefreshTitle")}</strong><span>{t("billing.creditInfoRefreshText")}</span></div></article>
+          <article><span className="credit-info-icon"><Coins /></span><div><strong>{t("billing.creditInfoPurchasedTitle")}</strong><span>{t("billing.creditInfoPurchasedText")}</span></div></article>
+          <article><span className="credit-info-icon"><ShieldCheck /></span><div><strong>{t("billing.creditInfoUsageTitle")}</strong><span>{t("billing.creditInfoUsageText")}</span></div></article>
+        </div>
       </section>
-      <p className="stripe-reference-footnote">{interval === "year" ? t("billing.plansRenewYearly") : t("billing.plansRenewMonthly")}</p>
+      <div className="stripe-reference-footer-row">
+        <p className="stripe-reference-footnote">{interval === "year" ? t("billing.plansRenewYearly") : t("billing.plansRenewMonthly")}</p>
+        {hasStripeSubscription ? (
+          <div className="stripe-reference-account-actions">
+            <span className="stripe-reference-status"><i className={hasStripeSubscription ? "active" : ""} /><small>{t("billing.subscriptionStatus")}</small><strong>{loading ? t("billing.loading") : statusLabel}</strong></span>
+            <button type="button" className="stripe-reference-cancel" disabled={Boolean(busyAction)} onClick={() => toggleCancellation(cancelScheduled)}>
+              {busyAction ? <LoaderCircle className="billing-spin" size={14} /> : cancelScheduled ? <ShieldCheck size={14} /> : <XCircle size={14} />}
+              {cancelScheduled ? t("billing.keepSubscription") : t("billing.cancelSubscription")}
+            </button>
+          </div>
+        ) : null}
+      </div>
       {message ? <p className="stripe-billing-message">{message}</p> : null}
       {paymentLink ? <a className="stripe-billing-payment-link" href={paymentLink} target="_blank" rel="noreferrer">{t("billing.openPayment")} <ExternalLink /></a> : null}
     </section>

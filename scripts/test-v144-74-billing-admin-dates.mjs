@@ -26,6 +26,6 @@ assert((automation.match(/!canManuallyEditCampaignPlan && isSlotScheduledInPast/
 
 assert(css.includes('.stripe-reference-interval') && css.includes('grid-template-columns:repeat(3,minmax(0,1fr))'), "reference plan-card layout is missing");
 assert(css.includes('.stripe-reference-plan.current > header') && css.includes('#ff5b38'), "current Pro-style treatment is missing");
-assert(globals.trimEnd().endsWith('@import "./styles/74-v144-74-billing-admin-dates.css";'), "v144.74 must be the final stylesheet");
+assert(globals.includes('@import "./styles/74-v144-74-billing-admin-dates.css";'), "v144.74 stylesheet must remain loaded before later refinements");
 
 console.log("v144.74 billing, proration, admin dates and plan-card checks passed.");

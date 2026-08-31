@@ -1,0 +1,673 @@
+/* v144.75 — final desktop billing reference match.
+   Reference: equal-width plan cards, soft Spreelo palette, centered cadence control,
+   extra-credit side rail, navy included-benefits rail, light credit explainer. */
+
+html body .settings-reference-page > .stripe-reference-billing {
+  margin-top:22px !important;
+  color:#101d30 !important;
+}
+
+/* Center billing cadence over the three plan cards, not over the extra-credit rail. */
+html body .settings-reference-page .stripe-reference-controls {
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) 245px !important;
+  align-items:center !important;
+  gap:24px !important;
+  margin:0 0 18px !important;
+}
+
+html body .settings-reference-page .stripe-reference-interval {
+  grid-column:1 !important;
+  justify-self:center !important;
+  display:grid !important;
+  grid-template-columns:1fr 1fr !important;
+  width:390px !important;
+  min-height:66px !important;
+  gap:4px !important;
+  padding:5px !important;
+  border:1px solid #dfe5ec !important;
+  border-radius:14px !important;
+  background:#fff !important;
+  box-shadow:0 6px 16px rgba(15,35,58,.045) !important;
+}
+
+html body .settings-reference-page .stripe-reference-interval button {
+  display:grid !important;
+  place-content:center !important;
+  gap:3px !important;
+  min-width:0 !important;
+  min-height:54px !important;
+  padding:6px 12px !important;
+  border:0 !important;
+  border-radius:10px !important;
+  color:#1b2a40 !important;
+  background:transparent !important;
+  font:inherit !important;
+  text-align:center !important;
+  cursor:pointer !important;
+  box-shadow:none !important;
+}
+
+html body .settings-reference-page .stripe-reference-interval button strong {
+  display:block !important;
+  color:inherit !important;
+  font-size:12px !important;
+  line-height:1.15 !important;
+  font-weight:800 !important;
+}
+
+html body .settings-reference-page .stripe-reference-interval button small {
+  display:block !important;
+  color:#718095 !important;
+  font-size:9.5px !important;
+  line-height:1.2 !important;
+  font-weight:500 !important;
+}
+
+html body .settings-reference-page .stripe-reference-interval button.active {
+  color:#fff !important;
+  background:#061a2e !important;
+  box-shadow:0 5px 12px rgba(6,26,46,.15) !important;
+}
+
+html body .settings-reference-page .stripe-reference-interval button.active small {
+  color:#d3dee8 !important;
+}
+
+html body .settings-reference-page .stripe-reference-interval button span {
+  display:inline-flex !important;
+  align-items:center !important;
+  margin-left:5px !important;
+  padding:2px 6px !important;
+  border-radius:999px !important;
+  color:#258a50 !important;
+  background:#e7f7eb !important;
+  font-size:8.5px !important;
+  line-height:1.2 !important;
+  font-weight:800 !important;
+  vertical-align:1px !important;
+}
+
+html body .settings-reference-page .stripe-reference-interval button.active span {
+  color:#248349 !important;
+  background:#dff4e5 !important;
+}
+
+html body .settings-reference-page .stripe-reference-notice {
+  margin:0 0 16px !important;
+  border-color:#eadff8 !important;
+  background:#faf8fe !important;
+}
+
+/* Pricing row: three equal plan cards + narrower extra-credit rail. */
+html body .settings-reference-page .stripe-reference-layout {
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) 245px !important;
+  gap:24px !important;
+  align-items:stretch !important;
+}
+
+html body .settings-reference-page .stripe-reference-table {
+  display:grid !important;
+  grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+  gap:16px !important;
+  border:0 !important;
+  background:transparent !important;
+  min-width:0 !important;
+}
+
+html body .settings-reference-page .stripe-reference-plan {
+  display:grid !important;
+  grid-template-rows:72px 86px minmax(126px,1fr) 64px 62px !important;
+  min-width:0 !important;
+  min-height:430px !important;
+  overflow:hidden !important;
+  border:1px solid #dfe5eb !important;
+  border-radius:16px !important;
+  background:#fff !important;
+  box-shadow:0 8px 22px rgba(13,29,48,.055) !important;
+}
+
+html body .settings-reference-page .stripe-reference-plan.current {
+  order:0 !important;
+  border-color:#f1bdaF !important;
+  background:linear-gradient(180deg,#fff8f5 0%,#fffdfc 100%) !important;
+  box-shadow:0 8px 22px rgba(117,52,34,.065) !important;
+}
+
+html body .settings-reference-page .stripe-reference-plan > header {
+  display:flex !important;
+  align-items:center !important;
+  justify-content:space-between !important;
+  gap:12px !important;
+  min-height:72px !important;
+  padding:12px 18px !important;
+  border-bottom:0 !important;
+  color:#101d30 !important;
+  background:#fff !important;
+}
+
+html body .settings-reference-page .stripe-reference-plan.plan-starter > header {
+  background:linear-gradient(180deg,#f7fbff 0%,#fff 100%) !important;
+}
+html body .settings-reference-page .stripe-reference-plan.plan-growth > header {
+  background:linear-gradient(180deg,#f5fbf6 0%,#fff 100%) !important;
+}
+html body .settings-reference-page .stripe-reference-plan.plan-pro > header,
+html body .settings-reference-page .stripe-reference-plan.current > header {
+  color:#101d30 !important;
+  background:linear-gradient(180deg,#fff5f0 0%,#fffaf8 100%) !important;
+}
+
+html body .settings-reference-page .stripe-reference-plan-title {
+  display:flex !important;
+  align-items:center !important;
+  gap:11px !important;
+  min-width:0 !important;
+}
+
+html body .settings-reference-page .stripe-reference-plan-title .plan-icon {
+  flex:0 0 auto !important;
+  display:grid !important;
+  place-items:center !important;
+  width:38px !important;
+  height:38px !important;
+  border-radius:11px !important;
+}
+html body .settings-reference-page .stripe-reference-plan-title .plan-icon svg {
+  width:21px !important;
+  height:21px !important;
+  stroke-width:2 !important;
+}
+html body .settings-reference-page .stripe-reference-plan.plan-starter .plan-icon { color:#2584f4 !important; background:#edf6ff !important; }
+html body .settings-reference-page .stripe-reference-plan.plan-growth .plan-icon { color:#1faf60 !important; background:#ebf8ee !important; }
+html body .settings-reference-page .stripe-reference-plan.plan-pro .plan-icon { color:#ff6544 !important; background:#fff0e9 !important; }
+
+html body .settings-reference-page .stripe-reference-plan > header h2,
+html body .settings-reference-page .stripe-reference-plan.current > header h2 {
+  margin:0 0 3px !important;
+  color:#101d30 !important;
+  font-size:17px !important;
+  line-height:1.1 !important;
+  letter-spacing:-.015em !important;
+}
+html body .settings-reference-page .stripe-reference-plan > header small,
+html body .settings-reference-page .stripe-reference-plan.current > header small {
+  display:block !important;
+  color:#68778d !important;
+  font-size:10.5px !important;
+  line-height:1.25 !important;
+}
+html body .settings-reference-page .stripe-reference-plan > header > span,
+html body .settings-reference-page .stripe-reference-plan.current > header > span {
+  flex:0 0 auto !important;
+  padding:5px 9px !important;
+  border:0 !important;
+  border-radius:999px !important;
+  color:#ef5837 !important;
+  background:#fff0ea !important;
+  font-size:9px !important;
+  line-height:1.1 !important;
+  font-weight:800 !important;
+}
+
+html body .settings-reference-page .stripe-reference-plan .price {
+  display:flex !important;
+  flex-wrap:wrap !important;
+  align-content:center !important;
+  align-items:baseline !important;
+  gap:4px !important;
+  min-height:86px !important;
+  padding:12px 18px 10px !important;
+  border:0 !important;
+  color:#101d30 !important;
+}
+html body .settings-reference-page .stripe-reference-plan .price strong {
+  color:#101d30 !important;
+  font-size:27px !important;
+  line-height:1 !important;
+  letter-spacing:-.035em !important;
+}
+html body .settings-reference-page .stripe-reference-plan .price small {
+  color:#53637a !important;
+  font-size:10.5px !important;
+  font-weight:500 !important;
+}
+html body .settings-reference-page .stripe-reference-plan .price em {
+  flex-basis:100% !important;
+  margin-top:5px !important;
+  color:#7a8798 !important;
+  font-size:9.5px !important;
+  line-height:1.2 !important;
+  font-style:normal !important;
+}
+
+html body .settings-reference-page .stripe-reference-plan > .stripe-reference-features {
+  display:grid !important;
+  align-content:start !important;
+  gap:11px !important;
+  min-height:126px !important;
+  margin:0 18px !important;
+  padding:14px 0 !important;
+  border-top:1px solid #e9edf1 !important;
+  border-bottom:0 !important;
+}
+html body .settings-reference-page .stripe-reference-plan .stripe-reference-features .plan-feature {
+  display:flex !important;
+  align-items:center !important;
+  gap:9px !important;
+  min-height:0 !important;
+  padding:0 !important;
+  border:0 !important;
+  color:#4c5d73 !important;
+  font-size:10.5px !important;
+  line-height:1.25 !important;
+}
+html body .settings-reference-page .stripe-reference-plan .plan-feature::before { display:none !important; }
+html body .settings-reference-page .stripe-reference-plan .plan-feature svg {
+  flex:0 0 auto !important;
+  width:12px !important;
+  height:12px !important;
+  stroke-width:2.6 !important;
+}
+html body .settings-reference-page .stripe-reference-plan.plan-starter .plan-feature svg { color:#2584f4 !important; }
+html body .settings-reference-page .stripe-reference-plan.plan-growth .plan-feature svg { color:#1eaa5c !important; }
+html body .settings-reference-page .stripe-reference-plan.plan-pro .plan-feature svg { color:#ff6040 !important; }
+
+html body .settings-reference-page .stripe-reference-plan .fit {
+  display:flex !important;
+  align-items:center !important;
+  min-height:64px !important;
+  margin:0 18px !important;
+  padding:10px 12px !important;
+  border:1px solid #dce8f7 !important;
+  border-radius:8px !important;
+  color:#405168 !important;
+  background:#f6f9fe !important;
+  font-size:10px !important;
+  line-height:1.4 !important;
+}
+html body .settings-reference-page .stripe-reference-plan.plan-growth .fit { border-color:#dcecdf !important; background:#f5faf6 !important; }
+html body .settings-reference-page .stripe-reference-plan.plan-pro .fit { border-color:#f2d9cf !important; background:#fff6f1 !important; }
+
+html body .settings-reference-page .stripe-reference-plan .action {
+  display:flex !important;
+  align-items:center !important;
+  min-height:62px !important;
+  margin:0 !important;
+  padding:11px 18px 15px !important;
+  border:0 !important;
+}
+html body .settings-reference-page .stripe-reference-plan .action button {
+  width:100% !important;
+  min-height:38px !important;
+  padding:0 12px !important;
+  border:1px solid #ccd5df !important;
+  border-radius:7px !important;
+  color:#14233a !important;
+  background:#fff !important;
+  box-shadow:none !important;
+  font:inherit !important;
+  font-size:10.5px !important;
+  line-height:1 !important;
+  font-weight:800 !important;
+}
+html body .settings-reference-page .stripe-reference-plan.plan-pro .action button,
+html body .settings-reference-page .stripe-reference-plan.current .action button,
+html body .settings-reference-page .stripe-reference-plan.current .action button:disabled {
+  border-color:#f25836 !important;
+  color:#fff !important;
+  background:#f4512d !important;
+  opacity:1 !important;
+}
+
+/* Extra-credit rail. */
+html body .settings-reference-page .stripe-reference-packs {
+  display:flex !important;
+  flex-direction:column !important;
+  min-width:0 !important;
+  min-height:430px !important;
+  padding:20px 18px 17px !important;
+  border:1px solid #dfe5eb !important;
+  border-radius:16px !important;
+  background:#fff !important;
+  box-shadow:0 8px 22px rgba(13,29,48,.045) !important;
+}
+html body .settings-reference-page .stripe-reference-packs h2 {
+  margin:0 !important;
+  color:#101d30 !important;
+  font-size:16px !important;
+  line-height:1.2 !important;
+}
+html body .settings-reference-page .stripe-reference-packs > p {
+  margin:9px 0 16px !important;
+  color:#607086 !important;
+  font-size:10.5px !important;
+  line-height:1.45 !important;
+}
+html body .settings-reference-page .stripe-reference-packs > div {
+  display:grid !important;
+  grid-template-columns:1fr !important;
+  gap:10px !important;
+  margin:0 !important;
+}
+html body .settings-reference-page .stripe-reference-packs article {
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) auto !important;
+  gap:9px 8px !important;
+  padding:11px 10px 9px !important;
+  border:1px solid #e0e5eb !important;
+  border-radius:10px !important;
+  background:#fff !important;
+  box-shadow:0 4px 12px rgba(20,37,58,.055) !important;
+}
+html body .settings-reference-page .stripe-reference-packs article span,
+html body .settings-reference-page .stripe-reference-packs article strong {
+  color:#15243a !important;
+  font-size:10px !important;
+  line-height:1.2 !important;
+}
+html body .settings-reference-page .stripe-reference-packs article strong { font-weight:800 !important; }
+html body .settings-reference-page .stripe-reference-packs article button {
+  grid-column:1/-1 !important;
+  min-height:34px !important;
+  border:0 !important;
+  border-radius:6px !important;
+  color:#fff !important;
+  background:#03172a !important;
+  font:inherit !important;
+  font-size:10px !important;
+  font-weight:800 !important;
+}
+html body .settings-reference-page .stripe-reference-packs > small {
+  margin-top:auto !important;
+  padding-top:15px !important;
+  color:#788597 !important;
+  font-size:9.5px !important;
+  line-height:1.2 !important;
+}
+html body .settings-reference-page .stripe-reference-packs > a {
+  margin-top:8px !important;
+  color:#15243a !important;
+  font-size:10px !important;
+  line-height:1.2 !important;
+  font-weight:800 !important;
+  text-decoration:none !important;
+}
+
+/* Included benefits: one calm navy rail, matching the approved reference. */
+html body .settings-reference-page .stripe-reference-benefits {
+  display:grid !important;
+  grid-template-columns:1.25fr repeat(5,1fr) !important;
+  align-items:center !important;
+  min-height:72px !important;
+  margin-top:18px !important;
+  padding:0 22px !important;
+  border:0 !important;
+  border-radius:13px !important;
+  color:#fff !important;
+  background:linear-gradient(105deg,#03172a 0%,#0b2b46 100%) !important;
+  box-shadow:0 8px 20px rgba(3,23,42,.10) !important;
+}
+html body .settings-reference-page .stripe-reference-benefits span {
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  gap:9px !important;
+  min-width:0 !important;
+  min-height:42px !important;
+  padding:0 13px !important;
+  border-right:1px solid rgba(255,255,255,.17) !important;
+  color:#fff !important;
+  font-size:10px !important;
+  line-height:1.2 !important;
+  text-align:center !important;
+  white-space:nowrap !important;
+}
+html body .settings-reference-page .stripe-reference-benefits span:first-child { justify-content:flex-start !important; font-weight:800 !important; }
+html body .settings-reference-page .stripe-reference-benefits span:last-child { border-right:0 !important; }
+html body .settings-reference-page .stripe-reference-benefits svg {
+  flex:0 0 auto !important;
+  width:17px !important;
+  height:17px !important;
+  stroke-width:1.8 !important;
+}
+
+/* Credit explainer remains light: no second dark block. */
+html body .settings-reference-page .stripe-reference-credit-info {
+  display:grid !important;
+  grid-template-columns:minmax(310px,1.55fr) minmax(0,2.45fr) !important;
+  align-items:stretch !important;
+  margin-top:18px !important;
+  overflow:hidden !important;
+  border:1px solid #dfe5eb !important;
+  border-radius:14px !important;
+  background:#fff !important;
+  box-shadow:0 5px 16px rgba(13,29,48,.035) !important;
+  scroll-margin-top:24px !important;
+}
+html body .settings-reference-page .stripe-reference-credit-info > header {
+  display:flex !important;
+  align-items:center !important;
+  gap:14px !important;
+  min-width:0 !important;
+  padding:20px 20px !important;
+  border-right:1px solid #e5e9ee !important;
+  color:#101d30 !important;
+  background:#fff !important;
+}
+html body .settings-reference-page .stripe-reference-credit-info .credit-info-main-icon {
+  flex:0 0 auto !important;
+  display:grid !important;
+  place-items:center !important;
+  width:40px !important;
+  height:40px !important;
+  border-radius:50% !important;
+  color:#334c68 !important;
+  background:#f0f4f7 !important;
+}
+html body .settings-reference-page .stripe-reference-credit-info .credit-info-main-icon svg {
+  width:21px !important;
+  height:21px !important;
+  color:inherit !important;
+}
+html body .settings-reference-page .stripe-reference-credit-info h2 {
+  margin:0 0 5px !important;
+  color:#101d30 !important;
+  font-size:15px !important;
+  line-height:1.15 !important;
+}
+html body .settings-reference-page .stripe-reference-credit-info p {
+  margin:0 !important;
+  color:#6e7d91 !important;
+  font-size:9.5px !important;
+  line-height:1.4 !important;
+}
+html body .settings-reference-page .stripe-reference-credit-info > div {
+  display:grid !important;
+  grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+  min-width:0 !important;
+}
+html body .settings-reference-page .stripe-reference-credit-info > div article {
+  display:flex !important;
+  align-items:center !important;
+  gap:10px !important;
+  min-width:0 !important;
+  padding:17px 14px !important;
+  border-right:1px solid #e5e9ee !important;
+  color:#101d30 !important;
+  background:#fff !important;
+}
+html body .settings-reference-page .stripe-reference-credit-info > div article:last-child { border-right:0 !important; }
+html body .settings-reference-page .stripe-reference-credit-info .credit-info-icon {
+  flex:0 0 auto !important;
+  display:grid !important;
+  place-items:center !important;
+  width:28px !important;
+  height:28px !important;
+  border-radius:50% !important;
+  color:#ff6544 !important;
+  background:#fff1ec !important;
+}
+html body .settings-reference-page .stripe-reference-credit-info .credit-info-icon svg { width:15px !important; height:15px !important; }
+html body .settings-reference-page .stripe-reference-credit-info article > div { min-width:0 !important; }
+html body .settings-reference-page .stripe-reference-credit-info article strong,
+html body .settings-reference-page .stripe-reference-credit-info article span {
+  display:block !important;
+}
+html body .settings-reference-page .stripe-reference-credit-info article strong {
+  margin-bottom:4px !important;
+  color:#101d30 !important;
+  font-size:10px !important;
+  line-height:1.2 !important;
+}
+html body .settings-reference-page .stripe-reference-credit-info article div > span {
+  color:#718095 !important;
+  font-size:9px !important;
+  line-height:1.35 !important;
+}
+
+html body .settings-reference-page .stripe-reference-footer-row {
+  position:relative !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  min-height:34px !important;
+  margin-top:4px !important;
+}
+html body .settings-reference-page .stripe-reference-footnote {
+  margin:0 !important;
+  color:#8390a0 !important;
+  text-align:center !important;
+  font-size:9px !important;
+  line-height:1.2 !important;
+}
+html body .settings-reference-page .stripe-reference-account-actions {
+  position:absolute !important;
+  right:0 !important;
+  top:50% !important;
+  display:flex !important;
+  align-items:center !important;
+  gap:8px !important;
+  transform:translateY(-50%) !important;
+}
+html body .settings-reference-page .stripe-reference-account-actions .stripe-reference-status {
+  display:inline-flex !important;
+  align-items:center !important;
+  gap:5px !important;
+  min-height:0 !important;
+  margin:0 !important;
+  padding:0 !important;
+  border:0 !important;
+  border-radius:0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+}
+html body .settings-reference-page .stripe-reference-account-actions .stripe-reference-status i {
+  width:6px !important;
+  height:6px !important;
+  border-radius:50% !important;
+  background:#9aa6b5 !important;
+}
+html body .settings-reference-page .stripe-reference-account-actions .stripe-reference-status i.active { background:#2caf67 !important; }
+html body .settings-reference-page .stripe-reference-account-actions .stripe-reference-status small,
+html body .settings-reference-page .stripe-reference-account-actions .stripe-reference-status strong {
+  margin:0 !important;
+  color:#8b96a5 !important;
+  font-size:8.5px !important;
+  line-height:1 !important;
+  font-weight:600 !important;
+}
+html body .settings-reference-page .stripe-reference-account-actions .stripe-reference-status strong { color:#657487 !important; }
+html body .settings-reference-page .stripe-reference-account-actions .stripe-reference-cancel {
+  min-height:0 !important;
+  padding:0 !important;
+  border:0 !important;
+  border-radius:0 !important;
+  color:#778496 !important;
+  background:transparent !important;
+  font-size:8.5px !important;
+  line-height:1 !important;
+  font-weight:600 !important;
+  text-decoration:underline !important;
+  text-underline-offset:2px !important;
+  box-shadow:none !important;
+}
+html body .settings-reference-page .stripe-reference-account-actions .stripe-reference-cancel svg { width:11px !important; height:11px !important; }
+
+/* Keep async/error UI readable without moving the reference layout. */
+html body .settings-reference-page .stripe-billing-message,
+html body .settings-reference-page .stripe-billing-payment-link {
+  margin:8px 0 0 !important;
+  font-size:11px !important;
+}
+
+/* Tablet: retain plan comparison first, then move credit packs below. */
+@media (max-width:1180px) and (min-width:801px) {
+  html body .settings-reference-page .stripe-reference-controls { grid-template-columns:1fr !important; }
+  html body .settings-reference-page .stripe-reference-interval { grid-column:1 !important; }
+  html body .settings-reference-page .stripe-reference-layout { grid-template-columns:1fr !important; }
+  html body .settings-reference-page .stripe-reference-packs { min-height:0 !important; }
+  html body .settings-reference-page .stripe-reference-packs > div { grid-template-columns:repeat(3,minmax(0,1fr)) !important; }
+  html body .settings-reference-page .stripe-reference-packs > small { margin-top:14px !important; }
+  html body .settings-reference-page .stripe-reference-credit-info { grid-template-columns:1fr !important; }
+  html body .settings-reference-page .stripe-reference-credit-info > header { border-right:0 !important; border-bottom:1px solid #e5e9ee !important; }
+}
+
+/* Mobile: readable cards, no compressed desktop columns, no horizontal overflow. */
+@media (max-width:800px) {
+  html body .settings-reference-page > .stripe-reference-billing { margin-top:18px !important; }
+  html body .settings-reference-page .stripe-reference-controls { display:block !important; margin-bottom:14px !important; }
+  html body .settings-reference-page .stripe-reference-interval {
+    width:100% !important;
+    min-height:62px !important;
+  }
+  html body .settings-reference-page .stripe-reference-layout { grid-template-columns:1fr !important; gap:14px !important; }
+  html body .settings-reference-page .stripe-reference-table { grid-template-columns:1fr !important; gap:12px !important; }
+  html body .settings-reference-page .stripe-reference-plan {
+    display:grid !important;
+    grid-template-rows:auto auto auto auto auto !important;
+    min-height:0 !important;
+  }
+  html body .settings-reference-page .stripe-reference-plan > header { min-height:66px !important; }
+  html body .settings-reference-page .stripe-reference-plan .price { min-height:76px !important; }
+  html body .settings-reference-page .stripe-reference-plan > .stripe-reference-features { min-height:0 !important; }
+  html body .settings-reference-page .stripe-reference-packs { min-height:0 !important; }
+  html body .settings-reference-page .stripe-reference-packs > div { grid-template-columns:1fr !important; }
+  html body .settings-reference-page .stripe-reference-benefits {
+    grid-template-columns:1fr 1fr !important;
+    min-height:0 !important;
+    padding:12px !important;
+  }
+  html body .settings-reference-page .stripe-reference-benefits span {
+    justify-content:flex-start !important;
+    min-height:40px !important;
+    border-right:0 !important;
+    border-bottom:1px solid rgba(255,255,255,.12) !important;
+    white-space:normal !important;
+    text-align:left !important;
+  }
+  html body .settings-reference-page .stripe-reference-benefits span:nth-last-child(-n+2) { border-bottom:0 !important; }
+  html body .settings-reference-page .stripe-reference-credit-info { grid-template-columns:1fr !important; }
+  html body .settings-reference-page .stripe-reference-credit-info > header { border-right:0 !important; border-bottom:1px solid #e5e9ee !important; }
+  html body .settings-reference-page .stripe-reference-credit-info > div { grid-template-columns:1fr !important; }
+  html body .settings-reference-page .stripe-reference-credit-info > div article { border-right:0 !important; border-bottom:1px solid #e5e9ee !important; }
+  html body .settings-reference-page .stripe-reference-credit-info > div article:last-child { border-bottom:0 !important; }
+  html body .settings-reference-page .stripe-reference-footer-row { display:grid !important; gap:7px !important; padding:8px 0 !important; }
+  html body .settings-reference-page .stripe-reference-account-actions {
+    position:static !important;
+    justify-content:center !important;
+    transform:none !important;
+  }
+}
+
+@media (max-width:520px) {
+  html body .settings-reference-page .stripe-reference-interval { grid-template-columns:1fr 1fr !important; }
+  html body .settings-reference-page .stripe-reference-interval button { min-height:50px !important; padding:5px 7px !important; }
+  html body .settings-reference-page .stripe-reference-interval button strong { font-size:11px !important; }
+  html body .settings-reference-page .stripe-reference-interval button small { font-size:8.5px !important; }
+  html body .settings-reference-page .stripe-reference-plan .price strong { font-size:25px !important; }
+  html body .settings-reference-page .stripe-reference-benefits { grid-template-columns:1fr !important; }
+  html body .settings-reference-page .stripe-reference-benefits span { border-bottom:1px solid rgba(255,255,255,.12) !important; }
+  html body .settings-reference-page .stripe-reference-benefits span:last-child { border-bottom:0 !important; }
+}
