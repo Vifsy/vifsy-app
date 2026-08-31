@@ -1,0 +1,232 @@
+/* v144.74 — reversible billing cadence, compact reference plan cards, admin date access */
+
+html body .settings-reference-page .stripe-reference-billing {
+  margin-top:24px !important;
+}
+
+html body .settings-reference-page .stripe-reference-controls {
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:12px;
+  margin:0 0 16px;
+}
+
+html body .settings-reference-page .stripe-reference-status {
+  margin-right:auto;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  min-height:42px;
+  padding:7px 12px;
+  border:1px solid #e0e6ed;
+  border-radius:11px;
+  background:#fff;
+}
+
+html body .settings-reference-page .stripe-reference-status > span {
+  width:9px;
+  height:9px;
+  border-radius:50%;
+  background:#9aa6b5;
+}
+
+html body .settings-reference-page .stripe-reference-status > span.active { background:#22ad65; }
+html body .settings-reference-page .stripe-reference-status div { display:grid; gap:1px; }
+html body .settings-reference-page .stripe-reference-status small { color:#7b8797; font-size:10px; }
+html body .settings-reference-page .stripe-reference-status strong { color:#0b1e35; font-size:12px; }
+
+html body .settings-reference-page .stripe-reference-interval {
+  display:flex;
+  gap:3px;
+  padding:4px;
+  border:1px solid #dce3eb;
+  border-radius:11px;
+  background:#f3f6f9;
+}
+
+html body .settings-reference-page .stripe-reference-interval button {
+  min-height:34px;
+  padding:0 14px;
+  border:0;
+  border-radius:8px;
+  color:#607086;
+  background:transparent;
+  font:inherit;
+  font-size:12px;
+  font-weight:750;
+  cursor:pointer;
+}
+
+html body .settings-reference-page .stripe-reference-interval button.active {
+  color:#fff;
+  background:#061a2e;
+  box-shadow:0 4px 10px rgba(6,26,46,.16);
+}
+
+html body .settings-reference-page .stripe-reference-interval button span {
+  margin-left:6px;
+  color:#ff704d;
+  font-size:9px;
+}
+
+html body .settings-reference-page .stripe-reference-cancel {
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  min-height:42px;
+  padding:0 13px;
+  border:1px solid #e0e6ed;
+  border-radius:11px;
+  color:#526278;
+  background:#fff;
+  font:inherit;
+  font-size:11px;
+  font-weight:700;
+  cursor:pointer;
+}
+
+html body .settings-reference-page .stripe-reference-notice {
+  display:flex;
+  align-items:center;
+  gap:9px;
+  margin:-4px 0 16px;
+  padding:10px 13px;
+  border:1px solid #eadffb;
+  border-radius:10px;
+  color:#574675;
+  background:#faf7ff;
+  font-size:12px;
+}
+
+html body .settings-reference-page .stripe-reference-layout {
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) !important;
+  gap:18px !important;
+}
+
+html body .settings-reference-page .stripe-reference-table {
+  grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+  gap:18px !important;
+}
+
+html body .settings-reference-page .stripe-reference-plan {
+  min-height:0 !important;
+  border-radius:14px !important;
+  box-shadow:0 9px 25px rgba(13,29,48,.07) !important;
+}
+
+html body .settings-reference-page .stripe-reference-plan.current {
+  border-color:#f2c0b4 !important;
+  background:linear-gradient(180deg,#fff6f2 0%,#fffaf8 100%) !important;
+}
+
+html body .settings-reference-page .stripe-reference-plan > header {
+  min-height:68px !important;
+  padding:12px 16px !important;
+  align-items:center !important;
+}
+
+html body .settings-reference-page .stripe-reference-plan-title {
+  display:flex;
+  align-items:center;
+  gap:11px;
+  min-width:0;
+}
+
+html body .settings-reference-page .stripe-reference-plan-title .plan-icon {
+  flex:0 0 auto;
+  width:36px;
+  height:36px;
+  display:grid;
+  place-items:center;
+  border-radius:10px;
+}
+
+html body .settings-reference-page .stripe-reference-plan-title .plan-icon svg { width:20px; height:20px; }
+html body .settings-reference-page .stripe-reference-plan.plan-starter .plan-icon { color:#2578ef; background:#edf5ff; }
+html body .settings-reference-page .stripe-reference-plan.plan-growth .plan-icon { color:#1eab5c; background:#edf9f1; }
+html body .settings-reference-page .stripe-reference-plan.plan-pro .plan-icon { color:#ff613c; background:rgba(255,255,255,.08); }
+html body .settings-reference-page .stripe-reference-plan > header h2 { margin:0 0 3px !important; font-size:17px !important; line-height:1.1; }
+html body .settings-reference-page .stripe-reference-plan > header small { font-size:10.5px !important; line-height:1.25 !important; }
+html body .settings-reference-page .stripe-reference-plan.current > header { background:linear-gradient(145deg,#061b31,#031426) !important; }
+html body .settings-reference-page .stripe-reference-plan.current > header > span { padding:5px 8px !important; color:#fff !important; background:#ff5b38 !important; border:0 !important; font-size:9px !important; }
+
+html body .settings-reference-page .stripe-reference-plan .price {
+  min-height:67px !important;
+  padding:11px 18px 9px !important;
+  border:0 !important;
+}
+
+html body .settings-reference-page .stripe-reference-plan .price strong { font-size:25px !important; }
+html body .settings-reference-page .stripe-reference-plan .price small { font-size:11px !important; }
+html body .settings-reference-page .stripe-reference-plan .price em { font-size:9.5px !important; }
+
+html body .settings-reference-page .stripe-reference-plan > .stripe-reference-features {
+  display:grid !important;
+  gap:11px;
+  min-height:116px;
+  margin:0 18px;
+  padding:13px 0 !important;
+  border-top:1px solid #edf0f3 !important;
+  border-bottom:0 !important;
+}
+
+html body .settings-reference-page .stripe-reference-plan .stripe-reference-features .plan-feature {
+  min-height:0 !important;
+  display:flex !important;
+  align-items:center !important;
+  gap:9px;
+  padding:0 !important;
+  border:0 !important;
+  color:#526278;
+  font-size:10.5px !important;
+}
+
+html body .settings-reference-page .stripe-reference-plan .plan-feature::before { display:none !important; }
+html body .settings-reference-page .stripe-reference-plan .plan-feature svg { flex:0 0 auto; width:12px; height:12px; stroke-width:2.5; }
+html body .settings-reference-page .stripe-reference-plan.plan-starter .plan-feature svg { color:#2578ef; }
+html body .settings-reference-page .stripe-reference-plan.plan-growth .plan-feature svg { color:#1eab5c; }
+html body .settings-reference-page .stripe-reference-plan.plan-pro .plan-feature svg { color:#ff5b38; }
+
+html body .settings-reference-page .stripe-reference-plan .fit {
+  min-height:58px !important;
+  margin:0 18px;
+  padding:11px !important;
+  border:1px solid #dce8f7 !important;
+  border-radius:8px;
+  color:#405168 !important;
+  background:#f5f9ff !important;
+  font-size:10.5px !important;
+  line-height:1.4 !important;
+}
+
+html body .settings-reference-page .stripe-reference-plan.plan-growth .fit { border-color:#dcecdf !important; background:#f4faf5 !important; }
+html body .settings-reference-page .stripe-reference-plan.plan-pro .fit { border-color:#f2d9cf !important; background:#fff5ef !important; }
+html body .settings-reference-page .stripe-reference-plan .action { margin-top:0 !important; padding:14px 18px 17px !important; }
+html body .settings-reference-page .stripe-reference-plan .action button { min-height:42px !important; border-radius:8px !important; font-size:11px !important; }
+
+html body .settings-reference-page .stripe-reference-packs {
+  display:block !important;
+  padding:20px !important;
+}
+
+html body .settings-reference-page .stripe-reference-packs > div {
+  grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+}
+
+@media (max-width:800px) {
+  html body .settings-reference-page .stripe-reference-controls { align-items:stretch; flex-wrap:wrap; }
+  html body .settings-reference-page .stripe-reference-status { width:100%; }
+  html body .settings-reference-page .stripe-reference-interval { flex:1; }
+  html body .settings-reference-page .stripe-reference-interval button { flex:1; }
+  html body .settings-reference-page .stripe-reference-table { grid-template-columns:1fr !important; }
+  html body .settings-reference-page .stripe-reference-plan.current { order:0 !important; }
+  html body .settings-reference-page .stripe-reference-plan > header { min-height:68px !important; }
+  html body .settings-reference-page .stripe-reference-packs > div { grid-template-columns:1fr !important; }
+}
+
+@media (max-width:520px) {
+  html body .settings-reference-page .stripe-reference-cancel { width:100%; justify-content:center; }
+  html body .settings-reference-page .stripe-reference-plan .price strong { font-size:24px !important; }
+}

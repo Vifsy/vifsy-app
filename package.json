@@ -158,7 +158,9 @@
     "test:v144.69": "node scripts/test-v144-69-exact-reference-calibration.mjs",
     "test:v144.70": "node scripts/test-v144-70-section-corrections.mjs",
     "test:v144.71": "node scripts/test-v144-71-compact-planner-corrections.mjs",
-    "test:v144.72": "node scripts/test-v144-72-timeline-credit-rail.mjs"
+    "test:v144.72": "node scripts/test-v144-72-timeline-credit-rail.mjs",
+    "test:v144.73": "node scripts/test-v144-73-pixel-mobile-settings-week.mjs",
+    "test:v144.74": "node scripts/test-v144-74-billing-admin-dates.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

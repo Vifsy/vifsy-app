@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarClock, Check, CreditCard, ExternalLink, LoaderCircle, Plus, ShieldCheck, Sparkles, XCircle } from "lucide-react";
+import { CalendarClock, Check, CreditCard, Crown, ExternalLink, Leaf, LoaderCircle, Plus, Rocket, ShieldCheck, Sparkles, XCircle } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useUiText } from "../lib/i18n/useUiText";
 
@@ -53,6 +53,7 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
   const [billing, setBilling] = useState(initialBalance);
   const [trialInfo, setTrialInfo] = useState(null);
   const [interval, setInterval] = useState("month");
+  const [intervalTouched, setIntervalTouched] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busyLookup, setBusyLookup] = useState("");
   const [busyAction, setBusyAction] = useState("");
@@ -104,6 +105,11 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
     refreshBilling();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const savedInterval = String(billing?.subscription_interval || "").toLowerCase();
+    if (!intervalTouched && ["month", "year"].includes(savedInterval)) setInterval(savedInterval);
+  }, [billing?.subscription_interval, intervalTouched]);
 
   async function startCheckout(lookupKey, trial = false) {
     if (busyLookup || busyAction) return;
@@ -229,17 +235,41 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
 
   return (
     <section id="spreelo-plans" className="stripe-reference-billing">
+      <div className="stripe-reference-controls">
+        <div className="stripe-reference-status">
+          <span className={hasStripeSubscription ? "active" : ""} />
+          <div><small>{t("billing.subscriptionStatus")}</small><strong>{loading ? t("billing.loading") : statusLabel}</strong></div>
+        </div>
+        <div className="stripe-reference-interval" role="group" aria-label={t("billing.billingPeriod")}>
+          <button type="button" className={interval === "month" ? "active" : ""} onClick={() => { setIntervalTouched(true); setInterval("month"); }}>{t("billing.monthly")}</button>
+          <button type="button" className={interval === "year" ? "active" : ""} onClick={() => { setIntervalTouched(true); setInterval("year"); }}>{t("billing.yearly")}<span>{t("billing.twoMonthsFree")}</span></button>
+        </div>
+        {hasStripeSubscription ? (
+          <button type="button" className="stripe-reference-cancel" disabled={Boolean(busyAction)} onClick={() => toggleCancellation(cancelScheduled)}>
+            {busyAction ? <LoaderCircle className="billing-spin" size={14} /> : cancelScheduled ? <ShieldCheck size={14} /> : <XCircle size={14} />}
+            {cancelScheduled ? t("billing.keepSubscription") : t("billing.cancelSubscription")}
+          </button>
+        ) : null}
+      </div>
+      {billing?.pending_subscription_plan ? (
+        <div className="stripe-reference-notice"><CalendarClock size={16} /><span>{t("billing.pendingPlanText", { plan: String(billing.pending_subscription_plan).replace(/^./, (c) => c.toUpperCase()), date: formatDate(billing?.pending_subscription_effective_at) || "—" })}</span></div>
+      ) : null}
       <div className="stripe-reference-layout">
         <div className="stripe-reference-table">
           {PLANS.map((plan) => {
-            const selected = currentPlan === plan.key;
-            const lookup = plan.yearLookup;
+            const currentInterval = String(billing?.subscription_interval || "").toLowerCase();
+            const activePlan = currentPlan === plan.key && hasStripeSubscription;
+            const selected = activePlan && currentInterval === interval;
+            const lookup = interval === "month" ? plan.monthLookup : plan.yearLookup;
+            const price = interval === "month" ? plan.month : plan.year;
             const isUpgrade = canChangePlan && plan.rank > currentRank;
-            const isImmediatePaidChange = Boolean(canChangePlan && plan.rank > currentRank);
+            const isDowngrade = canChangePlan && plan.rank < currentRank;
+            const isImmediatePaidChange = Boolean(canChangePlan && (plan.rank > currentRank || (plan.rank === currentRank && currentInterval === "month" && interval === "year")));
             const disabled = busyLookup === lookup || (selected && hasStripeSubscription) || (isTrialing && !selected);
             let buttonLabel = selected && hasStripeSubscription ? t("billing.currentPlan") : t("billing.choosePlan", { plan: plan.name });
-            if (!selected && isUpgrade) buttonLabel = t("billing.upgradeTo", { plan: plan.name });
-            if (!selected && canChangePlan && plan.rank < currentRank) buttonLabel = t("billing.downgradeTo", { plan: plan.name });
+            if (!selected && activePlan) buttonLabel = interval === "year" ? t("billing.switchYearly") : t("billing.switchMonthly");
+            else if (!selected && isUpgrade) buttonLabel = t("billing.upgradeTo", { plan: plan.name });
+            else if (!selected && isDowngrade) buttonLabel = t("billing.downgradeTo", { plan: plan.name });
             const fitText = plan.key === "starter"
               ? t("billing.fitStarter")
               : plan.key === "growth"
@@ -251,15 +281,17 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
                 ? t("billing.audienceGrowthShort")
                 : t("billing.audienceProShort");
             return (
-              <article key={plan.key} className={`stripe-reference-plan ${selected ? "current" : ""}`}>
-                <header><div><h2>{plan.name}</h2><small>{audienceText}</small></div>{selected ? <span>{t("billing.currentPlan")}</span> : null}</header>
-                <div className="price"><strong>{plan.year.toLocaleString()} kr</strong><small>/{t("billing.yearShort")}</small><em>{t("billing.priceBilledYearly")}</em></div>
-                <div className="plan-feature credits">{t("billing.creditsPerMonth", { count: plan.credits })}</div>
-                <div className="plan-feature brands">{plan.brands === 1 ? t("billing.businessOne") : t("billing.businesses", { count: plan.brands })}</div>
-                <div className="plan-feature social">{plan.socialAccounts === 1 ? t("billing.socialAccountLimitOne") : t("billing.socialAccountLimit", { count: plan.socialAccounts })}</div>
-                <div className="plan-feature recurring">{plan.recurringPlans === 1 ? t("billing.recurringPlanLimitOne") : t("billing.recurringPlanLimit", { count: plan.recurringPlans })}</div>
+              <article key={plan.key} className={`stripe-reference-plan plan-${plan.key} ${activePlan ? "current" : ""}`}>
+                <header><div className="stripe-reference-plan-title"><span className="plan-icon">{plan.key === "starter" ? <Rocket /> : plan.key === "growth" ? <Leaf /> : <Crown />}</span><div><h2>{plan.name}</h2><small>{audienceText}</small></div></div>{activePlan ? <span>{t("billing.currentPlan")}</span> : null}</header>
+                <div className="price"><strong>{price.toLocaleString("sv-SE")} kr</strong><small>/{interval === "month" ? t("billing.monthShort") : t("billing.yearShort")}</small><em>{interval === "year" ? t("billing.priceBilledYearly") : t("billing.priceBilledMonthly")}</em></div>
+                <div className="stripe-reference-features">
+                  <div className="plan-feature credits"><Check />{t("billing.creditsPerMonth", { count: plan.credits })}</div>
+                  <div className="plan-feature brands"><Check />{plan.brands === 1 ? t("billing.businessOne") : t("billing.businesses", { count: plan.brands })}</div>
+                  <div className="plan-feature social"><Check />{plan.socialAccounts === 1 ? t("billing.socialAccountLimitOne") : t("billing.socialAccountLimit", { count: plan.socialAccounts })}</div>
+                  <div className="plan-feature recurring"><Check />{plan.recurringPlans === 1 ? t("billing.recurringPlanLimitOne") : t("billing.recurringPlanLimit", { count: plan.recurringPlans })}</div>
+                </div>
                 <div className="fit">{fitText}</div>
-                <div className="action"><button type="button" disabled={disabled} onClick={() => selected && hasStripeSubscription ? null : hasStripeSubscription ? changeSubscription(lookup, isImmediatePaidChange) : startCheckout(lookup, Boolean(trialInfo?.eligible))}>{busyLookup === lookup ? <LoaderCircle className="billing-spin" /> : null}{buttonLabel}</button></div>
+                <div className="action"><button type="button" disabled={disabled} onClick={() => selected ? null : hasStripeSubscription ? changeSubscription(lookup, isImmediatePaidChange) : startCheckout(lookup, Boolean(trialInfo?.eligible))}>{busyLookup === lookup ? <LoaderCircle className="billing-spin" /> : null}{buttonLabel}</button></div>
               </article>
             );
           })}
@@ -277,7 +309,7 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
         <header><Sparkles /><div><h2>{t("billing.howCreditsWorkTitle")}</h2><p>{t("billing.howCreditsWorkText")}</p></div></header>
         <div><article><strong>{t("billing.creditInfoRefreshTitle")}</strong><span>{t("billing.creditInfoRefreshText")}</span></article><article><strong>{t("billing.creditInfoPurchasedTitle")}</strong><span>{t("billing.creditInfoPurchasedText")}</span></article><article><strong>{t("billing.creditInfoUsageTitle")}</strong><span>{t("billing.creditInfoUsageText")}</span></article></div>
       </section>
-      <p className="stripe-reference-footnote">{t("billing.plansRenewYearly")}</p>
+      <p className="stripe-reference-footnote">{interval === "year" ? t("billing.plansRenewYearly") : t("billing.plansRenewMonthly")}</p>
       {message ? <p className="stripe-billing-message">{message}</p> : null}
       {paymentLink ? <a className="stripe-billing-payment-link" href={paymentLink} target="_blank" rel="noreferrer">{t("billing.openPayment")} <ExternalLink /></a> : null}
     </section>

@@ -6320,6 +6320,9 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
   const [ctaType, setCtaType] = useState("Learn more");
   const [timeZone, setTimeZone] = useState(DEFAULT_TIME_ZONE);
   const canManuallyEditCampaignPlan = String(currentUserEmail || "").toLowerCase() === SPREELO_INTERNAL_TESTER_EMAIL;
+  const minimumSelectablePlanningDate = canManuallyEditCampaignPlan
+    ? null
+    : getDateInputValueInTimeZone(new Date(), timeZone);
   const [showSavedRules, setShowSavedRules] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [showLearnMoreModal, setShowLearnMoreModal] = useState(false);
@@ -10633,7 +10636,7 @@ function blockFormatCardClickAfterDrag(event) {
                       <strong>{locale.startsWith("sv") ? "STRATEGI" : "STRATEGY"}</strong>
                     </header>
                     <div className="plan-v14467-settings-rows">
-                  <label className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile">
+                  <label className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile plan-v14473-goal-tile">
                     <div className="plan-v90-setting-head">
                       <span className="plan-v90-setting-icon"><Target size={20} aria-hidden="true" /></span>
                       <div className="plan-v90-setting-copy">
@@ -10675,9 +10678,13 @@ function blockFormatCardClickAfterDrag(event) {
                         </option>
                       ))}
                     </select>
+                    <span className="plan-v14473-mobile-value">
+                      <strong>{autoPlanGoal ? translateAutoPlanGoalLabel(autoPlanGoal) : t("automation.redesign.chooseGoal")}</strong>
+                      <ChevronDown size={14} aria-hidden="true" />
+                    </span>
                   </label>
 
-                  <label className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile">
+                  <label className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile plan-v14473-frequency-tile">
                     <div className="plan-v90-setting-head">
                       <span className="plan-v90-setting-icon"><CalendarDays size={20} aria-hidden="true" /></span>
                       <div className="plan-v90-setting-copy">
@@ -10697,6 +10704,10 @@ function blockFormatCardClickAfterDrag(event) {
                         </option>
                       ))}
                     </select>
+                    <span className="plan-v14473-mobile-value">
+                      <strong>{locale.startsWith("sv") ? `${autoPlanPostCount} inlägg` : `${autoPlanPostCount} posts`}</strong>
+                      <ChevronDown size={14} aria-hidden="true" />
+                    </span>
                   </label>
                     </div>
                   </section>
@@ -10728,14 +10739,15 @@ function blockFormatCardClickAfterDrag(event) {
                         locale={locale}
                         previousMonthLabel={t("automation.previousMonth")}
                         nextMonthLabel={t("automation.nextMonth")}
-                        minDate={getDateInputValueInTimeZone(new Date(), timeZone)}
+                        minDate={minimumSelectablePlanningDate}
                       />
+                      <ChevronDown className="plan-v14473-date-chevron" size={14} aria-hidden="true" />
                     </div>
                   </div>
 
                   <label className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile plan-v14459-publishing-tile">
                     <div className="plan-v90-setting-head">
-                      <span className="plan-v90-setting-icon"><Send size={20} aria-hidden="true" /></span>
+                      <span className="plan-v90-setting-icon"><Clock3 size={20} aria-hidden="true" /></span>
                       <div className="plan-v90-setting-copy">
                         <span className="plan-v90-setting-title">{t("automation.redesign.publishing")}</span>
                         <small>{plannerSectionCopy.publishingHelp}</small>
@@ -10749,6 +10761,10 @@ function blockFormatCardClickAfterDrag(event) {
                       <option value="weekly">{t("automation.weekly")}</option>
                       <option value="once">{t("automation.once")}</option>
                     </select>
+                    <span className="plan-v14473-mobile-value">
+                      <strong>{scheduleType === "weekly" ? t("automation.weekly") : t("automation.once")}</strong>
+                      <ChevronDown size={14} aria-hidden="true" />
+                    </span>
                   </label>
                     </div>
                   </section>
@@ -10759,7 +10775,7 @@ function blockFormatCardClickAfterDrag(event) {
                       <strong>{locale.startsWith("sv") ? "KANALER & SPRÅK" : "CHANNELS & LANGUAGE"}</strong>
                     </header>
                     <div className="plan-v14467-settings-rows">
-                  <label className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile">
+                  <label className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile plan-v14473-language-tile">
                     <div className="plan-v90-setting-head">
                       <span className="plan-v90-setting-icon"><Globe2 size={20} aria-hidden="true" /></span>
                       <div className="plan-v90-setting-copy">
@@ -10774,11 +10790,15 @@ function blockFormatCardClickAfterDrag(event) {
                         </option>
                       ))}
                     </select>
+                    <span className="plan-v14473-mobile-value">
+                      <strong>{languageOptions.find((option) => option.value === language)?.label || language}</strong>
+                      <ChevronDown size={14} aria-hidden="true" />
+                    </span>
                   </label>
 
                   <div className="plan-v70-field plan-v73-platform-field plan-v83-setting-tile plan-v90-setting-tile plan-v14459-platform-tile">
                     <div className="plan-v90-setting-head">
-                      <span className="plan-v90-setting-icon"><LayoutGrid size={20} aria-hidden="true" /></span>
+                      <span className="plan-v90-setting-icon"><Send size={20} aria-hidden="true" /></span>
                       <div className="plan-v90-setting-copy">
                         <span className="plan-v90-setting-title">{t("automation.platform")}</span>
                         <small>{plannerSectionCopy.platformHelp}</small>
@@ -10846,7 +10866,9 @@ function blockFormatCardClickAfterDrag(event) {
                       <div className="plan-v14457-week-rhythm-head">
                         <div>
                           <strong>{t("automation.weekRhythm.title")}</strong>
-                          <span>{t("automation.weekRhythm.help")}</span>
+                          <span>{locale.startsWith("sv")
+                            ? "Spreelo har valt de starkaste veckodagarna för denna plan."
+                            : "Spreelo has selected the strongest weekdays for this plan."}</span>
                         </div>
                       </div>
                       <span className="plan-v14457-week-rhythm-note"><Info size={18} aria-hidden="true" />{t("automation.weekRhythm.timeHelp")}</span>
@@ -11043,7 +11065,7 @@ function blockFormatCardClickAfterDrag(event) {
                     previousMonthLabel={t("automation.previousMonth")}
                     nextMonthLabel={t("automation.nextMonth")}
                           ariaLabel={t("automation.offerPlan.startLabel")}
-                          minDate={getDateInputValueInTimeZone(new Date(), timeZone)}
+                          minDate={minimumSelectablePlanningDate}
                         />
                       </div>
                       <div className="plan-v101-offer-date-field">
@@ -11061,7 +11083,7 @@ function blockFormatCardClickAfterDrag(event) {
                     previousMonthLabel={t("automation.previousMonth")}
                     nextMonthLabel={t("automation.nextMonth")}
                           ariaLabel={t("automation.offerPlan.endLabel")}
-                          minDate={getLaterDateString(offerStartDate, getDateInputValueInTimeZone(new Date(), timeZone))}
+                          minDate={canManuallyEditCampaignPlan ? offerStartDate || null : getLaterDateString(offerStartDate, minimumSelectablePlanningDate)}
                         />
                       </div>
                     </div>
@@ -11129,7 +11151,7 @@ function blockFormatCardClickAfterDrag(event) {
                     previousMonthLabel={t("automation.previousMonth")}
                     nextMonthLabel={t("automation.nextMonth")}
                         ariaLabel={t("automation.giveaway.endDateLabel")}
-                        minDate={getDateInputValueInTimeZone(new Date(), timeZone)}
+                        minDate={minimumSelectablePlanningDate}
                       />
                     </div>
                   </div>
@@ -11262,7 +11284,7 @@ function blockFormatCardClickAfterDrag(event) {
 
                     {chronologicalSlots.map((slot, index) => {
                       const rowExpanded = expandedInstructionSlotIds.includes(slot.id);
-                      const isPastCampaignSlot = planCreationMode === "campaign" && isSlotScheduledInPast(slot, timeZone);
+                      const isPastCampaignSlot = planCreationMode === "campaign" && !canManuallyEditCampaignPlan && isSlotScheduledInPast(slot, timeZone);
                       const slotPlatformOptions = getSlotPlatformOptions(slot);
                       const platformLabel = slotPlatformOptions[0]?.label || platform || t("automation.choosePlatform");
                       const formatItem = getExploreFormatItem(slot.contentTypeId);
@@ -11368,7 +11390,7 @@ function blockFormatCardClickAfterDrag(event) {
                                   locale={locale}
                                   previousMonthLabel={t("automation.previousMonth")}
                                   nextMonthLabel={t("automation.nextMonth")}
-                                  minDate={getDateInputValueInTimeZone(new Date(), timeZone)}
+                                  minDate={minimumSelectablePlanningDate}
                                 />
                               )}
                               {scheduleType !== "weekly" && planCreationMode === "manual" ? (
@@ -11596,7 +11618,7 @@ function blockFormatCardClickAfterDrag(event) {
                   ) : null}
                   <div className="campaign-v14335-slot-list">
                     {slots.map((slot, index) => {
-                      const isPastCampaignSlot = isSlotScheduledInPast(slot, timeZone);
+                      const isPastCampaignSlot = !canManuallyEditCampaignPlan && isSlotScheduledInPast(slot, timeZone);
                       const scheduleUnlocked = !isPastCampaignSlot && slot.dateLocked === false;
                       const slotPlatformOptions = getSlotPlatformOptions(slot);
 
@@ -11619,7 +11641,7 @@ function blockFormatCardClickAfterDrag(event) {
                                 locale={locale}
                     previousMonthLabel={t("automation.previousMonth")}
                     nextMonthLabel={t("automation.nextMonth")}
-                                minDate={getDateInputValueInTimeZone(new Date(), timeZone)}
+                                minDate={minimumSelectablePlanningDate}
                               />
                             ) : (
                               <>
@@ -11988,7 +12010,7 @@ function blockFormatCardClickAfterDrag(event) {
                     locale={locale}
                     previousMonthLabel={t("automation.previousMonth")}
                     nextMonthLabel={t("automation.nextMonth")}
-                    minDate={getDateInputValueInTimeZone(new Date(), timeZone)}
+                    minDate={minimumSelectablePlanningDate}
                   />
 
                   {planCreationMode === "manual" && scheduleType !== "weekly" ? (
@@ -12299,7 +12321,7 @@ function blockFormatCardClickAfterDrag(event) {
         const canEditTechnicalCampaignPrompt =
           slot.isCampaignSlot && canManuallyEditCampaignPlan;
         const isPastCampaignSlot =
-          planCreationMode === "campaign" && isSlotScheduledInPast(slot, timeZone);
+          planCreationMode === "campaign" && !canManuallyEditCampaignPlan && isSlotScheduledInPast(slot, timeZone);
         const includedLogo =
           Boolean(currentBrandProfile?.logo_url) &&
           (typeof slot.includeLogo === "boolean"
@@ -12425,7 +12447,7 @@ function blockFormatCardClickAfterDrag(event) {
                     locale={locale}
                     previousMonthLabel={t("automation.previousMonth")}
                     nextMonthLabel={t("automation.nextMonth")}
-                    minDate={getDateInputValueInTimeZone(new Date(), timeZone)}
+                    minDate={minimumSelectablePlanningDate}
                   />
                 )}
               </div>
