@@ -10553,7 +10553,7 @@ function blockFormatCardClickAfterDrag(event) {
             setOpenPickerId(null);
           }
 
-          if (!event.target.closest(".platform-multiselect")) {
+          if (!event.target.closest(".platform-multiselect") && !event.target.closest(".sp85-platform-picker")) {
             setPlatformDropdownOpen(false);
           }
         }}
@@ -10813,7 +10813,10 @@ function blockFormatCardClickAfterDrag(event) {
                                 type="button"
                                 className="sp85-platform-button"
                                 aria-expanded={platformDropdownOpen}
-                                onClick={() => setPlatformDropdownOpen((open) => !open)}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setPlatformDropdownOpen((open) => !open);
+                                }}
                               >
                                 <span className="sp85-platform-icons" aria-hidden="true">
                                   {selectedPlatformOptions.slice(0, 3).map((item) => (
