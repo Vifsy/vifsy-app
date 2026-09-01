@@ -10622,277 +10622,285 @@ function blockFormatCardClickAfterDrag(event) {
                   )}
                 </section>
 
-                <div className="plan-v89-settings-heading">
-                  <div>
-                    <h2>{plannerSectionCopy.settingsTitle}</h2>
-                    <p>{plannerSectionCopy.settingsText}</p>
-                  </div>
+                <div className="sp85-settings-heading">
+                  <h2>{plannerSectionCopy.settingsTitle}</h2>
+                  <p>{plannerSectionCopy.settingsText}</p>
                 </div>
 
-                <div className="plan-v14467-settings-groups">
-                  <section className="plan-v14467-settings-group">
-                    <header className="plan-v14467-group-title">
+                <div className="sp85-settings-grid">
+                  <section className="sp85-settings-card sp85-settings-card-strategy">
+                    <header className="sp85-settings-card-title">
                       <span><Target size={18} aria-hidden="true" /></span>
                       <strong>{locale.startsWith("sv") ? "STRATEGI" : "STRATEGY"}</strong>
                     </header>
-                    <div className="plan-v14467-settings-rows">
-                  <label className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile plan-v14473-goal-tile">
-                    <div className="plan-v90-setting-head">
-                      <span className="plan-v90-setting-icon"><Target size={20} aria-hidden="true" /></span>
-                      <div className="plan-v90-setting-copy">
-                        <span className="plan-v90-setting-title">{t("automation.goal")}</span>
-                        <small>{plannerSectionCopy.goalHelp}</small>
-                      </div>
-                    </div>
-                    <select
-                      value={autoPlanGoal}
-                      aria-busy={autoPlanLoading}
-                      onPointerDown={(event) => {
-                        if (!loadingConnectedPlatforms && connectedPlatformOptions.length === 0) {
-                          event.preventDefault();
-                          setShowSocialChannelRequiredModal(true);
-                        }
-                      }}
-                      onKeyDown={(event) => {
-                        if (
-                          !loadingConnectedPlatforms &&
-                          connectedPlatformOptions.length === 0 &&
-                          ["Enter", " ", "ArrowDown", "ArrowUp"].includes(event.key)
-                        ) {
-                          event.preventDefault();
-                          setShowSocialChannelRequiredModal(true);
-                        }
-                      }}
-                      onChange={(event) => {
-                        if (!connectedPlatformOptions.length) {
-                          setShowSocialChannelRequiredModal(true);
-                          return;
-                        }
-                        changeAutoPlanGoal(event.target.value);
-                      }}
-                    >
-                      <option value="" disabled hidden>{t("automation.redesign.chooseGoal")}</option>
-                      {autoPlanGoals.map((goal) => (
-                        <option value={goal.id} key={goal.id}>
-                          {translateAutoPlanGoalLabel(goal.id)}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="plan-v14473-mobile-value">
-                      <strong>{autoPlanGoal ? translateAutoPlanGoalLabel(autoPlanGoal) : t("automation.redesign.chooseGoal")}</strong>
-                      <ChevronDown size={14} aria-hidden="true" />
-                    </span>
-                  </label>
+                    <div className="sp85-settings-card-rows">
+                      <label className="sp85-settings-row sp85-row-goal">
+                        <span className="sp85-row-icon"><Target size={20} aria-hidden="true" /></span>
+                        <span className="sp85-row-copy">
+                          <strong>{t("automation.goal")}</strong>
+                          <small>{plannerSectionCopy.goalHelp}</small>
+                        </span>
+                        <span className="sp85-control sp85-select-control">
+                          <select
+                            className="sp85-native-select"
+                            value={autoPlanGoal}
+                            aria-busy={autoPlanLoading}
+                            onPointerDown={(event) => {
+                              if (!loadingConnectedPlatforms && connectedPlatformOptions.length === 0) {
+                                event.preventDefault();
+                                setShowSocialChannelRequiredModal(true);
+                              }
+                            }}
+                            onKeyDown={(event) => {
+                              if (
+                                !loadingConnectedPlatforms &&
+                                connectedPlatformOptions.length === 0 &&
+                                ["Enter", " ", "ArrowDown", "ArrowUp"].includes(event.key)
+                              ) {
+                                event.preventDefault();
+                                setShowSocialChannelRequiredModal(true);
+                              }
+                            }}
+                            onChange={(event) => {
+                              if (!connectedPlatformOptions.length) {
+                                setShowSocialChannelRequiredModal(true);
+                                return;
+                              }
+                              changeAutoPlanGoal(event.target.value);
+                            }}
+                          >
+                            <option value="" disabled hidden>{t("automation.redesign.chooseGoal")}</option>
+                            {autoPlanGoals.map((goal) => (
+                              <option value={goal.id} key={goal.id}>
+                                {translateAutoPlanGoalLabel(goal.id)}
+                              </option>
+                            ))}
+                          </select>
+                          <span className="sp85-value-display">
+                            <strong>{autoPlanGoal ? translateAutoPlanGoalLabel(autoPlanGoal) : t("automation.redesign.chooseGoal")}</strong>
+                            <ChevronDown size={16} aria-hidden="true" />
+                          </span>
+                        </span>
+                      </label>
 
-                  <label className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile plan-v14473-frequency-tile">
-                    <div className="plan-v90-setting-head">
-                      <span className="plan-v90-setting-icon"><CalendarDays size={20} aria-hidden="true" /></span>
-                      <div className="plan-v90-setting-copy">
-                        <span className="plan-v90-setting-title">{scheduleType === "weekly" ? t("automation.postsPerWeek") : t("automation.postCountTitle")}</span>
-                        <small>{scheduleType === "weekly" ? plannerSectionCopy.frequencyHelp : t("automation.redesign.postCountCardHelp")}</small>
-                      </div>
-                    </div>
-                    <select
-                      value={autoPlanPostCount}
-                      aria-busy={autoPlanLoading}
-                      onChange={(event) => changeAutoPlanPostCount(Number(event.target.value))}
-                      disabled={planCreationMode === "campaign"}
-                    >
-                      {displayedAutoPlanPostCountOptions.map((count) => (
-                        <option value={count} key={count}>
-                          {scheduleType === "weekly" ? t("automation.redesign.postsPerWeekValue", { count }) : t("automation.redesign.postCountValue", { count })}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="plan-v14473-mobile-value">
-                      <strong>{locale.startsWith("sv") ? `${autoPlanPostCount} inlägg` : `${autoPlanPostCount} posts`}</strong>
-                      <ChevronDown size={14} aria-hidden="true" />
-                    </span>
-                  </label>
+                      <label className="sp85-settings-row sp85-row-frequency">
+                        <span className="sp85-row-icon"><CalendarDays size={20} aria-hidden="true" /></span>
+                        <span className="sp85-row-copy">
+                          <strong>{scheduleType === "weekly" ? t("automation.postsPerWeek") : t("automation.postCountTitle")}</strong>
+                          <small>{scheduleType === "weekly" ? plannerSectionCopy.frequencyHelp : t("automation.redesign.postCountCardHelp")}</small>
+                        </span>
+                        <span className="sp85-control sp85-select-control">
+                          <select
+                            className="sp85-native-select"
+                            value={autoPlanPostCount}
+                            aria-busy={autoPlanLoading}
+                            onChange={(event) => changeAutoPlanPostCount(Number(event.target.value))}
+                            disabled={planCreationMode === "campaign"}
+                          >
+                            {displayedAutoPlanPostCountOptions.map((count) => (
+                              <option value={count} key={count}>
+                                {scheduleType === "weekly" ? t("automation.redesign.postsPerWeekValue", { count }) : t("automation.redesign.postCountValue", { count })}
+                              </option>
+                            ))}
+                          </select>
+                          <span className="sp85-value-display">
+                            <strong className="sp85-frequency-desktop-value">{scheduleType === "weekly"
+                              ? (locale.startsWith("sv") ? `${autoPlanPostCount} inlägg per vecka` : `${autoPlanPostCount} posts per week`)
+                              : (locale.startsWith("sv") ? `${autoPlanPostCount} inlägg` : `${autoPlanPostCount} posts`)}</strong>
+                            <strong className="sp85-frequency-mobile-value">{locale.startsWith("sv") ? `${autoPlanPostCount} inlägg` : `${autoPlanPostCount} posts`}</strong>
+                            <ChevronDown size={16} aria-hidden="true" />
+                          </span>
+                        </span>
+                      </label>
                     </div>
                   </section>
 
-                  <section className="plan-v14467-settings-group">
-                    <header className="plan-v14467-group-title">
+                  <section className="sp85-settings-card sp85-settings-card-schedule">
+                    <header className="sp85-settings-card-title">
                       <span><CalendarDays size={18} aria-hidden="true" /></span>
                       <strong>{locale.startsWith("sv") ? "SCHEMA" : "SCHEDULE"}</strong>
                     </header>
-                    <div className="plan-v14467-settings-rows">
-                  <div className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile plan-v14341-date-tile">
-                    <div className="plan-v90-setting-head">
-                      <span className="plan-v90-setting-icon"><CalendarDays size={20} aria-hidden="true" /></span>
-                      <div className="plan-v90-setting-copy">
-                        <span className="plan-v90-setting-title">{t("automation.startDate")}</span>
-                        <small>{plannerSectionCopy.startDateHelp}</small>
+                    <div className="sp85-settings-card-rows">
+                      <div className="sp85-settings-row sp85-row-date">
+                        <span className="sp85-row-icon"><CalendarDays size={20} aria-hidden="true" /></span>
+                        <span className="sp85-row-copy">
+                          <strong>{t("automation.startDate")}</strong>
+                          <small>{plannerSectionCopy.startDateHelp}</small>
+                        </span>
+                        <span className="sp85-control sp85-date-control">
+                          <DatePickerField
+                            value={planStartDate}
+                            onChange={updatePlanStartDate}
+                            pickerId="v70-start-date"
+                            openPickerId={openPickerId}
+                            setOpenPickerId={setOpenPickerId}
+                            timeZone={timeZone}
+                            compact
+                            weekdayLabels={weekdayLabels}
+                            locale={locale}
+                            previousMonthLabel={t("automation.previousMonth")}
+                            nextMonthLabel={t("automation.nextMonth")}
+                            minDate={minimumSelectablePlanningDate}
+                          />
+                          <ChevronRight className="sp85-mobile-chevron" size={17} aria-hidden="true" />
+                        </span>
                       </div>
-                    </div>
-                    <div className="plan-v143-date-time-row plan-v14341-date-only-row">
-                      <DatePickerField
-                        value={planStartDate}
-                        onChange={updatePlanStartDate}
-                        pickerId="v70-start-date"
-                        openPickerId={openPickerId}
-                        setOpenPickerId={setOpenPickerId}
-                        timeZone={timeZone}
-                        compact
-                        weekdayLabels={weekdayLabels}
-                        locale={locale}
-                        previousMonthLabel={t("automation.previousMonth")}
-                        nextMonthLabel={t("automation.nextMonth")}
-                        minDate={minimumSelectablePlanningDate}
-                      />
-                      <ChevronDown className="plan-v14473-date-chevron" size={14} aria-hidden="true" />
-                    </div>
-                  </div>
 
-                  <label className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile plan-v14459-publishing-tile">
-                    <div className="plan-v90-setting-head">
-                      <span className="plan-v90-setting-icon"><Clock3 size={20} aria-hidden="true" /></span>
-                      <div className="plan-v90-setting-copy">
-                        <span className="plan-v90-setting-title">{t("automation.redesign.publishing")}</span>
-                        <small>{plannerSectionCopy.publishingHelp}</small>
-                      </div>
-                    </div>
-                    <select
-                      value={scheduleType}
-                      onChange={(event) => setScheduleType(event.target.value)}
-                      disabled={planCreationMode === "campaign"}
-                    >
-                      <option value="weekly">{t("automation.weekly")}</option>
-                      <option value="once">{t("automation.once")}</option>
-                    </select>
-                    <span className="plan-v14473-mobile-value">
-                      <strong>{scheduleType === "weekly" ? t("automation.weekly") : t("automation.once")}</strong>
-                      <ChevronDown size={14} aria-hidden="true" />
-                    </span>
-                  </label>
+                      <label className="sp85-settings-row sp85-row-publishing">
+                        <span className="sp85-row-icon"><Clock3 size={20} aria-hidden="true" /></span>
+                        <span className="sp85-row-copy">
+                          <strong>{t("automation.redesign.publishing")}</strong>
+                          <small>{plannerSectionCopy.publishingHelp}</small>
+                        </span>
+                        <span className="sp85-control sp85-select-control">
+                          <select
+                            className="sp85-native-select"
+                            value={scheduleType}
+                            onChange={(event) => setScheduleType(event.target.value)}
+                            disabled={planCreationMode === "campaign"}
+                          >
+                            <option value="weekly">{t("automation.weekly")}</option>
+                            <option value="once">{t("automation.once")}</option>
+                          </select>
+                          <span className="sp85-value-display">
+                            <strong>{scheduleType === "weekly" ? t("automation.weekly") : t("automation.once")}</strong>
+                            <ChevronDown size={16} aria-hidden="true" />
+                          </span>
+                        </span>
+                      </label>
                     </div>
                   </section>
 
-                  <section className="plan-v14467-settings-group">
-                    <header className="plan-v14467-group-title">
+                  <section className="sp85-settings-card sp85-settings-card-channels">
+                    <header className="sp85-settings-card-title">
                       <span><Globe2 size={18} aria-hidden="true" /></span>
                       <strong>{locale.startsWith("sv") ? "KANALER & SPRÅK" : "CHANNELS & LANGUAGE"}</strong>
                     </header>
-                    <div className="plan-v14467-settings-rows">
-                  <label className="plan-v70-field plan-v83-setting-tile plan-v90-setting-tile plan-v14473-language-tile">
-                    <div className="plan-v90-setting-head">
-                      <span className="plan-v90-setting-icon"><Globe2 size={20} aria-hidden="true" /></span>
-                      <div className="plan-v90-setting-copy">
-                        <span className="plan-v90-setting-title">{t("automation.redesign.postLanguage")}</span>
-                        <small>{plannerSectionCopy.languageHelp}</small>
-                      </div>
-                    </div>
-                    <select value={language} onChange={(event) => setLanguage(event.target.value)}>
-                      {languageOptions.map((option) => (
-                        <option value={option.value} key={`${option.value}-${option.label}`}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="plan-v14473-mobile-value">
-                      <strong>{languageOptions.find((option) => option.value === language)?.label || language}</strong>
-                      <ChevronDown size={14} aria-hidden="true" />
-                    </span>
-                  </label>
-
-                  <div className="plan-v70-field plan-v73-platform-field plan-v83-setting-tile plan-v90-setting-tile plan-v14459-platform-tile">
-                    <div className="plan-v90-setting-head">
-                      <span className="plan-v90-setting-icon"><Send size={20} aria-hidden="true" /></span>
-                      <div className="plan-v90-setting-copy">
-                        <span className="plan-v90-setting-title">{t("automation.platform")}</span>
-                        <small>{plannerSectionCopy.platformHelp}</small>
-                      </div>
-                    </div>
-                    {loadingConnectedPlatforms ? (
-                      <div className="plan-v73-platform-loading">{t("automation.loadingConnectedChannels")}</div>
-                    ) : connectedPlatformOptions.length > 0 ? (
-                      <div className={`platform-multiselect plan-v14467-platform-picker${platformDropdownOpen ? " is-open" : ""}`}>
-                        <button
-                          type="button"
-                          className="plan-v14467-value-button"
-                          aria-expanded={platformDropdownOpen}
-                          onClick={() => setPlatformDropdownOpen((open) => !open)}
-                        >
-                          <span className="plan-v14467-selected-platforms">
-                            {selectedPlatformOptions.slice(0, 3).map((item) => (
-                              <img src={item.icon} alt="" className="platform-icon-img" key={`selected-${item.value}`} />
+                    <div className="sp85-settings-card-rows">
+                      <label className="sp85-settings-row sp85-row-language">
+                        <span className="sp85-row-icon"><Globe2 size={20} aria-hidden="true" /></span>
+                        <span className="sp85-row-copy">
+                          <strong>{t("automation.redesign.postLanguage")}</strong>
+                          <small>{plannerSectionCopy.languageHelp}</small>
+                        </span>
+                        <span className="sp85-control sp85-select-control">
+                          <select className="sp85-native-select" value={language} onChange={(event) => setLanguage(event.target.value)}>
+                            {languageOptions.map((option) => (
+                              <option value={option.value} key={`${option.value}-${option.label}`}>
+                                {option.label}
+                              </option>
                             ))}
-                            <strong>{selectedPlatformOptions.length > 0
-                              ? selectedPlatformOptions.map((item) => item.label).join(" + ")
-                              : t("automation.choosePlatform")}</strong>
+                          </select>
+                          <span className="sp85-value-display">
+                            <strong>{languageOptions.find((option) => option.value === language)?.label || language}</strong>
+                            <ChevronDown size={16} aria-hidden="true" />
                           </span>
-                          {platformDropdownOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                        </button>
-                        {platformDropdownOpen ? (
-                          <div className="platform-multiselect-menu plan-v14467-platform-options" onClick={(event) => event.stopPropagation()}>
-                            {connectedPlatformOptions.map((item) => {
-                              const checked = selectedPlatformKeys.includes(item.value);
-                              return (
-                                <label key={`v73-platform-${item.value}`} className="platform-multiselect-option">
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={() => {
-                                      const nextKeys = checked
-                                        ? selectedPlatformKeys.filter((key) => key !== item.value)
-                                        : [...selectedPlatformKeys, item.value];
-                                      applyPlatformSelection(nextKeys);
-                                    }}
-                                  />
-                                  <img src={item.icon} alt="" className="platform-icon-img" />
-                                  <span>{item.label}</span>
-                                  {checked ? <CheckCircle2 className="plan-v14467-platform-check" size={17} aria-hidden="true" /> : null}
-                                </label>
-                              );
-                            })}
-                          </div>
-                        ) : null}
+                        </span>
+                      </label>
+
+                      <div className="sp85-settings-row sp85-row-platform">
+                        <span className="sp85-row-icon"><Send size={20} aria-hidden="true" /></span>
+                        <span className="sp85-row-copy">
+                          <strong>{t("automation.platform")}</strong>
+                          <small>{plannerSectionCopy.platformHelp}</small>
+                        </span>
+                        <span className="sp85-control sp85-platform-control">
+                          {loadingConnectedPlatforms ? (
+                            <span className="sp85-platform-loading">{t("automation.loadingConnectedChannels")}</span>
+                          ) : connectedPlatformOptions.length > 0 ? (
+                            <div className={`sp85-platform-picker${platformDropdownOpen ? " is-open" : ""}`}>
+                              <button
+                                type="button"
+                                className="sp85-platform-button"
+                                aria-expanded={platformDropdownOpen}
+                                onClick={() => setPlatformDropdownOpen((open) => !open)}
+                              >
+                                <span className="sp85-platform-icons" aria-hidden="true">
+                                  {selectedPlatformOptions.slice(0, 3).map((item) => (
+                                    <img src={item.icon} alt="" key={`sp85-selected-${item.value}`} />
+                                  ))}
+                                </span>
+                                <strong className="sp85-platform-desktop-label">{selectedPlatformOptions.length > 0
+                                  ? (selectedPlatformOptions.length <= 2
+                                    ? selectedPlatformOptions.map((item) => item.label).join(" + ")
+                                    : `+${selectedPlatformOptions.length - Math.min(3, selectedPlatformOptions.length)}`)
+                                  : t("automation.choosePlatform")}</strong>
+                                <strong className="sp85-platform-mobile-label">{selectedPlatformOptions.length > 0
+                                  ? (locale.startsWith("sv")
+                                    ? `${selectedPlatformOptions.length} ${selectedPlatformOptions.length === 1 ? "plattform" : "plattformar"}`
+                                    : `${selectedPlatformOptions.length} ${selectedPlatformOptions.length === 1 ? "platform" : "platforms"}`)
+                                  : t("automation.choosePlatform")}</strong>
+                                <ChevronRight size={17} aria-hidden="true" />
+                              </button>
+                              {platformDropdownOpen ? (
+                                <div className="sp85-platform-options" onClick={(event) => event.stopPropagation()}>
+                                  {connectedPlatformOptions.map((item) => {
+                                    const checked = selectedPlatformKeys.includes(item.value);
+                                    return (
+                                      <label key={`sp85-platform-${item.value}`} className="sp85-platform-option">
+                                        <input
+                                          type="checkbox"
+                                          checked={checked}
+                                          onChange={() => {
+                                            const nextKeys = checked
+                                              ? selectedPlatformKeys.filter((key) => key !== item.value)
+                                              : [...selectedPlatformKeys, item.value];
+                                            applyPlatformSelection(nextKeys);
+                                          }}
+                                        />
+                                        <img src={item.icon} alt="" />
+                                        <span>{item.label}</span>
+                                        {checked ? <CheckCircle2 size={17} aria-hidden="true" /> : null}
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <a className="sp85-connect-platform" href="/social-channels">
+                              {t("automation.connectSocialChannelFirst")}
+                            </a>
+                          )}
+                        </span>
                       </div>
-                    ) : (
-                      <a className="plan-v73-connect-platform" href="/social-channels">
-                        {t("automation.connectSocialChannelFirst")}
-                      </a>
-                    )}
-                  </div>
                     </div>
                   </section>
                 </div>
 
                 {scheduleType === "weekly" && planCreationMode !== "campaign" && slots.length ? (
-                  <div className="plan-v14457-week-rhythm plan-v14467-week-rhythm">
-                    <span className="plan-v14467-week-visual" aria-hidden="true"><CalendarDays size={32} /></span>
-                    <div className="plan-v14467-week-content">
-                      <div className="plan-v14457-week-rhythm-head">
-                        <div>
-                          <strong>{t("automation.weekRhythm.title")}</strong>
-                          <span>{locale.startsWith("sv")
-                            ? "Spreelo har valt de starkaste veckodagarna för denna plan."
-                            : "Spreelo has selected the strongest weekdays for this plan."}</span>
-                        </div>
+                  <div className="sp85-week-rhythm">
+                    <div className="sp85-week-intro">
+                      <span className="sp85-week-icon" aria-hidden="true"><CalendarDays size={29} /></span>
+                      <div>
+                        <strong>{t("automation.weekRhythm.title")}</strong>
+                        <span>{locale.startsWith("sv")
+                          ? "Spreelo har valt de starkaste veckodagarna för denna plan."
+                          : "Spreelo has selected the strongest weekdays for this plan."}</span>
                       </div>
-                      <span className="plan-v14457-week-rhythm-note"><Info size={18} aria-hidden="true" />{t("automation.weekRhythm.timeHelp")}</span>
-                      <div className="plan-v14457-week-days">
+                    </div>
+                    <div className="sp85-week-days">
                       {weekdays.map((weekday, index) => {
                         const count = weeklyDayCounts[weekday] || 0;
+                        const moving = slots.some((slot) => slot.id === weekdayMoveSourceSlotId && (slot.weekday || getWeekdayFromDateString(slot.startDate, timeZone)) === weekday);
                         return (
                           <button
                             type="button"
                             key={weekday}
                             className={[
-                              "plan-v14457-week-day",
-                              count ? "selected" : "",
-                              count > 1 ? "double" : "",
-                              slots.some((slot) => slot.id === weekdayMoveSourceSlotId && (slot.weekday || getWeekdayFromDateString(slot.startDate, timeZone)) === weekday) ? "moving" : "",
+                              "sp85-week-day",
+                              count ? "is-selected" : "",
+                              count > 1 ? "is-multi" : "",
+                              moving ? "is-moving" : "",
                             ].filter(Boolean).join(" ")}
                             onClick={() => handleWeeklyDayClick(weekday)}
                           >
+                            <i className="sp85-week-dot" aria-hidden="true" />
                             <span>{weekdayLabels[index]}</span>
                             <strong>{count ? t(count === 1 ? "automation.weekRhythm.postCountOne" : "automation.weekRhythm.postCountMany", { count }) : "—"}</strong>
                           </button>
                         );
                       })}
-                      </div>
                     </div>
                   </div>
                 ) : null}
