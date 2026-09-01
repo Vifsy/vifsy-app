@@ -1,0 +1,226 @@
+/* v144.88 — responsive bridge for Planinställningar + Veckovis publiceringsrytm.
+   Purpose: preserve the approved mobile (<=760px) and wide-desktop layouts,
+   while preventing the desktop cards from being squeezed by the sidebar at
+   intermediate widths. Breakpoints are based on the actual settings section
+   width via CSS container queries, not the viewport width. */
+
+@media (min-width: 761px) {
+  html body .automation-page.plan-v70-active .plan-v89-settings-section {
+    container-type: inline-size;
+    container-name: sp85-settings-area;
+  }
+
+  /* Compact intermediate area: use the proven six-row structure rather than
+     squeezing two/three desktop cards into an undersized content column. */
+  @container sp85-settings-area (max-width: 899px) {
+    html body .automation-page.plan-v70-active .sp85-settings-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      width: 100%;
+      margin: 0;
+      padding: 6px 20px;
+      border: 1px solid rgba(190, 203, 224, .46);
+      border-radius: 22px;
+      background: linear-gradient(145deg, rgba(255,255,255,.55), rgba(255,255,255,.34));
+      box-shadow: 0 14px 34px rgba(35,50,79,.065), inset 0 1px 0 rgba(255,255,255,.82);
+      backdrop-filter: blur(19px) saturate(116%);
+      -webkit-backdrop-filter: blur(19px) saturate(116%);
+    }
+
+    html body .automation-page.plan-v70-active .sp85-settings-card,
+    html body .automation-page.plan-v70-active .sp85-settings-card-rows {
+      display: contents;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-settings-card-title {
+      display: none;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-settings-card-channels .sp85-settings-row + .sp85-settings-row {
+      border-left: 0;
+      padding-left: 0;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-settings-row {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr) minmax(150px, 34%) 16px;
+      align-items: center;
+      column-gap: 12px;
+      width: 100%;
+      min-height: 72px;
+      padding: 8px 0;
+      border-top: 1px solid rgba(181,195,216,.42);
+    }
+
+    html body .automation-page.plan-v70-active .sp85-row-goal { order: 1; border-top: 0; }
+    html body .automation-page.plan-v70-active .sp85-row-frequency { order: 2; }
+    html body .automation-page.plan-v70-active .sp85-row-date { order: 3; }
+    html body .automation-page.plan-v70-active .sp85-row-language { order: 4; }
+    html body .automation-page.plan-v70-active .sp85-row-platform { order: 5; }
+    html body .automation-page.plan-v70-active .sp85-row-publishing { order: 6; }
+
+    html body .automation-page.plan-v70-active .sp85-row-copy > strong {
+      font-size: 14px;
+      line-height: 1.18;
+      white-space: nowrap;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-row-copy > small {
+      display: -webkit-box;
+      margin-top: 3px;
+      overflow: hidden;
+      font-size: 11.5px;
+      line-height: 1.28;
+      white-space: normal;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-control {
+      grid-column: 3 / 5;
+      min-width: 0;
+      width: 100%;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-select-control,
+    html body .automation-page.plan-v70-active .sp85-date-control,
+    html body .automation-page.plan-v70-active .sp85-platform-button {
+      height: 46px;
+      min-height: 46px;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-date-control .custom-picker-button {
+      min-height: 44px;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-value-display > strong,
+    html body .automation-page.plan-v70-active .sp85-date-control .custom-picker-button > span,
+    html body .automation-page.plan-v70-active .sp85-platform-button > strong {
+      font-size: 13px;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-frequency-desktop-value { display: none; }
+    html body .automation-page.plan-v70-active .sp85-frequency-mobile-value { display: block; }
+
+    html body .automation-page.plan-v70-active .sp85-week-rhythm {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 13px;
+      min-height: 0;
+      padding: 16px 20px 18px;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-week-intro {
+      grid-template-columns: 46px minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-week-icon {
+      width: 46px;
+      height: 46px;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-week-days {
+      width: 100%;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-week-day {
+      min-height: 64px;
+      padding: 7px 3px;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-week-day > span { font-size: 12.5px; }
+    html body .automation-page.plan-v70-active .sp85-week-day > strong { font-size: 10.5px; }
+  }
+
+  /* Medium content area: 2 + 1 cards. The third card spans the full row, while
+     text is allowed to use two calm lines instead of collapsing into a thin column. */
+  @container sp85-settings-area (min-width: 900px) and (max-width: 1279px) {
+    html body .automation-page.plan-v70-active .sp85-settings-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-settings-card {
+      min-height: 224px;
+      padding: 19px 20px 17px;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-settings-card-channels {
+      grid-column: 1 / -1;
+      min-height: 176px;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-settings-card-channels .sp85-settings-card-rows {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-rows: none;
+      gap: 20px;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-settings-card-channels .sp85-settings-row + .sp85-settings-row {
+      border-top: 0;
+      border-left: 1px solid rgba(178,193,216,.42);
+      padding-left: 20px;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-settings-row {
+      grid-template-columns: 42px minmax(0, 1fr) minmax(142px, 37%);
+      column-gap: 12px;
+      min-height: 76px;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-row-copy > strong {
+      font-size: 14px;
+      line-height: 1.18;
+      white-space: nowrap;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-row-copy > small {
+      display: -webkit-box;
+      overflow: hidden;
+      font-size: 11.5px;
+      line-height: 1.28;
+      white-space: normal;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-select-control,
+    html body .automation-page.plan-v70-active .sp85-date-control,
+    html body .automation-page.plan-v70-active .sp85-platform-button {
+      height: 46px;
+      min-height: 46px;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-date-control .custom-picker-button {
+      min-height: 44px;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-week-rhythm {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+      min-height: 0;
+      padding: 16px 20px 18px;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-week-intro {
+      grid-template-columns: 48px minmax(0, 1fr);
+      gap: 13px;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-week-icon {
+      width: 48px;
+      height: 48px;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-week-days {
+      width: 100%;
+    }
+
+    html body .automation-page.plan-v70-active .sp85-week-day {
+      min-height: 66px;
+    }
+  }
+}

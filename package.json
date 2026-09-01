@@ -170,7 +170,8 @@
     "test:v144.83": "node scripts/test-v144-83-plan-settings-week-rhythm-correction.mjs",
     "test:v144.84": "node scripts/test-v144-84-glass-plan-settings-week-rhythm.mjs",
     "test:v144.85": "node scripts/test-v144-85-clean-settings-system.mjs",
-    "test:v144.86": "node scripts/test-v144-86-targeted-ui-corrections.mjs"
+    "test:v144.86": "node scripts/test-v144-86-targeted-ui-corrections.mjs",
+    "test:v144.88": "node scripts/test-v144-88-responsive-bridge.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
