@@ -167,7 +167,8 @@
     "test:v144.80": "node scripts/test-v144-80-studio-reference-final.mjs",
     "test:v144.81": "node scripts/test-v144-81-studio-precision-polish.mjs",
     "test:v144.82": "node scripts/test-v144-82-exact-settings-week-reference.mjs",
-    "test:v144.83": "node scripts/test-v144-83-plan-settings-week-rhythm-correction.mjs"
+    "test:v144.83": "node scripts/test-v144-83-plan-settings-week-rhythm-correction.mjs",
+    "test:v144.84": "node scripts/test-v144-84-glass-plan-settings-week-rhythm.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
