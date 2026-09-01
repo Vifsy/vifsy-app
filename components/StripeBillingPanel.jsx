@@ -243,6 +243,27 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
     }
   }
 
+  async function cancelScheduledPlanChange() {
+    if (busyAction || busyLookup || !billing?.pending_subscription_plan) return;
+    setBusyAction("cancel-plan-change");
+    setMessage("");
+    try {
+      const token = await getToken();
+      const response = await fetch("/api/stripe/subscription/change/cancel", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || t("billing.cancelScheduledPlanChangeError"));
+      setMessage(t("billing.scheduledPlanChangeCanceled"));
+      await refreshBilling();
+    } catch (error) {
+      setMessage(error?.message || t("billing.cancelScheduledPlanChangeError"));
+    } finally {
+      setBusyAction("");
+    }
+  }
+
   const statusLabel = useMemo(() => {
     const status = String(billing?.subscription_status || "").toLowerCase();
     if (!status || currentPlan === "free") return t("billing.statusFree");
@@ -268,7 +289,19 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
         </div>
       </div>
       {billing?.pending_subscription_plan ? (
-        <div className="stripe-reference-notice"><CalendarClock size={16} /><span>{t("billing.pendingPlanText", { plan: String(billing.pending_subscription_plan).replace(/^./, (c) => c.toUpperCase()), date: formatDate(billing?.pending_subscription_effective_at) || "—" })}</span></div>
+        <div className="stripe-reference-notice">
+          <CalendarClock size={16} />
+          <span>{t("billing.pendingPlanText", { plan: String(billing.pending_subscription_plan).replace(/^./, (c) => c.toUpperCase()), date: formatDate(billing?.pending_subscription_effective_at) || "—" })}</span>
+          <button
+            type="button"
+            className="stripe-reference-undo-plan-change"
+            disabled={Boolean(busyAction) || Boolean(busyLookup)}
+            onClick={cancelScheduledPlanChange}
+          >
+            {busyAction === "cancel-plan-change" ? <LoaderCircle className="billing-spin" size={14} /> : <XCircle size={14} />}
+            {t("billing.cancelScheduledPlanChange")}
+          </button>
+        </div>
       ) : null}
       <div className="stripe-reference-layout">
         <div className="stripe-reference-table">
@@ -281,9 +314,13 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
             const isUpgrade = canChangePlan && plan.rank > currentRank;
             const isDowngrade = canChangePlan && plan.rank < currentRank;
             const isImmediatePaidChange = Boolean(canChangePlan && (plan.rank > currentRank || (plan.rank === currentRank && currentInterval === "month" && interval === "year")));
-            const disabled = busyLookup === lookup || (selected && hasStripeSubscription) || (isTrialing && !selected);
+            const pendingPlanKey = cleanPlanName(billing?.pending_subscription_plan);
+            const hasPendingPlanChange = Boolean(pendingPlanKey);
+            const pendingTarget = pendingPlanKey === plan.key;
+            const disabled = busyLookup === lookup || (selected && hasStripeSubscription) || (isTrialing && !selected) || (hasPendingPlanChange && !selected);
             let buttonLabel = selected && hasStripeSubscription ? t("billing.currentPlan") : t("billing.choosePlan", { plan: plan.name });
-            if (!selected && activePlan) buttonLabel = interval === "year" ? t("billing.switchYearly") : t("billing.switchMonthly");
+            if (pendingTarget) buttonLabel = t("billing.planScheduledFor", { date: formatDate(billing?.pending_subscription_effective_at) || "—" });
+            else if (!selected && activePlan) buttonLabel = interval === "year" ? t("billing.switchYearly") : t("billing.switchMonthly");
             else if (!selected && isUpgrade) buttonLabel = t("billing.upgradeTo", { plan: plan.name });
             else if (!selected && isDowngrade) buttonLabel = t("billing.downgradeTo", { plan: plan.name });
             const fitText = plan.key === "starter"
@@ -395,7 +432,7 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
         <div className="stripe-trial-banner muted"><CalendarClock size={18} /><div><strong>{t("billing.cancellationScheduledTitle")}</strong><span>{t("billing.cancellationScheduledText", { date: formatDate(billing?.current_period_end) || "—" })}</span></div></div>
       )}
       {billing?.pending_subscription_plan && (
-        <div className="stripe-trial-banner muted"><CalendarClock size={18} /><div><strong>{t("billing.pendingPlanTitle")}</strong><span>{t("billing.pendingPlanText", { plan: String(billing.pending_subscription_plan).replace(/^./, (c) => c.toUpperCase()), date: formatDate(billing?.pending_subscription_effective_at) || "—" })}</span></div></div>
+        <div className="stripe-trial-banner muted stripe-pending-plan-banner"><CalendarClock size={18} /><div><strong>{t("billing.pendingPlanTitle")}</strong><span>{t("billing.pendingPlanText", { plan: String(billing.pending_subscription_plan).replace(/^./, (c) => c.toUpperCase()), date: formatDate(billing?.pending_subscription_effective_at) || "—" })}</span></div><button type="button" disabled={Boolean(busyAction) || Boolean(busyLookup)} onClick={cancelScheduledPlanChange}>{busyAction === "cancel-plan-change" ? <LoaderCircle className="billing-spin" size={14} /> : <XCircle size={14} />}{t("billing.cancelScheduledPlanChange")}</button></div>
       )}
 
       <div className="stripe-billing-toggle" role="group" aria-label={t("billing.billingPeriod")}>
