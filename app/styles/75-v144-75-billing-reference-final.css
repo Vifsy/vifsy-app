@@ -22,7 +22,7 @@ html body .settings-reference-page .stripe-reference-interval {
   display:grid !important;
   grid-template-columns:1fr 1fr !important;
   width:390px !important;
-  min-height:66px !important;
+  min-height:70px !important;
   gap:4px !important;
   padding:5px !important;
   border:1px solid #dfe5ec !important;
@@ -36,7 +36,7 @@ html body .settings-reference-page .stripe-reference-interval button {
   place-content:center !important;
   gap:3px !important;
   min-width:0 !important;
-  min-height:54px !important;
+  min-height:58px !important;
   padding:6px 12px !important;
   border:0 !important;
   border-radius:10px !important;
@@ -51,7 +51,7 @@ html body .settings-reference-page .stripe-reference-interval button {
 html body .settings-reference-page .stripe-reference-interval button strong {
   display:block !important;
   color:inherit !important;
-  font-size:12px !important;
+  font-size:13.5px !important;
   line-height:1.15 !important;
   font-weight:800 !important;
 }
@@ -59,7 +59,7 @@ html body .settings-reference-page .stripe-reference-interval button strong {
 html body .settings-reference-page .stripe-reference-interval button small {
   display:block !important;
   color:#718095 !important;
-  font-size:9.5px !important;
+  font-size:11px !important;
   line-height:1.2 !important;
   font-weight:500 !important;
 }
@@ -82,7 +82,7 @@ html body .settings-reference-page .stripe-reference-interval button span {
   border-radius:999px !important;
   color:#258a50 !important;
   background:#e7f7eb !important;
-  font-size:8.5px !important;
+  font-size:9.5px !important;
   line-height:1.2 !important;
   font-weight:800 !important;
   vertical-align:1px !important;
@@ -118,9 +118,9 @@ html body .settings-reference-page .stripe-reference-table {
 
 html body .settings-reference-page .stripe-reference-plan {
   display:grid !important;
-  grid-template-rows:72px 86px minmax(126px,1fr) 64px 62px !important;
+  grid-template-rows:78px 92px minmax(140px,1fr) 72px 66px !important;
   min-width:0 !important;
-  min-height:430px !important;
+  min-height:448px !important;
   overflow:hidden !important;
   border:1px solid #dfe5eb !important;
   border-radius:16px !important;
@@ -140,8 +140,8 @@ html body .settings-reference-page .stripe-reference-plan > header {
   align-items:center !important;
   justify-content:space-between !important;
   gap:12px !important;
-  min-height:72px !important;
-  padding:12px 18px !important;
+  min-height:78px !important;
+  padding:14px 18px !important;
   border-bottom:0 !important;
   color:#101d30 !important;
   background:#fff !important;
@@ -162,7 +162,7 @@ html body .settings-reference-page .stripe-reference-plan.current > header {
 html body .settings-reference-page .stripe-reference-plan-title {
   display:flex !important;
   align-items:center !important;
-  gap:11px !important;
+  gap:12px !important;
   min-width:0 !important;
 }
 
@@ -187,7 +187,7 @@ html body .settings-reference-page .stripe-reference-plan > header h2,
 html body .settings-reference-page .stripe-reference-plan.current > header h2 {
   margin:0 0 3px !important;
   color:#101d30 !important;
-  font-size:17px !important;
+  font-size:18px !important;
   line-height:1.1 !important;
   letter-spacing:-.015em !important;
 }
@@ -195,7 +195,7 @@ html body .settings-reference-page .stripe-reference-plan > header small,
 html body .settings-reference-page .stripe-reference-plan.current > header small {
   display:block !important;
   color:#68778d !important;
-  font-size:10.5px !important;
+  font-size:12px !important;
   line-height:1.25 !important;
 }
 html body .settings-reference-page .stripe-reference-plan > header > span,
@@ -206,7 +206,7 @@ html body .settings-reference-page .stripe-reference-plan.current > header > spa
   border-radius:999px !important;
   color:#ef5837 !important;
   background:#fff0ea !important;
-  font-size:9px !important;
+  font-size:11.5px !important;
   line-height:1.1 !important;
   font-weight:800 !important;
 }
@@ -217,27 +217,27 @@ html body .settings-reference-page .stripe-reference-plan .price {
   align-content:center !important;
   align-items:baseline !important;
   gap:4px !important;
-  min-height:86px !important;
+  min-height:92px !important;
   padding:12px 18px 10px !important;
   border:0 !important;
   color:#101d30 !important;
 }
 html body .settings-reference-page .stripe-reference-plan .price strong {
   color:#101d30 !important;
-  font-size:27px !important;
+  font-size:29px !important;
   line-height:1 !important;
   letter-spacing:-.035em !important;
 }
 html body .settings-reference-page .stripe-reference-plan .price small {
   color:#53637a !important;
-  font-size:10.5px !important;
+  font-size:12px !important;
   font-weight:500 !important;
 }
 html body .settings-reference-page .stripe-reference-plan .price em {
   flex-basis:100% !important;
   margin-top:5px !important;
   color:#7a8798 !important;
-  font-size:9.5px !important;
+  font-size:11px !important;
   line-height:1.2 !important;
   font-style:normal !important;
 }
@@ -245,10 +245,10 @@ html body .settings-reference-page .stripe-reference-plan .price em {
 html body .settings-reference-page .stripe-reference-plan > .stripe-reference-features {
   display:grid !important;
   align-content:start !important;
-  gap:11px !important;
-  min-height:126px !important;
+  gap:12px !important;
+  min-height:140px !important;
   margin:0 18px !important;
-  padding:14px 0 !important;
+  padding:16px 0 !important;
   border-top:1px solid #e9edf1 !important;
   border-bottom:0 !important;
 }
@@ -260,14 +260,14 @@ html body .settings-reference-page .stripe-reference-plan .stripe-reference-feat
   padding:0 !important;
   border:0 !important;
   color:#4c5d73 !important;
-  font-size:10.5px !important;
+  font-size:12px !important;
   line-height:1.25 !important;
 }
 html body .settings-reference-page .stripe-reference-plan .plan-feature::before { display:none !important; }
 html body .settings-reference-page .stripe-reference-plan .plan-feature svg {
   flex:0 0 auto !important;
-  width:12px !important;
-  height:12px !important;
+  width:14px !important;
+  height:14px !important;
   stroke-width:2.6 !important;
 }
 html body .settings-reference-page .stripe-reference-plan.plan-starter .plan-feature svg { color:#2584f4 !important; }
@@ -277,14 +277,14 @@ html body .settings-reference-page .stripe-reference-plan.plan-pro .plan-feature
 html body .settings-reference-page .stripe-reference-plan .fit {
   display:flex !important;
   align-items:center !important;
-  min-height:64px !important;
+  min-height:72px !important;
   margin:0 18px !important;
-  padding:10px 12px !important;
+  padding:12px 13px !important;
   border:1px solid #dce8f7 !important;
   border-radius:8px !important;
   color:#405168 !important;
   background:#f6f9fe !important;
-  font-size:10px !important;
+  font-size:11.5px !important;
   line-height:1.4 !important;
 }
 html body .settings-reference-page .stripe-reference-plan.plan-growth .fit { border-color:#dcecdf !important; background:#f5faf6 !important; }
@@ -293,14 +293,14 @@ html body .settings-reference-page .stripe-reference-plan.plan-pro .fit { border
 html body .settings-reference-page .stripe-reference-plan .action {
   display:flex !important;
   align-items:center !important;
-  min-height:62px !important;
+  min-height:66px !important;
   margin:0 !important;
   padding:11px 18px 15px !important;
   border:0 !important;
 }
 html body .settings-reference-page .stripe-reference-plan .action button {
   width:100% !important;
-  min-height:38px !important;
+  min-height:40px !important;
   padding:0 12px !important;
   border:1px solid #ccd5df !important;
   border-radius:7px !important;
@@ -308,7 +308,7 @@ html body .settings-reference-page .stripe-reference-plan .action button {
   background:#fff !important;
   box-shadow:none !important;
   font:inherit !important;
-  font-size:10.5px !important;
+  font-size:12px !important;
   line-height:1 !important;
   font-weight:800 !important;
 }
@@ -326,7 +326,7 @@ html body .settings-reference-page .stripe-reference-packs {
   display:flex !important;
   flex-direction:column !important;
   min-width:0 !important;
-  min-height:430px !important;
+  min-height:448px !important;
   padding:20px 18px 17px !important;
   border:1px solid #dfe5eb !important;
   border-radius:16px !important;
@@ -336,26 +336,26 @@ html body .settings-reference-page .stripe-reference-packs {
 html body .settings-reference-page .stripe-reference-packs h2 {
   margin:0 !important;
   color:#101d30 !important;
-  font-size:16px !important;
+  font-size:17px !important;
   line-height:1.2 !important;
 }
 html body .settings-reference-page .stripe-reference-packs > p {
-  margin:9px 0 16px !important;
+  margin:10px 0 18px !important;
   color:#607086 !important;
-  font-size:10.5px !important;
+  font-size:12px !important;
   line-height:1.45 !important;
 }
 html body .settings-reference-page .stripe-reference-packs > div {
   display:grid !important;
   grid-template-columns:1fr !important;
-  gap:10px !important;
+  gap:12px !important;
   margin:0 !important;
 }
 html body .settings-reference-page .stripe-reference-packs article {
   display:grid !important;
   grid-template-columns:minmax(0,1fr) auto !important;
   gap:9px 8px !important;
-  padding:11px 10px 9px !important;
+  padding:12px 11px 10px !important;
   border:1px solid #e0e5eb !important;
   border-radius:10px !important;
   background:#fff !important;
@@ -364,32 +364,32 @@ html body .settings-reference-page .stripe-reference-packs article {
 html body .settings-reference-page .stripe-reference-packs article span,
 html body .settings-reference-page .stripe-reference-packs article strong {
   color:#15243a !important;
-  font-size:10px !important;
+  font-size:11.5px !important;
   line-height:1.2 !important;
 }
 html body .settings-reference-page .stripe-reference-packs article strong { font-weight:800 !important; }
 html body .settings-reference-page .stripe-reference-packs article button {
   grid-column:1/-1 !important;
-  min-height:34px !important;
+  min-height:36px !important;
   border:0 !important;
   border-radius:6px !important;
   color:#fff !important;
   background:#03172a !important;
   font:inherit !important;
-  font-size:10px !important;
+  font-size:11.5px !important;
   font-weight:800 !important;
 }
 html body .settings-reference-page .stripe-reference-packs > small {
   margin-top:auto !important;
-  padding-top:15px !important;
+  padding-top:16px !important;
   color:#788597 !important;
-  font-size:9.5px !important;
+  font-size:11px !important;
   line-height:1.2 !important;
 }
 html body .settings-reference-page .stripe-reference-packs > a {
   margin-top:8px !important;
   color:#15243a !important;
-  font-size:10px !important;
+  font-size:11.5px !important;
   line-height:1.2 !important;
   font-weight:800 !important;
   text-decoration:none !important;
@@ -400,7 +400,7 @@ html body .settings-reference-page .stripe-reference-benefits {
   display:grid !important;
   grid-template-columns:1.25fr repeat(5,1fr) !important;
   align-items:center !important;
-  min-height:72px !important;
+  min-height:78px !important;
   margin-top:18px !important;
   padding:0 22px !important;
   border:0 !important;
@@ -415,11 +415,11 @@ html body .settings-reference-page .stripe-reference-benefits span {
   justify-content:center !important;
   gap:9px !important;
   min-width:0 !important;
-  min-height:42px !important;
+  min-height:46px !important;
   padding:0 13px !important;
   border-right:1px solid rgba(255,255,255,.17) !important;
   color:#fff !important;
-  font-size:10px !important;
+  font-size:11.5px !important;
   line-height:1.2 !important;
   text-align:center !important;
   white-space:nowrap !important;
@@ -428,8 +428,8 @@ html body .settings-reference-page .stripe-reference-benefits span:first-child {
 html body .settings-reference-page .stripe-reference-benefits span:last-child { border-right:0 !important; }
 html body .settings-reference-page .stripe-reference-benefits svg {
   flex:0 0 auto !important;
-  width:17px !important;
-  height:17px !important;
+  width:18px !important;
+  height:18px !important;
   stroke-width:1.8 !important;
 }
 
@@ -451,7 +451,7 @@ html body .settings-reference-page .stripe-reference-credit-info > header {
   align-items:center !important;
   gap:14px !important;
   min-width:0 !important;
-  padding:20px 20px !important;
+  padding:24px 22px !important;
   border-right:1px solid #e5e9ee !important;
   color:#101d30 !important;
   background:#fff !important;
@@ -460,8 +460,8 @@ html body .settings-reference-page .stripe-reference-credit-info .credit-info-ma
   flex:0 0 auto !important;
   display:grid !important;
   place-items:center !important;
-  width:40px !important;
-  height:40px !important;
+  width:42px !important;
+  height:42px !important;
   border-radius:50% !important;
   color:#334c68 !important;
   background:#f0f4f7 !important;
@@ -474,14 +474,14 @@ html body .settings-reference-page .stripe-reference-credit-info .credit-info-ma
 html body .settings-reference-page .stripe-reference-credit-info h2 {
   margin:0 0 5px !important;
   color:#101d30 !important;
-  font-size:15px !important;
+  font-size:17px !important;
   line-height:1.15 !important;
 }
 html body .settings-reference-page .stripe-reference-credit-info p {
   margin:0 !important;
   color:#6e7d91 !important;
-  font-size:9.5px !important;
-  line-height:1.4 !important;
+  font-size:11.5px !important;
+  line-height:1.45 !important;
 }
 html body .settings-reference-page .stripe-reference-credit-info > div {
   display:grid !important;
@@ -491,9 +491,9 @@ html body .settings-reference-page .stripe-reference-credit-info > div {
 html body .settings-reference-page .stripe-reference-credit-info > div article {
   display:flex !important;
   align-items:center !important;
-  gap:10px !important;
+  gap:12px !important;
   min-width:0 !important;
-  padding:17px 14px !important;
+  padding:20px 16px !important;
   border-right:1px solid #e5e9ee !important;
   color:#101d30 !important;
   background:#fff !important;
@@ -503,8 +503,8 @@ html body .settings-reference-page .stripe-reference-credit-info .credit-info-ic
   flex:0 0 auto !important;
   display:grid !important;
   place-items:center !important;
-  width:28px !important;
-  height:28px !important;
+  width:30px !important;
+  height:30px !important;
   border-radius:50% !important;
   color:#ff6544 !important;
   background:#fff1ec !important;
@@ -518,12 +518,12 @@ html body .settings-reference-page .stripe-reference-credit-info article span {
 html body .settings-reference-page .stripe-reference-credit-info article strong {
   margin-bottom:4px !important;
   color:#101d30 !important;
-  font-size:10px !important;
+  font-size:11.5px !important;
   line-height:1.2 !important;
 }
 html body .settings-reference-page .stripe-reference-credit-info article div > span {
   color:#718095 !important;
-  font-size:9px !important;
+  font-size:11.5px !important;
   line-height:1.35 !important;
 }
 
@@ -532,14 +532,14 @@ html body .settings-reference-page .stripe-reference-footer-row {
   display:flex !important;
   align-items:center !important;
   justify-content:center !important;
-  min-height:34px !important;
+  min-height:36px !important;
   margin-top:4px !important;
 }
 html body .settings-reference-page .stripe-reference-footnote {
   margin:0 !important;
   color:#8390a0 !important;
   text-align:center !important;
-  font-size:9px !important;
+  font-size:11.5px !important;
   line-height:1.2 !important;
 }
 html body .settings-reference-page .stripe-reference-account-actions {
@@ -574,8 +574,8 @@ html body .settings-reference-page .stripe-reference-account-actions .stripe-ref
 html body .settings-reference-page .stripe-reference-account-actions .stripe-reference-status strong {
   margin:0 !important;
   color:#8b96a5 !important;
-  font-size:8.5px !important;
-  line-height:1 !important;
+  font-size:10.5px !important;
+  line-height:1.15 !important;
   font-weight:600 !important;
 }
 html body .settings-reference-page .stripe-reference-account-actions .stripe-reference-status strong { color:#657487 !important; }
@@ -586,8 +586,8 @@ html body .settings-reference-page .stripe-reference-account-actions .stripe-ref
   border-radius:0 !important;
   color:#778496 !important;
   background:transparent !important;
-  font-size:8.5px !important;
-  line-height:1 !important;
+  font-size:10.5px !important;
+  line-height:1.15 !important;
   font-weight:600 !important;
   text-decoration:underline !important;
   text-underline-offset:2px !important;
@@ -599,7 +599,7 @@ html body .settings-reference-page .stripe-reference-account-actions .stripe-ref
 html body .settings-reference-page .stripe-billing-message,
 html body .settings-reference-page .stripe-billing-payment-link {
   margin:8px 0 0 !important;
-  font-size:11px !important;
+  font-size:12px !important;
 }
 
 /* Tablet: retain plan comparison first, then move credit packs below. */
@@ -620,7 +620,7 @@ html body .settings-reference-page .stripe-billing-payment-link {
   html body .settings-reference-page .stripe-reference-controls { display:block !important; margin-bottom:14px !important; }
   html body .settings-reference-page .stripe-reference-interval {
     width:100% !important;
-    min-height:62px !important;
+    min-height:66px !important;
   }
   html body .settings-reference-page .stripe-reference-layout { grid-template-columns:1fr !important; gap:14px !important; }
   html body .settings-reference-page .stripe-reference-table { grid-template-columns:1fr !important; gap:12px !important; }
@@ -664,9 +664,9 @@ html body .settings-reference-page .stripe-billing-payment-link {
 @media (max-width:520px) {
   html body .settings-reference-page .stripe-reference-interval { grid-template-columns:1fr 1fr !important; }
   html body .settings-reference-page .stripe-reference-interval button { min-height:50px !important; padding:5px 7px !important; }
-  html body .settings-reference-page .stripe-reference-interval button strong { font-size:11px !important; }
-  html body .settings-reference-page .stripe-reference-interval button small { font-size:8.5px !important; }
-  html body .settings-reference-page .stripe-reference-plan .price strong { font-size:25px !important; }
+  html body .settings-reference-page .stripe-reference-interval button strong { font-size:12.5px !important; }
+  html body .settings-reference-page .stripe-reference-interval button small { font-size:10.5px !important; }
+  html body .settings-reference-page .stripe-reference-plan .price strong { font-size:27px !important; }
   html body .settings-reference-page .stripe-reference-benefits { grid-template-columns:1fr !important; }
   html body .settings-reference-page .stripe-reference-benefits span { border-bottom:1px solid rgba(255,255,255,.12) !important; }
   html body .settings-reference-page .stripe-reference-benefits span:last-child { border-bottom:0 !important; }
