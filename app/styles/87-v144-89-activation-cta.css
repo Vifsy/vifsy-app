@@ -1,0 +1,40 @@
+/* v144.89 — activation CTA emphasis
+   Scope: only the primary "Starta och aktivera planen" button.
+   Keeps layout, sizing and behavior unchanged while promoting the final action
+   with Spreelo's coral/orange accent. */
+
+html body .automation-page.plan-v70-active
+.plan-v70-activate-card:not(.saved)
+.plan-v70-activate-actions > button {
+  border-color: rgba(224, 73, 43, .92) !important;
+  background: linear-gradient(180deg, #ff6a4d 0%, #f04f32 100%) !important;
+  color: #fff !important;
+  box-shadow:
+    0 12px 26px rgba(240, 79, 50, .24),
+    0 2px 5px rgba(91, 29, 17, .10) !important;
+}
+
+html body .automation-page.plan-v70-active
+.plan-v70-activate-card:not(.saved)
+.plan-v70-activate-actions > button:hover:not(:disabled) {
+  transform: translateY(-1px) !important;
+  filter: brightness(1.035) saturate(1.03) !important;
+  box-shadow:
+    0 15px 30px rgba(240, 79, 50, .30),
+    0 0 0 3px rgba(240, 79, 50, .10) !important;
+}
+
+html body .automation-page.plan-v70-active
+.plan-v70-activate-card:not(.saved)
+.plan-v70-activate-actions > button:active:not(:disabled) {
+  transform: translateY(0) !important;
+  filter: brightness(.98) !important;
+  box-shadow: 0 8px 18px rgba(240, 79, 50, .22) !important;
+}
+
+html body .automation-page.plan-v70-active
+.plan-v70-activate-card:not(.saved)
+.plan-v70-activate-actions > button:focus-visible {
+  outline: 3px solid rgba(240, 79, 50, .22) !important;
+  outline-offset: 3px !important;
+}
