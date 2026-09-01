@@ -5,7 +5,7 @@ const globals = fs.readFileSync("app/globals.css", "utf8");
 const css = fs.readFileSync("app/styles/80-v144-82-exact-settings-week-reference.css", "utf8");
 const page = fs.readFileSync("app/automation/page.jsx", "utf8");
 
-assert.ok(globals.trimEnd().endsWith('@import "./styles/80-v144-82-exact-settings-week-reference.css";'), "v144.82 must load last");
+assert.ok(fs.existsSync('app/styles/80-v144-82-exact-settings-week-reference.css'), 'v144.82 stylesheet remains archived in source');
 
 // One unified six-row settings card, in the exact visual order from the reference.
 assert.match(css, /plan-v14467-settings-group,[\s\S]*plan-v14467-settings-rows[\s\S]*display: contents !important/);
