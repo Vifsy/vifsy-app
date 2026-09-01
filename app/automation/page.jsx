@@ -6319,7 +6319,7 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
   const [length, setLength] = useState("Medium");
   const [ctaType, setCtaType] = useState("Learn more");
   const [timeZone, setTimeZone] = useState(DEFAULT_TIME_ZONE);
-  const canManuallyEditCampaignPlan = String(currentUserEmail || "").toLowerCase() === SPREELO_INTERNAL_TESTER_EMAIL;
+  const canManuallyEditCampaignPlan = String(currentUserEmail || "").trim().toLowerCase() === SPREELO_INTERNAL_TESTER_EMAIL;
   const minimumSelectablePlanningDate = canManuallyEditCampaignPlan
     ? null
     : getDateInputValueInTimeZone(new Date(), timeZone);
@@ -6424,16 +6424,17 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
   const executableSlots = useMemo(() =>
     slots.filter((slot) => !(
       planCreationMode === "campaign" &&
+      !canManuallyEditCampaignPlan &&
       isSlotScheduledInPast(slot, timeZone)
     )),
-    [slots, planCreationMode, timeZone]
+    [slots, planCreationMode, timeZone, canManuallyEditCampaignPlan]
   );
 
   const skippedPastCampaignSlots = useMemo(() =>
-    planCreationMode === "campaign"
+    planCreationMode === "campaign" && !canManuallyEditCampaignPlan
       ? slots.filter((slot) => isSlotScheduledInPast(slot, timeZone))
       : [],
-    [slots, planCreationMode, timeZone]
+    [slots, planCreationMode, timeZone, canManuallyEditCampaignPlan]
   );
 
   const plannedCredits = useMemo(() => {
@@ -8251,7 +8252,7 @@ const { data, error } = await supabase
 
         if (field === "startDate") {
           const today = getDateInputValueInTimeZone(new Date(), timeZone);
-          if (value < today) return slot;
+          if (!canManuallyEditCampaignPlan && value < today) return slot;
           const nextWeekday = getWeekdayFromDateString(value, timeZone);
 
           return {
@@ -8430,7 +8431,11 @@ const { data, error } = await supabase
 
   function updatePlanStartDate(value) {
     const today = getDateInputValueInTimeZone(new Date(), timeZone);
-    const safeValue = value < today ? today : value;
+    const safeValue = canManuallyEditCampaignPlan
+      ? value
+      : value < today
+      ? today
+      : value;
     setPlanStartDate(safeValue);
     setSlots((currentSlots) => {
       if (scheduleType === "weekly" && planCreationMode !== "campaign") {
@@ -9656,7 +9661,9 @@ function toggleContentType(typeId) {
 }
 
     const slotsToSave = slots.filter((slot) => !(
-      planCreationMode === "campaign" && isSlotScheduledInPast(slot, timeZone)
+      planCreationMode === "campaign" &&
+      !canManuallyEditCampaignPlan &&
+      isSlotScheduledInPast(slot, timeZone)
     ));
 
     if (!slotsToSave.length) {
@@ -9677,13 +9684,15 @@ function toggleContentType(typeId) {
     }
 
     const todayDate = getDateInputValueInTimeZone(new Date(), timeZone);
-    const pastDateSlot = slotsToSave.find((slot) => String(slot.startDate || "") < todayDate);
+    const pastDateSlot = !canManuallyEditCampaignPlan
+      ? slotsToSave.find((slot) => String(slot.startDate || "") < todayDate)
+      : null;
     if (pastDateSlot) {
       setMessage(t("automation.errorPastDate"));
       return;
     }
 
-    const pastDateTimeSlot = scheduleType === "once"
+    const pastDateTimeSlot = !canManuallyEditCampaignPlan && scheduleType === "once"
       ? slotsToSave.find((slot) => {
           const scheduledIso = getOneTimeRunAtIso(slot.startDate, slot.publishTime, timeZone);
           return Boolean(scheduledIso && new Date(scheduledIso).getTime() <= Date.now());
