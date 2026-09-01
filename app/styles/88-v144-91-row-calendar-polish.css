@@ -1,0 +1,113 @@
+/* v144.91 — planned-post date calendar polish only.
+   Scope: the date picker that appears inside an expanded planned-post row.
+   Do not alter Planinställningar, week rhythm, billing, planning logic, or other pickers. */
+
+/* Remove the historical white wrapper around the selected-date button + calendar.
+   The row editor's own tone should remain visible around both controls. */
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-row-editor .custom-picker-field.compact {
+  position: relative !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-row-editor .custom-picker-field.compact .custom-picker-anchor {
+  width: 100% !important;
+  min-width: 0 !important;
+  overflow: visible !important;
+}
+
+/* Keep the selected date as one clean control; it is no longer nested in a second white frame. */
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-row-editor .custom-picker-field.compact .custom-picker-button {
+  width: min(210px, 100%) !important;
+  min-height: 42px !important;
+  height: 42px !important;
+  padding: 0 13px !important;
+  border: 1px solid rgba(198, 210, 227, .88) !important;
+  border-radius: 11px !important;
+  background: rgba(255, 255, 255, .78) !important;
+  box-shadow: 0 4px 12px rgba(18, 35, 58, .035) !important;
+}
+
+/* The calendar itself gets a real usable width and a regular 7-column grid. */
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-row-editor .custom-picker-field.compact .custom-calendar-popover {
+  position: static !important;
+  width: 314px !important;
+  max-width: 100% !important;
+  margin: 10px 0 0 !important;
+  padding: 15px !important;
+  border: 1px solid rgba(214, 222, 233, .92) !important;
+  border-radius: 16px !important;
+  background: rgba(255, 255, 255, .96) !important;
+  box-shadow: 0 14px 32px rgba(20, 34, 54, .11) !important;
+  box-sizing: border-box !important;
+  transform: none !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-row-editor .custom-calendar-header {
+  margin-bottom: 12px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-row-editor .custom-calendar-weekdays,
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-row-editor .custom-calendar-grid {
+  display: grid !important;
+  grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+  width: 100% !important;
+  gap: 4px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-row-editor .custom-calendar-weekdays span {
+  min-width: 0 !important;
+  font-size: 10px !important;
+  letter-spacing: .01em !important;
+  white-space: nowrap !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-row-editor .custom-calendar-day {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 34px !important;
+  padding: 0 !important;
+  border-radius: 10px !important;
+  font-size: 12.5px !important;
+}
+
+/* On phones the old flex layout gave the date field only half a row, which is why
+   the seven calendar columns collapsed. Only while the calendar is open, let the
+   date editor use the full available width. The closed row remains unchanged. */
+@media (max-width: 760px) {
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-row-editor:has(.custom-calendar-popover) {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 10px !important;
+    align-items: start !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-row-editor:has(.custom-calendar-popover) .custom-picker-field.compact {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: none !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-row-editor:has(.custom-calendar-popover) .custom-picker-button {
+    width: min(190px, 100%) !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-row-editor:has(.custom-calendar-popover) .custom-calendar-popover {
+    left: auto !important;
+    right: auto !important;
+    width: min(314px, 100%) !important;
+    max-width: 100% !important;
+    padding: 14px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v70-planned-card .plan-v70-row-editor:has(.custom-calendar-popover) > button.danger {
+    width: min(190px, 100%) !important;
+    min-height: 42px !important;
+    justify-self: start !important;
+  }
+}
