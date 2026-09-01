@@ -31008,13 +31008,19 @@ async function prepareWebsiteContentForRule({
 
         if (!selected?.item) break;
 
-        const selectedKey = normalizeUrlForComparison(
-          selected.item?.url || selected.item?.product_url || selected.item?.item_url || ""
-        ) || createItemKey(selected.item);
+        const selectedUrl =
+          selected.item?.url || selected.item?.product_url || selected.item?.item_url || "";
+        const selectedKey =
+          normalizeComparableValue(
+            canonicalizeWebsiteProductUrl(selectedUrl, websiteUrl) || selectedUrl
+          ) || createItemKey(selected.item);
         remainingWebSearchItems = remainingWebSearchItems.filter((candidate) => {
-          const candidateKey = normalizeUrlForComparison(
-            candidate?.url || candidate?.product_url || candidate?.item_url || ""
-          ) || createItemKey(candidate);
+          const candidateUrl =
+            candidate?.url || candidate?.product_url || candidate?.item_url || "";
+          const candidateKey =
+            normalizeComparableValue(
+              canonicalizeWebsiteProductUrl(candidateUrl, websiteUrl) || candidateUrl
+            ) || createItemKey(candidate);
           return candidateKey !== selectedKey;
         });
 

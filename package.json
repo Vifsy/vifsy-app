@@ -174,7 +174,8 @@
     "test:v144.88": "node scripts/test-v144-88-responsive-bridge.mjs",
     "test:v144.89": "node scripts/test-v144-89-activation-cta.mjs",
     "test:v144.90": "node scripts/test-v144-90-admin-past-date-bypass.mjs",
-    "test:v144.91": "node scripts/test-v144-91-row-calendar-polish.mjs"
+    "test:v144.91": "node scripts/test-v144-91-row-calendar-polish.mjs",
+    "test:v144.92": "node scripts/test-v144-92-product-research-url-normalization.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
