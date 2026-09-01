@@ -161,7 +161,9 @@
     "test:v144.72": "node scripts/test-v144-72-timeline-credit-rail.mjs",
     "test:v144.73": "node scripts/test-v144-73-pixel-mobile-settings-week.mjs",
     "test:v144.74": "node scripts/test-v144-74-billing-admin-dates.mjs",
-    "test:v144.76": "node scripts/test-v144-76-billing-readability.mjs"
+    "test:v144.76": "node scripts/test-v144-76-billing-readability.mjs",
+    "test:v144.78": "node scripts/test-v144-78-growth-first-per-brand-entitlements.mjs",
+    "test:v144.79": "node scripts/test-v144-79-billing-final-polish.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

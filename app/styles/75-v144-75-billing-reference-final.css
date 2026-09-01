@@ -671,3 +671,21 @@ html body .settings-reference-page .stripe-billing-payment-link {
   html body .settings-reference-page .stripe-reference-benefits span { border-bottom:1px solid rgba(255,255,255,.12) !important; }
   html body .settings-reference-page .stripe-reference-benefits span:last-child { border-bottom:0 !important; }
 }
+
+
+/* v144.78 — one shared clarification instead of repeating “per brand” on feature rows. */
+html body .stripe-reference-billing .stripe-reference-per-brand-note {
+  grid-column: 1 / -1 !important;
+  margin: 0 4px 2px !important;
+  color: #728095 !important;
+  font-size: 11px !important;
+  line-height: 1.45 !important;
+  text-align: center !important;
+}
+
+@media (max-width: 800px) {
+  html body .stripe-reference-billing .stripe-reference-per-brand-note {
+    margin: 2px 2px 4px !important;
+    font-size: 10.5px !important;
+  }
+}

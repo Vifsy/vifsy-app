@@ -9,7 +9,7 @@ const billing = read("components/StripeBillingPanel.jsx");
 const css = read("app/styles/75-v144-75-billing-reference-final.css");
 const globals = read("app/globals.css");
 
-assert(globals.trimEnd().endsWith('@import "./styles/75-v144-75-billing-reference-final.css";'), "v144.75 must be the final stylesheet");
+assert(globals.includes('@import "./styles/75-v144-75-billing-reference-final.css";'), "v144.75 billing reference stylesheet import missing");
 assert(css.includes('grid-template-columns:minmax(0,1fr) 245px !important;'), "desktop plan + credit rail layout missing");
 assert(css.includes('grid-template-columns:repeat(3,minmax(0,1fr)) !important;'), "three equal plan columns missing");
 assert(css.includes('.stripe-reference-plan.current > header') && css.includes('#fff5f0'), "current plan must use the soft peach header, not a dark header");

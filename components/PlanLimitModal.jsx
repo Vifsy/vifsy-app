@@ -35,7 +35,9 @@ export default function PlanLimitModal({ details, onClose }) {
         {recommendedPlanName ? (
           <div className="plan-limit-modal-upgrade">
             <strong>{t("billing.limitUpgradeTitle", { plan: recommendedPlanName })}</strong>
-            <span>{t("billing.limitUpgradeText", { plan: recommendedPlanName, limit: details.recommendedLimit, resource: resourceLabel })}</span>
+            <span>{details.recommendedUnlimited
+              ? t("billing.limitUpgradeUnlimitedText", { plan: recommendedPlanName, resource: resourceLabel })
+              : t("billing.limitUpgradeText", { plan: recommendedPlanName, limit: details.recommendedLimit, resource: resourceLabel })}</span>
           </div>
         ) : (
           <div className="plan-limit-modal-upgrade">

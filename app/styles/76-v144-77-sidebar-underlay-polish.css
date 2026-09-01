@@ -1,0 +1,11 @@
+/* v144.77 — desktop sidebar underlay polish.
+   When long-page/screenshot scrolling exposes the shell behind the sticky sidebar,
+   keep the entire first settings grid column visually continuous with the sidebar
+   instead of revealing the warm workspace background. */
+@media (min-width: 801px) {
+  html body .app-shell.spreelo-shell:has(.settings-reference-page) {
+    background:
+      linear-gradient(180deg, var(--spreelo-sidebar) 0%, var(--spreelo-sidebar-deep) 100%) left top / 255px 100% no-repeat,
+      #fbfbfa !important;
+  }
+}

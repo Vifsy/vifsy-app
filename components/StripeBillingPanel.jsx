@@ -40,14 +40,14 @@ const PLANS = [
     audienceKey: "billing.planAudienceStarter", brands: 1, socialAccounts: 1, recurringPlans: 1,
   },
   {
-    key: "growth", name: "Growth", credits: 350, month: 599, year: 5990,
+    key: "growth", name: "Growth", credits: 450, month: 599, year: 5990,
     monthLookup: "spreelo_growth_monthly", yearLookup: "spreelo_growth_yearly", featured: true, rank: 2,
-    audienceKey: "billing.planAudienceGrowth", brands: 1, socialAccounts: 3, recurringPlans: 1,
+    audienceKey: "billing.planAudienceGrowth", brands: 2, socialAccounts: 5, recurringPlans: 3,
   },
   {
-    key: "pro", name: "Pro", credits: 750, month: 999, year: 9990,
+    key: "pro", name: "Pro", credits: 1000, month: 999, year: 9990,
     monthLookup: "spreelo_pro_monthly", yearLookup: "spreelo_pro_yearly", rank: 3,
-    audienceKey: "billing.planAudiencePro", brands: 3, socialAccounts: 10, recurringPlans: 3,
+    audienceKey: "billing.planAudiencePro", brands: 5, socialAccounts: null, recurringPlans: 8,
   },
 ];
 
@@ -303,7 +303,7 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
                 <div className="stripe-reference-features">
                   <div className="plan-feature credits"><Check />{t("billing.creditsPerMonth", { count: plan.credits })}</div>
                   <div className="plan-feature brands"><Check />{plan.brands === 1 ? t("billing.businessOne") : t("billing.businesses", { count: plan.brands })}</div>
-                  <div className="plan-feature social"><Check />{plan.socialAccounts === 1 ? t("billing.socialAccountLimitOne") : t("billing.socialAccountLimit", { count: plan.socialAccounts })}</div>
+                  <div className="plan-feature social"><Check />{plan.socialAccounts == null ? t("billing.socialAccountsUnlimited") : plan.socialAccounts === 1 ? t("billing.socialAccountLimitOne") : t("billing.socialAccountLimit", { count: plan.socialAccounts })}</div>
                   <div className="plan-feature recurring"><Check />{plan.recurringPlans === 1 ? t("billing.recurringPlanLimitOne") : t("billing.recurringPlanLimit", { count: plan.recurringPlans })}</div>
                 </div>
                 <div className="fit">{fitText}</div>
@@ -311,6 +311,7 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
               </article>
             );
           })}
+          <p className="stripe-reference-per-brand-note">{t("billing.perBrandLimitsNote")}</p>
         </div>
         <aside className="stripe-reference-packs">
           <h2>{t("billing.extraCreditsTitle")}</h2>
@@ -451,7 +452,7 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
               <p className="stripe-plan-credit-line">{t("billing.creditsPerMonth", { count: plan.credits })}</p>
               <ul>
                 <li><Check size={15} />{t("billing.brandLimit", { count: plan.brands })}</li>
-                <li><Check size={15} />{plan.socialAccounts === 1 ? t("billing.socialAccountLimitOne") : t("billing.socialAccountLimit", { count: plan.socialAccounts })}</li>
+                <li><Check size={15} />{plan.socialAccounts == null ? t("billing.socialAccountsUnlimited") : plan.socialAccounts === 1 ? t("billing.socialAccountLimitOne") : t("billing.socialAccountLimit", { count: plan.socialAccounts })}</li>
                 <li><Check size={15} />{plan.recurringPlans === 1 ? t("billing.recurringPlanLimitOne") : t("billing.recurringPlanLimit", { count: plan.recurringPlans })}</li>
                 {COMMON_FEATURE_KEYS.map((featureKey) => <li key={featureKey}><Check size={15} />{t(featureKey)}</li>)}
               </ul>
