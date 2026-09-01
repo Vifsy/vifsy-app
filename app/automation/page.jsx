@@ -11291,7 +11291,7 @@ function blockFormatCardClickAfterDrag(event) {
                       const campaignCode = getCampaignCodeFromSlot(slot);
 
                       return (
-                        <article className={`plan-v70-planned-row plan-v86-planned-row${rowExpanded ? " expanded" : ""}${isPastCampaignSlot ? " is-past-campaign" : ""}`} key={`v70-row-${slot.id}`}>
+                        <article className={`plan-v70-planned-row plan-v86-planned-row plan-v14481-tone-${(index % 4) + 1}${rowExpanded ? " expanded" : ""}${isPastCampaignSlot ? " is-past-campaign" : ""}`} key={`v70-row-${slot.id}`}>
                           <div className={`plan-v86-planned-visual tone-${(index % 4) + 1}`} aria-hidden="true">
                             <span className={slot.isCampaignSlot ? "plan-v100-combined-format-icon" : ""}>
                               <ContentFormatIconVisual

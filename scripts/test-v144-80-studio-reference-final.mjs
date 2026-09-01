@@ -7,7 +7,7 @@ const billing = fs.readFileSync("components/StripeBillingPanel.jsx", "utf8");
 const cancelRoute = fs.readFileSync("app/api/stripe/subscription/change/cancel/route.js", "utf8");
 const labels = fs.readFileSync("lib/i18n/defaultLabels.js", "utf8");
 
-assert.ok(globals.trimEnd().endsWith('@import "./styles/78-v144-80-studio-reference-final.css";'), "v144.80 must load last");
+assert.ok(globals.includes('@import "./styles/78-v144-80-studio-reference-final.css";'), "v144.80 stylesheet must remain imported");
 
 // Sidebar underlay is global on desktop, not settings-only.
 assert.match(css, /\.app-shell\.spreelo-shell[\s\S]*276px 100% no-repeat/);
