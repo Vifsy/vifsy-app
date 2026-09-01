@@ -1,0 +1,700 @@
+/* v144.82 — exact Planinställningar + Veckovis publiceringsrytm reference pass.
+   Scope is intentionally limited to these two components. No planning behavior changes. */
+
+/* ------------------------------ shared width ------------------------------ */
+html body .automation-page.plan-v70-active .plan-v89-settings-heading,
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups {
+  width: min(100%, 1120px) !important;
+  max-width: 1120px !important;
+  margin-left: 0 !important;
+  margin-right: auto !important;
+  box-sizing: border-box !important;
+}
+
+/* ---------------------------- settings heading ---------------------------- */
+html body .automation-page.plan-v70-active .plan-v89-settings-heading {
+  margin-top: 0 !important;
+  margin-bottom: 18px !important;
+  padding: 0 6px !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-settings-heading h2 {
+  margin: 0 !important;
+  color: #0d182c !important;
+  font-size: 30px !important;
+  font-weight: 900 !important;
+  line-height: 1.08 !important;
+  letter-spacing: -.035em !important;
+}
+html body .automation-page.plan-v70-active .plan-v89-settings-heading p {
+  margin: 7px 0 0 !important;
+  color: #5d6d86 !important;
+  font-size: 15px !important;
+  font-weight: 450 !important;
+  line-height: 1.35 !important;
+}
+
+/* -------------------------- one six-row settings card --------------------- */
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 0 !important;
+  padding: 0 24px !important;
+  overflow: visible !important;
+  border: 1px solid #dfe5ed !important;
+  border-radius: 22px !important;
+  background: rgba(255,255,255,.98) !important;
+  box-shadow: 0 9px 26px rgba(20,33,55,.055) !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-settings-group,
+html body .automation-page.plan-v70-active .plan-v14467-settings-rows {
+  display: contents !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-group-title {
+  display: none !important;
+}
+
+/* Force the exact reference order independent of the historical group DOM. */
+html body .automation-page.plan-v70-active .plan-v14473-goal-tile { order: 1 !important; }
+html body .automation-page.plan-v70-active .plan-v14473-frequency-tile { order: 2 !important; }
+html body .automation-page.plan-v70-active .plan-v14341-date-tile { order: 3 !important; }
+html body .automation-page.plan-v70-active .plan-v14473-language-tile { order: 4 !important; }
+html body .automation-page.plan-v70-active .plan-v14459-platform-tile { order: 5 !important; }
+html body .automation-page.plan-v70-active .plan-v14459-publishing-tile { order: 6 !important; }
+
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v90-setting-tile,
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14459-platform-tile {
+  position: relative !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 34%) !important;
+  align-items: center !important;
+  gap: 22px !important;
+  width: 100% !important;
+  min-height: 78px !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 10px 0 !important;
+  overflow: visible !important;
+  border: 0 !important;
+  border-bottom: 1px solid #e1e6ed !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14459-publishing-tile {
+  border-bottom: 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v90-setting-head {
+  display: grid !important;
+  grid-template-columns: 48px minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 16px !important;
+  min-width: 0 !important;
+  min-height: 58px !important;
+  height: auto !important;
+  margin: 0 !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v90-setting-icon {
+  display: grid !important;
+  place-items: center !important;
+  width: 46px !important;
+  height: 46px !important;
+  min-width: 46px !important;
+  min-height: 46px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  color: #ff5436 !important;
+  background: #fff0ec !important;
+  box-shadow: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v90-setting-icon svg {
+  width: 24px !important;
+  height: 24px !important;
+  color: #ff5436 !important;
+  stroke: currentColor !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v90-setting-copy {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  min-width: 0 !important;
+  min-height: 54px !important;
+  margin: 0 !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v90-setting-title {
+  margin: 0 !important;
+  color: #101b30 !important;
+  font-size: 17px !important;
+  font-weight: 850 !important;
+  line-height: 21px !important;
+  letter-spacing: -.015em !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v90-setting-copy small {
+  display: block !important;
+  max-width: none !important;
+  margin: 3px 0 0 !important;
+  overflow: visible !important;
+  color: #61718a !important;
+  font-size: 13px !important;
+  font-weight: 450 !important;
+  line-height: 17px !important;
+  white-space: normal !important;
+  -webkit-line-clamp: unset !important;
+}
+
+/* Use the simple right-aligned value treatment from the supplied reference. */
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v90-setting-tile > select {
+  position: absolute !important;
+  inset: 0 0 0 auto !important;
+  z-index: 4 !important;
+  display: block !important;
+  width: min(34%, 300px) !important;
+  height: 100% !important;
+  margin: 0 !important;
+  opacity: 0 !important;
+  cursor: pointer !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14473-mobile-value {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  justify-self: stretch !important;
+  gap: 15px !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  min-height: 46px !important;
+  margin: 0 !important;
+  padding: 0 4px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  color: #101b30 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  pointer-events: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14473-mobile-value strong {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  color: #101b30 !important;
+  font-size: 16px !important;
+  font-weight: 800 !important;
+  line-height: 20px !important;
+  text-align: right !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14473-mobile-value svg {
+  flex: 0 0 auto !important;
+  width: 18px !important;
+  height: 18px !important;
+  color: #34445c !important;
+  stroke: currentColor !important;
+}
+
+/* Date: same right aligned value, with its calendar icon preserved. */
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14341-date-tile .plan-v143-date-time-row {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  justify-self: stretch !important;
+  gap: 12px !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-height: 46px !important;
+  margin: 0 !important;
+  padding: 0 4px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14341-date-tile .custom-picker-field,
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14341-date-tile .custom-picker-anchor,
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14341-date-tile .custom-picker-button {
+  width: auto !important;
+  min-height: 46px !important;
+  height: 46px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14341-date-tile .custom-picker-button {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 10px !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14341-date-tile .custom-picker-button > span {
+  color: #101b30 !important;
+  font-size: 16px !important;
+  font-weight: 800 !important;
+  line-height: 20px !important;
+  white-space: nowrap !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14341-date-tile .custom-picker-button > strong,
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14341-date-tile .custom-picker-button > strong svg {
+  width: 19px !important;
+  height: 19px !important;
+  color: #41516a !important;
+  stroke: currentColor !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14473-date-chevron {
+  display: block !important;
+  flex: 0 0 auto !important;
+  width: 18px !important;
+  height: 18px !important;
+  color: #34445c !important;
+  stroke: currentColor !important;
+}
+
+/* Platform: same clean value treatment, no extra pill or selected platform icons. */
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14459-platform-tile .plan-v14467-platform-picker,
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14459-platform-tile .plan-v14467-value-button {
+  justify-self: stretch !important;
+  width: 100% !important;
+  max-width: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14459-platform-tile .plan-v14467-value-button {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 14px !important;
+  min-height: 46px !important;
+  height: 46px !important;
+  margin: 0 !important;
+  padding: 0 4px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  color: #101b30 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14459-platform-tile .plan-v14467-selected-platforms {
+  min-width: 0 !important;
+  justify-content: flex-end !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14459-platform-tile .plan-v14467-selected-platforms img {
+  display: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14459-platform-tile .plan-v14467-selected-platforms strong {
+  min-width: 0 !important;
+  max-width: 260px !important;
+  overflow: hidden !important;
+  color: #101b30 !important;
+  font-size: 16px !important;
+  font-weight: 800 !important;
+  line-height: 20px !important;
+  text-align: right !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14459-platform-tile .plan-v14467-value-button > svg {
+  flex: 0 0 auto !important;
+  width: 18px !important;
+  height: 18px !important;
+  color: #34445c !important;
+  stroke: currentColor !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v73-platform-loading,
+html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v73-connect-platform {
+  justify-self: end !important;
+  width: auto !important;
+  max-width: 100% !important;
+  min-height: 46px !important;
+  padding: 0 4px !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: #101b30 !important;
+  font-size: 15px !important;
+  font-weight: 750 !important;
+}
+
+/* ---------------------------- weekly rhythm card -------------------------- */
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm {
+  display: block !important;
+  width: min(100%, 1120px) !important;
+  max-width: 1120px !important;
+  min-height: 0 !important;
+  margin: 20px auto 0 0 !important;
+  overflow: hidden !important;
+  border: 1px solid #dfe5ed !important;
+  border-left: 4px solid #714df5 !important;
+  border-radius: 20px !important;
+  background: rgba(255,255,255,.98) !important;
+  box-shadow: 0 9px 26px rgba(20,33,55,.05) !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14467-week-visual,
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-rhythm-note {
+  display: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-week-content {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-areas: "head" "days" !important;
+  gap: 14px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  padding: 18px 30px 18px !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-rhythm-head {
+  grid-area: head !important;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-rhythm-head strong {
+  display: block !important;
+  margin: 0 !important;
+  color: #101b30 !important;
+  font-size: 18px !important;
+  font-weight: 900 !important;
+  line-height: 22px !important;
+  letter-spacing: -.02em !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-rhythm-head span {
+  display: block !important;
+  margin: 4px 0 0 !important;
+  color: #61718a !important;
+  font-size: 13px !important;
+  font-weight: 450 !important;
+  line-height: 17px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-days {
+  position: relative !important;
+  isolation: isolate !important;
+  grid-area: days !important;
+  display: grid !important;
+  grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+  gap: 0 !important;
+  width: 100% !important;
+  min-height: 82px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+/* One uninterrupted connector from the first circle centre to the last. */
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-days::before {
+  content: "" !important;
+  display: block !important;
+  position: absolute !important;
+  z-index: 0 !important;
+  top: 13px !important;
+  left: calc(100% / 14) !important;
+  right: calc(100% / 14) !important;
+  height: 2px !important;
+  border: 0 !important;
+  background: #cfd7e2 !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-day {
+  position: relative !important;
+  z-index: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 3px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 80px !important;
+  height: 80px !important;
+  margin: 0 !important;
+  padding: 36px 2px 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  color: #28364d !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-day::before {
+  content: "" !important;
+  position: absolute !important;
+  z-index: 2 !important;
+  top: 0 !important;
+  left: 50% !important;
+  width: 28px !important;
+  height: 28px !important;
+  box-sizing: border-box !important;
+  border: 3px solid #bcc6d3 !important;
+  border-radius: 50% !important;
+  background: #fff !important;
+  transform: translateX(-50%) !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-day::after {
+  display: none !important;
+  content: none !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-day > span {
+  margin: 0 !important;
+  color: inherit !important;
+  font-size: 15px !important;
+  font-weight: 850 !important;
+  line-height: 18px !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-day > strong {
+  margin: 0 !important;
+  color: inherit !important;
+  font-size: 13px !important;
+  font-weight: 750 !important;
+  line-height: 16px !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-day.selected:not(.double) {
+  color: #6840f4 !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-day.selected:not(.double)::before {
+  border-color: #744cf6 !important;
+  background: #fff !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-day.double {
+  color: #f04d2f !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-day.double::before {
+  border-color: #ff5a3c !important;
+  background: #fff !important;
+}
+html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-day.moving {
+  outline: 2px solid rgba(116,76,246,.22) !important;
+  outline-offset: 2px !important;
+  border-radius: 10px !important;
+}
+
+/* ------------------------------- tablet ---------------------------------- */
+@media (min-width: 761px) and (max-width: 1180px) {
+  html body .automation-page.plan-v70-active .plan-v89-settings-heading,
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups,
+  html body .automation-page.plan-v70-active .plan-v14467-week-rhythm {
+    width: 100% !important;
+    max-width: none !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-settings-heading h2 {
+    font-size: 27px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups {
+    padding: 0 20px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v90-setting-tile,
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14459-platform-tile {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 36%) !important;
+    min-height: 74px !important;
+    padding: 8px 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v90-setting-title {
+    font-size: 16px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v90-setting-copy small {
+    font-size: 12.5px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14473-mobile-value strong,
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14341-date-tile .custom-picker-button > span,
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14459-platform-tile .plan-v14467-selected-platforms strong {
+    font-size: 15px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-week-content {
+    padding: 17px 22px 17px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-day::before {
+    width: 25px !important;
+    height: 25px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-days::before {
+    top: 11.5px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-day {
+    padding-top: 33px !important;
+  }
+}
+
+/* ------------------------------- mobile ---------------------------------- */
+@media (max-width: 760px) {
+  html body .automation-page.plan-v70-active .plan-v89-settings-heading,
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups,
+  html body .automation-page.plan-v70-active .plan-v14467-week-rhythm {
+    width: 100% !important;
+    max-width: none !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-settings-heading {
+    margin: 0 4px 10px !important;
+    padding: 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-settings-heading h2 {
+    font-size: 21px !important;
+    line-height: 25px !important;
+    letter-spacing: -.025em !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v89-settings-heading p {
+    margin-top: 3px !important;
+    font-size: 12.5px !important;
+    line-height: 16px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups {
+    padding: 0 13px !important;
+    border-radius: 17px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v90-setting-tile,
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14459-platform-tile {
+    grid-template-columns: minmax(0, 1fr) minmax(112px, 39%) !important;
+    gap: 8px !important;
+    min-height: 68px !important;
+    padding: 6px 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v90-setting-head {
+    grid-template-columns: 36px minmax(0, 1fr) !important;
+    gap: 9px !important;
+    min-height: 50px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v90-setting-icon {
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+    min-height: 34px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v90-setting-icon svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v90-setting-copy {
+    min-height: 50px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v90-setting-title {
+    font-size: 14.5px !important;
+    line-height: 18px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v90-setting-copy small {
+    margin-top: 1px !important;
+    color: #647590 !important;
+    font-size: 11px !important;
+    line-height: 13.5px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v90-setting-tile > select {
+    width: 40% !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14473-mobile-value {
+    gap: 7px !important;
+    min-height: 40px !important;
+    padding: 0 2px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14473-mobile-value strong,
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14341-date-tile .custom-picker-button > span,
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14459-platform-tile .plan-v14467-selected-platforms strong {
+    font-size: 12.75px !important;
+    line-height: 16px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14473-mobile-value svg,
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14473-date-chevron,
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14459-platform-tile .plan-v14467-value-button > svg {
+    width: 15px !important;
+    height: 15px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14341-date-tile .plan-v143-date-time-row,
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14341-date-tile .custom-picker-field,
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14341-date-tile .custom-picker-anchor,
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14341-date-tile .custom-picker-button,
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14459-platform-tile .plan-v14467-value-button {
+    min-height: 40px !important;
+    height: 40px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14341-date-tile .custom-picker-button {
+    gap: 6px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14341-date-tile .custom-picker-button > strong,
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14341-date-tile .custom-picker-button > strong svg {
+    width: 15px !important;
+    height: 15px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14459-platform-tile .plan-v14467-selected-platforms strong {
+    max-width: 122px !important;
+  }
+
+  html body .automation-page.plan-v70-active .plan-v14467-week-rhythm {
+    margin-top: 13px !important;
+    border-radius: 17px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-week-content {
+    gap: 10px !important;
+    padding: 12px 10px 11px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-rhythm-head strong {
+    font-size: 14.5px !important;
+    line-height: 18px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-rhythm-head span {
+    margin-top: 2px !important;
+    font-size: 10.75px !important;
+    line-height: 13.5px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-days {
+    min-height: 65px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-days::before {
+    top: 8px !important;
+    left: calc(100% / 14) !important;
+    right: calc(100% / 14) !important;
+    height: 1.5px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-day {
+    min-height: 64px !important;
+    height: 64px !important;
+    gap: 2px !important;
+    padding: 24px 1px 0 !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-day::before {
+    top: 0 !important;
+    width: 18px !important;
+    height: 18px !important;
+    border-width: 2.5px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-day > span {
+    font-size: 11.5px !important;
+    line-height: 14px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-day > strong {
+    font-size: 10px !important;
+    line-height: 12px !important;
+  }
+}
+
+/* Very narrow phones: preserve readability by allowing copy to wrap, never by shrinking to micro-text. */
+@media (max-width: 360px) {
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups {
+    padding: 0 11px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v90-setting-tile,
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14459-platform-tile {
+    grid-template-columns: minmax(0, 1fr) 108px !important;
+    min-height: 72px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v90-setting-copy small {
+    font-size: 10.75px !important;
+    line-height: 13px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14473-mobile-value strong,
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14341-date-tile .custom-picker-button > span,
+  html body .automation-page.plan-v70-active .plan-v14467-settings-groups .plan-v14459-platform-tile .plan-v14467-selected-platforms strong {
+    font-size: 12px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-week-content {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-day > span {
+    font-size: 11px !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v14467-week-rhythm .plan-v14457-week-day > strong {
+    font-size: 9.5px !important;
+  }
+}

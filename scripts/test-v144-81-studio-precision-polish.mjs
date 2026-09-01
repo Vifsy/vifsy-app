@@ -6,7 +6,7 @@ const css = fs.readFileSync("app/styles/79-v144-81-studio-precision-polish.css",
 const page = fs.readFileSync("app/automation/page.jsx", "utf8");
 const billing = fs.readFileSync("components/StripeBillingPanel.jsx", "utf8");
 
-assert.ok(globals.trimEnd().endsWith('@import "./styles/79-v144-81-studio-precision-polish.css";'), "v144.81 must load last");
+assert.ok(globals.includes('@import "./styles/79-v144-81-studio-precision-polish.css";'), "v144.81 stylesheet must remain loaded");
 
 // Planned post tone is propagated to the row so destination background can match the left rail.
 assert.match(page, /plan-v14481-tone-\$\{\(index % 4\) \+ 1\}/);

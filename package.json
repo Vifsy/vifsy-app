@@ -165,7 +165,8 @@
     "test:v144.78": "node scripts/test-v144-78-growth-first-per-brand-entitlements.mjs",
     "test:v144.79": "node scripts/test-v144-79-billing-final-polish.mjs",
     "test:v144.80": "node scripts/test-v144-80-studio-reference-final.mjs",
-    "test:v144.81": "node scripts/test-v144-81-studio-precision-polish.mjs"
+    "test:v144.81": "node scripts/test-v144-81-studio-precision-polish.mjs",
+    "test:v144.82": "node scripts/test-v144-82-exact-settings-week-reference.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
