@@ -1,0 +1,142 @@
+/* v144.100 — Campaign overview image sizing + campaign-name overlay.
+   Prevents the calendar visual from stretching at intermediate widths and
+   simplifies the fact cards to period + planned-post count. */
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-body {
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.8fr);
+  align-items: start;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-meta {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-visual {
+  position: relative;
+  align-self: start;
+  width: 100%;
+  max-width: 470px;
+  aspect-ratio: 16 / 10;
+  min-height: 0;
+  justify-self: end;
+  overflow: hidden;
+  border: 0;
+  outline: 0;
+  border-radius: 24px;
+  background: #f5f2fb;
+  box-shadow: 0 14px 32px rgba(30, 41, 59, 0.11);
+  isolation: isolate;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-visual::after {
+  content: none !important;
+  display: none !important;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-visual img {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  border: 0;
+  outline: 0;
+  border-radius: inherit;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp100-campaign-image-scrim {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 48%, rgba(12, 20, 38, 0.08) 64%, rgba(12, 20, 38, 0.72) 100%);
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp100-campaign-image-overlay {
+  position: absolute;
+  z-index: 2;
+  left: 16px;
+  right: 16px;
+  bottom: 15px;
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  color: #fff;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.24);
+  pointer-events: none;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp100-campaign-image-overlay small {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.86;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp100-campaign-image-overlay strong {
+  display: block;
+  max-width: 100%;
+  font-size: clamp(1rem, 0.9rem + 0.45vw, 1.35rem);
+  line-height: 1.18;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1180px) {
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-body {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+  }
+
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-visual {
+    max-width: 360px;
+    min-height: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-visual {
+    width: min(100%, 560px);
+    max-width: 560px;
+    justify-self: center;
+  }
+}
+
+@media (max-width: 760px) {
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-visual {
+    order: 0;
+    width: 100%;
+    max-width: none;
+    min-height: 0;
+    aspect-ratio: 16 / 10;
+    border-radius: 20px;
+  }
+
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-meta {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-visual {
+    aspect-ratio: 4 / 3;
+    border-radius: 18px;
+  }
+
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp100-campaign-image-overlay {
+    left: 13px;
+    right: 13px;
+    bottom: 12px;
+  }
+
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp100-campaign-image-overlay strong {
+    font-size: 1rem;
+  }
+}

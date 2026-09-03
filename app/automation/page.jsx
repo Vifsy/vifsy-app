@@ -10868,14 +10868,6 @@ function blockFormatCardClickAfterDrag(event) {
                             <dt><ClipboardList size={15} aria-hidden="true" />{String(locale || "").startsWith("sv") ? "Totalt planerade inlägg" : "Total planned posts"}</dt>
                             <dd>{String(locale || "").startsWith("sv") ? `${slots.length} inlägg` : `${slots.length} posts`}</dd>
                           </div>
-                          <div>
-                            <dt><Repeat2 size={15} aria-hidden="true" />{String(locale || "").startsWith("sv") ? "Frekvens" : "Frequency"}</dt>
-                            <dd>{getCampaignOverviewFrequencyLabel(campaignOpportunity, slots, locale)}</dd>
-                          </div>
-                          <div>
-                            <dt><PenLine size={15} aria-hidden="true" />{String(locale || "").startsWith("sv") ? "Du kan ändra" : "You can change"}</dt>
-                            <dd>{String(locale || "").startsWith("sv") ? "Datum, lägga till eller ta bort inlägg" : "Dates, and add or remove posts"}</dd>
-                          </div>
                         </dl>
                       </div>
 
@@ -10890,6 +10882,11 @@ function blockFormatCardClickAfterDrag(event) {
                             }
                           }}
                         />
+                        <div className="sp100-campaign-image-scrim" aria-hidden="true" />
+                        <div className="sp100-campaign-image-overlay">
+                          <small>{String(locale || "").startsWith("sv") ? "Kampanj" : "Campaign"}</small>
+                          <strong>{campaignOpportunity.title}</strong>
+                        </div>
                       </div>
                     </div>
 
