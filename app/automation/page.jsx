@@ -10556,7 +10556,7 @@ function blockFormatCardClickAfterDrag(event) {
   return (
     <AppLayout active="automation">
       <div
-        className={`automation-page planner-wizard-page ${campaignOpportunity ? "campaign-planner-clean" : "plan-v70-active plan-v14380-polish"}`}
+        className={`automation-page planner-wizard-page plan-v70-active plan-v14380-polish${campaignOpportunity ? " campaign-v14497-unified" : ""}`}
         onClick={(event) => {
           if (!event.target.closest(".custom-picker-field")) {
             setOpenPickerId(null);
@@ -10569,7 +10569,7 @@ function blockFormatCardClickAfterDrag(event) {
       >
         <div className="wizard-layout">
           <main className="wizard-main">
-            {!campaignOpportunity ? (
+            {(
             <section className="plan-v70-shell">
               <header className="plan-v70-header plan-v14341-studio-hero">
                 <div className="plan-v14341-studio-hero-copy">
@@ -10646,14 +10646,15 @@ function blockFormatCardClickAfterDrag(event) {
                       <label className="sp85-settings-row sp85-row-goal">
                         <span className="sp85-row-icon"><Target size={20} aria-hidden="true" /></span>
                         <span className="sp85-row-copy">
-                          <strong>{t("automation.goal")}</strong>
-                          <small>{plannerSectionCopy.goalHelp}</small>
+                          <strong>{planCreationMode === "campaign" ? t("automation.campaignGoal") : t("automation.goal")}</strong>
+                          <small>{planCreationMode === "campaign" ? t("automation.campaignConnectedText") : plannerSectionCopy.goalHelp}</small>
                         </span>
                         <span className="sp85-control sp85-select-control">
                           <select
                             className="sp85-native-select"
                             value={autoPlanGoal}
                             aria-busy={autoPlanLoading}
+                            disabled={planCreationMode === "campaign"}
                             onPointerDown={(event) => {
                               if (!loadingConnectedPlatforms && connectedPlatformOptions.length === 0) {
                                 event.preventDefault();
@@ -10686,7 +10687,7 @@ function blockFormatCardClickAfterDrag(event) {
                             ))}
                           </select>
                           <span className="sp85-value-display">
-                            <strong>{autoPlanGoal ? translateAutoPlanGoalLabel(autoPlanGoal) : t("automation.redesign.chooseGoal")}</strong>
+                            <strong>{planCreationMode === "campaign" ? (campaignOpportunity?.title || t("automation.focusedCampaignFromCalendar")) : (autoPlanGoal ? translateAutoPlanGoalLabel(autoPlanGoal) : t("automation.redesign.chooseGoal"))}</strong>
                             <ChevronDown size={16} aria-hidden="true" />
                           </span>
                         </span>
@@ -10695,8 +10696,8 @@ function blockFormatCardClickAfterDrag(event) {
                       <label className="sp85-settings-row sp85-row-frequency">
                         <span className="sp85-row-icon"><CalendarDays size={20} aria-hidden="true" /></span>
                         <span className="sp85-row-copy">
-                          <strong>{scheduleType === "weekly" ? t("automation.postsPerWeek") : t("automation.postCountTitle")}</strong>
-                          <small>{scheduleType === "weekly" ? plannerSectionCopy.frequencyHelp : t("automation.redesign.postCountCardHelp")}</small>
+                          <strong>{planCreationMode === "campaign" ? t("automation.campaignPosts") : (scheduleType === "weekly" ? t("automation.postsPerWeek") : t("automation.postCountTitle"))}</strong>
+                          <small>{planCreationMode === "campaign" ? t("automation.campaignPostsPrepared", { count: slots.length }) : (scheduleType === "weekly" ? plannerSectionCopy.frequencyHelp : t("automation.redesign.postCountCardHelp"))}</small>
                         </span>
                         <span className="sp85-control sp85-select-control">
                           <select
@@ -10713,10 +10714,12 @@ function blockFormatCardClickAfterDrag(event) {
                             ))}
                           </select>
                           <span className="sp85-value-display">
-                            <strong className="sp85-frequency-desktop-value">{scheduleType === "weekly"
+                            <strong className="sp85-frequency-desktop-value">{planCreationMode === "campaign"
+                              ? (locale.startsWith("sv") ? `${slots.length} inlägg` : `${slots.length} posts`)
+                              : scheduleType === "weekly"
                               ? (locale.startsWith("sv") ? `${autoPlanPostCount} inlägg per vecka` : `${autoPlanPostCount} posts per week`)
                               : (locale.startsWith("sv") ? `${autoPlanPostCount} inlägg` : `${autoPlanPostCount} posts`)}</strong>
-                            <strong className="sp85-frequency-mobile-value">{locale.startsWith("sv") ? `${autoPlanPostCount} inlägg` : `${autoPlanPostCount} posts`}</strong>
+                            <strong className="sp85-frequency-mobile-value">{locale.startsWith("sv") ? `${planCreationMode === "campaign" ? slots.length : autoPlanPostCount} inlägg` : `${planCreationMode === "campaign" ? slots.length : autoPlanPostCount} posts`}</strong>
                             <ChevronDown size={16} aria-hidden="true" />
                           </span>
                         </span>
@@ -10750,6 +10753,7 @@ function blockFormatCardClickAfterDrag(event) {
                             previousMonthLabel={t("automation.previousMonth")}
                             nextMonthLabel={t("automation.nextMonth")}
                             minDate={minimumSelectablePlanningDate}
+                            disabled={planCreationMode === "campaign"}
                           />
                           <ChevronRight className="sp85-mobile-chevron" size={17} aria-hidden="true" />
                         </span>
@@ -10930,9 +10934,13 @@ function blockFormatCardClickAfterDrag(event) {
                 <div className="plan-v70-formats-head">
                   <div>
                     <h2>{t("automation.redesign.contentTypesTitleV2")}</h2>
-                    <p>{locale.startsWith("sv")
-                      ? "Planen är redan optimerad med den innehållsmix som passar ditt mål bäst. Här kan du vid behov lägga till eller byta ut format i den befintliga planen."
-                      : "Your plan is already optimized with the content mix best suited to your goal. Use this section only if you want to add or replace formats in the existing plan."}</p>
+                    <p>{planCreationMode === "campaign"
+                      ? (locale.startsWith("sv")
+                        ? "Kalenderkampanjen är redan optimerad med en innehållsmix som passar kampanjen och dess datum."
+                        : "The calendar campaign is already optimized with a content mix matched to the campaign and its dates.")
+                      : (locale.startsWith("sv")
+                        ? "Planen är redan optimerad med den innehållsmix som passar ditt mål bäst. Här kan du vid behov lägga till eller byta ut format i den befintliga planen."
+                        : "Your plan is already optimized with the content mix best suited to your goal. Use this section only if you want to add or replace formats in the existing plan.")}</p>
                   </div>
                 </div>
 
@@ -10959,9 +10967,9 @@ function blockFormatCardClickAfterDrag(event) {
                       item={item}
                       index={index}
                       view="grid"
-                      disabled={!hasInitialGoalPlan && item.kind !== "giveaway"}
+                      disabled={planCreationMode === "campaign" || (!hasInitialGoalPlan && item.kind !== "giveaway")}
                       key={`v72-${item.id}`}
-                      onClick={() => requestFormatPreview(item.id, { fromAllFormats: true })}
+                      onClick={planCreationMode === "campaign" ? undefined : () => requestFormatPreview(item.id, { fromAllFormats: true })}
                     />
                   ))}
                 </div>
@@ -10970,7 +10978,7 @@ function blockFormatCardClickAfterDrag(event) {
                   <p className="plan-v72-format-empty">{t("automation.format.noMatches")}</p>
                 ) : null}
 
-                <button type="button" className="plan-v14470-format-browser" onClick={openAllFormats}>
+                <button type="button" className="plan-v14470-format-browser" onClick={openAllFormats} disabled={planCreationMode === "campaign"}>
                   <span><LayoutGrid size={18} aria-hidden="true" /></span>
                   <span>
                     <strong>{locale.startsWith("sv") ? `${exploreFormatItems.length} tillgängliga format` : `${exploreFormatItems.length} available formats`}</strong>
@@ -11284,9 +11292,9 @@ function blockFormatCardClickAfterDrag(event) {
                       <button
                         type="button"
                         className="plan-v70-add-button"
-                        onClick={openAllFormats}
+                        onClick={planCreationMode === "campaign" ? addSlot : openAllFormats}
                       >
-                        <Plus size={15} /> {t("automation.redesign.addPost")} <ChevronDown size={14} />
+                        <Plus size={15} /> {t("automation.redesign.addPost")} {planCreationMode === "campaign" ? null : <ChevronDown size={14} />}
                       </button>
                     </div>
                   </div>
@@ -11423,7 +11431,7 @@ function blockFormatCardClickAfterDrag(event) {
                                   compact
                                 />
                               ) : null}
-                              <button type="button" className="danger" onClick={() => removeSlot(slot.id)}>
+                              <button type="button" className="danger" onClick={() => planCreationMode === "campaign" ? removeCampaignSlot(slot.id) : removeSlot(slot.id)}>
                                 {t("automation.delete")}
                               </button>
                             </div>
@@ -11546,9 +11554,9 @@ function blockFormatCardClickAfterDrag(event) {
               </section>
               </div>
             </section>
-            ) : null}
+            )}
 
-            {campaignOpportunity ? (
+            {false ? (
               <div className="campaign-v14335-shell">
                 <section className={`campaign-v14335-hero ${String(campaignOpportunity?.title || "").length % 2 ? "is-shopping-visual" : "is-calendar-visual"}`}>
                   <div className="campaign-v14335-hero-copy">

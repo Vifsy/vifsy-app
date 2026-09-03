@@ -176,7 +176,9 @@
     "test:v144.90": "node scripts/test-v144-90-admin-past-date-bypass.mjs",
     "test:v144.91": "node scripts/test-v144-91-row-calendar-polish.mjs",
     "test:v144.92": "node scripts/test-v144-92-product-research-url-normalization.mjs",
-    "test:v144.93": "node scripts/test-v144-93-home-mobile-reference.mjs"
+    "test:v144.93": "node scripts/test-v144-93-home-mobile-reference.mjs",
+    "test:v144.96": "node scripts/test-v144-96-brand-profile-logo-preview-responsive.mjs",
+    "test:v144.97": "node scripts/test-v144-97-unified-calendar-campaign-studio.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

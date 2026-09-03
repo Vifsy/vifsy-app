@@ -1,0 +1,50 @@
+/* v144.97 — Calendar campaigns use the same AI Content Studio structure.
+   Functional campaign rules stay intact; this layer only keeps locked campaign
+   settings readable and responsive inside the regular Studio components. */
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp85-native-select:disabled,
+html body .automation-page.plan-v70-active.campaign-v14497-unified .custom-picker-button:disabled {
+  cursor: default !important;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp85-native-select:disabled + .sp85-value-display,
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp85-row-date .custom-picker-button:disabled {
+  opacity: 1 !important;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp85-row-goal .sp85-value-display svg,
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp85-row-frequency .sp85-value-display svg,
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp85-row-publishing .sp85-value-display svg,
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp85-row-date .sp85-mobile-chevron {
+  opacity: .34 !important;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .plan-v14470-format-browser:disabled {
+  cursor: default !important;
+  opacity: .78 !important;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .plan-v70-planned-row.is-past-campaign {
+  opacity: .62;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .plan-v14341-studio-hero h1,
+html body .automation-page.plan-v70-active.campaign-v14497-unified .plan-v14341-studio-hero p,
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp85-row-copy,
+html body .automation-page.plan-v70-active.campaign-v14497-unified .plan-v70-planned-post {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .plan-v14341-studio-hero-copy {
+    min-width: 0 !important;
+  }
+
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp85-value-display strong {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    overflow-wrap: anywhere !important;
+  }
+}

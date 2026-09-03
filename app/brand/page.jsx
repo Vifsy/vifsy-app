@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Building2, Check, ChevronRight, Globe2, Languages, Pencil, Sparkles, Users, X } from "lucide-react";
+import { Bookmark, Building2, Check, ChevronRight, Globe2, Heart, Languages, MessageCircle, Pencil, Send, Sparkles, Users, X } from "lucide-react";
 import AppLayout from "../../components/AppLayout";
 import { supabase } from "../../lib/supabaseClient";
 import { getValidAnalysisAccessToken } from "../../lib/analysisSession";
@@ -1460,62 +1460,132 @@ export default function BrandProfile() {
             </div>
 
             {showGeneratedFields && !isEditing && !analyzing ? (
-              <div className="brand-profile-summary-grid brand-v14495-summary-list">
-                <article className="brand-profile-summary-card identity brand-v14495-summary-row">
-                  <span className="brand-v14495-row-icon"><Building2 size={19} /></span>
-                  <div className="brand-v14495-row-label">
-                    <small>{t("brand.businessDetails")}</small>
+              <div className="brand-v14496-content-grid">
+                <div className="brand-profile-summary-grid brand-v14495-summary-list brand-v14496-summary-list">
+                  <article className="brand-profile-summary-card identity brand-v14495-summary-row">
+                    <span className="brand-v14495-row-icon"><Building2 size={19} /></span>
+                    <div className="brand-v14495-row-label">
+                      <small>{t("brand.businessDetails")}</small>
+                    </div>
+                    <div className="brand-v14495-row-value brand-v14495-business-value">
+                      <strong>{businessName || "—"}</strong>
+                      <a href={normalizedWebsiteUrl} target="_blank" rel="noreferrer">{normalizedWebsiteUrl || "—"}</a>
+                    </div>
+                    <span className="brand-v14495-row-chevron" aria-hidden="true"><ChevronRight size={18} /></span>
+                  </article>
+                  <article className="brand-profile-summary-card compact brand-v14495-summary-row">
+                    <span className="brand-v14495-row-icon"><Globe2 size={19} /></span>
+                    <div className="brand-v14495-row-label"><small>{t("brand.campaignMarket")}</small></div>
+                    <div className="brand-v14495-row-value"><strong>{getMarketOptionLabel(t, visibleMarketOptions.find((market) => market.label === contentMarket) || { label: contentMarket, countryCode })}</strong></div>
+                    <span className="brand-v14495-row-chevron" aria-hidden="true"><ChevronRight size={18} /></span>
+                  </article>
+                  <article className="brand-profile-summary-card compact brand-v14495-summary-row">
+                    <span className="brand-v14495-row-icon"><Languages size={19} /></span>
+                    <div className="brand-v14495-row-label"><small>{t("brand.postLanguage")}</small></div>
+                    <div className="brand-v14495-row-value"><strong>{getLanguageOptionLabel(t, normalizedContentLanguage)}</strong></div>
+                    <span className="brand-v14495-row-chevron" aria-hidden="true"><ChevronRight size={18} /></span>
+                  </article>
+                  <article className="brand-profile-summary-card narrative brand-v14495-summary-row">
+                    <span className="brand-v14495-row-icon"><Sparkles size={19} /></span>
+                    <div className="brand-v14495-row-label"><small>{t("brand.industry")}</small></div>
+                    <div className="brand-v14495-row-value"><p>{industry || "—"}</p></div>
+                    <span className="brand-v14495-row-chevron" aria-hidden="true"><ChevronRight size={18} /></span>
+                  </article>
+                  <article className="brand-profile-summary-card narrative brand-v14495-summary-row">
+                    <span className="brand-v14495-row-icon"><Users size={19} /></span>
+                    <div className="brand-v14495-row-label"><small>{t("brand.targetAudience")}</small></div>
+                    <div className="brand-v14495-row-value"><p>{targetAudience || "—"}</p></div>
+                    <span className="brand-v14495-row-chevron" aria-hidden="true"><ChevronRight size={18} /></span>
+                  </article>
+                </div>
+
+                <section className="brand-v14496-logo-panel" aria-labelledby="brand-v14496-logo-title">
+                  <div className="brand-v14496-logo-copy">
+                    <div className="brand-v14496-logo-heading">
+                      <span className="brand-v14496-logo-heading-icon" aria-hidden="true"><Sparkles size={18} /></span>
+                      <div>
+                        <p className="dashboard-eyebrow">{t("brand.logoSectionEyebrow")}</p>
+                        <h3 id="brand-v14496-logo-title">{t("brand.logoCompactTitle")}</h3>
+                      </div>
+                    </div>
+
+                    <p className="brand-v14496-logo-description">{t("brand.logoSectionDescription")}</p>
+
+                    <ul className="brand-v14496-logo-benefits">
+                      <li><span><Check size={14} /></span>{t("brand.logoBenefitPlacement")}</li>
+                      <li><span><Check size={14} /></span>{t("brand.logoBenefitRecognition")}</li>
+                      <li><span><Check size={14} /></span>{t("brand.logoBenefitChannels")}</li>
+                    </ul>
+
+                    <div className="brand-v14496-current-logo">
+                      <p>{logoUrl ? t("brand.logoCurrentTitle") : t("brand.logoExampleTitle")}</p>
+                      <div className="brand-v14496-current-logo-row">
+                        <span className={`brand-v14496-current-logo-mark ${logoUrl ? "has-logo" : "is-example"}`}>
+                          {logoUrl ? (
+                            <img src={logoUrl} alt={t("brand.logoPreviewAlt")} />
+                          ) : (
+                            <span>{brandInitials}</span>
+                          )}
+                        </span>
+                        <span className="brand-v14496-current-logo-meta">
+                          <strong>{businessName || t("brand.brandSetup")}</strong>
+                          <small>{logoUrl ? t("brand.logoFileHint") : t("brand.logoExampleHint")}</small>
+                        </span>
+                        <button
+                          type="button"
+                          className="brand-v14496-logo-action"
+                          onClick={() => {
+                            setLogoMessage("");
+                            setShowLogoModal(true);
+                          }}
+                          disabled={analyzing || saving || deletingBrand}
+                        >
+                          {logoUrl ? t("brand.logoManageButton") : t("brand.logoAddButton")}
+                        </button>
+                      </div>
+                      <div className="brand-v14496-logo-tip">
+                        <span aria-hidden="true">i</span>
+                        <p>{t("brand.logoRecommendation")}</p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="brand-v14495-row-value brand-v14495-business-value">
-                    <strong>{businessName || "—"}</strong>
-                    <a href={normalizedWebsiteUrl} target="_blank" rel="noreferrer">{normalizedWebsiteUrl || "—"}</a>
+
+                  <div className="brand-v14496-preview-wrap">
+                    <p className="brand-v14496-preview-label">{t("brand.logoPlacementExample")}</p>
+                    <div className="brand-v14496-social-card">
+                      <div className="brand-v14496-social-head">
+                        <span className={`brand-v14496-social-avatar ${logoUrl ? "has-logo" : "is-example"}`}>
+                          {logoUrl ? <img src={logoUrl} alt="" /> : <span>{brandInitials}</span>}
+                        </span>
+                        <span className="brand-v14496-social-account">
+                          <strong>{businessName || t("brand.brandSetup")}</strong>
+                          <small>{t("brand.logoPostSponsored")}</small>
+                        </span>
+                        <span className="brand-v14496-social-more" aria-hidden="true">•••</span>
+                      </div>
+
+                      <div className="brand-v14496-social-creative">
+                        <img src="/brand/logo-preview-beauty-v144-96.webp" alt={t("brand.logoPostPreviewAlt")} />
+                        <div className="brand-v14496-social-copy">
+                          <strong>{t("brand.logoPostHeadline")}</strong>
+                          <span>{t("brand.logoPostText")}</span>
+                          <b>{t("brand.logoPostCta")}</b>
+                        </div>
+                        <span className="brand-v14496-social-logo">
+                          {logoUrl ? <img src={logoUrl} alt={t("brand.logoPreviewAlt")} /> : <span>{brandInitials}</span>}
+                        </span>
+                      </div>
+
+                      <div className="brand-v14496-social-actions" aria-hidden="true">
+                        <span><Heart size={18} /></span>
+                        <span><MessageCircle size={18} /></span>
+                        <span><Send size={18} /></span>
+                        <span className="brand-v14496-social-save"><Bookmark size={18} /></span>
+                      </div>
+                    </div>
+                    <p className="brand-v14496-preview-note">{logoUrl ? t("brand.logoPreviewUsesOwn") : t("brand.logoPreviewUsesExample")}</p>
                   </div>
-                  <span className="brand-v14495-row-chevron" aria-hidden="true"><ChevronRight size={18} /></span>
-                </article>
-                <article className="brand-profile-summary-card compact brand-v14495-summary-row">
-                  <span className="brand-v14495-row-icon"><Globe2 size={19} /></span>
-                  <div className="brand-v14495-row-label"><small>{t("brand.campaignMarket")}</small></div>
-                  <div className="brand-v14495-row-value"><strong>{getMarketOptionLabel(t, visibleMarketOptions.find((market) => market.label === contentMarket) || { label: contentMarket, countryCode })}</strong></div>
-                  <span className="brand-v14495-row-chevron" aria-hidden="true"><ChevronRight size={18} /></span>
-                </article>
-                <article className="brand-profile-summary-card compact brand-v14495-summary-row">
-                  <span className="brand-v14495-row-icon"><Languages size={19} /></span>
-                  <div className="brand-v14495-row-label"><small>{t("brand.postLanguage")}</small></div>
-                  <div className="brand-v14495-row-value"><strong>{getLanguageOptionLabel(t, normalizedContentLanguage)}</strong></div>
-                  <span className="brand-v14495-row-chevron" aria-hidden="true"><ChevronRight size={18} /></span>
-                </article>
-                <article className="brand-profile-summary-card narrative brand-v14495-summary-row">
-                  <span className="brand-v14495-row-icon"><Sparkles size={19} /></span>
-                  <div className="brand-v14495-row-label"><small>{t("brand.industry")}</small></div>
-                  <div className="brand-v14495-row-value"><p>{industry || "—"}</p></div>
-                  <span className="brand-v14495-row-chevron" aria-hidden="true"><ChevronRight size={18} /></span>
-                </article>
-                <article className="brand-profile-summary-card narrative brand-v14495-summary-row">
-                  <span className="brand-v14495-row-icon"><Users size={19} /></span>
-                  <div className="brand-v14495-row-label"><small>{t("brand.targetAudience")}</small></div>
-                  <div className="brand-v14495-row-value"><p>{targetAudience || "—"}</p></div>
-                  <span className="brand-v14495-row-chevron" aria-hidden="true"><ChevronRight size={18} /></span>
-                </article>
-                <article className="brand-profile-summary-card logo brand-v14495-summary-row brand-v14495-logo-row">
-                  <button
-                    type="button"
-                    className="brand-logo-summary-trigger brand-v14495-logo-trigger"
-                    onClick={() => {
-                      setLogoMessage("");
-                      setShowLogoModal(true);
-                    }}
-                    disabled={analyzing || saving || deletingBrand}
-                  >
-                    <span className={`brand-logo-compact-thumb ${logoUrl ? "has-logo" : "empty"}`}>
-                      {logoUrl ? <img src={logoUrl} alt={t("brand.logoPreviewAlt")} /> : <span>PNG</span>}
-                    </span>
-                    <span className="brand-logo-summary-copy">
-                      <small>{t("brand.logoCompactTitle")}</small>
-                      <strong>{logoUrl ? t("brand.logoCompactTextReady") : t("brand.logoCompactTextEmpty")}</strong>
-                    </span>
-                    <span className="brand-logo-summary-cta">{logoUrl ? t("brand.logoManageButton") : t("brand.logoAddButton")}</span>
-                  </button>
-                </article>
+                </section>
               </div>
             ) : (
               <>
