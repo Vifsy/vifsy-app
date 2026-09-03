@@ -171,6 +171,18 @@ const PINTEREST_TRANSIENT_RETRY_MAX_MINUTES = 60;
 const PINTEREST_RECONCILE_PAGE_SIZE = 100;
 const PINTEREST_CREATE_SETTLE_MINUTES = 15;
 const CRON_RULE_PROCESSING_LOCK_MINUTES = 15;
+const AUTOMATION_WORKER_LANE_LEASE_SECONDS = Math.max(
+  120,
+  Math.min(900, Number(process.env.AUTOMATION_WORKER_LANE_LEASE_SECONDS || 720) || 720)
+);
+const AUTOMATION_WORKER_LONG_RUNNING_ALERT_SECONDS = Math.max(
+  300,
+  Math.min(900, Number(process.env.AUTOMATION_WORKER_LONG_RUNNING_ALERT_SECONDS || 480) || 480)
+);
+const ADMIN_INCIDENT_EMAIL_COOLDOWN_SECONDS = Math.max(
+  60,
+  Math.min(86400, Number(process.env.ADMIN_INCIDENT_EMAIL_COOLDOWN_SECONDS || 600) || 600)
+);
 const RECENT_AUTOMATION_DRAFT_BLOCK_HOURS = 6;
 const INCOMPLETE_CAROUSEL_DRAFT_GRACE_MINUTES = 20;
 const STALE_CAROUSEL_RECOVERY_WINDOW_HOURS = 24;
@@ -776,6 +788,116 @@ async function releaseWebsiteDomainJobLock({ domain, token, ruleId }) {
       domain,
       ruleId,
       message: error.message,
+    });
+  }
+}
+
+
+function isDedicatedAutomationWorkerName(workerName) {
+  return /^worker-[1-9]\d*$/i.test(String(workerName || "").trim());
+}
+
+async function acquireAutomationWorkerLaneLease({ supabase, workerName, metadata = {} }) {
+  if (!supabase || !isDedicatedAutomationWorkerName(workerName)) {
+    return { acquired: true, token: null, bypassed: true };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc("acquire_automation_worker_lane", {
+      p_lane_name: workerName,
+      p_ttl_seconds: AUTOMATION_WORKER_LANE_LEASE_SECONDS,
+      p_metadata: metadata || {},
+    });
+
+    if (error) {
+      const migrationMissing = /acquire_automation_worker_lane|automation_worker_leases|schema cache|does not exist/i.test(
+        String(error.message || "")
+      );
+      console.warn("Automation worker lane lease unavailable; preserving the existing queue behavior", {
+        workerName,
+        migrationMissing,
+        message: error.message,
+      });
+      return {
+        acquired: true,
+        token: null,
+        degraded: true,
+        migrationMissing,
+        errorMessage: error.message || "Worker lane lease unavailable",
+      };
+    }
+
+    const result = data && typeof data === "object" ? data : {};
+    return {
+      acquired: result.acquired === true,
+      token: result.lease_token || null,
+      acquiredAt: result.acquired_at || null,
+      expiresAt: result.expires_at || null,
+      reason: result.reason || null,
+      activeMetadata:
+        result.active_metadata && typeof result.active_metadata === "object"
+          ? result.active_metadata
+          : {},
+    };
+  } catch (error) {
+    console.warn("Automation worker lane lease check failed; preserving the existing queue behavior", {
+      workerName,
+      message: error?.message || String(error),
+    });
+    return {
+      acquired: true,
+      token: null,
+      degraded: true,
+      migrationMissing: false,
+      errorMessage: error?.message || String(error),
+    };
+  }
+}
+
+async function updateAutomationWorkerLaneMetadata({ supabase, workerName, token, metadata = {} }) {
+  if (!supabase || !workerName || !token) return;
+  try {
+    const { error } = await supabase
+      .from("automation_worker_leases")
+      .update({
+        metadata: metadata || {},
+        updated_at: new Date().toISOString(),
+      })
+      .eq("lane_name", String(workerName).toLowerCase())
+      .eq("lease_token", token);
+
+    if (error && !/automation_worker_leases|schema cache|does not exist/i.test(String(error.message || ""))) {
+      console.warn("Automation worker lane metadata could not be updated", {
+        workerName,
+        message: error.message,
+      });
+    }
+  } catch (error) {
+    console.warn("Automation worker lane metadata update failed without affecting generation", {
+      workerName,
+      message: error?.message || String(error),
+    });
+  }
+}
+
+async function releaseAutomationWorkerLaneLease({ supabase, workerName, token }) {
+  if (!supabase || !workerName || !token) return;
+  try {
+    const { error } = await supabase.rpc("release_automation_worker_lane", {
+      p_lane_name: workerName,
+      p_lease_token: token,
+    });
+
+    if (error && !/release_automation_worker_lane|automation_worker_leases|schema cache|does not exist/i.test(String(error.message || ""))) {
+      console.warn("Automation worker lane lease could not be released", {
+        workerName,
+        message: error.message,
+      });
+    }
+  } catch (error) {
+    console.warn("Automation worker lane release failed; the lease will expire automatically", {
+      workerName,
+      message: error?.message || String(error),
     });
   }
 }
@@ -12268,17 +12390,213 @@ function getImmediateAdminAlertRecipients() {
   return [...new Set([...getConfiguredAdminEmails(), ...legacyRecipients])];
 }
 
+async function loadAdminIncidentCostSnapshot({ supabase, occurrenceId = null, postId = null }) {
+  if (!supabase || (!occurrenceId && !postId)) {
+    return { totalByCurrency: {}, providers: [], events: [] };
+  }
+
+  try {
+    let query = supabase
+      .from("post_generation_cost_events")
+      .select("provider, service, model, operation, currency, amount, exact, provider_request_id, created_at")
+      .order("created_at", { ascending: true })
+      .limit(50);
+    query = occurrenceId ? query.eq("occurrence_id", occurrenceId) : query.eq("post_id", postId);
+    const { data, error } = await query;
+    if (error) {
+      if (!/post_generation_cost_events|schema cache|does not exist/i.test(String(error.message || ""))) {
+        console.warn("Admin incident cost snapshot unavailable", { occurrenceId, postId, message: error.message });
+      }
+      return { totalByCurrency: {}, providers: [], events: [] };
+    }
+
+    const events = Array.isArray(data) ? data : [];
+    const totalByCurrency = {};
+    const providers = new Set();
+    for (const event of events) {
+      const providerLabel = [event?.provider, event?.model].filter(Boolean).join(" / ");
+      if (providerLabel) providers.add(providerLabel);
+      if (event?.amount != null && event?.exact === true) {
+        const currency = String(event.currency || "USD");
+        totalByCurrency[currency] =
+          Math.round(((totalByCurrency[currency] || 0) + Number(event.amount || 0)) * 1e6) / 1e6;
+      }
+    }
+    return {
+      totalByCurrency,
+      providers: Array.from(providers).slice(0, 12),
+      events: events.slice(-12),
+    };
+  } catch (error) {
+    console.warn("Admin incident cost snapshot failed without affecting automation", {
+      occurrenceId,
+      postId,
+      message: error?.message || String(error),
+    });
+    return { totalByCurrency: {}, providers: [], events: [] };
+  }
+}
+
+async function loadAdminIncidentRunLogSnapshot({ supabase, runLogId = null }) {
+  if (!supabase || !runLogId) return null;
+  try {
+    const { data, error } = await supabase
+      .from("automation_run_logs")
+      .select("id, status, started_at, finished_at, duration_ms, brand_name, brand_website_url, rule_name, campaign_title, content_type_id, content_format, products_selected, product_titles, product_urls, search_methods, error_message, metadata")
+      .eq("id", runLogId)
+      .maybeSingle();
+    if (error) {
+      if (!/automation_run_logs|schema cache|does not exist/i.test(String(error.message || ""))) {
+        console.warn("Admin incident run-log snapshot unavailable", { runLogId, message: error.message });
+      }
+      return null;
+    }
+    return data || null;
+  } catch {
+    return null;
+  }
+}
+
+function buildAdminIncidentDedupeKey({
+  dedupeKey = null,
+  kind = "generation",
+  failureCode = null,
+  stage = null,
+  workerName = null,
+  occurrenceId = null,
+  postId = null,
+  rule = null,
+}) {
+  if (dedupeKey) return String(dedupeKey).slice(0, 500);
+  return [
+    "spreelo",
+    kind || "runtime",
+    failureCode || "unknown",
+    stage || "unknown",
+    occurrenceId || postId || rule?.id || workerName || "global",
+  ]
+    .map((value) => String(value || "unknown").replace(/\s+/g, "_").slice(0, 140))
+    .join(":")
+    .slice(0, 500);
+}
+
+async function recordAdminRuntimeIncident({
+  supabase,
+  dedupeKey,
+  severity,
+  kind,
+  title,
+  failureCode,
+  stage,
+  message,
+  workerName,
+  rule,
+  brandProfile,
+  occurrenceId,
+  postId,
+  runLogId,
+  metadata,
+}) {
+  if (!supabase) return { incidentId: null, eventCount: 1, shouldEmail: true, durable: false };
+  try {
+    const { data, error } = await supabase.rpc("record_admin_runtime_incident", {
+      p_dedupe_key: dedupeKey,
+      p_severity: severity || "error",
+      p_kind: kind || "runtime",
+      p_title: title || null,
+      p_failure_code: failureCode || null,
+      p_stage: stage || null,
+      p_message: String(message || "").slice(0, 8000) || null,
+      p_worker_name: workerName || null,
+      p_user_id: rule?.user_id || null,
+      p_brand_profile_id: brandProfile?.id || rule?.brand_profile_id || null,
+      p_automation_rule_id: rule?.id || null,
+      p_occurrence_id: occurrenceId || null,
+      p_post_id: postId || null,
+      p_run_log_id: runLogId || null,
+      p_metadata: metadata || {},
+      p_email_cooldown_seconds: ADMIN_INCIDENT_EMAIL_COOLDOWN_SECONDS,
+    });
+
+    if (error) {
+      const migrationMissing = /record_admin_runtime_incident|admin_runtime_incidents|schema cache|does not exist/i.test(
+        String(error.message || "")
+      );
+      console.warn("Durable admin incident record unavailable; email alert will still be attempted", {
+        migrationMissing,
+        failureCode,
+        stage,
+        message: error.message,
+      });
+      return { incidentId: null, eventCount: 1, shouldEmail: true, durable: false, migrationMissing };
+    }
+
+    return {
+      incidentId: data?.incident_id || null,
+      eventCount: Math.max(1, Number(data?.event_count || 1)),
+      shouldEmail: data?.should_email !== false,
+      durable: true,
+    };
+  } catch (error) {
+    console.warn("Durable admin incident recording failed without affecting automation; email alert will still be attempted", {
+      failureCode,
+      stage,
+      message: error?.message || String(error),
+    });
+    return { incidentId: null, eventCount: 1, shouldEmail: true, durable: false };
+  }
+}
+
+function renderAdminIncidentDetail(label, value) {
+  const normalized = value == null || value === "" ? "—" : String(value);
+  return `<tr><td style="padding:6px 14px 6px 0;color:#657083;vertical-align:top;white-space:nowrap">${escapeHtml(label)}</td><td style="padding:6px 0;color:#172033;font-weight:650;word-break:break-word">${escapeHtml(normalized)}</td></tr>`;
+}
+
+async function releaseAdminIncidentEmailReservation({ supabase, incidentId }) {
+  if (!supabase || !incidentId) return;
+  try {
+    const { error } = await supabase
+      .from("admin_runtime_incidents")
+      .update({ last_email_at: null, updated_at: new Date().toISOString() })
+      .eq("id", incidentId);
+    if (error && !/admin_runtime_incidents|schema cache|does not exist/i.test(String(error.message || ""))) {
+      console.warn("Admin incident email reservation could not be released", {
+        incidentId,
+        message: error.message,
+      });
+    }
+  } catch (error) {
+    console.warn("Admin incident email reservation release failed without affecting automation", {
+      incidentId,
+      message: error?.message || String(error),
+    });
+  }
+}
+
 async function sendImmediateAdminFailureAlertEmail({
+  supabase = null,
   resendApiKey,
   rule = null,
   brandProfile = null,
   occurrenceId = null,
   postId = null,
+  runLogId = null,
   failureCode = null,
   stage = null,
   message = null,
+  errorStack = null,
   productItems = [],
   kind = "generation",
+  severity = "critical",
+  workerName = null,
+  scheduledFor = null,
+  retryCount = null,
+  retryLimit = null,
+  queueContext = null,
+  workerActivity = [],
+  metadata = {},
+  dedupeKey = null,
+  title = null,
 }) {
   const recipients = getImmediateAdminAlertRecipients();
   if (!resendApiKey || !recipients.length) {
@@ -12302,24 +12620,143 @@ async function sendImmediateAdminFailureAlertEmail({
     rule?.brand_profile?.business_name ||
     rule?.brand_name ||
     "Unknown brand";
+  const brandWebsite =
+    brandProfile?.website_product_source_url ||
+    brandProfile?.website_url ||
+    rule?.brand_website_url ||
+    null;
   const contentLabel =
     rule?.content_type_label ||
     rule?.post_type ||
     rule?.content_format ||
     "Post";
-  const safeMessage = String(message || "Unknown failure").slice(0, 4000);
+  const campaignTitle =
+    rule?.campaign_title ||
+    rule?.campaign_name ||
+    rule?.campaign_opportunity_title ||
+    rule?.name ||
+    null;
+  const safeMessage = String(message || "Unknown failure").slice(0, 8000);
+  const safeStack = String(errorStack || "").slice(0, 6000);
+  const incidentDedupeKey = buildAdminIncidentDedupeKey({
+    dedupeKey,
+    kind,
+    failureCode,
+    stage,
+    workerName,
+    occurrenceId,
+    postId,
+    rule,
+  });
+  const incidentMetadata = {
+    scheduled_for: scheduledFor || null,
+    queue_context: queueContext || null,
+    worker_activity: Array.isArray(workerActivity) ? workerActivity.slice(-10) : [],
+    retry_count: retryCount == null ? null : Number(retryCount),
+    retry_limit: retryLimit == null ? null : Number(retryLimit),
+    ...(metadata || {}),
+  };
+  const incident = await recordAdminRuntimeIncident({
+    supabase,
+    dedupeKey: incidentDedupeKey,
+    severity,
+    kind,
+    title: title || `${kind === "publish" ? "Publishing" : kind === "runtime" ? "Runtime" : "Generation"} incident · ${brandName}`,
+    failureCode,
+    stage,
+    message: safeMessage,
+    workerName,
+    rule,
+    brandProfile,
+    occurrenceId,
+    postId,
+    runLogId,
+    metadata: incidentMetadata,
+  });
+
+  if (!incident.shouldEmail) {
+    console.info("Immediate admin failure alert email deduplicated", {
+      incidentId: incident.incidentId,
+      occurrenceId,
+      postId,
+      failureCode,
+      stage,
+      eventCount: incident.eventCount,
+    });
+    return { sent: false, reason: "deduplicated", incidentId: incident.incidentId };
+  }
+
+  const [costSnapshot, runLogSnapshot] = await Promise.all([
+    loadAdminIncidentCostSnapshot({ supabase, occurrenceId, postId }),
+    loadAdminIncidentRunLogSnapshot({ supabase, runLogId }),
+  ]);
   const suppliedProducts = (Array.isArray(productItems) ? productItems : [])
     .filter((item) => item?.title || item?.image_url || item?.url)
-    .slice(0, 5);
+    .slice(0, 8);
+  const loggedProductTitles = Array.isArray(runLogSnapshot?.product_titles)
+    ? runLogSnapshot.product_titles.slice(0, 8)
+    : [];
+  const loggedProductUrls = Array.isArray(runLogSnapshot?.product_urls)
+    ? runLogSnapshot.product_urls.slice(0, 8)
+    : [];
   const productSummary = suppliedProducts.length
-    ? `<p><strong>Products available for internal review:</strong> ${suppliedProducts.length}</p><div>${suppliedProducts
+    ? `<div style="margin-top:20px"><h3 style="font-size:16px;margin:0 0 10px">Products involved</h3>${suppliedProducts
         .map((item) => `<div style="border:1px solid #e2e7ed;border-radius:12px;padding:12px 14px;margin:8px 0"><strong>${escapeHtml(item?.title || "Unnamed product")}</strong>${item?.url ? `<br/><a href="${escapeHtml(item.url)}" style="display:inline-block;margin-top:9px;background:#0b1724;color:#fff;text-decoration:none;padding:9px 13px;border-radius:8px;font-weight:700">Open product source</a>` : ""}</div>`)
         .join("")}</div>`
+    : loggedProductTitles.length || loggedProductUrls.length
+      ? `<div style="margin-top:20px"><h3 style="font-size:16px;margin:0 0 10px">Products involved</h3>${loggedProductTitles
+          .map((name, index) => `<div style="border:1px solid #e2e7ed;border-radius:12px;padding:10px 12px;margin:7px 0"><strong>${escapeHtml(name || `Product ${index + 1}`)}</strong>${loggedProductUrls[index] ? `<br/><span style="font-size:12px;color:#657083">${escapeHtml(loggedProductUrls[index])}</span>` : ""}</div>`)
+          .join("")}</div>`
+      : "";
+  const costText = Object.entries(costSnapshot.totalByCurrency || {})
+    .map(([currency, amount]) => `${Number(amount).toFixed(4)} ${currency}`)
+    .join(" + ") || "No exact cost recorded yet";
+  const providerText = (costSnapshot.providers || []).join(", ") || "Not recorded yet";
+  const activityRows = (Array.isArray(workerActivity) ? workerActivity : []).slice(-10);
+  const activityHtml = activityRows.length
+    ? `<div style="margin-top:20px"><h3 style="font-size:16px;margin:0 0 10px">Worker batch activity</h3>${activityRows
+        .map((item) => `<div style="padding:9px 11px;border-radius:10px;background:#f6f8fb;margin:6px 0"><strong>${escapeHtml(item?.content_label || item?.content_format || "Post")}</strong>${item?.campaign_title ? ` · ${escapeHtml(item.campaign_title)}` : ""}<br/><span style="font-size:12px;color:#657083">${escapeHtml(item?.status || "unknown")} · ${escapeHtml(item?.scheduled_for || "no schedule")} · rule ${escapeHtml(item?.rule_id || "—")}</span></div>`)
+        .join("")}</div>`
     : "";
+  const queueText = queueContext
+    ? `candidates ${Number(queueContext?.candidates || 0)}, claimed ${Number(queueContext?.claimed || 0)}, generated ${Number(queueContext?.generated || 0)}, errors ${Number(queueContext?.errors || 0)}`
+    : "Not available";
+  const severityLabel = String(severity || "error").toUpperCase();
+  const subjectPrefix = severity === "warning" ? "WARNING" : severity === "critical" ? "CRITICAL" : "ERROR";
+  const incidentId = incident.incidentId || "not persisted";
+  const reviewUrl = occurrenceId || postId ? `${appUrl}/admin/post-approvals` : `${appUrl}/admin`;
+
+  const detailRows = [
+    ["Severity", severityLabel],
+    ["Incident ID", incidentId],
+    ["Seen", incident.eventCount > 1 ? `${incident.eventCount} times` : "First event"],
+    ["Brand", brandName],
+    ["Website", brandWebsite],
+    ["Customer user ID", rule?.user_id || null],
+    ["Brand profile ID", brandProfile?.id || rule?.brand_profile_id || null],
+    ["Campaign / plan", campaignTitle],
+    ["Content", contentLabel],
+    ["Format", rule?.content_format || runLogSnapshot?.content_format || null],
+    ["Scheduled for", scheduledFor || null],
+    ["Worker", workerName],
+    ["Stage", stage || "unknown"],
+    ["Failure code", failureCode || "unknown"],
+    ["Rule ID", rule?.id || null],
+    ["Occurrence ID", occurrenceId],
+    ["Post ID", postId],
+    ["Run log ID", runLogId],
+    ["Queue attempts", rule?.queue_attempts == null ? null : Number(rule.queue_attempts || 0) + 1],
+    ["Retry", retryCount == null ? null : retryLimit == null ? String(retryCount) : `${retryCount} / ${retryLimit}`],
+    ["Run duration", runLogSnapshot?.duration_ms == null ? null : `${Math.round(Number(runLogSnapshot.duration_ms) / 1000)} s`],
+    ["Providers / models", providerText],
+    ["Exact recorded cost", costText],
+    ["Queue snapshot", queueText],
+  ].map(([label, value]) => renderAdminIncidentDetail(label, value)).join("");
 
   try {
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
+      signal: AbortSignal.timeout(8000),
       headers: {
         Authorization: `Bearer ${resendApiKey}`,
         "Content-Type": "application/json",
@@ -12327,51 +12764,56 @@ async function sendImmediateAdminFailureAlertEmail({
       body: JSON.stringify({
         from: process.env.RESEND_FROM_EMAIL || "Spreelo <noreply@spreelo.com>",
         to: recipients,
-        subject: `Spreelo ${kind === "publish" ? "publishing" : "post"} failed · ${brandName}`,
-        html: `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;padding:28px;color:#172033">
-          <p style="color:#d65337;font-weight:800;letter-spacing:.08em">SPREELO · ACTION REQUIRED</p>
-          <h1 style="font-size:25px;margin:8px 0 14px">A ${kind === "publish" ? "publishing attempt" : "post generation"} failed</h1>
-          <p><strong>Brand:</strong> ${escapeHtml(brandName)}<br/>
-          <strong>Content:</strong> ${escapeHtml(contentLabel)}<br/>
-          <strong>Stage:</strong> ${escapeHtml(stage || "unknown")}<br/>
-          <strong>Failure code:</strong> ${escapeHtml(failureCode || "unknown")}</p>
-          <div style="background:#fff5f2;border:1px solid #ffd5ca;border-radius:12px;padding:14px 16px;margin:18px 0;white-space:pre-wrap">${escapeHtml(safeMessage)}</div>
+        subject: `[${subjectPrefix}] Spreelo · ${brandName} · ${failureCode || stage || kind}`,
+        html: `<div style="font-family:Arial,sans-serif;max-width:760px;margin:auto;padding:28px;color:#172033">
+          <p style="color:${severity === "warning" ? "#b26a00" : "#d65337"};font-weight:800;letter-spacing:.08em">SPREELO · ${escapeHtml(severityLabel)} RUNTIME ALERT</p>
+          <h1 style="font-size:25px;margin:8px 0 14px">${escapeHtml(title || (kind === "publish" ? "A publishing attempt failed" : kind === "runtime" ? "Spreelo detected an unusual worker event" : "A post generation failed"))}</h1>
+          <table style="border-collapse:collapse;width:100%;font-size:14px">${detailRows}</table>
+          <div style="background:#fff5f2;border:1px solid #ffd5ca;border-radius:12px;padding:14px 16px;margin:18px 0;white-space:pre-wrap"><strong>Technical message</strong><br/>${escapeHtml(safeMessage)}</div>
+          ${safeStack ? `<details style="margin:12px 0"><summary style="cursor:pointer;font-weight:700">Technical stack</summary><pre style="white-space:pre-wrap;background:#f6f8fb;border-radius:10px;padding:12px;font-size:11px;overflow:auto">${escapeHtml(safeStack)}</pre></details>` : ""}
           ${productSummary}
-          <a href="${appUrl}/admin/post-approvals" style="display:inline-block;background:#0b1724;color:white;text-decoration:none;padding:13px 18px;border-radius:10px;font-weight:700">Open admin review</a>
+          ${activityHtml}
+          <a href="${reviewUrl}" style="display:inline-block;margin-top:22px;background:#0b1724;color:white;text-decoration:none;padding:13px 18px;border-radius:10px;font-weight:700">Open Spreelo admin</a>
+          <p style="font-size:12px;color:#7a8493;margin-top:20px">Repeated identical incidents are grouped so one provider outage does not flood your inbox. This alert contains IDs and diagnostics, never API keys or access tokens.</p>
         </div>`,
-        text: `Spreelo ${kind === "publish" ? "publishing" : "post generation"} failed\nBrand: ${brandName}\nContent: ${contentLabel}\nStage: ${stage || "unknown"}\nFailure code: ${failureCode || "unknown"}\n${safeMessage}\n${appUrl}/admin/post-approvals`,
+        text: `Spreelo ${severityLabel} runtime alert\nIncident: ${incidentId}\nBrand: ${brandName}\nWebsite: ${brandWebsite || "—"}\nCampaign/plan: ${campaignTitle || "—"}\nContent: ${contentLabel}\nWorker: ${workerName || "—"}\nStage: ${stage || "unknown"}\nFailure code: ${failureCode || "unknown"}\nRule: ${rule?.id || "—"}\nOccurrence: ${occurrenceId || "—"}\nPost: ${postId || "—"}\nRun log: ${runLogId || "—"}\nProviders: ${providerText}\nExact recorded cost: ${costText}\nQueue: ${queueText}\n\n${safeMessage}\n\n${reviewUrl}`,
       }),
     });
 
     if (!response.ok) {
       const providerError = await response.text().catch(() => "");
       console.warn("Immediate admin failure alert email failed", {
+        incidentId,
         occurrenceId,
         postId,
         failureCode,
         stage,
         providerError: String(providerError || "").slice(0, 1000),
       });
-      return { sent: false, reason: "provider_error" };
+      await releaseAdminIncidentEmailReservation({ supabase, incidentId });
+      return { sent: false, reason: "provider_error", incidentId };
     }
 
     console.info("Immediate admin failure alert email sent", {
+      incidentId,
       occurrenceId,
       postId,
       failureCode,
       stage,
       recipients: recipients.length,
     });
-    return { sent: true };
+    return { sent: true, incidentId };
   } catch (alertError) {
     console.warn("Immediate admin failure alert email unavailable", {
+      incidentId,
       occurrenceId,
       postId,
       failureCode,
       stage,
       message: alertError?.message || String(alertError || "Unknown email error"),
     });
-    return { sent: false, reason: "transport_error" };
+    await releaseAdminIncidentEmailReservation({ supabase, incidentId });
+    return { sent: false, reason: "transport_error", incidentId };
   }
 }
 
@@ -12537,6 +12979,7 @@ async function failAutomationOccurrenceTerminal({
   stage,
   scheduledFor = null,
   metadata = {},
+  incidentContext = {},
 }) {
   if (!occurrenceId) {
     await setRuleError(supabase, rule.id, String(errorOrMessage?.message || errorOrMessage || "Automation failed"));
@@ -12611,15 +13054,26 @@ async function failAutomationOccurrenceTerminal({
     });
     await setRuleError(supabase, rule.id, internalMessage);
     await sendImmediateAdminFailureAlertEmail({
+      supabase,
       resendApiKey,
       rule,
       brandProfile,
       occurrenceId,
+      runLogId: incidentContext?.runLogId || metadata?.run_log_id || null,
       failureCode: failure.code,
       stage: stage || "occurrence_finalize",
       message: `${internalMessage}\n\nOccurrence finalization also failed: ${error.message}`,
+      errorStack: errorOrMessage?.stack || null,
       productItems: repairProductItems,
       kind: "generation",
+      severity: "critical",
+      workerName: incidentContext?.workerName || metadata?.worker_name || null,
+      scheduledFor,
+      retryCount: incidentContext?.retryCount ?? metadata?.retry_count ?? null,
+      retryLimit: incidentContext?.retryLimit ?? metadata?.retry_limit ?? null,
+      queueContext: incidentContext?.queueContext || null,
+      workerActivity: incidentContext?.workerActivity || [],
+      metadata: { ...(metadata || {}), occurrence_finalization_failed: true },
     });
     return { handled: false, refundedCredits: 0, notificationStatus: "failed" };
   }
@@ -12646,15 +13100,26 @@ async function failAutomationOccurrenceTerminal({
     }
 
     await sendImmediateAdminFailureAlertEmail({
+      supabase,
       resendApiKey,
       rule,
       brandProfile: resolvedBrandProfile,
       occurrenceId,
+      runLogId: incidentContext?.runLogId || metadata?.run_log_id || null,
       failureCode: failure.code,
       stage: stage || "unhandled",
       message: internalMessage,
+      errorStack: errorOrMessage?.stack || null,
       productItems: repairProductItems,
       kind: "generation",
+      severity: "critical",
+      workerName: incidentContext?.workerName || metadata?.worker_name || null,
+      scheduledFor,
+      retryCount: incidentContext?.retryCount ?? metadata?.retry_count ?? null,
+      retryLimit: incidentContext?.retryLimit ?? metadata?.retry_limit ?? null,
+      queueContext: incidentContext?.queueContext || null,
+      workerActivity: incidentContext?.workerActivity || [],
+      metadata: metadata || {},
     });
 
     const notification = await sendAutomationCreationFailureEmail({
@@ -12690,7 +13155,7 @@ async function finalizeStaleAutomationOccurrences({ supabase, resendApiKey, now 
   // different worker as "stale" while it was actively doing product research.
   const { data: staleOccurrences, error } = await supabase
     .from("automation_occurrences")
-    .select("id, automation_rule_id, run_log_id, started_at, updated_at")
+    .select("id, automation_rule_id, run_log_id, worker_name, started_at, updated_at")
     .eq("status", "running")
     .lt("updated_at", staleBefore)
     .order("updated_at", { ascending: true })
@@ -12726,6 +13191,14 @@ async function finalizeStaleAutomationOccurrences({ supabase, resendApiKey, now 
         stale_last_activity_at: occurrence.updated_at || occurrence.started_at,
         stale_finalized_at: now.toISOString(),
         stale_runtime_ms: AUTOMATION_STALE_RUNTIME_MS,
+        run_log_id: occurrence.run_log_id || null,
+        worker_name: occurrence.worker_name || null,
+      },
+      incidentContext: {
+        runLogId: occurrence.run_log_id || null,
+        workerName: occurrence.worker_name || null,
+        queueContext: null,
+        workerActivity: [],
       },
     });
     if (result.handled) {
@@ -40790,9 +41263,12 @@ async function publishApprovedSocialPosts({
           publishBrandProfile = loadedPublishBrand || null;
         }
         await sendImmediateAdminFailureAlertEmail({
+          supabase,
           resendApiKey,
           rule: {
             id: post.automation_rule_id || null,
+            user_id: post.user_id || null,
+            brand_profile_id: post.brand_profile_id || null,
             content_type_label: post.post_type || post.content_format || "Social post",
             content_format: post.content_format || null,
           },
@@ -40801,8 +41277,21 @@ async function publishApprovedSocialPosts({
           failureCode: authFailure ? "social_connection_auth_failed" : "social_publish_failed",
           stage: `social_publish_${activePublishTarget || targets.join("_") || "unknown"}`,
           message: error.message || "Social publishing failed",
+          errorStack: error?.stack || null,
           productItems: [],
           kind: "publish",
+          severity: "critical",
+          scheduledFor: post.scheduled_for || null,
+          retryCount: publishAttempt,
+          retryLimit: MAX_PUBLISH_ATTEMPTS,
+          metadata: {
+            target: activePublishTarget || null,
+            desired_targets: targets,
+            published_targets: Array.from(publishedTargetSet),
+            auth_failure: authFailure,
+            http_status: error?.status || null,
+            tiktok_code: error?.tiktokCode || null,
+          },
         });
       }
 
@@ -40997,6 +41486,11 @@ async function upsertAdminReviewCase(supabase, values) {
 }
 
 async function runAutomationCron(request, options = {}) {
+  let workerLaneLease = null;
+  let workerLaneLeaseSupabase = null;
+  let runtimeSupabase = null;
+  let runtimeResendApiKey = process.env.RESEND_API_KEY || null;
+  let runtimeWorkerName = String(options.workerName || "manual-worker");
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -41027,6 +41521,8 @@ async function runAutomationCron(request, options = {}) {
     }
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
+    runtimeSupabase = supabase;
+    runtimeResendApiKey = resendApiKey || runtimeResendApiKey;
 
     let activeGenerationCostTracker = null;
     const rawOpenai = new OpenAI({
@@ -41045,6 +41541,7 @@ async function runAutomationCron(request, options = {}) {
         SMART_QUEUE_WORKER_COUNT
     );
     const workerName = String(options.workerName || "manual-worker");
+    runtimeWorkerName = workerName;
 
     console.info("Shared automation queue started", {
       workerName,
@@ -41084,6 +41581,110 @@ async function runAutomationCron(request, options = {}) {
   summary,
   resendApiKey,
 });
+
+    const workerRunActivity = [];
+    const laneLeaseResult = await acquireAutomationWorkerLaneLease({
+      supabase,
+      workerName,
+      metadata: {
+        worker_name: workerName,
+        run_started_at: nowIso,
+        phase: "generation_queue",
+      },
+    });
+
+    if (laneLeaseResult?.degraded) {
+      summary.worker_lane_lease_degraded =
+        Number(summary.worker_lane_lease_degraded || 0) + 1;
+    }
+
+    if (!laneLeaseResult.acquired) {
+      summary.worker_lane_busy = Number(summary.worker_lane_busy || 0) + 1;
+      const activeSinceMs = laneLeaseResult?.acquiredAt
+        ? new Date(laneLeaseResult.acquiredAt).getTime()
+        : 0;
+      const activeForSeconds = activeSinceMs > 0
+        ? Math.max(0, Math.floor((Date.now() - activeSinceMs) / 1000))
+        : 0;
+      const activeMetadata = laneLeaseResult?.activeMetadata || {};
+
+      console.info("Automation generation skipped because this worker lane is already active", {
+        workerName,
+        activeForSeconds,
+        expiresAt: laneLeaseResult?.expiresAt || null,
+        activeRuleId: activeMetadata?.current_rule_id || null,
+        activeBrandProfileId: activeMetadata?.brand_profile_id || null,
+      });
+
+      if (activeForSeconds >= AUTOMATION_WORKER_LONG_RUNNING_ALERT_SECONDS) {
+        let busyBrandProfile = null;
+        if (activeMetadata?.brand_profile_id) {
+          const { data: loadedBusyBrand } = await supabase
+            .from("brand_profiles")
+            .select("id, business_name, website_url, website_product_source_url")
+            .eq("id", activeMetadata.brand_profile_id)
+            .maybeSingle();
+          busyBrandProfile = loadedBusyBrand || null;
+        }
+        await sendImmediateAdminFailureAlertEmail({
+          supabase,
+          resendApiKey,
+          rule: {
+            id: activeMetadata?.current_rule_id || null,
+            user_id: activeMetadata?.user_id || null,
+            brand_profile_id: activeMetadata?.brand_profile_id || null,
+            name: activeMetadata?.campaign_title || null,
+            content_type_label: activeMetadata?.content_label || "Automation job",
+            content_format: activeMetadata?.content_format || null,
+          },
+          brandProfile: busyBrandProfile,
+          runLogId: activeMetadata?.run_log_id || null,
+          occurrenceId: activeMetadata?.occurrence_id || null,
+          postId: activeMetadata?.post_id || null,
+          failureCode: "worker_lane_unusually_long",
+          stage: activeMetadata?.stage || "generation_queue",
+          message: `${workerName} has remained active for ${activeForSeconds} seconds. The new cron invocation was correctly blocked, so no extra generation worker was started.`,
+          kind: "runtime",
+          severity: "warning",
+          workerName,
+          scheduledFor: activeMetadata?.scheduled_for || null,
+          workerActivity: Array.isArray(activeMetadata?.worker_activity)
+            ? activeMetadata.worker_activity
+            : [],
+          metadata: {
+            active_for_seconds: activeForSeconds,
+            lease_expires_at: laneLeaseResult?.expiresAt || null,
+            lane_guard_worked: true,
+            active_metadata: activeMetadata,
+          },
+          dedupeKey: `worker_lane_long:${workerName}`,
+          title: `Worker ${workerName} is taking unusually long`,
+        });
+      }
+
+      return Response.json({
+        ok: true,
+        mode: "live_text_image_facebook_brand_profile_website_content_history",
+        checked_at: nowIso,
+        batch_size: SMART_QUEUE_BATCH_SIZE,
+        queue_mode: "shared_atomic_claim_with_lane_guard",
+        worker_name: workerName,
+        worker_count: workerCount,
+        worker_lane_busy: true,
+        active_for_seconds: activeForSeconds,
+        fetched_rules: 0,
+        claimed_rules: 0,
+        summary,
+      });
+    }
+
+    if (laneLeaseResult?.token) {
+      workerLaneLease = {
+        workerName,
+        token: laneLeaseResult.token,
+      };
+      workerLaneLeaseSupabase = supabase;
+    }
 
     const rules = await getRulesToProcess({
       supabase,
@@ -41148,6 +41749,7 @@ async function runAutomationCron(request, options = {}) {
       let automationBrandProfile = null;
       let websiteDomainJobLock = null;
       let automationCurrentStage = "queue_claim";
+      let automationWorkerActivityEntry = null;
 
       const finishRunLog = async (status, errorMessage = null, extraSummary = {}) => {
         if (automationRunFinished || !automationRunLogId) {
@@ -41173,6 +41775,14 @@ async function runAutomationCron(request, options = {}) {
 
         automationRunFinished = true;
         summary.automation_run_logs_finished += 1;
+        if (automationWorkerActivityEntry) {
+          automationWorkerActivityEntry.status = status;
+          automationWorkerActivityEntry.post_id = automationRunPostId || null;
+          automationWorkerActivityEntry.finished_at = new Date().toISOString();
+          automationWorkerActivityEntry.error = errorMessage
+            ? String(errorMessage).slice(0, 500)
+            : null;
+        }
       };
 
       const failCurrentOccurrence = async (
@@ -41180,6 +41790,10 @@ async function runAutomationCron(request, options = {}) {
         stage,
         extraSummary = {}
       ) => {
+        if (automationWorkerActivityEntry) {
+          automationWorkerActivityEntry.status = "failed";
+          automationWorkerActivityEntry.stage = stage || automationCurrentStage;
+        }
         const result = await failAutomationOccurrenceTerminal({
           supabase,
           resendApiKey,
@@ -41189,7 +41803,24 @@ async function runAutomationCron(request, options = {}) {
           errorOrMessage,
           stage,
           scheduledFor: scheduledPublishAtIso,
-          metadata: extraSummary,
+          metadata: {
+            worker_name: workerName,
+            run_log_id: automationRunLogId,
+            ...(extraSummary || {}),
+          },
+          incidentContext: {
+            runLogId: automationRunLogId,
+            workerName,
+            retryCount: extraSummary?.retry_count ?? null,
+            retryLimit: extraSummary?.retry_limit ?? null,
+            queueContext: {
+              candidates: rules?.length || 0,
+              claimed: claimedRulesThisRun,
+              generated: summary.generated || 0,
+              errors: summary.errors || 0,
+            },
+            workerActivity: workerRunActivity,
+          },
         });
 
         await cancelCampaignResearchJobsForOccurrence({
@@ -41246,6 +41877,42 @@ async function runAutomationCron(request, options = {}) {
           summary.website_rate_limit_retries_exhausted =
             Number(summary.website_rate_limit_retries_exhausted || 0) + 1;
           return { ...result, terminal: true };
+        }
+        if (result.retryCount >= 2) {
+          await sendImmediateAdminFailureAlertEmail({
+            supabase,
+            resendApiKey,
+            rule,
+            brandProfile: automationBrandProfile,
+            occurrenceId: automationOccurrenceId,
+            runLogId: automationRunLogId,
+            failureCode: "website_rate_limit_repeated",
+            stage,
+            message: String(errorOrMessage?.message || errorOrMessage || "Website temporarily rate limited"),
+            errorStack: errorOrMessage?.stack || null,
+            productItems: automationRunWebsiteItems,
+            kind: "runtime",
+            severity: "warning",
+            workerName,
+            scheduledFor: scheduledPublishAtIso,
+            retryCount: result.retryCount,
+            retryLimit: WEBSITE_RATE_LIMIT_MAX_RETRIES,
+            queueContext: {
+              candidates: rules?.length || 0,
+              claimed: claimedRulesThisRun,
+              generated: summary.generated || 0,
+              errors: summary.errors || 0,
+            },
+            workerActivity: workerRunActivity,
+            metadata: {
+              website_domain: result.domain || null,
+              retry_at: result.retryAt || null,
+              retry_after_ms: result.retryAfterMs || null,
+              ...(extraSummary || {}),
+            },
+            dedupeKey: `website_rate_limit:${automationOccurrenceId || rule.id}:${stage || "unknown"}`,
+            title: "Repeated website rate limiting detected",
+          });
         }
         await finishRunLog(
           "skipped",
@@ -41304,6 +41971,42 @@ async function runAutomationCron(request, options = {}) {
           protectedProductResearchRetry:
             isProtectedProductResearchRetryError(errorOrMessage),
         });
+        if (result.retryCount >= 2) {
+          await sendImmediateAdminFailureAlertEmail({
+            supabase,
+            resendApiKey,
+            rule,
+            brandProfile: automationBrandProfile,
+            occurrenceId: automationOccurrenceId,
+            runLogId: automationRunLogId,
+            failureCode: "repeated_transient_runtime_failure",
+            stage,
+            message: String(errorOrMessage?.message || errorOrMessage || "Temporary automation failure"),
+            errorStack: errorOrMessage?.stack || null,
+            productItems: automationRunWebsiteItems,
+            kind: "runtime",
+            severity: "warning",
+            workerName,
+            scheduledFor: scheduledPublishAtIso,
+            retryCount: result.retryCount,
+            retryLimit: retryOptions?.maxRetries || TRANSIENT_AUTOMATION_MAX_RETRIES,
+            queueContext: {
+              candidates: rules?.length || 0,
+              claimed: claimedRulesThisRun,
+              generated: summary.generated || 0,
+              errors: summary.errors || 0,
+            },
+            workerActivity: workerRunActivity,
+            metadata: {
+              retry_at: result.retryAt || null,
+              retry_after_ms: result.retryAfterMs || null,
+              protected_product_research_retry: isProtectedProductResearchRetryError(errorOrMessage),
+              ...(extraSummary || {}),
+            },
+            dedupeKey: `transient_retry:${automationOccurrenceId || rule.id}:${stage || "unknown"}`,
+            title: "Repeated automation retry detected",
+          });
+        }
         await finishRunLog(
           "skipped",
           String(errorOrMessage?.message || errorOrMessage || "Temporary automation failure"),
@@ -41375,6 +42078,40 @@ async function runAutomationCron(request, options = {}) {
           summary.skipped_locked += 1;
           continue;
         }
+
+        automationWorkerActivityEntry = {
+          rule_id: rule.id,
+          user_id: rule.user_id || null,
+          brand_profile_id: rule.brand_profile_id || null,
+          campaign_title: rule.name || rule.campaign_theme || null,
+          content_label: rule.content_type_label || rule.post_type || null,
+          content_format: normalizeContentFormat(rule.content_format),
+          scheduled_for: scheduledPublishAtIso || null,
+          status: "running",
+          stage: "queue_claim",
+          started_at: new Date().toISOString(),
+          post_id: null,
+        };
+        workerRunActivity.push(automationWorkerActivityEntry);
+        await updateAutomationWorkerLaneMetadata({
+          supabase,
+          workerName,
+          token: workerLaneLease?.token || null,
+          metadata: {
+            worker_name: workerName,
+            run_started_at: nowIso,
+            phase: "generation",
+            current_rule_id: rule.id,
+            user_id: rule.user_id || null,
+            brand_profile_id: rule.brand_profile_id || null,
+            campaign_title: rule.name || rule.campaign_theme || null,
+            content_label: rule.content_type_label || rule.post_type || null,
+            content_format: normalizeContentFormat(rule.content_format),
+            scheduled_for: scheduledPublishAtIso || null,
+            stage: "queue_claim",
+            worker_activity: workerRunActivity.slice(-10),
+          },
+        });
 
         rememberAdaptiveWeeklySelection({
           rule,
@@ -41457,6 +42194,33 @@ async function runAutomationCron(request, options = {}) {
         } else {
           summary.brand_profile_missing += 1;
         }
+
+        if (automationWorkerActivityEntry) {
+          automationWorkerActivityEntry.stage = "brand_profile_loaded";
+          automationWorkerActivityEntry.run_log_id = automationRunLogId || null;
+          automationWorkerActivityEntry.brand_name = automationBrandProfile?.business_name || null;
+        }
+        await updateAutomationWorkerLaneMetadata({
+          supabase,
+          workerName,
+          token: workerLaneLease?.token || null,
+          metadata: {
+            worker_name: workerName,
+            run_started_at: nowIso,
+            phase: "generation",
+            current_rule_id: rule.id,
+            user_id: rule.user_id || null,
+            brand_profile_id: rule.brand_profile_id || null,
+            brand_name: automationBrandProfile?.business_name || null,
+            campaign_title: rule.name || rule.campaign_theme || null,
+            content_label: rule.content_type_label || rule.post_type || null,
+            content_format: normalizeContentFormat(rule.content_format),
+            scheduled_for: scheduledPublishAtIso || null,
+            run_log_id: automationRunLogId || null,
+            stage: "brand_profile_loaded",
+            worker_activity: workerRunActivity.slice(-10),
+          },
+        });
 
         if (rule.uses_website_content) {
           const websiteJobUrl = getWebsiteProductSourceUrl(automationBrandProfile, rule);
@@ -41550,6 +42314,34 @@ async function runAutomationCron(request, options = {}) {
             Number(summary.skipped_duplicate_occurrence || 0) + 1;
           continue;
         }
+
+        if (automationWorkerActivityEntry) {
+          automationWorkerActivityEntry.stage = "occurrence_claimed";
+          automationWorkerActivityEntry.occurrence_id = automationOccurrenceId || null;
+          automationWorkerActivityEntry.run_log_id = automationRunLogId || null;
+        }
+        await updateAutomationWorkerLaneMetadata({
+          supabase,
+          workerName,
+          token: workerLaneLease?.token || null,
+          metadata: {
+            worker_name: workerName,
+            run_started_at: nowIso,
+            phase: "generation",
+            current_rule_id: rule.id,
+            user_id: rule.user_id || null,
+            brand_profile_id: rule.brand_profile_id || null,
+            brand_name: automationBrandProfile?.business_name || null,
+            campaign_title: rule.name || rule.campaign_theme || null,
+            content_label: rule.content_type_label || rule.post_type || null,
+            content_format: normalizeContentFormat(rule.content_format),
+            scheduled_for: scheduledPublishAtIso || null,
+            run_log_id: automationRunLogId || null,
+            occurrence_id: automationOccurrenceId || null,
+            stage: "occurrence_claimed",
+            worker_activity: workerRunActivity.slice(-10),
+          },
+        });
 
         activeGenerationCostTracker = createGenerationCostTracker({
           supabase,
@@ -42468,6 +43260,33 @@ product_research_model_used: websitePreparedRule.uses_website_content
         }
 
         automationRunPostId = post.id;
+        if (automationWorkerActivityEntry) {
+          automationWorkerActivityEntry.post_id = post.id;
+          automationWorkerActivityEntry.stage = "post_created";
+        }
+        await updateAutomationWorkerLaneMetadata({
+          supabase,
+          workerName,
+          token: workerLaneLease?.token || null,
+          metadata: {
+            worker_name: workerName,
+            run_started_at: nowIso,
+            phase: "generation",
+            current_rule_id: rule.id,
+            user_id: rule.user_id || null,
+            brand_profile_id: rule.brand_profile_id || null,
+            brand_name: automationBrandProfile?.business_name || null,
+            campaign_title: rule.name || rule.campaign_theme || null,
+            content_label: rule.content_type_label || rule.post_type || null,
+            content_format: normalizeContentFormat(rule.content_format),
+            scheduled_for: scheduledPublishAtIso || null,
+            run_log_id: automationRunLogId || null,
+            occurrence_id: automationOccurrenceId || null,
+            post_id: post.id,
+            stage: "post_created",
+            worker_activity: workerRunActivity.slice(-10),
+          },
+        });
         try {
           await activeGenerationCostTracker?.bindPost(post.id);
         } catch (costError) {
@@ -43908,6 +44727,37 @@ product_research_model_used: websitePreparedRule.uses_website_content
           summary.errors += 1;
         } else {
           await setRuleError(supabase, rule.id, message);
+          if (automationWorkerActivityEntry) {
+            automationWorkerActivityEntry.status = "failed";
+            automationWorkerActivityEntry.stage = failureStage || "unhandled_before_occurrence_claim";
+          }
+          await sendImmediateAdminFailureAlertEmail({
+            supabase,
+            resendApiKey,
+            rule,
+            brandProfile: automationBrandProfile,
+            runLogId: automationRunLogId,
+            failureCode: error?.code || "generation_failed_before_occurrence_claim",
+            stage: failureStage || "unhandled_before_occurrence_claim",
+            message,
+            errorStack: error?.stack || null,
+            productItems: automationRunWebsiteItems,
+            kind: "generation",
+            severity: "critical",
+            workerName,
+            scheduledFor: scheduledPublishAtIso,
+            queueContext: {
+              candidates: rules?.length || 0,
+              claimed: claimedRulesThisRun,
+              generated: summary.generated || 0,
+              errors: summary.errors || 0,
+            },
+            workerActivity: workerRunActivity,
+            metadata: {
+              failure_before_occurrence_claim: true,
+              rule_queue_attempts: Number(rule.queue_attempts || 0) + 1,
+            },
+          });
           await finishRunLog("failed", message, {
             stage: failureStage || "unhandled_before_occurrence_claim",
             automatic_retry_scheduled: false,
@@ -43941,7 +44791,7 @@ product_research_model_used: websitePreparedRule.uses_website_content
       mode: "live_text_image_facebook_brand_profile_website_content_history",
       checked_at: nowIso,
       batch_size: SMART_QUEUE_BATCH_SIZE,
-      queue_mode: "shared_atomic_claim",
+      queue_mode: "shared_atomic_claim_with_lane_guard",
       worker_name: workerName,
       worker_count: workerCount,
       fetched_rules: rules?.length || 0,
@@ -43949,6 +44799,33 @@ product_research_model_used: websitePreparedRule.uses_website_content
       summary,
     });
   } catch (error) {
+    console.error("Shared automation queue crashed outside the per-job safety boundary", {
+      workerName: runtimeWorkerName,
+      message: error?.message || String(error),
+    });
+    try {
+      await sendImmediateAdminFailureAlertEmail({
+        supabase: runtimeSupabase,
+        resendApiKey: runtimeResendApiKey,
+        failureCode: "worker_cron_unhandled_failure",
+        stage: "worker_cron",
+        message: error?.message || "Unknown cron error",
+        errorStack: error?.stack || null,
+        kind: "runtime",
+        severity: "critical",
+        workerName: runtimeWorkerName,
+        metadata: {
+          request_url: request?.url || null,
+        },
+        dedupeKey: `worker_cron_unhandled:${runtimeWorkerName}:${error?.code || error?.name || "error"}`,
+        title: `Unhandled automation worker failure · ${runtimeWorkerName}`,
+      });
+    } catch (alertError) {
+      console.warn("Top-level worker failure alert could not be sent", {
+        workerName: runtimeWorkerName,
+        message: alertError?.message || String(alertError),
+      });
+    }
     return Response.json(
       {
         ok: false,
@@ -43956,6 +44833,14 @@ product_research_model_used: websitePreparedRule.uses_website_content
       },
       { status: 500 }
     );
+  } finally {
+    if (workerLaneLease?.token && workerLaneLeaseSupabase) {
+      await releaseAutomationWorkerLaneLease({
+        supabase: workerLaneLeaseSupabase,
+        workerName: workerLaneLease.workerName,
+        token: workerLaneLease.token,
+      });
+    }
   }
 }
 
