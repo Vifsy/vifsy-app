@@ -1,0 +1,342 @@
+/* v144.98 — Campaign overview card inside the unified AI Content Studio.
+   Adds a clear campaign summary, visual anchor, period rail and responsive guidance cards. */
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview {
+  margin: 0 0 22px;
+  padding: 22px;
+  border-radius: 28px;
+  border: 1px solid rgba(244, 193, 176, 0.44);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 248, 246, 0.92)),
+    radial-gradient(circle at top right, rgba(253, 180, 159, 0.18), transparent 42%);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
+  display: grid;
+  gap: 18px;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-head,
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-title-block,
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-copy,
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-note {
+  min-width: 0;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-title-block {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-title-block h2 {
+  margin: 0;
+  font-size: clamp(1.12rem, 1rem + 0.5vw, 1.45rem);
+  line-height: 1.15;
+  color: #13213c;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.09);
+  border: 1px solid rgba(129, 140, 248, 0.22);
+  color: #5750d8;
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(250px, 0.9fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-copy > p {
+  margin: 0;
+  color: #4b5568;
+  line-height: 1.65;
+  font-size: 0.97rem;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-chips span {
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(212, 220, 234, 0.9);
+  color: #334155;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-meta {
+  margin: 18px 0 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-meta div {
+  min-width: 0;
+  padding: 14px 15px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(223, 230, 244, 0.92);
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-meta dt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-meta dd {
+  margin: 0;
+  color: #13213c;
+  font-size: 0.98rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-visual {
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+  min-height: 238px;
+  background:
+    linear-gradient(145deg, rgba(244, 235, 255, 0.88), rgba(247, 214, 209, 0.74));
+  border: 1px solid rgba(230, 216, 246, 0.95);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-visual::after {
+  content: "";
+  position: absolute;
+  inset: auto -12% -30% 12%;
+  height: 46%;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.55), transparent 68%);
+  pointer-events: none;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-visual img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-timeline-block {
+  padding: 16px 18px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(223, 230, 244, 0.92);
+  display: grid;
+  gap: 12px;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-timeline-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-timeline-head strong {
+  color: #13213c;
+  font-size: 0.95rem;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-timeline-head span {
+  color: #64748b;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-timeline-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-edge-label {
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-timeline-rail {
+  position: relative;
+  height: 16px;
+  border-radius: 999px;
+  background: rgba(232, 236, 246, 0.92);
+  overflow: hidden;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-timeline-fill {
+  position: absolute;
+  inset: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(168, 139, 250, 0.95), rgba(251, 146, 60, 0.95));
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-timeline-marker {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.98);
+  background: #6d57f5;
+  box-shadow: 0 8px 18px rgba(109, 87, 245, 0.28);
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-footer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-note {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px 17px;
+  border-radius: 22px;
+  border: 1px solid rgba(223, 230, 244, 0.92);
+  background: rgba(255, 255, 255, 0.84);
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-note-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(245, 246, 255, 0.95);
+  color: #5d4fe1;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-note strong {
+  display: block;
+  margin: 0 0 6px;
+  color: #13213c;
+  font-size: 0.96rem;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-note p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-note-ai .sp98-campaign-overview-note-icon {
+  color: #5d4fe1;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-note-editable .sp98-campaign-overview-note-icon {
+  color: #f06449;
+}
+
+@media (max-width: 1180px) {
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-visual {
+    min-height: 220px;
+  }
+}
+
+@media (max-width: 860px) {
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-meta,
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-footer-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview {
+    padding: 18px;
+    border-radius: 24px;
+  }
+
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-body {
+    gap: 14px;
+  }
+
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-visual {
+    order: -1;
+    min-height: 205px;
+  }
+
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-meta div,
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-timeline-block,
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-note {
+    border-radius: 18px;
+  }
+
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-timeline-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-edge-label:last-child {
+    text-align: right;
+  }
+}
+
+@media (max-width: 520px) {
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview {
+    padding: 16px;
+    gap: 14px;
+  }
+
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-title-block h2 {
+    font-size: 1.06rem;
+  }
+
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-badge,
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-chips span {
+    font-size: 0.79rem;
+  }
+
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-copy > p,
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-note p {
+    font-size: 0.88rem;
+  }
+
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-timeline-head {
+    align-items: flex-start;
+  }
+
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .sp98-campaign-overview-edge-label {
+    font-size: 0.75rem;
+  }
+}

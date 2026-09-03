@@ -1,0 +1,46 @@
+/* v144.99 — Calendar-campaign format interaction and campaign-name badges. */
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .plan-v72-format-card:not(.disabled) {
+  cursor: pointer;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .plan-v72-format-card:not(.disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 34px rgba(43, 55, 86, 0.10);
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .plan-v72-format-card:not(.disabled):focus-visible {
+  outline: 3px solid rgba(109, 87, 245, 0.22);
+  outline-offset: 3px;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .plan-v14499-campaign-name-badge {
+  display: inline-block;
+  max-width: min(260px, 34vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+html body .automation-page.plan-v70-active.campaign-v14497-unified .plan-v14470-format-browser {
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .plan-v14499-campaign-name-badge {
+    max-width: 210px;
+  }
+}
+
+@media (max-width: 760px) {
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .plan-v14499-campaign-name-badge {
+    max-width: min(170px, 48vw);
+  }
+}
+
+@media (max-width: 460px) {
+  html body .automation-page.plan-v70-active.campaign-v14497-unified .plan-v14499-campaign-name-badge {
+    max-width: 145px;
+  }
+}

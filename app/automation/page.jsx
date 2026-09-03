@@ -4028,6 +4028,98 @@ function getCampaignRecommendedPostCount(campaign, fallbackCount = 3) {
 }
 
 
+function formatCampaignOverviewDate(dateValue, locale = "sv-SE", includeYear = true) {
+  const [year, month, day] = String(dateValue || "").slice(0, 10).split("-").map(Number);
+  if (![year, month, day].every(Number.isFinite)) return String(dateValue || "");
+  return new Intl.DateTimeFormat(locale || undefined, {
+    day: "numeric",
+    month: "short",
+    ...(includeYear ? { year: "numeric" } : {}),
+  }).format(new Date(Date.UTC(year, month - 1, day, 12)));
+}
+
+function getCampaignOverviewPeriod(campaign, locale = "sv-SE") {
+  const startDate = String(campaign?.start_date || campaign?.event_date || "").slice(0, 10);
+  const endDate = String(campaign?.end_date || campaign?.event_date || startDate || "").slice(0, 10);
+
+  if (!startDate && !endDate) return "";
+  if (startDate && endDate && startDate !== endDate) {
+    return `${formatCampaignOverviewDate(startDate, locale)} – ${formatCampaignOverviewDate(endDate, locale)}`;
+  }
+  return formatCampaignOverviewDate(startDate || endDate, locale);
+}
+
+function getCampaignOverviewFrequencyLabel(campaign, slots = [], locale = "sv-SE") {
+  const safeLocale = String(locale || "sv-SE");
+  const count = Array.isArray(slots) ? slots.length : 0;
+  const startDate = String(campaign?.start_date || campaign?.event_date || "").slice(0, 10);
+  const endDate = String(campaign?.end_date || campaign?.event_date || startDate || "").slice(0, 10);
+  const spanDays = startDate && endDate ? Math.abs(getDaysBetweenDateStrings(startDate, endDate) || 0) : 0;
+
+  if (count <= 1) {
+    return safeLocale.startsWith("sv") ? "Ett inlägg" : "One post";
+  }
+
+  if (spanDays >= 14) {
+    return safeLocale.startsWith("sv")
+      ? "Sprids ut över perioden"
+      : "Distributed across the campaign period";
+  }
+
+  return safeLocale.startsWith("sv")
+    ? "Löpande under perioden"
+    : "Published across the selected dates";
+}
+
+function getCampaignOverviewSummary(campaign, locale = "sv-SE") {
+  const safeLocale = String(locale || "sv-SE");
+  const title = String(campaign?.title || "").trim();
+  const period = getCampaignOverviewPeriod(campaign, safeLocale);
+
+  if (safeLocale.startsWith("sv")) {
+    return `Denna kampanjen fokuserar på att marknadsföra produkter från er webbutik och skapa inlägg som kan kopplas till temat ${title ? `“${title}”` : "kampanjen"}. ${period ? `Vald kampanjperiod: ${period}. ` : ""}Du kan justera datum för varje inlägg om du vill ha dem på andra dagar.`;
+  }
+
+  return `This campaign focuses on promoting products from your website and creating posts that fit the theme ${title ? `“${title}”` : "of the campaign"}. ${period ? `Selected campaign period: ${period}. ` : ""}You can adjust the date for each post if you want them to run on different days.`;
+}
+
+function getCampaignOverviewImageSrc(campaign) {
+  const candidate = String(campaign?.visual_image_url || "").trim();
+  return candidate || "/calendar-generic.svg";
+}
+
+function getCampaignOverviewTimelineMarkers(campaign, slots = []) {
+  const startDate = String(campaign?.start_date || campaign?.event_date || "").slice(0, 10);
+  const endDate = String(campaign?.end_date || campaign?.event_date || startDate || "").slice(0, 10);
+  const safeSlots = Array.isArray(slots) ? slots : [];
+
+  if (!safeSlots.length) return [];
+
+  const totalSpanDays = startDate && endDate
+    ? Math.max(1, Math.abs(getDaysBetweenDateStrings(startDate, endDate) || 0))
+    : Math.max(1, safeSlots.length - 1);
+
+  return safeSlots
+    .map((slot, index) => {
+      const slotDate = String(slot?.startDate || "").slice(0, 10);
+      const distanceFromStart = startDate && slotDate
+        ? Math.max(0, Math.min(totalSpanDays, Math.abs(getDaysBetweenDateStrings(startDate, slotDate) || 0)))
+        : index;
+      const fallbackPosition = ((index + 1) / (safeSlots.length + 1)) * 100;
+      const percentage = startDate && slotDate
+        ? (distanceFromStart / totalSpanDays) * 100
+        : fallbackPosition;
+
+      return {
+        id: `${slot?.id || slotDate || "slot"}-${index}`,
+        percentage: Math.max(4, Math.min(96, Number.isFinite(percentage) ? percentage : fallbackPosition)),
+        label: slotDate,
+      };
+    })
+    .sort((a, b) => a.percentage - b.percentage);
+}
+
+
 function normalizeCampaignOpportunityForPlanner(campaign) {
   if (!campaign) return campaign;
 
@@ -4856,6 +4948,55 @@ function getCampaignSlotAnimationStyle(sourceMode) {
 function getCampaignSlotContentTypeLabel(campaign, sourceMode) {
   const contentType = getContentTypeById(getCampaignSlotContentTypeId(sourceMode));
   return contentType?.label || campaign?.title || "Campaign post";
+}
+
+function getCampaignSourceModeForSelectedContentType(contentTypeId) {
+  const mappedSourceModes = {
+    website_item: "website_product",
+    website_item_text_ad: "website_product_ad",
+    animated_website_item: "website_reel",
+    ai_product_video: "website_product",
+    carousel_website_item: "website_carousel",
+    service_focus: "website_service",
+    problem_solution: "problem_solution",
+    tips: "tips",
+    faq: "faq",
+    checklist: "checklist",
+    mistakes: "mistakes",
+    myth_fact: "myth_fact",
+    mini_guide: "mini_guide",
+    seasonal: "seasonal",
+  };
+
+  return mappedSourceModes[contentTypeId] || "";
+}
+
+function buildSelectedCampaignFormatPrompt(campaign, postPlanItem, index, selectedType) {
+  const campaignPrompt = buildCampaignPrompt(campaign, postPlanItem, index);
+  if (!selectedType) return campaignPrompt;
+
+  return [
+    campaignPrompt,
+    `Selected content format: ${selectedType.label || selectedType.id}.`,
+    selectedType.prompt ? `Format-specific instruction: ${selectedType.prompt}` : "",
+    "Keep all campaign targeting, product-selection and timing rules above. The selected format changes how the campaign idea is expressed; it does not turn this into a generic non-campaign post.",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function buildSelectedCampaignImagePrompt(campaign, postPlanItem, index, selectedType) {
+  const campaignImagePrompt = buildCampaignImagePrompt(campaign, postPlanItem, index);
+  if (!selectedType) return campaignImagePrompt;
+
+  return [
+    campaignImagePrompt,
+    selectedType.imagePrompt
+      ? `Selected format visual instruction: ${selectedType.imagePrompt}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 function getDaysBetweenDateStrings(startDateString, endDateString) {
   const startParts = getDatePartsFromDateString(startDateString);
@@ -6628,10 +6769,19 @@ const languageOptions = baseLanguageOptions.filter((option, index, options) => {
   }, [exploreFormatItems, formatFilter]);
 
   const mainExploreFormatItems = useMemo(() => {
-    if (formatFilter !== "all") return filteredExploreFormatItems;
-    const featured = exploreFormatItems.filter((item) => item.is_featured);
-    return (featured.length ? featured : exploreFormatItems).slice(0, 8);
-  }, [exploreFormatItems, filteredExploreFormatItems, formatFilter]);
+    const campaignSafeExploreItems =
+      planCreationMode === "campaign"
+        ? exploreFormatItems.filter((item) => item.kind === "content_type")
+        : exploreFormatItems;
+    const campaignSafeFilteredItems =
+      planCreationMode === "campaign"
+        ? filteredExploreFormatItems.filter((item) => item.kind === "content_type")
+        : filteredExploreFormatItems;
+
+    if (formatFilter !== "all") return campaignSafeFilteredItems;
+    const featured = campaignSafeExploreItems.filter((item) => item.is_featured);
+    return (featured.length ? featured : campaignSafeExploreItems).slice(0, 8);
+  }, [exploreFormatItems, filteredExploreFormatItems, formatFilter, planCreationMode]);
 
   const selectedFormatPreview = useMemo(
     () => exploreFormatItems.find((item) => item.id === formatPreviewId) || null,
@@ -8479,13 +8629,22 @@ const { data, error } = await supabase
     );
   }
 
-function addCampaignSlot() {
+function addCampaignSlot(selectedContentTypeId = "") {
   if (!campaignOpportunity) {
     setMessage(t("automation.errorNoCampaignLoaded"));
     return;
   }
 
   setMessage("");
+
+  const selectedType = selectedContentTypeId
+    ? getContentTypeById(selectedContentTypeId)
+    : null;
+
+  if (selectedContentTypeId && !selectedType) {
+    setMessage(t("automation.format.noMatches"));
+    return;
+  }
 
   setSlots((currentSlots) => {
     const nextIndex = currentSlots.length;
@@ -8611,12 +8770,29 @@ const fallbackStartDate =
       timingAnchor,
     });
 
-    const contentSourceMode = getCampaignContentSourceMode(
+    postPlanItem.scheduled_date = startDate;
+    postPlanItem.campaign_main_date = getCampaignMainDateString(campaignOpportunity) || null;
+    const verifiedDaysBeforeMainDate = getVerifiedDaysBeforeCampaignMainDate(
       campaignOpportunity,
-      postPlanItem,
-      nextIndex,
-      nextTotal
+      startDate
     );
+    if (typeof verifiedDaysBeforeMainDate === "number") {
+      postPlanItem.days_before_event = verifiedDaysBeforeMainDate;
+    }
+
+    const selectedSourceMode = selectedType
+      ? getCampaignSourceModeForSelectedContentType(selectedType.id)
+      : "";
+    const contentSourceMode =
+      selectedSourceMode ||
+      (selectedType?.usesWebsiteContent
+        ? "website_product"
+        : getCampaignContentSourceMode(
+            campaignOpportunity,
+            postPlanItem,
+            nextIndex,
+            nextTotal
+          ));
 
     postPlanItem.content_source_mode = contentSourceMode;
 
@@ -8624,17 +8800,31 @@ const fallbackStartDate =
       startDate,
       weekday: getWeekdayFromDateString(startDate, selectedTimeZone),
       publishTime,
-      prompt: buildCampaignPrompt(campaignOpportunity, postPlanItem, nextIndex),
-      imagePrompt: buildCampaignImagePrompt(campaignOpportunity, postPlanItem),
-     generateImage: true,
-     contentTypeId: getCampaignSlotContentTypeId(contentSourceMode),
-contentTypeLabel: getCampaignSlotContentTypeLabel(campaignOpportunity, contentSourceMode),
-usesWebsiteContent: shouldUseWebsiteContentForCampaign(
-  contentSourceMode,
-  campaignOpportunity
-),
-contentFormat: getCampaignSlotContentFormat(contentSourceMode),
-        animationStyle: getCampaignSlotAnimationStyle(contentSourceMode),
+      prompt: buildSelectedCampaignFormatPrompt(
+        campaignOpportunity,
+        postPlanItem,
+        nextIndex,
+        selectedType
+      ),
+      imagePrompt: buildSelectedCampaignImagePrompt(
+        campaignOpportunity,
+        postPlanItem,
+        nextIndex,
+        selectedType
+      ),
+      generateImage: true,
+      contentTypeId: selectedType?.id || getCampaignSlotContentTypeId(contentSourceMode),
+      contentTypeLabel:
+        selectedType?.label ||
+        getCampaignSlotContentTypeLabel(campaignOpportunity, contentSourceMode),
+      usesWebsiteContent: selectedType
+        ? Boolean(selectedType.usesWebsiteContent) &&
+          shouldUseWebsiteContentForCampaign(contentSourceMode, campaignOpportunity)
+        : shouldUseWebsiteContentForCampaign(contentSourceMode, campaignOpportunity),
+      contentFormat:
+        selectedType?.contentFormat || getCampaignSlotContentFormat(contentSourceMode),
+      animationStyle:
+        selectedType?.animationStyle || getCampaignSlotAnimationStyle(contentSourceMode),
 isCampaignSlot: true,
 campaignRole: postPlanItem.role || "Campaign post",
 campaignSummary: buildCampaignSummary(
@@ -10355,7 +10545,16 @@ setRules((currentRules) =>
   const item = exploreFormatItems.find((formatItem) => formatItem.id === formatId);
   if (!item) return;
 
-  if (!hasInitialGoalPlan && item.kind !== "giveaway") {
+  if (planCreationMode === "campaign" && item.kind !== "content_type") {
+    const copy = locale.startsWith("sv")
+      ? "Det formatet använder ett separat flöde och kan inte läggas till direkt i en kalenderkampanj ännu."
+      : "That format uses a separate flow and cannot be added directly to a calendar campaign yet.";
+    setFormatGuardMessage(copy);
+    setMessage(copy);
+    return;
+  }
+
+  if (planCreationMode !== "campaign" && !hasInitialGoalPlan && item.kind !== "giveaway") {
     showChooseGoalFirstMessage();
     return;
   }
@@ -10381,7 +10580,7 @@ setRules((currentRules) =>
 }
 
  function openAllFormats() {
-  if (!hasInitialGoalPlan) {
+  if (planCreationMode !== "campaign" && !hasInitialGoalPlan) {
     showChooseGoalFirstMessage();
     return;
   }
@@ -10394,6 +10593,15 @@ setRules((currentRules) =>
 
  function confirmSelectedFormat() {
   if (!selectedFormatPreview) return;
+
+  if (planCreationMode === "campaign") {
+    if (selectedFormatPreview.kind !== "content_type") return;
+    setReturnToAllFormatsAfterPreview(false);
+    setFormatPreviewId("");
+    setShowAddPostModal(false);
+    addCampaignSlot(selectedFormatPreview.id);
+    return;
+  }
 
   if (selectedFormatPreview.kind === "offer_campaign") {
     setReturnToAllFormatsAfterPreview(false);
@@ -10630,6 +10838,110 @@ function blockFormatCardClickAfterDrag(event) {
                     </button>
                   )}
                 </section>
+
+                {planCreationMode === "campaign" && campaignOpportunity ? (
+                  <section className="sp98-campaign-overview" aria-label={String(locale || "").startsWith("sv") ? "Kampanjöversikt" : "Campaign overview"}>
+                    <div className="sp98-campaign-overview-head">
+                      <div className="sp98-campaign-overview-title-block">
+                        <h2>{String(locale || "").startsWith("sv") ? "Kampanjöversikt" : "Campaign overview"}</h2>
+                        <span className="sp98-campaign-overview-badge"><Sparkles size={14} aria-hidden="true" />{String(locale || "").startsWith("sv") ? "Automatiskt planerad av Spreelo" : "Automatically planned by Spreelo"}</span>
+                      </div>
+                    </div>
+
+                    <div className="sp98-campaign-overview-body">
+                      <div className="sp98-campaign-overview-copy">
+                        <p>{getCampaignOverviewSummary(campaignOpportunity, locale)}</p>
+
+                        <div className="sp98-campaign-overview-chips" aria-label={String(locale || "").startsWith("sv") ? "Kampanjfakta" : "Campaign facts"}>
+                          <span>{campaignOpportunity.title}</span>
+                          <span>{getCampaignOverviewPeriod(campaignOpportunity, locale)}</span>
+                          <span>{String(locale || "").startsWith("sv") ? `${slots.length} inlägg` : `${slots.length} posts`}</span>
+                          <span>{selectedPlatformOptions.map((item) => item.label).join(", ") || t("automation.choosePlatform")}</span>
+                        </div>
+
+                        <dl className="sp98-campaign-overview-meta">
+                          <div>
+                            <dt><CalendarDays size={15} aria-hidden="true" />{String(locale || "").startsWith("sv") ? "Kampanjperiod" : "Campaign period"}</dt>
+                            <dd>{getCampaignOverviewPeriod(campaignOpportunity, locale)}</dd>
+                          </div>
+                          <div>
+                            <dt><ClipboardList size={15} aria-hidden="true" />{String(locale || "").startsWith("sv") ? "Totalt planerade inlägg" : "Total planned posts"}</dt>
+                            <dd>{String(locale || "").startsWith("sv") ? `${slots.length} inlägg` : `${slots.length} posts`}</dd>
+                          </div>
+                          <div>
+                            <dt><Repeat2 size={15} aria-hidden="true" />{String(locale || "").startsWith("sv") ? "Frekvens" : "Frequency"}</dt>
+                            <dd>{getCampaignOverviewFrequencyLabel(campaignOpportunity, slots, locale)}</dd>
+                          </div>
+                          <div>
+                            <dt><PenLine size={15} aria-hidden="true" />{String(locale || "").startsWith("sv") ? "Du kan ändra" : "You can change"}</dt>
+                            <dd>{String(locale || "").startsWith("sv") ? "Datum, lägga till eller ta bort inlägg" : "Dates, and add or remove posts"}</dd>
+                          </div>
+                        </dl>
+                      </div>
+
+                      <div className="sp98-campaign-overview-visual">
+                        <img
+                          src={getCampaignOverviewImageSrc(campaignOpportunity)}
+                          alt={campaignOpportunity?.title || ""}
+                          onError={(event) => {
+                            const image = event.currentTarget;
+                            if (!image.src.endsWith("/calendar-generic.svg")) {
+                              image.src = "/calendar-generic.svg";
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="sp98-campaign-overview-timeline-block">
+                      <div className="sp98-campaign-overview-timeline-head">
+                        <strong>{String(locale || "").startsWith("sv") ? "Period" : "Period"}</strong>
+                        <span>
+                          {getCampaignOverviewPeriod(campaignOpportunity, locale)}
+                          {String(locale || "").startsWith("sv") ? ` (${slots.length} inlägg)` : ` (${slots.length} posts)`}
+                        </span>
+                      </div>
+
+                      <div className="sp98-campaign-overview-timeline-row">
+                        <span className="sp98-campaign-overview-edge-label">
+                          {formatCampaignOverviewDate(campaignOpportunity?.start_date || campaignOpportunity?.event_date, locale)}
+                        </span>
+                        <div className="sp98-campaign-overview-timeline-rail" aria-hidden="true">
+                          <span className="sp98-campaign-overview-timeline-fill" />
+                          {getCampaignOverviewTimelineMarkers(campaignOpportunity, slots).map((marker) => (
+                            <span
+                              key={marker.id}
+                              className="sp98-campaign-overview-timeline-marker"
+                              style={{ left: `${marker.percentage}%` }}
+                              title={marker.label ? formatCampaignOverviewDate(marker.label, locale) : undefined}
+                            />
+                          ))}
+                        </div>
+                        <span className="sp98-campaign-overview-edge-label">
+                          {formatCampaignOverviewDate(campaignOpportunity?.end_date || campaignOpportunity?.event_date || campaignOpportunity?.start_date, locale)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="sp98-campaign-overview-footer-grid">
+                      <article className="sp98-campaign-overview-note sp98-campaign-overview-note-ai">
+                        <div className="sp98-campaign-overview-note-icon"><Sparkles size={18} aria-hidden="true" /></div>
+                        <div>
+                          <strong>{String(locale || "").startsWith("sv") ? "Automatiskt valt av AI" : "Automatically selected by AI"}</strong>
+                          <p>{String(locale || "").startsWith("sv") ? "Produkter som passar kampanjen, relevanta innehållstyper och rekommenderade datum över perioden." : "Products that fit the campaign, relevant content types, and recommended dates across the selected period."}</p>
+                        </div>
+                      </article>
+
+                      <article className="sp98-campaign-overview-note sp98-campaign-overview-note-editable">
+                        <div className="sp98-campaign-overview-note-icon"><PenLine size={18} aria-hidden="true" /></div>
+                        <div>
+                          <strong>{String(locale || "").startsWith("sv") ? "Kan ändras av dig" : "Can be changed by you"}</strong>
+                          <p>{String(locale || "").startsWith("sv") ? "Flytta datum för enskilda inlägg, lägg till fler eller ta bort inlägg innan du aktiverar planen." : "Move dates for individual posts, add more posts, or remove posts before you activate the plan."}</p>
+                        </div>
+                      </article>
+                    </div>
+                  </section>
+                ) : null}
 
                 <div className="sp85-settings-heading">
                   <h2>{plannerSectionCopy.settingsTitle}</h2>
@@ -10936,8 +11248,8 @@ function blockFormatCardClickAfterDrag(event) {
                     <h2>{t("automation.redesign.contentTypesTitleV2")}</h2>
                     <p>{planCreationMode === "campaign"
                       ? (locale.startsWith("sv")
-                        ? "Kalenderkampanjen är redan optimerad med en innehållsmix som passar kampanjen och dess datum."
-                        : "The calendar campaign is already optimized with a content mix matched to the campaign and its dates.")
+                        ? "Kampanjen är redan optimerad med en innehållsmix som passar temat. Vill du komplettera planen kan du välja ett format nedan."
+                        : "The campaign is already optimized with a content mix that fits the theme. If you want to expand the plan, choose a format below.")
                       : (locale.startsWith("sv")
                         ? "Planen är redan optimerad med den innehållsmix som passar ditt mål bäst. Här kan du vid behov lägga till eller byta ut format i den befintliga planen."
                         : "Your plan is already optimized with the content mix best suited to your goal. Use this section only if you want to add or replace formats in the existing plan.")}</p>
@@ -10962,27 +11274,38 @@ function blockFormatCardClickAfterDrag(event) {
                   onDragStart={(event) => event.preventDefault()}
                   onClickCapture={blockFormatCardClickAfterDrag}
                 >
-                  {mainExploreFormatItems.map((item, index) => (
+                  {mainExploreFormatItems.filter((item) => planCreationMode !== "campaign" || item.kind === "content_type").map((item, index) => (
                     <ContentFormatCard
                       item={item}
                       index={index}
                       view="grid"
-                      disabled={planCreationMode === "campaign" || (!hasInitialGoalPlan && item.kind !== "giveaway")}
+                      disabled={
+                        (planCreationMode === "campaign" && item.kind !== "content_type") ||
+                        (planCreationMode !== "campaign" && !hasInitialGoalPlan && item.kind !== "giveaway")
+                      }
                       key={`v72-${item.id}`}
-                      onClick={planCreationMode === "campaign" ? undefined : () => requestFormatPreview(item.id, { fromAllFormats: true })}
+                      onClick={() => requestFormatPreview(item.id, { fromAllFormats: true })}
                     />
                   ))}
                 </div>
 
-                {mainExploreFormatItems.length === 0 ? (
+                {mainExploreFormatItems.filter((item) => planCreationMode !== "campaign" || item.kind === "content_type").length === 0 ? (
                   <p className="plan-v72-format-empty">{t("automation.format.noMatches")}</p>
                 ) : null}
 
-                <button type="button" className="plan-v14470-format-browser" onClick={openAllFormats} disabled={planCreationMode === "campaign"}>
+                <button type="button" className="plan-v14470-format-browser" onClick={openAllFormats}>
                   <span><LayoutGrid size={18} aria-hidden="true" /></span>
                   <span>
-                    <strong>{locale.startsWith("sv") ? `${exploreFormatItems.length} tillgängliga format` : `${exploreFormatItems.length} available formats`}</strong>
-                    <small>{locale.startsWith("sv") ? "Valfritt: lägg till eller byt format i den optimerade planen" : "Optional: add or replace formats in the optimized plan"}</small>
+                    <strong>{locale.startsWith("sv")
+                      ? `${planCreationMode === "campaign" ? exploreFormatItems.filter((item) => item.kind === "content_type").length : exploreFormatItems.length} tillgängliga format`
+                      : `${planCreationMode === "campaign" ? exploreFormatItems.filter((item) => item.kind === "content_type").length : exploreFormatItems.length} available formats`}</strong>
+                    <small>{planCreationMode === "campaign"
+                      ? (locale.startsWith("sv")
+                        ? "Välj ett format för att lägga till ett nytt inlägg som fortfarande följer kampanjens tema och produktlogik"
+                        : "Choose a format to add a new post that still follows the campaign theme and product logic")
+                      : (locale.startsWith("sv")
+                        ? "Valfritt: lägg till eller byt format i den optimerade planen"
+                        : "Optional: add or replace formats in the optimized plan")}</small>
                   </span>
                   <ChevronRight size={18} aria-hidden="true" />
                 </button>
@@ -11345,8 +11668,13 @@ function blockFormatCardClickAfterDrag(event) {
                               <div className="plan-v100-planned-title-line">
                                 <strong>{getUnifiedContentTypeLabel(slot.contentTypeId, slot.contentTypeLabel)}</strong>
                                 {slot.isCampaignSlot ? (
-                                  <span className="plan-v100-campaign-badge">
-                                    {campaignCode
+                                  <span
+                                    className="plan-v100-campaign-badge plan-v14499-campaign-name-badge"
+                                    title={planCreationMode === "campaign" ? campaignOpportunity?.title || "" : ""}
+                                  >
+                                    {planCreationMode === "campaign" && campaignOpportunity?.title
+                                      ? campaignOpportunity.title
+                                      : campaignCode
                                       ? t("automation.offerPlan.campaignCodeBadge", { code: campaignCode })
                                       : t("automation.offerPlan.campaignBadge")}
                                   </span>
@@ -12392,8 +12720,13 @@ function blockFormatCardClickAfterDrag(event) {
                   <strong>{displayLabel}</strong>
 
                   {slot.isCampaignSlot ? (
-                    <span className="plan-v100-campaign-badge">
-                      {campaignCode
+                    <span
+                      className="plan-v100-campaign-badge plan-v14499-campaign-name-badge"
+                      title={planCreationMode === "campaign" ? campaignOpportunity?.title || "" : ""}
+                    >
+                      {planCreationMode === "campaign" && campaignOpportunity?.title
+                        ? campaignOpportunity.title
+                        : campaignCode
                         ? t("automation.offerPlan.campaignCodeBadge", { code: campaignCode })
                         : t("automation.offerPlan.campaignBadge")}
                     </span>
@@ -13250,7 +13583,11 @@ function blockFormatCardClickAfterDrag(event) {
                   </span>
                   <div>
                     <p>
-                      {selectedFormatPreview.kind === "giveaway"
+                      {planCreationMode === "campaign" && selectedFormatPreview.kind === "content_type"
+                        ? (locale.startsWith("sv")
+                          ? `Kampanj: ${campaignOpportunity?.title || ""}`
+                          : `Campaign: ${campaignOpportunity?.title || ""}`)
+                        : selectedFormatPreview.kind === "giveaway"
                         ? t("automation.giveaway.modalEyebrow")
                         : t("automation.format.recommendedForGoal", { goal: translateAutoPlanGoalLabel(autoPlanGoal) })}
                     </p>
@@ -13305,7 +13642,9 @@ function blockFormatCardClickAfterDrag(event) {
                   <button type="button" className="primary" onClick={confirmSelectedFormat}>
                     {selectedFormatPreview.kind === "content_type" ? <Plus size={18} /> : <ChevronDown size={18} />}
                     {selectedFormatPreview.kind === "content_type"
-                      ? t("automation.format.addToPlan")
+                      ? (planCreationMode === "campaign"
+                        ? (locale.startsWith("sv") ? "Lägg till i kampanjen" : "Add to campaign")
+                        : t("automation.format.addToPlan"))
                       : selectedFormatPreview.kind === "offer_campaign"
                       ? t("automation.format.addAndConfigure")
                       : selectedFormatPreview.kind === "giveaway"
@@ -13549,12 +13888,13 @@ function blockFormatCardClickAfterDrag(event) {
                 </div>
               ) : (
                 <div className="plan-v72-all-formats-grid grid">
-                  {exploreFormatItems.map((item, index) => (
+                  {exploreFormatItems.filter((item) => planCreationMode !== "campaign" || item.kind === "content_type").map((item, index) => (
                     <ContentFormatCard
                       item={item}
                       index={index}
                       view="grid"
                       key={`modal-format-${item.id}`}
+                      disabled={planCreationMode === "campaign" && item.kind !== "content_type"}
                       onClick={() => requestFormatPreview(item.id, { fromAllFormats: true })}
                     />
                   ))}
