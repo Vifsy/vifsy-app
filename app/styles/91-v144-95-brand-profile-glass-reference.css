@@ -1,0 +1,555 @@
+/* v144.95 — Brand profile reference layout on the AI Studio glass/magic system.
+   Scoped to brand-v14495-* so the rest of the app remains untouched. */
+
+html body .content.spreelo-content:has(.brand-profile-page.brand-v14495-page) {
+  background-color: #f5f7fb !important;
+  background-image: url("/backgrounds/spreelo-plan-reference-magic-v95.svg") !important;
+  background-repeat: no-repeat !important;
+  background-position: center top !important;
+  background-size: 100% 920px !important;
+}
+
+html body .brand-profile-page.brand-v14495-page {
+  width: min(1480px, calc(100% - 48px)) !important;
+  max-width: none !important;
+  margin: 0 auto !important;
+  padding: 30px 0 58px !important;
+  background: transparent !important;
+}
+
+/* Hero */
+html body .brand-v14495-page .brand-v14495-hero {
+  position: relative !important;
+  display: block !important;
+  min-height: 228px !important;
+  padding: 38px 42px !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(255,255,255,.88) !important;
+  border-radius: 28px !important;
+  background: linear-gradient(112deg, rgba(255,255,255,.80) 0%, rgba(255,255,255,.70) 44%, rgba(255,255,255,.34) 100%) !important;
+  box-shadow: 0 22px 58px rgba(32,46,74,.085), inset 0 1px 0 rgba(255,255,255,.9) !important;
+  backdrop-filter: blur(22px) saturate(118%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(118%) !important;
+}
+
+html body .brand-v14495-page .brand-v14495-hero-copy {
+  position: relative;
+  z-index: 2;
+  width: min(650px, 54%);
+  padding-top: 10px;
+}
+
+html body .brand-v14495-page .brand-v14495-hero .dashboard-eyebrow {
+  margin: 0 0 12px !important;
+  color: #f05236 !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+  font-weight: 900 !important;
+  letter-spacing: .11em !important;
+}
+
+html body .brand-v14495-page .brand-v14495-hero h2 {
+  margin: 0 !important;
+  color: #101b30 !important;
+  font-size: clamp(38px, 3.1vw, 54px) !important;
+  line-height: 1.03 !important;
+  font-weight: 900 !important;
+  letter-spacing: -.045em !important;
+}
+
+html body .brand-v14495-page .brand-v14495-hero-copy > span {
+  display: block;
+  max-width: 620px;
+  margin-top: 14px !important;
+  color: #52627a !important;
+  font-size: 16px !important;
+  line-height: 1.6 !important;
+  font-weight: 500 !important;
+}
+
+html body .brand-v14495-page .brand-v14495-hero-art {
+  position: absolute;
+  z-index: 1;
+  top: -54px;
+  right: -28px;
+  bottom: -82px;
+  width: 61%;
+  background-image: url("/backgrounds/spreelo-brand-intelligence-v143-38.png");
+  background-repeat: no-repeat;
+  background-position: 62% 56%;
+  background-size: cover;
+  opacity: .88;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.42) 20%, #000 46%);
+  mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.42) 20%, #000 46%);
+}
+
+/* Read-only profile: separate glass strip + compact settings rows. */
+html body .brand-v14495-page .brand-v14495-layout {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 18px 0 0 !important;
+}
+
+html body .brand-v14495-page .brand-v14495-shell:not(.editing) {
+  width: 100% !important;
+  max-width: none !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html body .brand-v14495-page .brand-v14495-shell:not(.editing) .brand-v14495-profile-strip {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 24px !important;
+  min-height: 112px !important;
+  margin: 0 !important;
+  padding: 22px 28px !important;
+  border: 1px solid rgba(255,255,255,.82) !important;
+  border-radius: 22px !important;
+  background: linear-gradient(145deg, rgba(255,255,255,.58), rgba(255,255,255,.34)) !important;
+  box-shadow: 0 14px 36px rgba(35,50,79,.065), inset 0 1px 0 rgba(255,255,255,.82) !important;
+  backdrop-filter: blur(19px) saturate(120%) !important;
+  -webkit-backdrop-filter: blur(19px) saturate(120%) !important;
+}
+
+html body .brand-v14495-page .brand-v14495-profile-main {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+html body .brand-v14495-page .brand-v14495-brand-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 52px;
+  width: 52px;
+  height: 52px;
+  border: 1px solid rgba(255,255,255,.88);
+  border-radius: 15px;
+  background: linear-gradient(145deg, rgba(255,244,239,.96), rgba(255,226,216,.76));
+  box-shadow: 0 9px 22px rgba(231,83,55,.10), inset 0 1px 0 rgba(255,255,255,.96);
+  color: #f05236;
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 850;
+  letter-spacing: -.05em;
+  text-transform: lowercase;
+}
+
+html body .brand-v14495-page .brand-v14495-profile-strip .dashboard-eyebrow {
+  margin: 0 0 7px !important;
+  color: #f05236 !important;
+  font-size: 11px !important;
+  line-height: 1 !important;
+  font-weight: 900 !important;
+  letter-spacing: .1em !important;
+}
+
+html body .brand-v14495-page .brand-v14495-profile-strip h3 {
+  margin: 0 !important;
+  color: #101b30 !important;
+  font-size: 19px !important;
+  line-height: 1.15 !important;
+  font-weight: 850 !important;
+  letter-spacing: -.02em !important;
+}
+
+html body .brand-v14495-page .brand-v14495-profile-strip .brand-profile-form-intro {
+  margin: 5px 0 0 !important;
+  color: #627189 !important;
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+}
+
+html body .brand-v14495-page .brand-v14495-edit-button {
+  flex: 0 0 auto !important;
+  min-height: 48px !important;
+  padding: 0 20px !important;
+  border: 1.5px solid #ff5b3b !important;
+  border-radius: 12px !important;
+  background: rgba(255,255,255,.44) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.86) !important;
+  color: #f05236 !important;
+  font-size: 14px !important;
+  font-weight: 750 !important;
+}
+
+html body .brand-v14495-page .brand-v14495-edit-button:hover {
+  background: rgba(255,245,241,.78) !important;
+  box-shadow: 0 8px 22px rgba(240,82,54,.10), inset 0 1px 0 rgba(255,255,255,.9) !important;
+}
+
+html body .brand-v14495-page .brand-profile-summary-grid.brand-v14495-summary-list {
+  display: block !important;
+  width: 100% !important;
+  margin: 14px 0 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(255,255,255,.82) !important;
+  border-radius: 22px !important;
+  background: linear-gradient(145deg, rgba(255,255,255,.56), rgba(255,255,255,.31)) !important;
+  box-shadow: 0 16px 40px rgba(35,50,79,.065), inset 0 1px 0 rgba(255,255,255,.82) !important;
+  backdrop-filter: blur(19px) saturate(118%) !important;
+  -webkit-backdrop-filter: blur(19px) saturate(118%) !important;
+}
+
+html body .brand-v14495-page .brand-v14495-summary-list .brand-v14495-summary-row {
+  display: grid !important;
+  grid-template-columns: 46px 260px minmax(0, 1fr) 22px !important;
+  align-items: center !important;
+  gap: 18px !important;
+  width: 100% !important;
+  min-height: 84px !important;
+  margin: 0 !important;
+  padding: 14px 24px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  overflow: visible !important;
+}
+
+html body .brand-v14495-page .brand-v14495-summary-list .brand-v14495-summary-row + .brand-v14495-summary-row {
+  border-top: 1px solid rgba(182,196,216,.38) !important;
+}
+
+html body .brand-v14495-page .brand-v14495-summary-list .brand-v14495-row-icon {
+  display: grid !important;
+  place-items: center !important;
+  width: 38px !important;
+  height: 38px !important;
+  border: 1px solid rgba(255,255,255,.82) !important;
+  border-radius: 12px !important;
+  background: rgba(255,239,233,.72) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.88) !important;
+  color: #f05236 !important;
+}
+
+html body .brand-v14495-page .brand-v14495-row-label,
+html body .brand-v14495-page .brand-v14495-row-value {
+  min-width: 0;
+}
+
+html body .brand-v14495-page .brand-v14495-row-label small {
+  display: block !important;
+  margin: 0 !important;
+  color: #5e6e86 !important;
+  font-size: 11px !important;
+  line-height: 1.2 !important;
+  font-weight: 850 !important;
+  letter-spacing: .08em !important;
+  text-transform: uppercase !important;
+}
+
+html body .brand-v14495-page .brand-v14495-row-value strong {
+  display: block !important;
+  margin: 0 !important;
+  color: #172238 !important;
+  font-size: 14px !important;
+  line-height: 1.45 !important;
+  font-weight: 700 !important;
+}
+
+html body .brand-v14495-page .brand-v14495-row-value p {
+  margin: 0 !important;
+  color: #35445d !important;
+  font-size: 13.5px !important;
+  line-height: 1.55 !important;
+  font-weight: 560 !important;
+  white-space: normal !important;
+}
+
+html body .brand-v14495-page .brand-v14495-business-value a {
+  display: block !important;
+  width: max-content;
+  max-width: 100%;
+  margin: 3px 0 0 !important;
+  overflow: hidden;
+  color: #687a94 !important;
+  font-size: 12.5px !important;
+  line-height: 1.35 !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html body .brand-v14495-page .brand-v14495-row-chevron {
+  display: grid;
+  place-items: center;
+  color: #30405a;
+  opacity: .86;
+}
+
+/* Logo keeps its existing modal behavior, but uses the same compact row language. */
+html body .brand-v14495-page .brand-v14495-summary-list .brand-v14495-logo-row {
+  display: block !important;
+  min-height: 84px !important;
+  padding: 0 !important;
+}
+
+html body .brand-v14495-page .brand-v14495-logo-trigger {
+  display: grid !important;
+  grid-template-columns: 46px minmax(0,1fr) auto !important;
+  align-items: center !important;
+  gap: 18px !important;
+  width: 100% !important;
+  min-height: 84px !important;
+  padding: 14px 24px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #172238 !important;
+}
+
+html body .brand-v14495-page .brand-v14495-logo-trigger:hover {
+  background: rgba(255,255,255,.22) !important;
+}
+
+html body .brand-v14495-page .brand-v14495-logo-trigger .brand-logo-compact-thumb {
+  display: grid !important;
+  place-items: center !important;
+  width: 38px !important;
+  height: 38px !important;
+  margin: 0 !important;
+  border: 1px dashed rgba(89,146,224,.42) !important;
+  border-radius: 11px !important;
+  background: rgba(247,251,255,.68) !important;
+  box-shadow: none !important;
+}
+
+html body .brand-v14495-page .brand-v14495-logo-trigger .brand-logo-compact-thumb > span {
+  color: #1766d0 !important;
+  font-size: 9px !important;
+  font-weight: 850 !important;
+}
+
+html body .brand-v14495-page .brand-v14495-logo-trigger .brand-logo-summary-copy {
+  display: grid !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+}
+
+html body .brand-v14495-page .brand-v14495-logo-trigger .brand-logo-summary-copy small {
+  margin: 0 !important;
+  color: #5e6e86 !important;
+  font-size: 11px !important;
+  line-height: 1.2 !important;
+  font-weight: 850 !important;
+  letter-spacing: .08em !important;
+  text-transform: uppercase !important;
+}
+
+html body .brand-v14495-page .brand-v14495-logo-trigger .brand-logo-summary-copy strong {
+  overflow: hidden;
+  color: #35445d !important;
+  font-size: 13.5px !important;
+  line-height: 1.45 !important;
+  font-weight: 560 !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html body .brand-v14495-page .brand-v14495-logo-trigger .brand-logo-summary-cta {
+  padding: 9px 13px !important;
+  border: 1px solid rgba(177,193,214,.65) !important;
+  border-radius: 10px !important;
+  background: rgba(255,255,255,.52) !important;
+  color: #1a273c !important;
+  font-size: 12.5px !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+}
+
+/* Keep the edit dialog behavior from the existing implementation. */
+html body .brand-v14495-page .brand-v14495-shell.editing .brand-v14495-brand-mark {
+  display: none !important;
+}
+html body .brand-v14495-page .brand-v14495-shell.editing .brand-v14495-profile-main {
+  display: block !important;
+}
+
+/* Danger zone: still clearly destructive, but visually part of the same page. */
+html body .brand-v14495-page > .danger-zone-card.brand-v14495-danger {
+  margin-top: 18px !important;
+  padding: 20px 24px !important;
+  border: 1px solid rgba(242,178,169,.48) !important;
+  border-radius: 20px !important;
+  background: linear-gradient(145deg, rgba(255,245,243,.68), rgba(255,237,235,.50)) !important;
+  box-shadow: 0 12px 32px rgba(105,45,37,.045), inset 0 1px 0 rgba(255,255,255,.78) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+}
+
+@media (max-width: 1120px) {
+  html body .brand-v14495-page .brand-v14495-summary-list .brand-v14495-summary-row {
+    grid-template-columns: 44px 205px minmax(0,1fr) 20px !important;
+    gap: 14px !important;
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+  }
+  html body .brand-v14495-page .brand-v14495-hero-copy {
+    width: 60%;
+  }
+  html body .brand-v14495-page .brand-v14495-hero-art {
+    width: 58%;
+    opacity: .78;
+  }
+}
+
+@media (max-width: 760px) {
+  html body .content.spreelo-content:has(.brand-profile-page.brand-v14495-page) {
+    background-size: 100% 760px !important;
+  }
+
+  html body .brand-profile-page.brand-v14495-page {
+    width: calc(100% - 20px) !important;
+    padding: 16px 0 34px !important;
+  }
+
+  html body .brand-v14495-page .brand-v14495-hero {
+    min-height: 220px !important;
+    padding: 24px 20px !important;
+    border-radius: 21px !important;
+  }
+
+  html body .brand-v14495-page .brand-v14495-hero-copy {
+    width: 72%;
+    padding-top: 4px;
+  }
+
+  html body .brand-v14495-page .brand-v14495-hero h2 {
+    font-size: clamp(32px, 9vw, 42px) !important;
+  }
+
+  html body .brand-v14495-page .brand-v14495-hero-copy > span {
+    margin-top: 10px !important;
+    font-size: 13.5px !important;
+    line-height: 1.48 !important;
+  }
+
+  html body .brand-v14495-page .brand-v14495-hero-art {
+    top: 0;
+    right: -58px;
+    bottom: -22px;
+    width: 72%;
+    background-image: url("/backgrounds/spreelo-brand-intelligence-v143-39-mobile.webp");
+    background-position: 57% 52%;
+    opacity: .53;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.28) 25%, #000 58%);
+    mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.28) 25%, #000 58%);
+  }
+
+  html body .brand-v14495-page .brand-v14495-layout {
+    margin-top: 12px !important;
+  }
+
+  html body .brand-v14495-page .brand-v14495-shell:not(.editing) .brand-v14495-profile-strip {
+    align-items: stretch !important;
+    flex-direction: column !important;
+    gap: 16px !important;
+    min-height: 0 !important;
+    padding: 18px !important;
+    border-radius: 18px !important;
+  }
+
+  html body .brand-v14495-page .brand-v14495-brand-mark {
+    flex-basis: 46px;
+    width: 46px;
+    height: 46px;
+    border-radius: 13px;
+    font-size: 21px;
+  }
+
+  html body .brand-v14495-page .brand-v14495-edit-button {
+    width: 100% !important;
+    min-height: 46px !important;
+    justify-content: center !important;
+  }
+
+  html body .brand-v14495-page .brand-profile-summary-grid.brand-v14495-summary-list {
+    margin-top: 12px !important;
+    border-radius: 18px !important;
+  }
+
+  html body .brand-v14495-page .brand-v14495-summary-list .brand-v14495-summary-row {
+    grid-template-columns: 40px minmax(0,1fr) 18px !important;
+    grid-template-rows: auto auto !important;
+    column-gap: 12px !important;
+    row-gap: 4px !important;
+    min-height: 78px !important;
+    padding: 15px 16px !important;
+  }
+
+  html body .brand-v14495-page .brand-v14495-summary-list .brand-v14495-row-icon {
+    grid-column: 1 !important;
+    grid-row: 1 / 3 !important;
+    width: 36px !important;
+    height: 36px !important;
+    border-radius: 11px !important;
+  }
+
+  html body .brand-v14495-page .brand-v14495-row-label {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+  }
+
+  html body .brand-v14495-page .brand-v14495-row-value {
+    grid-column: 2 !important;
+    grid-row: 2 !important;
+  }
+
+  html body .brand-v14495-page .brand-v14495-row-chevron {
+    grid-column: 3 !important;
+    grid-row: 1 / 3 !important;
+  }
+
+  html body .brand-v14495-page .brand-v14495-row-value p,
+  html body .brand-v14495-page .brand-v14495-row-value strong {
+    font-size: 13px !important;
+  }
+
+  html body .brand-v14495-page .brand-v14495-business-value a {
+    font-size: 11.5px !important;
+  }
+
+  html body .brand-v14495-page .brand-v14495-logo-trigger {
+    grid-template-columns: 40px minmax(0,1fr) !important;
+    gap: 12px !important;
+    min-height: 82px !important;
+    padding: 15px 16px !important;
+  }
+
+  html body .brand-v14495-page .brand-v14495-logo-trigger .brand-logo-summary-cta {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    text-align: center !important;
+  }
+
+  html body .brand-v14495-page > .danger-zone-card.brand-v14495-danger {
+    margin-top: 12px !important;
+    padding: 18px !important;
+    border-radius: 18px !important;
+  }
+}
+
+@media (max-width: 430px) {
+  html body .brand-v14495-page .brand-v14495-hero-copy {
+    width: 82%;
+  }
+  html body .brand-v14495-page .brand-v14495-hero-art {
+    right: -82px;
+    width: 78%;
+    opacity: .42;
+  }
+}

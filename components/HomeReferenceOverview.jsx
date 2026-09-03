@@ -121,13 +121,13 @@ export default function HomeReferenceOverview({
       <section className="home-reference-review">
         <ClipboardCheck />
         <div><strong>{pendingCount} inlägg väntar på ditt godkännande</strong><small>Granska och godkänn innan innehållet skickas vidare.</small></div>
-        <a className="primary" href="/review?view=queue">Granska inlägg</a>
+        <a className="primary" href="/review?view=queue">Granska inlägg<ArrowRight className="home-reference-review-primary-arrow" aria-hidden="true" /></a>
         <a href="/review?view=history"><History /><span className="home-reference-review-desktop-label">Inläggshistorik</span><span className="home-reference-review-mobile-label">Visa innehållskalender</span><ArrowRight /></a>
       </section>
 
       <div className="home-reference-workspace">
         <section className="home-reference-plans">
-          <header><h2>Innehållsplaner</h2></header>
+          <header><h2>Innehållsplaner</h2><a className="home-reference-plans-show-all" href="/automation">Visa alla</a></header>
           <article className="recurring"><RefreshCw /><div><h3>Återkommande scheman</h3><p>Veckoscheman som fortsätter skapa innehåll tills du pausar eller avslutar dem.</p></div><strong className={recurringCount ? "" : "is-empty-status"}>{recurringCount || "Inga aktiva"}</strong>{recurringCount ? <button type="button" className={`home-reference-manage-link${showRecurringSchedules ? " open" : ""}`} onClick={() => setShowRecurringSchedules((current) => !current)}>{showRecurringSchedules ? "Dölj scheman" : "Hantera scheman"}<ChevronDown /></button> : <a href="/automation">Skapa schema<ArrowRight /></a>}</article>
 
           {recurringCount > 0 && showRecurringSchedules ? (

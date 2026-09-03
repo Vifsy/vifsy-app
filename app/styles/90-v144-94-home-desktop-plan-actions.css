@@ -1,0 +1,51 @@
+/* v144.94 — wide-desktop Content plans status/action alignment.
+   Deliberately scoped to wide desktop so the v144.93 mobile reference remains untouched. */
+
+@media (min-width:1451px) {
+  html body .home-reference-page .home-reference-plans article {
+    grid-template-columns:48px minmax(0,1fr) 118px 154px !important;
+    column-gap:18px !important;
+  }
+
+  html body .home-reference-page .home-reference-plans article > strong {
+    position:static !important;
+    justify-self:end !important;
+    width:118px !important;
+    max-width:118px !important;
+    margin:0 !important;
+    text-align:right !important;
+    white-space:nowrap !important;
+  }
+
+  html body .home-reference-page .home-reference-plans article > strong.is-empty-status {
+    color:#66758a !important;
+    font-size:12px !important;
+    line-height:1.2 !important;
+    font-weight:700 !important;
+    letter-spacing:0 !important;
+  }
+
+  html body .home-reference-page .home-reference-plans article > a,
+  html body .home-reference-page .home-reference-plans article > button,
+  html body .home-reference-page .home-reference-plans article > .home-reference-manage-link {
+    position:static !important;
+    justify-self:end !important;
+    display:inline-flex !important;
+    align-items:center !important;
+    justify-content:flex-end !important;
+    gap:8px !important;
+    width:154px !important;
+    min-width:154px !important;
+    margin:0 !important;
+    padding:0 !important;
+    text-align:right !important;
+    white-space:nowrap !important;
+  }
+
+  html body .home-reference-page .home-reference-plans article > a svg,
+  html body .home-reference-page .home-reference-plans article > button svg,
+  html body .home-reference-page .home-reference-plans article > .home-reference-manage-link svg {
+    flex:0 0 auto !important;
+    margin:0 !important;
+  }
+}

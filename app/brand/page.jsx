@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Building2, Check, Globe2, Languages, Pencil, Sparkles, Users, X } from "lucide-react";
+import { Building2, Check, ChevronRight, Globe2, Languages, Pencil, Sparkles, Users, X } from "lucide-react";
 import AppLayout from "../../components/AppLayout";
 import { supabase } from "../../lib/supabaseClient";
 import { getValidAnalysisAccessToken } from "../../lib/analysisSession";
@@ -364,6 +364,18 @@ export default function BrandProfile() {
   }, [contentMarket, countryCode, contentLanguage]);
 
   const normalizedContentLanguage = normalizeSingleContentLanguage(contentLanguage);
+
+  const brandInitials = useMemo(() => {
+    const words = String(businessName || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    if (!words.length) return "S";
+    if (words.length === 1) return words[0].slice(0, 2).toLowerCase();
+
+    return `${words[0][0] || ""}${words[1][0] || ""}`.toLowerCase();
+  }, [businessName]);
 
   const visibleLanguageOptions = useMemo(() => languageOptions, []);
 
@@ -1398,29 +1410,32 @@ export default function BrandProfile() {
 
   return (
     <AppLayout active="brand">
-      <div className="brand-profile-page">
-        <header className="brand-profile-hero">
-          <div>
+      <div className="brand-profile-page brand-v14495-page">
+        <header className="brand-profile-hero brand-v14495-hero">
+          <div className="brand-v14495-hero-copy">
             <p className="dashboard-eyebrow">{t("brand.eyebrow")}</p>
             <h2>{t("brand.heroTitle")}</h2>
             <span>{t("brand.heroText")}</span>
           </div>
-
+          <div className="brand-v14495-hero-art" aria-hidden="true" />
         </header>
 
-        <section className="brand-profile-layout">
-          <section className={`brand-profile-form-card${isEditing ? " editing" : ""}`}>
-            <div className="brand-profile-form-header">
-              <div>
-                <p className="dashboard-eyebrow">{t("brand.profileOverview")}</p>
-                <h3>{businessName || t("brand.brandSetup")}</h3>
-                <p className="brand-profile-form-intro">{t("brand.profileOverviewText")}</p>
+        <section className="brand-profile-layout brand-v14495-layout">
+          <section className={`brand-profile-form-card brand-v14495-shell${isEditing ? " editing" : ""}`}>
+            <div className="brand-profile-form-header brand-v14495-profile-strip">
+              <div className="brand-v14495-profile-main">
+                <span className="brand-v14495-brand-mark" aria-hidden="true">{brandInitials}</span>
+                <div>
+                  <p className="dashboard-eyebrow">{t("brand.profileOverview")}</p>
+                  <h3>{businessName || t("brand.brandSetup")}</h3>
+                  <p className="brand-profile-form-intro">{t("brand.profileOverviewText")}</p>
+                </div>
               </div>
 
               {showGeneratedFields && !isEditing && !analyzing ? (
                 <button
                   type="button"
-                  className="brand-profile-edit-button"
+                  className="brand-profile-edit-button brand-v14495-edit-button"
                   onClick={() => {
                     setIsEditing(true);
                     setMessage("");
@@ -1445,47 +1460,46 @@ export default function BrandProfile() {
             </div>
 
             {showGeneratedFields && !isEditing && !analyzing ? (
-              <div className="brand-profile-summary-grid">
-                <article className="brand-profile-summary-card identity">
-                  <span><Building2 size={19} /></span>
-                  <div>
+              <div className="brand-profile-summary-grid brand-v14495-summary-list">
+                <article className="brand-profile-summary-card identity brand-v14495-summary-row">
+                  <span className="brand-v14495-row-icon"><Building2 size={19} /></span>
+                  <div className="brand-v14495-row-label">
                     <small>{t("brand.businessDetails")}</small>
+                  </div>
+                  <div className="brand-v14495-row-value brand-v14495-business-value">
                     <strong>{businessName || "—"}</strong>
                     <a href={normalizedWebsiteUrl} target="_blank" rel="noreferrer">{normalizedWebsiteUrl || "—"}</a>
                   </div>
+                  <span className="brand-v14495-row-chevron" aria-hidden="true"><ChevronRight size={18} /></span>
                 </article>
-                <article className="brand-profile-summary-card compact">
-                  <span><Globe2 size={19} /></span>
-                  <div>
-                    <small>{t("brand.campaignMarket")}</small>
-                    <strong>{getMarketOptionLabel(t, visibleMarketOptions.find((market) => market.label === contentMarket) || { label: contentMarket, countryCode })}</strong>
-                  </div>
+                <article className="brand-profile-summary-card compact brand-v14495-summary-row">
+                  <span className="brand-v14495-row-icon"><Globe2 size={19} /></span>
+                  <div className="brand-v14495-row-label"><small>{t("brand.campaignMarket")}</small></div>
+                  <div className="brand-v14495-row-value"><strong>{getMarketOptionLabel(t, visibleMarketOptions.find((market) => market.label === contentMarket) || { label: contentMarket, countryCode })}</strong></div>
+                  <span className="brand-v14495-row-chevron" aria-hidden="true"><ChevronRight size={18} /></span>
                 </article>
-                <article className="brand-profile-summary-card compact">
-                  <span><Languages size={19} /></span>
-                  <div>
-                    <small>{t("brand.postLanguage")}</small>
-                    <strong>{getLanguageOptionLabel(t, normalizedContentLanguage)}</strong>
-                  </div>
+                <article className="brand-profile-summary-card compact brand-v14495-summary-row">
+                  <span className="brand-v14495-row-icon"><Languages size={19} /></span>
+                  <div className="brand-v14495-row-label"><small>{t("brand.postLanguage")}</small></div>
+                  <div className="brand-v14495-row-value"><strong>{getLanguageOptionLabel(t, normalizedContentLanguage)}</strong></div>
+                  <span className="brand-v14495-row-chevron" aria-hidden="true"><ChevronRight size={18} /></span>
                 </article>
-                <article className="brand-profile-summary-card narrative">
-                  <span><Sparkles size={19} /></span>
-                  <div>
-                    <small>{t("brand.industry")}</small>
-                    <p>{industry || "—"}</p>
-                  </div>
+                <article className="brand-profile-summary-card narrative brand-v14495-summary-row">
+                  <span className="brand-v14495-row-icon"><Sparkles size={19} /></span>
+                  <div className="brand-v14495-row-label"><small>{t("brand.industry")}</small></div>
+                  <div className="brand-v14495-row-value"><p>{industry || "—"}</p></div>
+                  <span className="brand-v14495-row-chevron" aria-hidden="true"><ChevronRight size={18} /></span>
                 </article>
-                <article className="brand-profile-summary-card narrative">
-                  <span><Users size={19} /></span>
-                  <div>
-                    <small>{t("brand.targetAudience")}</small>
-                    <p>{targetAudience || "—"}</p>
-                  </div>
+                <article className="brand-profile-summary-card narrative brand-v14495-summary-row">
+                  <span className="brand-v14495-row-icon"><Users size={19} /></span>
+                  <div className="brand-v14495-row-label"><small>{t("brand.targetAudience")}</small></div>
+                  <div className="brand-v14495-row-value"><p>{targetAudience || "—"}</p></div>
+                  <span className="brand-v14495-row-chevron" aria-hidden="true"><ChevronRight size={18} /></span>
                 </article>
-                <article className="brand-profile-summary-card logo">
+                <article className="brand-profile-summary-card logo brand-v14495-summary-row brand-v14495-logo-row">
                   <button
                     type="button"
-                    className="brand-logo-summary-trigger"
+                    className="brand-logo-summary-trigger brand-v14495-logo-trigger"
                     onClick={() => {
                       setLogoMessage("");
                       setShowLogoModal(true);
@@ -1907,7 +1921,7 @@ export default function BrandProfile() {
           </div>
         )}
 
-        <section className="danger-zone-card">
+        <section className="danger-zone-card brand-v14495-danger">
           <div>
             <p className="eyebrow danger-eyebrow">{t("brand.dangerEyebrow")}</p>
             <h3>{t("brand.deleteTitle")}</h3>
