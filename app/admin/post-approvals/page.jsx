@@ -915,16 +915,26 @@ ${post.strategy_snapshot || ruleSnapshot.strategy_notes || ""}
 KRAV
 Ta fram exakt ${count} ${count === 1 ? "produkt" : "produkter"} som matchar uppdraget. Produkterna ska vara riktiga produkter från kundens egen webbplats. För varje produkt ska du verifiera att produktnamn, produktlänk och produktbild hör till exakt samma produkt. Använd inte kategoribilder, bilder från andra produkter eller AI-genererade ersättningsbilder. Hämta den bästa tillgängliga riktiga produktbilden. Ta med pris endast om det går att verifiera. Skriv en kort saklig produktbeskrivning utan att hitta på egenskaper. Om temat kräver flera produkter ska urvalet tillsammans passa temat, inte bara var och en löst.
 
-LEVERERA EN FAKTISK ZIP-FIL med denna struktur:
+LEVERERA EN FAKTISK ZIP-FIL. ZIP-filen måste alltid innehålla manifest.json. Om du kan paketera de riktiga produktbilderna får de också ligga i ZIP-filen, men det är INTE längre ett krav.
+
+Minsta giltiga struktur:
+rescue-package.zip
+└── manifest.json
+
+Valfri struktur när du även kan paketera bilder:
 rescue-package.zip
 ├── manifest.json
 ${Array.from({ length: count }, (_, i) => `├── product-${i + 1}.jpg`).join("\n")}
 
-Bildfiler får även vara .png eller .webp, men image_file i manifest.json måste exakt matcha filnamnet.
+För varje produkt måste manifestet ha antingen:
+- image_file: filnamnet på den riktiga produktbilden i ZIP-filen, ELLER
+- image_url: en direkt HTTPS-adress till den verifierade riktiga produktbilden från kundens webbplats/CDN.
+
+Om både image_file och image_url finns använder Spreelo image_file först. Om endast image_url finns kommer Spreelo vid importen att ladda ner bilden, kontrollera att den verkligen är en läsbar JPG/PNG/WEBP och spara en egen kopia i Spreelo Storage innan jag får förhandsgranska materialet. Använd INTE en URL till produktsidan i image_url; det ska vara den direkta bildresursen.
 
 manifest.json ska vara giltig JSON med:
 {
-  "version": 1,
+  "version": 2,
   "source_type": "chatgpt_rescue",
   "post_type": ${JSON.stringify(post.content_type_id || post.content_format || "product_post")},
   "website_url": ${JSON.stringify(post.brand_website_url || post.source_url || "")},
@@ -943,13 +953,13 @@ manifest.json ska vara giltig JSON med:
       "brand": "...",
       "product_type": "...",
       "color": "...",
-      "image_file": "product-1.jpg",
-      "verification_note": "Kort förklaring till hur produkt och bild verifierades"
+      "image_url": "https://kundens-cdn.example/path/riktig-produktbild.jpg",
+      "verification_note": "Kort förklaring till hur produkt och huvudbild verifierades som samma produkt"
     }
   ]
 }
 
-VIKTIGT: Lägg själva riktiga produktbildfilerna i ZIP-filen. Svara inte bara med bildlänkar. Om du inte kan verifiera ${count} kompletta produkter ska du säga det istället för att fylla ut med osäkert material.`;
+KRAV PÅ image_url: direkt HTTPS-bild från kundens webbplats eller dess riktiga CDN, inte sökresultatets miniatyrbild, inte proxy/cache från en annan tjänst och inte AI-genererad bild. Om du kan bifoga bildfilen i ZIP-filen får du använda image_file istället. Om du inte kan verifiera ${count} kompletta produkter med korrekt produktlänk och riktig produktbild ska du säga det istället för att fylla ut med osäkert material.`;
   }
 
   async function copyRescuePromptAndOpenChatGpt() {
@@ -962,7 +972,7 @@ VIKTIGT: Lägg själva riktiga produktbildfilerna i ZIP-filen. Svara inte bara m
     window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
     try {
       await navigator.clipboard.writeText(prompt);
-      setRescueMessage("Rescue-uppdraget är kopierat. Klistra in det i ChatGPT och skicka. När ZIP-filen är klar laddar du upp den här.");
+      setRescueMessage("Rescue-uppdraget är kopierat. Klistra in det i ChatGPT och skicka. ZIP-filen får innehålla bara manifest.json om ChatGPT verifierar en direkt image_url. När ZIP-filen är klar laddar du upp den här.");
     } catch {
       setRescueError("ChatGPT öppnades, men uppdraget kunde inte kopieras automatiskt. Kopiera texten manuellt från rutan nedan.");
     }

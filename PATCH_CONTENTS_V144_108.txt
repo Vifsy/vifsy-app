@@ -1,0 +1,6 @@
+Spreelo v144.108 (deploy over v144.106)
+
+Includes all v144.107 fail-fast changes plus v144.108 remote rescue-image support.
+
+Changed/new files relative to v144.106 are included in the companion patch ZIP.
+No new SQL migration.

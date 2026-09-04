@@ -1,0 +1,10 @@
+Spreelo v144.107 — FAIL FAST + RESCUE HANDOFF
+Base: v144.106 — ADMIN QUEUE + RESCUE ZIP
+
+Overlay these files on the deployed v144.106 project:
+- app/api/cron/run-automations/route.js
+- package.json
+- scripts/test-v144-107-fail-fast-rescue-handoff.mjs
+- PATCH_V144_107.md
+
+No Supabase SQL is required for v144.107.

@@ -180,7 +180,9 @@
     "test:v144.93": "node scripts/test-v144-93-home-mobile-reference.mjs",
     "test:v144.96": "node scripts/test-v144-96-brand-profile-logo-preview-responsive.mjs",
     "test:v144.97": "node scripts/test-v144-97-unified-calendar-campaign-studio.mjs",
-    "test:v144.106": "node scripts/test-v144-106-admin-queue-rescue.mjs"
+    "test:v144.106": "node scripts/test-v144-106-admin-queue-rescue.mjs",
+    "test:v144.107": "node scripts/test-v144-107-fail-fast-rescue-handoff.mjs",
+    "test:v144.108": "node scripts/test-v144-108-rescue-remote-images.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

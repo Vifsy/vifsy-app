@@ -34,7 +34,7 @@ assert.match(page, /Ladda upp rescue-ZIP/u);
 assert.match(page, /manifest\.json/u);
 assert.match(rescue, /readZipEntries/u);
 assert.match(rescue, /MAX_UNCOMPRESSED_BYTES/u);
-assert.match(rescue, /sharp\(Buffer\.from\(imageEntry\.bytes\)/u);
+assert.match(rescue, /inspectImageBytes\(imageEntry\.bytes\)/u);
 assert.match(rescue, /rescue_status: "ready"/u);
 assert.match(rescue, /admin_materials_authoritative: true/u);
 

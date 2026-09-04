@@ -522,12 +522,17 @@ function isWebsiteSecurityBlockedError(error) {
 class ProtectedProductResearchRetryError extends Error {
   constructor(message, { url = "", domain = "", cause = null } = {}) {
     super(message);
+    // Kept under the historical class/code name for compatibility with older
+    // logs and stored metadata. Since v144.107 this error is terminal and
+    // always hands the work item to Admin Rescue instead of retry_pending.
     this.name = "ProtectedProductResearchRetryError";
     this.code = "PROTECTED_PRODUCT_RESEARCH_RETRY";
     this.url = url;
     this.domain = domain || getWebsiteFetchDomain(url);
     this.cause = cause || null;
     this.protectedProductResearch = true;
+    this.failFast = true;
+    this.adminRescueRequired = true;
   }
 }
 
@@ -7694,6 +7699,55 @@ async function prepareCarouselProductsForRule({
     limit: WEBSITE_PRODUCT_REUSE_LIMIT,
   });
 
+  // v144.107 fail-fast for carousels. A known protected retailer gets only
+  // the cheap deterministic sources above: fresh previously verified catalog
+  // rows and authoritative public commerce feeds. If those cannot already
+  // satisfy the five-product delivery contract, stop before GPT-4.1/GPT-5.5
+  // research and hand the complete work order to Admin Rescue.
+  if (websiteAccessProtected) {
+    const protectedOfflineProducts = dedupeWebsiteItemsByUrlTitleAndImage(
+      catalogItems.filter((item) => isValidCarouselProduct(item))
+    );
+    if (
+      contentSourceScope === "product_category" ||
+      contentSourceScope === "focus_page" ||
+      protectedOfflineProducts.length < CAROUSEL_PRODUCT_SLIDE_TARGET
+    ) {
+      console.warn("Protected carousel source stopped before paid indexed/AI research", {
+        ruleId: rule.id,
+        brandProfileId: rule.brand_profile_id,
+        websiteUrl,
+        domain: getWebsiteFetchDomain(websiteUrl),
+        contentSourceScope,
+        safeOfflineProductCount: protectedOfflineProducts.length,
+        requiredProductCount: CAROUSEL_PRODUCT_SLIDE_TARGET,
+        failFast: true,
+        adminRescueRequired: true,
+      });
+      const protectedError = new ProtectedProductResearchRetryError(
+        "The carousel product source is protected by website security and the cheap verified product pool is not sufficient. Spreelo has stopped automatic product research for this occurrence and sent it to admin rescue instead of starting paid indexed/GPT fallback research.",
+        { url: websiteUrl }
+      );
+      protectedError.partialProducts = protectedOfflineProducts.slice(
+        0,
+        CAROUSEL_PRODUCT_SLIDE_TARGET
+      );
+      protectedError.verifiedProductCount = protectedOfflineProducts.length;
+      protectedError.targetProductCount = CAROUSEL_PRODUCT_SLIDE_TARGET;
+      protectedError.failFast = true;
+      protectedError.adminRescueRequired = true;
+      throw protectedError;
+    }
+
+    console.info("Protected carousel continuing only from sufficient offline verified product pool", {
+      ruleId: rule.id,
+      brandProfileId: rule.brand_profile_id,
+      websiteUrl,
+      safeOfflineProductCount: protectedOfflineProducts.length,
+      paidProtectedResearchSkipped: true,
+    });
+  }
+
   if (contentSourceScope === "exact_product") {
     throw new Error(
       "A website carousel needs a product category or collection URL. Choose another content type for one exact product."
@@ -7702,151 +7756,27 @@ async function prepareCarouselProductsForRule({
 
   const canUsePrimaryCampaignWebResearch =
     isCampaignRule &&
+    !websiteAccessProtected &&
     contentSourceScope !== "product_category" &&
     contentSourceScope !== "focus_page";
   let primaryCampaignWebResearch = null;
 
-  // v144.11: if this retailer is already known (from the shared domain fetch
-  // profile) to block Spreelo with HTTP 403, do not start the older multi-round
-  // campaign researcher first. Use the same one-batch indexed fallback shared
-  // by every product-image format. Normal retailers never enter this branch.
+  // v144.107: re-check the shared domain state immediately before any paid
+  // campaign web research. If a cheap request in this same run has just
+  // established a security block, stop here instead of entering the retired
+  // indexed/GPT recovery path.
   if (canUsePrimaryCampaignWebResearch) {
-    const knownDomainState =
+    const currentDomainState =
       websiteAccessState ||
       (await getWebsiteDomainFetchState(websiteUrl).catch(() => null));
-    if (websiteAccessProtected || isWebsiteAccessProtectedState(knownDomainState)) {
-      try {
-        console.log("Campaign carousel using known-403 indexed product fallback", {
-          ruleId: rule?.id,
-          brandProfileId: rule?.brand_profile_id,
-          websiteUrl,
-          targetVerifiedCount: campaignRequiredVerifiedCount,
-        });
-
-        const indexedFallbackItems = await findWebsiteProductWithWebSearch({
-          openai,
-          brandProfile,
-          rule,
-          websiteUrl,
-          usedWebsiteItems: recentUsedItems,
-          researchModel: PRODUCT_RESEARCH_FAST_MODEL,
-          fitModel: PRODUCT_RESEARCH_FAST_MODEL,
-          fitMinimumStrongProducts: CAROUSEL_PRODUCT_SLIDE_TARGET,
-          maxAttempts: 1,
-          deadlineMs: productPreparationDeadline,
-          verificationCache: productVerificationCache,
-          allowIndexedSecurityFallback: true,
-          desiredVerifiedCount: campaignRequiredVerifiedCount,
-          indexedSecurityRepairBatchSize: 8,
-          indexedSecurityFallbackState,
-        });
-
-        const rankedIndexedItems = dedupeWebsiteItemsByUrlTitleAndImage(
-          indexedFallbackItems || []
-        )
-          .map((item, index) => ({
-            ...item,
-            campaign_research_rank:
-              getPrimaryCampaignResearchRank(item) || index + 1,
-            campaign_research_round: 1,
-            campaign_selection_mode:
-              item?.campaign_selection_mode || "varied_categories",
-          }))
-          .sort(
-            (left, right) =>
-              getPrimaryCampaignResearchRank(left) -
-              getPrimaryCampaignResearchRank(right)
-          );
-
-        if (
-          rankedIndexedItems.length >=
-          campaignRequiredVerifiedCount
-        ) {
-          const resolvedIndexedItems =
-            await resolveLargestProductImagesBeforeGeneration({
-              items: rankedIndexedItems,
-              ruleId: rule.id,
-              openai,
-            });
-          const reviewedIndexedItems =
-            await reviewResolvedProductImageIdentity({
-              openai,
-              items: resolvedIndexedItems.map((item) => ({
-                ...item,
-                product_image_verified_candidates: [],
-              })),
-              ruleId: rule.id,
-              failClosed: true,
-            });
-          const finalIndexedItems = reviewedIndexedItems.filter(
-            (item) =>
-              item?.image_url &&
-              item?.product_image_semantic_verified === true &&
-              item?.product_image_identity_unresolved !== true &&
-              isValidCarouselProduct(item)
-          );
-
-          if (
-            finalIndexedItems.length >=
-            campaignRequiredVerifiedCount
-          ) {
-            const indexedCarouselResult =
-              await finalizeCarouselFromPrimaryCampaignWebResearch({
-                supabase,
-                rule,
-                summary,
-                websiteUrl,
-                contentType,
-                recentUsedItems,
-                usedWebsiteImageUrlsThisRun,
-                requireReserve: false,
-                researchResult: {
-                  executed: true,
-                  candidates: rankedIndexedItems,
-                  verifiedProducts: finalIndexedItems,
-                  validProducts: finalIndexedItems,
-                  campaignTheme: getPrimaryCampaignWebResearchTheme(rule),
-                  allowedDomain: getWebsiteFetchDomain(websiteUrl),
-                  prompt: buildCampaignResearchText(rule),
-                  selectionMode: "varied_categories",
-                  researchRoundCount: 1,
-                  technicalPageRateLimited: false,
-                  indexedSecurityFallback: true,
-                },
-              });
-
-            if (indexedCarouselResult) {
-              console.log("Campaign carousel completed from one indexed 403 fallback batch", {
-                ruleId: rule?.id,
-                brandProfileId: rule?.brand_profile_id,
-                websiteUrl,
-                recoveredCount: rankedIndexedItems.length,
-                finalVerifiedCount: finalIndexedItems.length,
-                additionalPrimaryResearchRoundsSkipped: true,
-              });
-              return indexedCarouselResult;
-            }
-          }
-        }
-
-        console.warn("Known-403 indexed carousel fallback was insufficient; preserving existing campaign research as the final fallback", {
-          ruleId: rule?.id,
-          brandProfileId: rule?.brand_profile_id,
-          websiteUrl,
-          recoveredCount: rankedIndexedItems.length,
-        });
-      } catch (indexedCarouselError) {
-        if (isWebsiteRateLimitError(indexedCarouselError)) {
-          throw indexedCarouselError;
-        }
-        console.warn("Known-403 indexed carousel fallback failed; preserving existing campaign research", {
-          ruleId: rule?.id,
-          brandProfileId: rule?.brand_profile_id,
-          websiteUrl,
-          message:
-            indexedCarouselError?.message || String(indexedCarouselError),
-        });
-      }
+    if (isWebsiteAccessProtectedState(currentDomainState)) {
+      const protectedError = new ProtectedProductResearchRetryError(
+        "The carousel product source became security-blocked before paid campaign research started. Spreelo has stopped the occurrence for admin rescue instead of starting indexed/GPT fallback research.",
+        { url: websiteUrl }
+      );
+      protectedError.failFast = true;
+      protectedError.adminRescueRequired = true;
+      throw protectedError;
     }
   }
 
@@ -9056,6 +8986,7 @@ async function prepareCarouselProductsForRule({
 
   if (
     isCampaignRule &&
+    !websiteAccessProtected &&
     !resumedAfterWebsiteRateLimit &&
     !campaignWebsiteRateLimited &&
     !hasLockedCampaignSearchPool &&
@@ -9082,7 +9013,7 @@ async function prepareCarouselProductsForRule({
         verificationCache: productVerificationCache,
         // v144.11: only activates after a real 403/security block. Normal
         // retailer retrieval stays unchanged.
-        allowIndexedSecurityFallback: true,
+        allowIndexedSecurityFallback: false,
         desiredVerifiedCount: CAROUSEL_PRODUCT_SLIDE_TARGET,
         indexedSecurityRepairBatchSize: 8,
         indexedSecurityFallbackState,
@@ -9730,6 +9661,7 @@ async function prepareCarouselProductsForRule({
 
   if (
     hasProductPreparationBudget(60_000) &&
+    !websiteAccessProtected &&
     (!isCampaignRule || !campaignWebsiteRateLimited) &&
     !hasLockedCampaignSearchPool &&
     !hasEnoughCarouselProductsForRule(selectedProducts, rule) &&
@@ -9753,7 +9685,7 @@ async function prepareCarouselProductsForRule({
           : PRODUCT_RESEARCH_MODEL,
         deadlineMs: productPreparationDeadline,
         verificationCache: productVerificationCache,
-        allowIndexedSecurityFallback: true,
+        allowIndexedSecurityFallback: false,
         desiredVerifiedCount: CAROUSEL_PRODUCT_SLIDE_TARGET,
         indexedSecurityRepairBatchSize: 8,
         indexedSecurityFallbackState,
@@ -10095,6 +10027,7 @@ async function prepareCarouselProductsForRule({
   // runs only when that complete flow still has fewer than five products.
   if (
     isCampaignRule &&
+    !websiteAccessProtected &&
     !campaignWebsiteRateLimited &&
     selectedProducts.length < CAROUSEL_PRODUCT_SLIDE_TARGET &&
     hasProductPreparationBudget(70_000)
@@ -10135,7 +10068,7 @@ async function prepareCarouselProductsForRule({
         maxAttempts: 2,
         deadlineMs: productPreparationDeadline,
         verificationCache: productVerificationCache,
-        allowIndexedSecurityFallback: true,
+        allowIndexedSecurityFallback: false,
         desiredVerifiedCount: Math.max(
           1,
           CAROUSEL_PRODUCT_SLIDE_TARGET - selectedBeforeBackup
@@ -10392,7 +10325,7 @@ async function prepareCarouselProductsForRule({
 
     if (websiteAccessProtected) {
       const retryError = new ProtectedProductResearchRetryError(
-        "The protected retailer did not expose enough fresh in-stock products for a safe carousel in this attempt. Spreelo will retry the same occurrence with public commerce feeds and current indexed assortment research instead of publishing stale or unverified products.",
+        "The protected retailer did not expose enough fresh in-stock products for a safe carousel. Spreelo has stopped the occurrence for admin rescue instead of starting another paid protected-source research pass or publishing stale or unverified products.",
         { url: websiteUrl }
       );
       retryError.partialProducts = selectedProducts;
@@ -12114,6 +12047,14 @@ function classifyAutomationCreationFailure(errorOrMessage, stage = "unhandled") 
     };
   }
 
+  if (isProtectedProductResearchRetryError(errorOrMessage)) {
+    return {
+      code: "website_security_blocked",
+      customerMessage:
+        "The website's security protection stopped Spreelo from accessing the product information needed for this post. The occurrence has been stopped for Spreelo admin rescue and will not be retried automatically.",
+    };
+  }
+
   if (
     [
       "CAROUSEL_EXACT_PRODUCT_POOL_INCOMPLETE",
@@ -12133,7 +12074,7 @@ function classifyAutomationCreationFailure(errorOrMessage, stage = "unhandled") 
     return {
       code: "website_security_blocked",
       customerMessage:
-        "The website's security protection stopped Spreelo from accessing the information needed for this post. Your website administrator needs to allow Spreelo before this plan can continue.",
+        "The website's security protection stopped Spreelo from accessing the information needed for this post. The occurrence has been stopped for Spreelo admin rescue and will not be retried automatically.",
     };
   }
 
@@ -12232,7 +12173,11 @@ function classifyAutomationCreationFailure(errorOrMessage, stage = "unhandled") 
 
 
 function isTransientAutomationError(errorOrMessage) {
-  if (isProtectedProductResearchRetryError(errorOrMessage)) return true;
+  // v144.107: a confirmed protected product source (403 / Access Denied /
+  // anti-bot challenge) is deterministic for this server-side occurrence.
+  // Retrying the same product-research chain only repeats paid web/AI work, so
+  // hand it to Admin Rescue immediately instead of treating it as transient.
+  if (isProtectedProductResearchRetryError(errorOrMessage)) return false;
   const message = String(errorOrMessage?.message || errorOrMessage || "").toLowerCase();
   const code = String(errorOrMessage?.code || "").toLowerCase();
   const status = Number(
@@ -30684,7 +30629,7 @@ async function prepareWebsiteContentForRule({
         isWebsiteSecurityBlockedError(error)
       ) {
         throw new ProtectedProductResearchRetryError(
-          "The exact customer-selected product is on a protected website and could not be safely re-verified in this attempt. Spreelo will retry the same exact product; it will not substitute another item.",
+          "The exact customer-selected product is on a protected website and could not be safely re-verified. Spreelo has stopped this occurrence for admin rescue and will not substitute or automatically retry another item.",
           { url: websiteUrl, cause: error }
         );
       }
@@ -30736,8 +30681,8 @@ async function prepareWebsiteContentForRule({
       });
       throw new ProtectedProductResearchRetryError(
         isManufacturerCatalogSource(rule, brandProfile)
-          ? "The customer-selected manufacturer category is protected from direct crawling. Spreelo will wait before one bounded indexed retry and will not search outside the selected source."
-          : "The customer-selected product category is protected from direct crawling. Spreelo will wait before one bounded indexed retry and will not search outside the selected source.",
+          ? "The customer-selected manufacturer category is protected from direct crawling. Spreelo has stopped this occurrence for admin rescue and will not search outside the selected source."
+          : "The customer-selected product category is protected from direct crawling. Spreelo has stopped this occurrence for admin rescue and will not search outside the selected source.",
         { url: websiteUrl }
       );
     }
@@ -30795,7 +30740,7 @@ async function prepareWebsiteContentForRule({
       );
       if (websiteAccessProtected) {
         throw new ProtectedProductResearchRetryError(
-          "The customer-selected category is on a protected website and Spreelo could not verify a current in-stock product in this attempt. The same occurrence will retry automatically without searching outside the selected category.",
+          "The customer-selected category is on a protected website and Spreelo could not verify a current in-stock product. The occurrence has been stopped for admin rescue and will not automatically retry the protected category.",
           { url: websiteUrl }
         );
       }
@@ -31062,7 +31007,7 @@ async function prepareWebsiteContentForRule({
     }
   }
 
-  if (productIntentScoped && catalogItems.length) {
+  if (productIntentScoped && catalogItems.length && !websiteAccessProtected) {
     catalogItems = await applyAiCampaignFitScores({
       openai,
       rule,
@@ -31234,6 +31179,41 @@ async function prepareWebsiteContentForRule({
     return finalizePreparedWebsiteItem(catalogSelection.item, catalogSelection.cycleNumber);
   }
 
+  if (
+    catalogSelection?.item &&
+    productIntentScoped &&
+    websiteAccessProtected &&
+    isAcceptableWebsiteTextProductSelection(catalogSelection.item, rule)
+  ) {
+    try {
+      const preparedProtectedCatalogItem = await finalizePreparedWebsiteItem(
+        catalogSelection.item,
+        catalogSelection.cycleNumber,
+        { allowAiRepair: false }
+      );
+      console.log("Protected website product selected from fresh locked catalog without paid research", {
+        ruleId: rule.id,
+        brandProfileId: rule.brand_profile_id,
+        websiteUrl,
+        productUrl: preparedProtectedCatalogItem?.websiteItem?.url || catalogSelection.item.url,
+        title: preparedProtectedCatalogItem?.websiteItem?.title || catalogSelection.item.title,
+        paidProtectedResearchSkipped: true,
+      });
+      summary.website_items_found += 1;
+      summary.website_content_success += 1;
+      return preparedProtectedCatalogItem;
+    } catch (error) {
+      if (isWebsiteRateLimitError(error)) throw error;
+      console.info("Protected fresh catalog candidate could not be locked deterministically; handing off to admin rescue", {
+        ruleId: rule.id,
+        brandProfileId: rule.brand_profile_id,
+        websiteUrl,
+        productUrl: catalogSelection.item?.url || null,
+        message: error?.message || String(error),
+      });
+    }
+  }
+
   if (catalogSelection?.item && productIntentScoped) {
     console.log("Website text product-intent rule found a catalog match, but will still run focused product research before final selection", {
       ruleId: rule.id,
@@ -31244,6 +31224,30 @@ async function prepareWebsiteContentForRule({
       catalogCount: catalogItems.length,
       recentUsedCount: recentUsedItems.length,
     });
+  }
+
+  // v144.107 fail-fast: once this domain is confirmed protected, do not enter
+  // GPT web research / indexed repair. A fresh fully locked catalog or public
+  // commerce-feed item was already given the chance above. If that did not
+  // produce the post, the cheapest and safest next step is Admin Rescue.
+  if (websiteAccessProtected) {
+    console.warn("Protected product source stopped before paid indexed/AI research", {
+      ruleId: rule.id,
+      brandProfileId: rule.brand_profile_id,
+      websiteUrl,
+      domain: getWebsiteFetchDomain(websiteUrl),
+      safeCatalogCandidateCount: catalogItems.length,
+      failFast: true,
+      adminRescueRequired: true,
+    });
+    const protectedError = new ProtectedProductResearchRetryError(
+      "The product source is protected by website security and Spreelo cannot safely continue automatic product retrieval. The occurrence has been stopped for admin rescue; no automatic protected-source retry or paid indexed product research will be started.",
+      { url: websiteUrl }
+    );
+    protectedError.failFast = true;
+    protectedError.adminRescueRequired = true;
+    protectedError.safeCatalogCandidateCount = catalogItems.length;
+    throw protectedError;
   }
 
   try {
@@ -31453,7 +31457,7 @@ async function prepareWebsiteContentForRule({
       // 403 fallback. For a single-product post one verified item is enough,
       // but the single repair batch may also return reserves for video/image
       // fallback without paying one GPT-5.5 request per product.
-      allowIndexedSecurityFallback: true,
+      allowIndexedSecurityFallback: false,
       desiredVerifiedCount: 1,
       indexedSecurityRepairBatchSize: 4,
     });
@@ -31867,7 +31871,7 @@ async function prepareWebsiteContentForRule({
     websiteAccessState ||
     (await getWebsiteDomainFetchState(websiteUrl).catch(() => null));
   if (websiteAccessProtected || isWebsiteAccessProtectedState(finalWebsiteAccessState)) {
-    console.warn("Protected product-source research exhausted this occurrence; requesting bounded retry instead of publishing an unverified product", {
+    console.warn("Protected product-source research exhausted this occurrence; stopping for admin rescue instead of starting another paid retry", {
       ruleId: rule.id,
       brandProfileId: rule.brand_profile_id,
       websiteUrl,
@@ -31875,8 +31879,8 @@ async function prepareWebsiteContentForRule({
     });
     throw new ProtectedProductResearchRetryError(
       isManufacturerCatalogSource(rule, brandProfile)
-        ? "The protected manufacturer catalog did not expose enough current official product evidence in this attempt. Spreelo will defer this occurrence before one bounded retry; it will not direct-crawl the blocked website."
-        : "The protected retailer did not expose enough fresh in-stock product evidence in this attempt. Spreelo will defer this occurrence before one bounded retry using public commerce feeds and indexed current-assortment research.",
+        ? "The protected manufacturer catalog did not expose enough current official product evidence. Spreelo has stopped this occurrence for admin rescue and will not direct-crawl or automatically retry the blocked website."
+        : "The protected retailer did not expose enough fresh in-stock product evidence. Spreelo has stopped this occurrence for admin rescue and will not start another automatic protected-source research pass.",
       { url: websiteUrl }
     );
   }
@@ -44787,6 +44791,28 @@ product_research_model_used: websitePreparedRule.uses_website_content
         } else if (
           automationOccurrenceClaimed &&
           automationOccurrenceId &&
+          isProtectedProductResearchRetryError(error)
+        ) {
+          await failCurrentOccurrence(error, failureStage, {
+            fail_fast_security_block: true,
+            admin_rescue_required: true,
+            protected_product_source: true,
+            protected_domain:
+              error?.domain || getWebsiteFetchDomain(error?.url || "") || null,
+            ...(Array.isArray(error?.partialProducts) && error.partialProducts.length
+              ? { partial_products: error.partialProducts.slice(0, 5) }
+              : {}),
+            ...(Number.isFinite(Number(error?.verifiedProductCount))
+              ? { verified_product_count: Number(error.verifiedProductCount) }
+              : {}),
+            ...(Number.isFinite(Number(error?.targetProductCount))
+              ? { target_product_count: Number(error.targetProductCount) }
+              : {}),
+          });
+          summary.errors += 1;
+        } else if (
+          automationOccurrenceClaimed &&
+          automationOccurrenceId &&
           isTransientAutomationError(error)
         ) {
           const protectedProductResearchRetry =
@@ -44838,6 +44864,15 @@ product_research_model_used: websitePreparedRule.uses_website_content
               : {}),
             ...(Number.isFinite(Number(error?.targetProductCount))
               ? { target_product_count: Number(error.targetProductCount) }
+              : {}),
+            ...(error?.failFast === true ? { fail_fast_security_block: true } : {}),
+            ...(error?.adminRescueRequired === true ? { admin_rescue_required: true } : {}),
+            ...(isProtectedProductResearchRetryError(error)
+              ? {
+                  protected_product_source: true,
+                  protected_domain:
+                    error?.domain || getWebsiteFetchDomain(error?.url || "") || null,
+                }
               : {}),
           };
           await failCurrentOccurrence(error, failureStage, terminalFailureMetadata);
