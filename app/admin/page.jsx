@@ -10,6 +10,7 @@ import {
   Coins,
   FileVideo2,
   FileCheck2,
+  FlaskConical,
   ImagePlay,
   ImagePlus,
   LayoutGrid,
@@ -421,6 +422,16 @@ export default function AdminDashboardPage() {
                   <p>{t("admin.icons.description")}</p>
                 </div>
                 <strong>{t("admin.icons.manage")} →</strong>
+              </a>
+
+              <a className="admin-tool-card" href="/admin/mass-tests">
+                <span className="admin-tool-icon"><FlaskConical size={24} aria-hidden="true" /></span>
+                <div>
+                  <span className="admin-card-kicker">ADMIN · TEST</span>
+                  <h2>Masstest</h2>
+                  <p>Kör riktiga AI-inlägg och kalenderkampanjer för flera varumärken samtidigt, utan att dra kundkrediter.</p>
+                </div>
+                <strong>Öppna masstest →</strong>
               </a>
 
               <a className="admin-tool-card" href="/admin/post-approvals">

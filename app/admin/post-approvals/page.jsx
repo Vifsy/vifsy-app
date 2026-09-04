@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  ClipboardCopy,
   ChevronLeft,
   ChevronRight,
   Clock3,
@@ -269,7 +270,12 @@ export default function AdminPostApprovalsPage() {
   const [sourceUrl, setSourceUrl] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [formatFilter, setFormatFilter] = useState("all");
+  const [testFilter, setTestFilter] = useState(() => {
+    if (typeof window === "undefined") return "all";
+    return new URLSearchParams(window.location.search).get("testBatch") || "all";
+  });
   const [restoringVersionId, setRestoringVersionId] = useState("");
+  const [copyingTestDiagnostic, setCopyingTestDiagnostic] = useState(false);
   const [page, setPage] = useState(1);
   const [pageInput, setPageInput] = useState("1");
   const postCopyRef = useRef(null);
@@ -286,16 +292,22 @@ export default function AdminPostApprovalsPage() {
   const availableFormats = useMemo(() => Array.from(new Set(
     posts.map((post) => String(post.content_format || post.post_type || "").trim()).filter(Boolean)
   )).sort((a, b) => a.localeCompare(b)), [posts]);
+  const availableTestBatches = useMemo(() => Array.from(new Set(
+    posts.map((post) => String(post.admin_test_batch_id || "").trim()).filter(Boolean)
+  )), [posts]);
   const filteredPosts = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return posts.filter((post) => {
       const format = String(post.content_format || post.post_type || "").trim();
       if (formatFilter !== "all" && format !== formatFilter) return false;
+      if (testFilter === "tests" && post.is_admin_test !== true) return false;
+      if (testFilter === "normal" && post.is_admin_test === true) return false;
+      if (!["all", "tests", "normal"].includes(testFilter) && post.admin_test_batch_id !== testFilter) return false;
       if (!query) return true;
       return [post.brand_name, post.customer_email, post.content, post.platform, post.post_type, post.content_format]
         .some((value) => String(value || "").toLowerCase().includes(query));
     });
-  }, [posts, searchQuery, formatFilter]);
+  }, [posts, searchQuery, formatFilter, testFilter]);
   const totalPages = Math.max(1, Math.ceil(filteredPosts.length / POSTS_PER_PAGE));
   const currentPage = Math.min(page, totalPages);
   const paginatedPosts = useMemo(
@@ -327,8 +339,8 @@ export default function AdminPostApprovalsPage() {
     return width > 0 && height > 0 && Math.max(width, height) < 1000;
   }).length;
 
-  useEffect(() => { loadPosts(); }, [filter]);
-  useEffect(() => { setPage(1); }, [filter, searchQuery, formatFilter]);
+  useEffect(() => { loadPosts(); }, [filter, testFilter]);
+  useEffect(() => { setPage(1); }, [filter, searchQuery, formatFilter, testFilter]);
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
@@ -492,7 +504,8 @@ export default function AdminPostApprovalsPage() {
     if (!silent) setError("");
     try {
       const headers = await getHeaders();
-      const response = await fetch(`/api/admin/post-approvals?status=${encodeURIComponent(filter)}`, { headers, cache: "no-store" });
+      const batchQuery = !["all", "tests", "normal"].includes(testFilter) ? `&testBatch=${encodeURIComponent(testFilter)}` : "";
+      const response = await fetch(`/api/admin/post-approvals?status=${encodeURIComponent(filter)}${batchQuery}`, { headers, cache: "no-store" });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.error || t("admin.approvals.loadError"));
       const nextPosts = payload?.posts || [];
@@ -515,6 +528,22 @@ export default function AdminPostApprovalsPage() {
       setError(loadError.message || t("admin.approvals.loadError"));
     } finally {
       if (!silent) setLoading(false);
+    }
+  }
+
+  async function copySelectedTestDiagnostic() {
+    if (!selectedPost?.is_admin_test || !selectedPost?.admin_test_batch_id || !selectedPost?.automation_rule_id) return;
+    setCopyingTestDiagnostic(true);
+    try {
+      const response = await fetch(`/api/admin/mass-tests/${selectedPost.admin_test_batch_id}/diagnostics?ruleId=${encodeURIComponent(selectedPost.automation_rule_id)}`, { headers: await getHeaders(), cache: "no-store" });
+      const text = await response.text();
+      if (!response.ok) throw new Error(text || "Kunde inte skapa felsökningsloggen.");
+      await navigator.clipboard.writeText(text);
+      setRegenerationSuccess("Felsökningsloggen är kopierad. Klistra in den direkt i ChatGPT.");
+    } catch (copyError) {
+      setRegenerationError(copyError.message || "Kunde inte kopiera felsökningsloggen.");
+    } finally {
+      setCopyingTestDiagnostic(false);
     }
   }
 
@@ -926,6 +955,7 @@ export default function AdminPostApprovalsPage() {
         <section className="admin-v14401-toolbar">
           <label className="admin-v14401-search"><Search size={16} /><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Sök företag, text eller plattform…" /></label>
           <label className="admin-v14401-format-filter"><span>Format</span><select value={formatFilter} onChange={(event) => setFormatFilter(event.target.value)}><option value="all">Alla format</option>{availableFormats.map((format) => <option key={format} value={format}>{format}</option>)}</select></label>
+          <label className="admin-v14401-format-filter"><span>Typ</span><select value={testFilter} onChange={(event) => setTestFilter(event.target.value)}><option value="all">Alla inlägg</option><option value="normal">Vanliga</option><option value="tests">Alla masstest</option>{availableTestBatches.map((id) => <option key={id} value={id}>Testbatch {id.slice(0, 8)}</option>)}</select></label>
           <div className="admin-v14401-safety-note"><ShieldCheck size={16} /><span>Fel och avbrutna genereringar stannar alltid i admin.</span></div>
         </section>
         {selectedIds.length ? (
@@ -966,8 +996,8 @@ export default function AdminPostApprovalsPage() {
                   </span>
                   <span className="admin-v14370-review-main">
                     <small>{post.platform || t("admin.approvals.platformUnknown")} · {post.content_format || post.post_type || t("admin.approvals.post")}</small>
-                    <strong>{post.brand_name || t("admin.approvals.unknownBrand")}</strong>
-                    <em>{String(post.content || "").replace(/\s+/g, " ").slice(0, 120) || t("admin.approvals.noContent")}</em>
+                    <strong>{post.brand_name || t("admin.approvals.unknownBrand")} {post.is_admin_test ? <span className="sp102-approval-test-badge">TEST · MASSTEST</span> : null}</strong>
+                    <em>{post.admin_test_campaign ? `${post.admin_test_campaign} · ` : ""}{String(post.content || "").replace(/\s+/g, " ").slice(0, 120) || t("admin.approvals.noContent")}</em>
                   </span>
                   <span className="admin-v14370-review-time"><small>{t("admin.approvals.created")}</small><strong>{formatDate(post.created_at)}</strong></span>
                   <span className="admin-v14370-review-time admin-v14412-review-cost"><small>{t("admin.approvals.generationCost")}</small><strong>{formatGenerationCost(post)}</strong></span>
@@ -1005,7 +1035,7 @@ export default function AdminPostApprovalsPage() {
             <section className="admin-v74-detail-modal" role="dialog" aria-modal="true" aria-label={t("admin.approvals.fullPost")}>
               <header>
                 <div>
-                  <span>{selectedPost.brand_name || t("admin.approvals.unknownBrand")}</span>
+                  <span>{selectedPost.brand_name || t("admin.approvals.unknownBrand")} {selectedPost.is_admin_test ? <b className="sp102-approval-test-badge">TEST · MASSTEST</b> : null}</span>
                   <h2>{t("admin.approvals.fullPost")}</h2>
                   <p>{formatDate(selectedPost.scheduled_for)} · {selectedPost.platform || "—"}</p>
                 </div>
@@ -1282,6 +1312,11 @@ export default function AdminPostApprovalsPage() {
                             </dl>
                             <pre>{JSON.stringify(selectedPost.failure, null, 2)}</pre>
                           </details>
+                        ) : null}
+                        {selectedPost.is_admin_test && selectedPost.admin_test_batch_id && selectedPost.automation_rule_id ? (
+                          <button type="button" className="sp102-copy-diagnostic" onClick={copySelectedTestDiagnostic} disabled={copyingTestDiagnostic}>
+                            <ClipboardCopy size={15} /> {copyingTestDiagnostic ? "Kopierar fellogg…" : "Kopiera komplett testlogg"}
+                          </button>
                         ) : null}
                       </div>
                     </div>

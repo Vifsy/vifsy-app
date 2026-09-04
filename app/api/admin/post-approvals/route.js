@@ -13,18 +13,20 @@ export async function GET(request) {
 
   const url = new URL(request.url);
   const status = String(url.searchParams.get("status") || "all");
+  const testBatch = String(url.searchParams.get("testBatch") || "").trim();
 
   let query = context.admin
     .from("posts")
     .select(
-      "id, user_id, brand_profile_id, automation_rule_id, status, content, platform, post_type, content_type_id, content_format, image_url, image_storage_path, image_status, image_prompt, video_url, video_status, video_error, video_provider, video_duration_seconds, video_background_selection, kling_prompt, kling_reference_image_url, kling_task_id, scheduled_for, created_at, updated_at, approved_at, approval_token, approval_email_sent_at, admin_review_status, admin_reviewed_at, admin_review_note, admin_product_items, admin_archived_at, website_url"
+      "id, user_id, brand_profile_id, automation_rule_id, status, content, platform, post_type, content_type_id, content_format, image_url, image_storage_path, image_status, image_prompt, video_url, video_status, video_error, video_provider, video_duration_seconds, video_background_selection, kling_prompt, kling_reference_image_url, kling_task_id, scheduled_for, created_at, updated_at, approved_at, approval_token, approval_email_sent_at, admin_review_status, admin_reviewed_at, admin_review_note, admin_product_items, admin_archived_at, website_url, is_admin_test, admin_test_batch_id, admin_test_job_key"
     )
     .in("status", Array.from(VISIBLE_STATUSES))
     .is("admin_archived_at", null)
     .order("created_at", { ascending: false })
-    .limit(150);
+    .limit(testBatch ? 600 : 150);
 
   if (VISIBLE_STATUSES.has(status)) query = query.eq("status", status);
+  if (testBatch) query = query.eq("admin_test_batch_id", testBatch);
 
   const { data: posts, error } = await query;
   if (error) {
@@ -57,7 +59,7 @@ export async function GET(request) {
   // installation can otherwise push a terminal failure out of the admin
   // window even though the failure email was sent correctly.
   const occurrenceSelect =
-    "id, post_id, user_id, brand_profile_id, automation_rule_id, status, scheduled_for, content_type_label, content_format, campaign_title, started_at, finished_at, failure_code, failure_stage, failure_message_internal, failure_message_customer, refunded_credits, metadata";
+    "id, post_id, user_id, brand_profile_id, automation_rule_id, status, scheduled_for, content_type_label, content_format, campaign_title, started_at, finished_at, failure_code, failure_stage, failure_message_internal, failure_message_customer, refunded_credits, metadata, is_admin_test, admin_test_batch_id, admin_test_job_key";
   // v144.22: a durable background generation can be healthy while it is in
   // retry_pending. The normal admin queue must surface that state instead of
   // looking empty while the customer is waiting. We intentionally keep
@@ -103,7 +105,7 @@ export async function GET(request) {
   const reviewCaseResult = ["all", "failed", "queue"].includes(status)
     ? await context.admin
         .from("admin_review_cases")
-        .select("id, occurrence_id, post_id, user_id, brand_profile_id, automation_rule_id, status, scheduled_for, campaign_title, content_type_label, content_format, product_items, failure_code, failure_stage, failure_message, needs_review, created_at, updated_at")
+        .select("id, occurrence_id, post_id, user_id, brand_profile_id, automation_rule_id, status, scheduled_for, campaign_title, content_type_label, content_format, product_items, failure_code, failure_stage, failure_message, needs_review, created_at, updated_at, is_admin_test, admin_test_batch_id, admin_test_job_key")
         .eq("needs_review", true)
         .eq("status", "needs_repair")
         .order("updated_at", { ascending: false })
@@ -119,11 +121,12 @@ export async function GET(request) {
   }
 
   const occurrenceRows = (occurrenceResult.data || []).filter((occurrence) => {
+    if (testBatch && occurrence.admin_test_batch_id !== testBatch) return false;
     if (status === "failed") return occurrence.status === "failed_terminal";
     if (status === "creating") return !["completed", "failed_terminal"].includes(occurrence.status);
     return true;
   });
-  const reviewCaseRows = reviewCaseResult.data || [];
+  const reviewCaseRows = (reviewCaseResult.data || []).filter((item) => !testBatch || item.admin_test_batch_id === testBatch);
   const reviewCaseByOccurrence = new Map(
     reviewCaseRows
       .filter((item) => item.occurrence_id)
@@ -158,7 +161,7 @@ export async function GET(request) {
       ? context.admin.from("brand_profiles").select("id, business_name, website_url, website_product_source_url, admin_review_required").in("id", brandIds)
       : Promise.resolve({ data: [] }),
     ruleIds.length
-      ? context.admin.from("automation_rules").select("id, website_url, content_source_url, content_source_scope, content_type_id, content_type_label, content_format, platform").in("id", ruleIds)
+      ? context.admin.from("automation_rules").select("id, website_url, content_source_url, content_source_scope, content_type_id, content_type_label, content_format, platform, is_admin_test, admin_test_batch_id, admin_test_job_key, name, queue_source").in("id", ruleIds)
       : Promise.resolve({ data: [] }),
     postIds.length
       ? context.admin
@@ -343,6 +346,10 @@ export async function GET(request) {
       generation_cost_updated_at: generationCostMap[item.id]?.updated_at || null,
       content_type_id: ruleMap[item.automation_rule_id]?.content_type_id || null,
       content_type_label: ruleMap[item.automation_rule_id]?.content_type_label || item.post_type || null,
+      is_admin_test: item.is_admin_test === true || ruleMap[item.automation_rule_id]?.is_admin_test === true,
+      admin_test_batch_id: item.admin_test_batch_id || ruleMap[item.automation_rule_id]?.admin_test_batch_id || null,
+      admin_test_job_key: item.admin_test_job_key || ruleMap[item.automation_rule_id]?.admin_test_job_key || null,
+      admin_test_campaign: ruleMap[item.automation_rule_id]?.queue_source === "campaign" ? ruleMap[item.automation_rule_id]?.name || null : null,
       admin_product_items: getEditableProductItems(item),
       brand_name: brandMap[item.brand_profile_id] || "",
       brand_admin_review_required: brands?.find((brand) => brand.id === item.brand_profile_id)?.admin_review_required ?? null,
@@ -371,6 +378,10 @@ export async function GET(request) {
       platform: ruleMap[occurrence.automation_rule_id]?.platform || null,
       content_type_id: ruleMap[occurrence.automation_rule_id]?.content_type_id || null,
       content_type_label: ruleMap[occurrence.automation_rule_id]?.content_type_label || occurrence.content_type_label || null,
+      is_admin_test: occurrence.is_admin_test === true || ruleMap[occurrence.automation_rule_id]?.is_admin_test === true,
+      admin_test_batch_id: occurrence.admin_test_batch_id || ruleMap[occurrence.automation_rule_id]?.admin_test_batch_id || null,
+      admin_test_job_key: occurrence.admin_test_job_key || ruleMap[occurrence.automation_rule_id]?.admin_test_job_key || null,
+      admin_test_campaign: ruleMap[occurrence.automation_rule_id]?.queue_source === "campaign" ? ruleMap[occurrence.automation_rule_id]?.name || null : null,
       post_type: occurrence.content_type_label || "Generation",
       content_format: occurrence.content_format || null,
       image_url: null,
@@ -422,6 +433,10 @@ export async function GET(request) {
       platform: ruleMap[reviewCase.automation_rule_id]?.platform || null,
       content_type_id: ruleMap[reviewCase.automation_rule_id]?.content_type_id || null,
       content_type_label: ruleMap[reviewCase.automation_rule_id]?.content_type_label || reviewCase.content_type_label || null,
+      is_admin_test: reviewCase.is_admin_test === true || ruleMap[reviewCase.automation_rule_id]?.is_admin_test === true,
+      admin_test_batch_id: reviewCase.admin_test_batch_id || ruleMap[reviewCase.automation_rule_id]?.admin_test_batch_id || null,
+      admin_test_job_key: reviewCase.admin_test_job_key || ruleMap[reviewCase.automation_rule_id]?.admin_test_job_key || null,
+      admin_test_campaign: ruleMap[reviewCase.automation_rule_id]?.queue_source === "campaign" ? ruleMap[reviewCase.automation_rule_id]?.name || null : null,
       post_type: reviewCase.content_type_label || "Generation",
       content_format: reviewCase.content_format || null,
       image_url: null,
