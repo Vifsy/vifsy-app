@@ -1855,7 +1855,7 @@ export default function BrandProfile() {
                     {analysisProgressStages.map((stage, index) => {
                       const done = analysisProgress >= stage.progress;
                       const current = getCurrentAnalysisStage(analysisProgress).titleKey === stage.titleKey;
-                      return <span key={stage.titleKey} className={`${done ? "done" : ""}${current ? " current" : ""}`}><b>{done ? <Check size={15} /> : index + 1}</b>{t(stage.titleKey)}</span>;
+                      return <span key={stage.titleKey} className={`${done ? "done" : ""}${current ? " current" : ""}`}><b>{done && !current ? <Check size={15} /> : index + 1}</b>{t(stage.titleKey)}</span>;
                     })}
                   </div>
                 </div>
