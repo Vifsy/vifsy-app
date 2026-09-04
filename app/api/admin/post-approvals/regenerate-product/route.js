@@ -491,6 +491,8 @@ export async function POST(request) {
           admin_regenerated_at: new Date().toISOString(),
           admin_rescue_resolved_at: new Date().toISOString(),
           admin_failure_resolved_by: context.user.id,
+          rescue_credit_refund_available: false,
+          rescue_credit_resolved_with_post: true,
         },
       }).eq("id", occurrenceId);
     }

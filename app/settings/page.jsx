@@ -243,6 +243,7 @@ export default function Settings() {
     try {
       await supabase.auth.updateUser({
         data: {
+          app_locale: nextLocale,
           app_language: nextLocale,
         },
       });

@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { getServerTranslations, resolveBestServerLocale } from "../../../lib/i18n/serverUiText";
+import { resolveLocaleFromUserMetadata } from "../../../lib/userAppLocale.js";
 
 export const dynamic = "force-dynamic";
 
@@ -73,7 +74,10 @@ export async function POST(request) {
 
     const body = await request.json().catch(() => ({}));
     const summary = body?.summary || {};
-    const locale = resolveBestServerLocale({ languageCandidates: [body?.locale, summary.language] });
+    const locale = resolveLocaleFromUserMetadata(
+      user?.user_metadata || {},
+      resolveBestServerLocale({ languageCandidates: [body?.locale, summary.language] })
+    );
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const admin = serviceRoleKey
       ? createClient(supabaseUrl, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } })

@@ -288,6 +288,9 @@ export default function AdminPostApprovalsPage() {
   const [rescueUploading, setRescueUploading] = useState(false);
   const [rescueMessage, setRescueMessage] = useState("");
   const [rescueError, setRescueError] = useState("");
+  const [cancellingFailedOccurrenceId, setCancellingFailedOccurrenceId] = useState("");
+  const [refundActionMessage, setRefundActionMessage] = useState("");
+  const [refundActionError, setRefundActionError] = useState("");
   const [page, setPage] = useState(1);
   const [pageInput, setPageInput] = useState("1");
   const postCopyRef = useRef(null);
@@ -403,6 +406,8 @@ export default function AdminPostApprovalsPage() {
       setSourceUrl("");
       setRescueMessage("");
       setRescueError("");
+      setRefundActionMessage("");
+      setRefundActionError("");
       return;
     }
     // Do not let the 15-second admin polling overwrite an open edit session.
@@ -428,6 +433,8 @@ export default function AdminPostApprovalsPage() {
     setRegenerationSuccess("");
     setRescueMessage("");
     setRescueError("");
+    setRefundActionMessage("");
+    setRefundActionError("");
     setLightboxIndex(null);
     setEditorPostId(selectedPost.id);
     setEditorDirty(false);
@@ -1090,6 +1097,49 @@ KRAV PÅ image_url: direkt HTTPS-bild från kundens webbplats eller dess riktiga
     } catch (actionError) { setError(actionError.message); }
   }
 
+  async function cancelFailedOccurrenceAndRefund() {
+    if (!selectedPost?.occurrence_id || selectedPost?.is_admin_test) return;
+
+    const refundedCredits = Math.max(0, Number(selectedPost?.failure?.refunded_credits || 0));
+    const heldCredits = Math.max(0, Number(selectedPost?.failure?.held_rescue_credits || selectedPost?.failure?.rescue_credit_cost || 0));
+    const notificationStatus = String(selectedPost?.failure?.notification_status || "").toLowerCase();
+    const alreadyRefunded = refundedCredits > 0;
+    const creditsLabel = alreadyRefunded ? refundedCredits : heldCredits;
+    const prompt = alreadyRefunded && notificationStatus !== "sent"
+      ? `Krediten är redan återbetald. Försöka skicka kundmejlet igen${creditsLabel > 0 ? ` (${creditsLabel} krediter)` : ""}?`
+      : `Avbryt det misslyckade inlägget och återbetala ${creditsLabel || "den reserverade"} kredit${creditsLabel === 1 ? "" : "er"}? Kunden får ett mejl på sitt valda appspråk och Spreelo gör inga fler rescue-försök för detta inlägg.`;
+
+    if (!window.confirm(prompt)) return;
+
+    setCancellingFailedOccurrenceId(selectedPost.occurrence_id);
+    setRefundActionMessage("");
+    setRefundActionError("");
+    try {
+      const response = await fetch("/api/admin/post-approvals/cancel-refund", {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify({ occurrence_id: selectedPost.occurrence_id }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.ok) {
+        if (result?.refund_applied) {
+          setRefundActionError(result?.error || "Krediten återbetalades men kundmejlet kunde inte skickas. Försök igen.");
+          await loadPosts(selectedPost.id);
+          return;
+        }
+        throw new Error(result?.error || "Inlägget kunde inte avbrytas och återbetalas.");
+      }
+
+      setRefundActionMessage(`${Number(result.refunded_credits || 0)} kredit${Number(result.refunded_credits || 0) === 1 ? "" : "er"} återbetalades och kunden informerades på ${String(result.locale || "sitt appspråk")}.`);
+      await loadPosts();
+      setSelectedPostId("");
+    } catch (refundError) {
+      setRefundActionError(refundError?.message || "Inlägget kunde inte avbrytas och återbetalas.");
+    } finally {
+      setCancellingFailedOccurrenceId("");
+    }
+  }
+
   async function setBrandPolicy(required) {
     if (!selectedPost?.brand_profile_id) return;
     try {
@@ -1544,6 +1594,30 @@ KRAV PÅ image_url: direkt HTTPS-bild från kundens webbplats eller dess riktiga
                       {rescueMessage ? <div className="admin-alert success"><CheckCircle2 size={15} /><span>{rescueMessage}</span></div> : null}
                       {rescueError ? <div className="admin-alert error"><AlertTriangle size={15} /><span>{rescueError}</span></div> : null}
                       <details className="admin-v144106-rescue-prompt"><summary>Visa exakt ChatGPT-uppdrag</summary><pre>{buildRescuePrompt(selectedPost)}</pre></details>
+                    </div>
+                  ) : null}
+
+                  {selectedPost.status === "failed" && selectedPost.occurrence_id && !selectedPost.is_admin_test && (Number(selectedPost?.failure?.held_rescue_credits || 0) > 0 || Number(selectedPost?.failure?.refunded_credits || 0) > 0) ? (
+                    <div className={`admin-v144111-credit-card ${Number(selectedPost?.failure?.refunded_credits || 0) > 0 ? "refunded" : "held"}`}>
+                      <div className="admin-v144111-credit-copy">
+                        {Number(selectedPost?.failure?.refunded_credits || 0) > 0 ? <CheckCircle2 size={18} /> : <ShieldCheck size={18} />}
+                        <span>
+                          <strong>{Number(selectedPost?.failure?.refunded_credits || 0) > 0
+                            ? `${Number(selectedPost.failure.refunded_credits)} kredit${Number(selectedPost.failure.refunded_credits) === 1 ? "" : "er"} återbetalda`
+                            : `${Number(selectedPost?.failure?.held_rescue_credits || 0)} kredit${Number(selectedPost?.failure?.held_rescue_credits || 0) === 1 ? "" : "er"} används för rescue`}</strong>
+                          <small>{Number(selectedPost?.failure?.refunded_credits || 0) > 0
+                            ? (String(selectedPost?.failure?.notification_status || "").toLowerCase() === "sent" ? "Kunden har informerats." : "Återbetalningen är klar men kundmejlet behöver skickas igen.")
+                            : "Krediten återbetalas inte automatiskt. Om Spreelo inte kan rädda inlägget kan du avsluta ärendet och återbetala krediten här."}</small>
+                        </span>
+                      </div>
+                      {(selectedPost?.failure?.rescue_credit_refund_available === true || (Number(selectedPost?.failure?.refunded_credits || 0) > 0 && String(selectedPost?.failure?.notification_status || "").toLowerCase() !== "sent")) ? (
+                        <button type="button" className="admin-v144111-refund-button" disabled={cancellingFailedOccurrenceId === selectedPost.occurrence_id} onClick={cancelFailedOccurrenceAndRefund}>
+                          {cancellingFailedOccurrenceId === selectedPost.occurrence_id ? <LoaderCircle className="admin-spin" size={15} /> : <RotateCcw size={15} />}
+                          {Number(selectedPost?.failure?.refunded_credits || 0) > 0 ? "Skicka kundmejl igen" : "Avbryt och återbetala kredit"}
+                        </button>
+                      ) : null}
+                      {refundActionMessage ? <div className="admin-alert success"><CheckCircle2 size={15} /><span>{refundActionMessage}</span></div> : null}
+                      {refundActionError ? <div className="admin-alert error"><AlertTriangle size={15} /><span>{refundActionError}</span></div> : null}
                     </div>
                   ) : null}
 

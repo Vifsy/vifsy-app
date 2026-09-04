@@ -1,0 +1,78 @@
+/* Spreelo v144.111 — held rescue credit + explicit admin cancel/refund. */
+html body .admin-v144111-credit-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px 15px;
+  border: 1px solid #eadfd7;
+  border-radius: 14px;
+  background: #fffdfa;
+}
+
+html body .admin-v144111-credit-card.held {
+  border-color: #f0d5a7;
+  background: linear-gradient(135deg,#fffaf0,#fffdf9);
+}
+
+html body .admin-v144111-credit-card.refunded {
+  border-color: #cce6d5;
+  background: linear-gradient(135deg,#f2fbf5,#fbfffc);
+}
+
+html body .admin-v144111-credit-copy {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: #17253b;
+}
+
+html body .admin-v144111-credit-card.held .admin-v144111-credit-copy > svg { color: #b7791f; }
+html body .admin-v144111-credit-card.refunded .admin-v144111-credit-copy > svg { color: #228257; }
+
+html body .admin-v144111-credit-copy > span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+html body .admin-v144111-credit-copy strong {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+html body .admin-v144111-credit-copy small {
+  color: #697386;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+html body .admin-v144111-refund-button {
+  width: max-content;
+  max-width: 100%;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 13px;
+  border: 1px solid #e3b1a5;
+  border-radius: 10px;
+  background: #fff;
+  color: #ad4631;
+  font-size: 10.5px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+html body .admin-v144111-refund-button:hover:not(:disabled) {
+  background: #fff5f1;
+  border-color: #d98f7e;
+}
+
+html body .admin-v144111-refund-button:disabled {
+  opacity: .58;
+  cursor: wait;
+}
+
+@media (max-width: 700px) {
+  html body .admin-v144111-refund-button { width: 100%; }
+}

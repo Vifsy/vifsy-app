@@ -13172,7 +13172,8 @@ async function failAutomationOccurrenceTerminal({
 
   const handled = Boolean(data?.handled);
   const refundedCredits = Math.max(0, Number(data?.refunded_credits || 0));
-  let notificationStatus = String(data?.notification_status || "pending");
+  const heldRescueCredits = Math.max(0, Number(data?.held_rescue_credits || 0));
+  let notificationStatus = String(data?.notification_status || "suppressed");
 
   await upsertAdminReviewCase(supabase, repairCaseValues);
 
@@ -13231,6 +13232,7 @@ async function failAutomationOccurrenceTerminal({
     failureCode: failure.code,
     customerMessage: failure.customerMessage,
     refundedCredits,
+    heldRescueCredits,
     notificationStatus,
     planContinues: Boolean(data?.plan_continues),
     nextRunAt: data?.next_run_at || null,
@@ -38160,9 +38162,12 @@ async function getUserAuthProfile(supabase, userId) {
   return {
     email: data.user.email,
     appLanguage:
+      metadata.app_locale ||
+      metadata.appLocale ||
       metadata.app_language ||
       metadata.appLanguage ||
       metadata.ui_language ||
+      metadata.uiLanguage ||
       metadata.locale ||
       null,
   };
@@ -38288,13 +38293,11 @@ export async function sendApprovalEmail({
     ],
   });
 
-  // Prefer the user's explicitly saved app language when it exists.
-  // If that is missing/English but the post is clearly in another supported script/language,
-  // use the post language so approval emails do not remain in English for non-English brands.
+  // v144.111: the user's explicitly saved app language is authoritative,
+  // including English. Post/content language is only a fallback for older
+  // accounts that do not yet have an app-language preference saved.
   const locale =
-    userLocale && userLocale !== "en"
-      ? userLocale
-      : detectedPostLocale || userLocale || (ruleLocale !== "en" ? ruleLocale : "en");
+    userLocale || detectedPostLocale || (ruleLocale !== "en" ? ruleLocale : "en");
   const { t } = await getServerTranslations({
     supabaseAdmin: supabase,
     locale,

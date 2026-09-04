@@ -388,7 +388,7 @@ export async function POST(request) {
     updated_at: now,
   }).eq("id", post.id);
   if (postReadyUpdate.error) return Response.json({ ok: false, error: postReadyUpdate.error.message }, { status: 500 });
-  if (occurrenceId) await context.admin.from("automation_occurrences").update({ post_id: post.id, metadata: { ...(occurrence?.metadata || {}), admin_product_items: products, admin_regenerated_at: now, admin_rescue_resolved_at: now, admin_failure_resolved_by: context.user.id } }).eq("id", occurrenceId);
+  if (occurrenceId) await context.admin.from("automation_occurrences").update({ post_id: post.id, metadata: { ...(occurrence?.metadata || {}), admin_product_items: products, admin_regenerated_at: now, admin_rescue_resolved_at: now, admin_failure_resolved_by: context.user.id, rescue_credit_refund_available: false, rescue_credit_resolved_with_post: true } }).eq("id", occurrenceId);
   const reviewPayload = { occurrence_id: occurrenceId || null, post_id: post.id, user_id: post.user_id, brand_profile_id: post.brand_profile_id, automation_rule_id: post.automation_rule_id, status: "awaiting_spreelo", draft_content: content, product_items: products, needs_review: true, failure_code: null, failure_stage: null, failure_message: null, updated_at: now };
   if (reviewCaseId) {
     await context.admin.from("admin_review_cases").update(reviewPayload).eq("id", reviewCaseId);

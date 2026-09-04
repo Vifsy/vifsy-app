@@ -58,7 +58,7 @@ export async function GET(request) {
   // installation can otherwise push a terminal failure out of the admin
   // window even though the failure email was sent correctly.
   const occurrenceSelect =
-    "id, post_id, user_id, brand_profile_id, automation_rule_id, status, scheduled_for, content_type_label, content_format, campaign_title, started_at, finished_at, failure_code, failure_stage, failure_message_internal, failure_message_customer, refunded_credits, metadata, is_admin_test, admin_test_batch_id, admin_test_job_key";
+    "id, post_id, user_id, brand_profile_id, automation_rule_id, status, scheduled_for, content_type_label, content_format, campaign_title, started_at, finished_at, failure_code, failure_stage, failure_message_internal, failure_message_customer, refunded_credits, notification_status, metadata, is_admin_test, admin_test_batch_id, admin_test_job_key";
   // v144.22: a durable background generation can be healthy while it is in
   // retry_pending. The normal admin queue must surface that state instead of
   // looking empty while the customer is waiting. We intentionally keep
@@ -204,7 +204,8 @@ export async function GET(request) {
     // admin_rescue_resolved_at marker.
     const failureResolvedByAdmin = Boolean(
       occurrence?.metadata?.admin_rescue_resolved_at ||
-      occurrence?.metadata?.admin_regenerated_at
+      occurrence?.metadata?.admin_regenerated_at ||
+      occurrence?.metadata?.customer_failure_notified_at
     );
     if (occurrence.status === "failed_terminal" && failureResolvedByAdmin) return false;
 
@@ -212,6 +213,7 @@ export async function GET(request) {
     if (status === "creating") return !["completed", "failed_terminal"].includes(occurrence.status);
     return true;
   });
+  const occurrenceById = new Map(occurrenceRows.map((item) => [item.id, item]));
   const reviewCaseRows = (reviewCaseResult.data || []).filter((item) => !testBatch || item.admin_test_batch_id === testBatch);
   const reviewCaseByOccurrence = new Map(
     reviewCaseRows
@@ -247,7 +249,7 @@ export async function GET(request) {
       ? context.admin.from("brand_profiles").select("id, business_name, website_url, website_product_source_url, admin_review_required").in("id", brandIds)
       : Promise.resolve({ data: [] }),
     ruleIds.length
-      ? context.admin.from("automation_rules").select("id, website_url, content_source_url, content_source_scope, content_type_id, content_type_label, content_format, platform, is_admin_test, admin_test_batch_id, admin_test_job_key, name, queue_source").in("id", ruleIds)
+      ? context.admin.from("automation_rules").select("id, website_url, content_source_url, content_source_scope, content_type_id, content_type_label, content_format, platform, is_admin_test, admin_test_batch_id, admin_test_job_key, name, queue_source, credit_cost, credit_reservation_status, credit_reserved_amount").in("id", ruleIds)
       : Promise.resolve({ data: [] }),
     postIds.length
       ? context.admin
@@ -438,22 +440,38 @@ export async function GET(request) {
   }
   const syntheticWorkItems = workItemRows.filter((item) => status === "upcoming" || !representedWorkItemIds.has(item.id));
   const workItemProducts = (item) => Array.isArray(item?.rescue_data?.products) ? item.rescue_data.products : [];
-  const workItemFailure = (item) => ({
-    id: item.occurrence_id || item.id,
-    work_item_id: item.id,
-    review_case_id: item.occurrence_id ? reviewCaseByOccurrence.get(item.occurrence_id)?.id || null : null,
-    status: item.status === "failed" ? "failed_terminal" : item.status,
-    scheduled_for: item.scheduled_for,
-    content_type_label: item.content_type_label,
-    content_format: item.content_format,
-    campaign_title: item.plan_name,
-    failure_code: item.failure_code,
-    failure_stage: item.failure_stage,
-    failure_message_internal: item.failure_message,
-    technical_log: item.technical_log || {},
-    technical_run_log: item.run_log_id ? workRunLogMap.get(item.run_log_id) || null : null,
-    rescue_status: item.rescue_status || "none",
-  });
+  const workItemFailure = (item) => {
+    const occurrence = item?.occurrence_id ? occurrenceById.get(item.occurrence_id) || null : null;
+    const heldRescueCredits = occurrence
+      ? Math.max(0, Number(
+          occurrence?.metadata?.rescue_credit_cost ||
+          item?.technical_log?.rescue_credit_cost ||
+          0
+        ))
+      : 0;
+    const refundedCredits = Math.max(0, Number(occurrence?.refunded_credits || 0));
+    return {
+      id: item.occurrence_id || item.id,
+      work_item_id: item.id,
+      review_case_id: item.occurrence_id ? reviewCaseByOccurrence.get(item.occurrence_id)?.id || null : null,
+      status: item.status === "failed" ? "failed_terminal" : item.status,
+      scheduled_for: item.scheduled_for,
+      content_type_label: item.content_type_label,
+      content_format: item.content_format,
+      campaign_title: item.plan_name,
+      failure_code: item.failure_code,
+      failure_stage: item.failure_stage,
+      failure_message_internal: item.failure_message,
+      failure_message_customer: occurrence?.failure_message_customer || null,
+      refunded_credits: refundedCredits,
+      notification_status: occurrence?.notification_status || "suppressed",
+      held_rescue_credits: refundedCredits > 0 ? 0 : heldRescueCredits,
+      rescue_credit_refund_available: refundedCredits <= 0 && heldRescueCredits > 0,
+      technical_log: item.technical_log || {},
+      technical_run_log: item.run_log_id ? workRunLogMap.get(item.run_log_id) || null : null,
+      rescue_status: item.rescue_status || "none",
+    };
+  };
 
   return Response.json({
     ok: true,
@@ -483,13 +501,23 @@ export async function GET(request) {
       work_item_id: workItemByPost.get(item.id)?.id || null,
       work_item: workItemByPost.get(item.id) || null,
       failure: reviewCaseByPost.get(item.id)
-        ? {
-            ...reviewCaseByPost.get(item.id),
-            review_case_id: reviewCaseByPost.get(item.id).id,
-            failure_message_internal: reviewCaseByPost.get(item.id).failure_message || item.video_error || null,
-            technical_log: workItemByPost.get(item.id)?.technical_log || {},
-            technical_run_log: workItemByPost.get(item.id)?.run_log_id ? workRunLogMap.get(workItemByPost.get(item.id)?.run_log_id) || null : null,
-          }
+        ? (() => {
+            const reviewCase = reviewCaseByPost.get(item.id);
+            const occurrence = reviewCase?.occurrence_id ? occurrenceById.get(reviewCase.occurrence_id) || null : null;
+            const refundedCredits = Math.max(0, Number(occurrence?.refunded_credits || 0));
+            const heldRescueCredits = Math.max(0, Number(occurrence?.metadata?.rescue_credit_cost || 0));
+            return {
+              ...reviewCase,
+              review_case_id: reviewCase.id,
+              failure_message_internal: reviewCase.failure_message || item.video_error || null,
+              refunded_credits: refundedCredits,
+              notification_status: occurrence?.notification_status || "suppressed",
+              held_rescue_credits: refundedCredits > 0 ? 0 : heldRescueCredits,
+              rescue_credit_refund_available: Boolean(occurrence) && refundedCredits <= 0 && heldRescueCredits > 0,
+              technical_log: workItemByPost.get(item.id)?.technical_log || {},
+              technical_run_log: workItemByPost.get(item.id)?.run_log_id ? workRunLogMap.get(workItemByPost.get(item.id)?.run_log_id) || null : null,
+            };
+          })()
         : (workItemByPost.get(item.id)?.status === "failed" ? workItemFailure(workItemByPost.get(item.id)) : null),
     })), ...orphanFailures.map((occurrence) => ({
       id: `occurrence-${occurrence.id}`,
@@ -533,6 +561,8 @@ export async function GET(request) {
       work_item: workItemByOccurrence.get(occurrence.id) || null,
       failure: {
         ...occurrence,
+        held_rescue_credits: Math.max(0, Number(occurrence?.metadata?.rescue_credit_cost || 0)),
+        rescue_credit_refund_available: Math.max(0, Number(occurrence?.refunded_credits || 0)) <= 0 && Math.max(0, Number(occurrence?.metadata?.rescue_credit_cost || 0)) > 0,
         ...(workItemByOccurrence.get(occurrence.id) ? {
           work_item_id: workItemByOccurrence.get(occurrence.id).id,
           technical_log: workItemByOccurrence.get(occurrence.id).technical_log || {},
@@ -590,18 +620,28 @@ export async function GET(request) {
       slides: [],
       work_item_id: reviewCase.occurrence_id ? workItemByOccurrence.get(reviewCase.occurrence_id)?.id || null : null,
       work_item: reviewCase.occurrence_id ? workItemByOccurrence.get(reviewCase.occurrence_id) || null : null,
-      failure: {
-        id: reviewCase.occurrence_id || reviewCase.id,
-        review_case_id: reviewCase.id,
-        status: "failed_terminal",
-        scheduled_for: reviewCase.scheduled_for,
-        content_type_label: reviewCase.content_type_label,
-        content_format: reviewCase.content_format,
-        campaign_title: reviewCase.campaign_title,
-        failure_code: reviewCase.failure_code,
-        failure_stage: reviewCase.failure_stage,
-        failure_message_internal: reviewCase.failure_message,
-      },
+      failure: (() => {
+        const occurrence = reviewCase.occurrence_id ? occurrenceById.get(reviewCase.occurrence_id) || null : null;
+        const refundedCredits = Math.max(0, Number(occurrence?.refunded_credits || 0));
+        const heldRescueCredits = Math.max(0, Number(occurrence?.metadata?.rescue_credit_cost || 0));
+        return {
+          id: reviewCase.occurrence_id || reviewCase.id,
+          review_case_id: reviewCase.id,
+          status: "failed_terminal",
+          scheduled_for: reviewCase.scheduled_for,
+          content_type_label: reviewCase.content_type_label,
+          content_format: reviewCase.content_format,
+          campaign_title: reviewCase.campaign_title,
+          failure_code: reviewCase.failure_code,
+          failure_stage: reviewCase.failure_stage,
+          failure_message_internal: reviewCase.failure_message,
+          failure_message_customer: occurrence?.failure_message_customer || null,
+          refunded_credits: refundedCredits,
+          notification_status: occurrence?.notification_status || "suppressed",
+          held_rescue_credits: refundedCredits > 0 ? 0 : heldRescueCredits,
+          rescue_credit_refund_available: Boolean(occurrence) && refundedCredits <= 0 && heldRescueCredits > 0,
+        };
+      })(),
     })), ...syntheticWorkItems.map((workItem) => ({
       id: `work-item-${workItem.id}`,
       work_item_id: workItem.id,
@@ -902,7 +942,7 @@ async function releasePostToCustomer({ context, body }) {
     const { data } = await context.admin.auth.admin.getUserById(post.user_id);
     customerEmail = data?.user?.email || "";
     const metadata = data?.user?.user_metadata || {};
-    userAppLanguage = metadata.app_language || metadata.appLanguage || metadata.ui_language || metadata.locale || null;
+    userAppLanguage = metadata.app_locale || metadata.appLocale || metadata.app_language || metadata.appLanguage || metadata.ui_language || metadata.uiLanguage || metadata.locale || null;
   } catch {
     customerEmail = "";
   }

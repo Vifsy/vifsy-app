@@ -10,6 +10,8 @@ import {
   unixToIso,
   verifyStripeWebhookSignature,
 } from "../../../../lib/stripeBilling";
+import { getServerTranslations } from "../../../../lib/i18n/serverUiText.js";
+import { resolveLocaleFromUserMetadata } from "../../../../lib/userAppLocale.js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -166,15 +168,16 @@ async function sendTrialEndingReminder(admin, userId, subscription) {
   const user = data?.user;
   const email = String(user?.email || "").trim();
   if (!email) return;
-  const locale = String(user?.user_metadata?.app_language || "en").toLowerCase();
-  const swedish = locale.startsWith("sv");
+  const locale = resolveLocaleFromUserMetadata(user?.user_metadata || {}, "en");
+  const { t } = await getServerTranslations({ supabaseAdmin: admin, locale, namespaces: ["emails"] });
   const trialEnd = unixToIso(subscription?.trial_end);
-  const dateLabel = trialEnd ? new Intl.DateTimeFormat(swedish ? "sv-SE" : "en-GB", { day: "numeric", month: "long", year: "numeric" }).format(new Date(trialEnd)) : "";
-  const subject = swedish ? "Din Spreelo-provperiod slutar snart" : "Your Spreelo trial ends soon";
-  const title = swedish ? "3 dagar kvar av din provperiod" : "3 days left in your trial";
-  const text = swedish
-    ? `Din gratis provperiod slutar ${dateLabel || "snart"}. Därefter börjar den plan du valde att debiteras automatiskt. Du kan ändra eller avsluta prenumerationen i Spreelo-inställningarna.`
-    : `Your free trial ends ${dateLabel || "soon"}. After that, the plan you selected starts billing automatically. You can change or cancel the subscription in Spreelo settings.`;
+  const dateLabel = trialEnd
+    ? new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric" }).format(new Date(trialEnd))
+    : t("emails.trialEnding.soon");
+  const subject = t("emails.trialEnding.subject");
+  const title = t("emails.trialEnding.title");
+  const text = t("emails.trialEnding.text", { date: dateLabel || t("emails.trialEnding.soon") });
+  const button = t("emails.trialEnding.button");
   const appUrl = String(process.env.NEXT_PUBLIC_APP_URL || "https://app.spreelo.com").replace(/\/$/, "");
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -184,7 +187,7 @@ async function sendTrialEndingReminder(admin, userId, subscription) {
       to: email,
       subject,
       text: `${title}\n\n${text}\n\n${appUrl}/settings`,
-      html: `<div style="font-family:Arial,sans-serif;background:#f4efe9;padding:30px"><div style="max-width:620px;margin:auto;background:#fff;border:1px solid #e6ddd6;border-radius:20px;padding:30px"><div style="font-size:20px;font-weight:800;color:#17253b">spreelo</div><h1 style="font-size:26px;color:#17253b">${title}</h1><p style="color:#667085;line-height:1.7">${text}</p><a href="${appUrl}/settings" style="display:inline-block;margin-top:12px;padding:13px 18px;border-radius:11px;background:#f25f43;color:#fff;text-decoration:none;font-weight:800">${swedish ? "Hantera prenumeration" : "Manage subscription"}</a></div></div>`,
+      html: `<div style="font-family:Arial,sans-serif;background:#f4efe9;padding:30px"><div style="max-width:620px;margin:auto;background:#fff;border:1px solid #e6ddd6;border-radius:20px;padding:30px"><div style="font-size:20px;font-weight:800;color:#17253b">spreelo</div><h1 style="font-size:26px;color:#17253b">${title}</h1><p style="color:#667085;line-height:1.7">${text}</p><a href="${appUrl}/settings" style="display:inline-block;margin-top:12px;padding:13px 18px;border-radius:11px;background:#f25f43;color:#fff;text-decoration:none;font-weight:800">${button}</a></div></div>`,
     }),
   });
   if (!response.ok) console.error("Trial ending email failed", { userId, status: response.status });

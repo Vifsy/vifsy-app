@@ -184,7 +184,8 @@
     "test:v144.107": "node scripts/test-v144-107-fail-fast-rescue-handoff.mjs",
     "test:v144.108": "node scripts/test-v144-108-rescue-remote-images.mjs",
     "test:v144.109": "node scripts/test-v144-109-rescue-center-annual-calendar-emails.mjs",
-    "test:v144.110": "node scripts/test-v144-110-admin-polish-product-typography.mjs"
+    "test:v144.110": "node scripts/test-v144-110-admin-polish-product-typography.mjs",
+    "test:v144.111": "node scripts/test-v144-111-rescue-credit-lifecycle-localized-email.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

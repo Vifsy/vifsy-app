@@ -8,6 +8,7 @@ import {
   resolveBestServerLocale,
   resolveUiLocaleFromLanguageName,
 } from "../../../lib/i18n/serverUiText.js";
+import { resolveLocaleFromUserMetadata } from "../../../lib/userAppLocale.js";
 
 export const dynamic = "force-dynamic";
 
@@ -101,13 +102,20 @@ async function getContext(request) {
     brand = data || null;
   }
 
+  let userMetadata = {};
+  try {
+    const { data: authUser } = await admin.auth.admin.getUserById(post.user_id);
+    userMetadata = authUser?.user?.user_metadata || {};
+  } catch {}
+
   const explicitLocale = resolveUiLocaleFromLanguageName(
     url.searchParams.get("lang") || url.searchParams.get("locale")
   );
-  const locale = explicitLocale || resolveBestServerLocale({
+  const fallbackLocale = explicitLocale || resolveBestServerLocale({
     request,
     languageCandidates: [post.language, brand?.content_language],
   });
+  const locale = resolveLocaleFromUserMetadata(userMetadata, fallbackLocale);
   const translator = await translatorFor(admin, locale);
   return { admin, token, post, brand, translator, locale: translator.locale };
 }
