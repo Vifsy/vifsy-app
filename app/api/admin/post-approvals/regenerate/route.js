@@ -388,7 +388,7 @@ export async function POST(request) {
     updated_at: now,
   }).eq("id", post.id);
   if (postReadyUpdate.error) return Response.json({ ok: false, error: postReadyUpdate.error.message }, { status: 500 });
-  if (occurrenceId) await context.admin.from("automation_occurrences").update({ post_id: post.id, metadata: { ...(occurrence?.metadata || {}), admin_product_items: products, admin_regenerated_at: now } }).eq("id", occurrenceId);
+  if (occurrenceId) await context.admin.from("automation_occurrences").update({ post_id: post.id, metadata: { ...(occurrence?.metadata || {}), admin_product_items: products, admin_regenerated_at: now, admin_rescue_resolved_at: now, admin_failure_resolved_by: context.user.id } }).eq("id", occurrenceId);
   const reviewPayload = { occurrence_id: occurrenceId || null, post_id: post.id, user_id: post.user_id, brand_profile_id: post.brand_profile_id, automation_rule_id: post.automation_rule_id, status: "awaiting_spreelo", draft_content: content, product_items: products, needs_review: true, failure_code: null, failure_stage: null, failure_message: null, updated_at: now };
   if (reviewCaseId) {
     await context.admin.from("admin_review_cases").update(reviewPayload).eq("id", reviewCaseId);
@@ -396,16 +396,22 @@ export async function POST(request) {
     await context.admin.from("admin_review_cases").upsert(reviewPayload, { onConflict: occurrenceId ? "occurrence_id" : "post_id" });
   }
   await snapshotAdminPostVersion(context.admin, post.id, { reason: "after_admin_carousel_regeneration", createdBy: context.user.id });
+  const resolvedWorkItemPatch = {
+    post_id: post.id,
+    status: "approval",
+    rescue_status: "used",
+    failure_code: null,
+    failure_stage: null,
+    failure_message: null,
+    updated_at: now,
+  };
   if (workItemId) {
-    await context.admin.from("admin_generation_work_items").update({
-      post_id: post.id,
-      status: "approval",
-      rescue_status: "used",
-      failure_code: null,
-      failure_stage: null,
-      failure_message: null,
-      updated_at: now,
-    }).eq("id", workItemId);
+    await context.admin.from("admin_generation_work_items").update(resolvedWorkItemPatch).eq("id", workItemId);
+  } else if (occurrenceId) {
+    // v144.110: older rescue actions did not always carry work_item_id back to
+    // the regeneration route. Resolve the durable failure row by occurrence as
+    // a fallback so the repaired post cannot remain in Misslyckat.
+    await context.admin.from("admin_generation_work_items").update(resolvedWorkItemPatch).eq("occurrence_id", occurrenceId);
   }
   return Response.json({ ok: true, post_id: post.id, slide_count: slides.length });
 }

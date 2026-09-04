@@ -2042,27 +2042,55 @@ function isProductLabelTextRedundant(existingText, candidateText) {
   return ` ${existing} `.includes(` ${candidate} `);
 }
 
+function looksLikeStorefrontNavigationText(value) {
+  const text = decodeHtmlEntities(String(value || ""))
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+  if (!text) return false;
+  if (/https?:\/\/|www\.|(?:^|\s)(?:home|hem|start|shop|products?|produkter|categories?|kategorier)\s*[>›»]/iu.test(text)) return true;
+  if ((text.match(/[>›»]/gu) || []).length >= 1) return true;
+  if ((text.match(/\s+\/\s+/gu) || []).length >= 2) return true;
+  if (/^[^\s/]+\/(?:[^\s/]+\/){2,}[^\s/]+$/u.test(text)) return true;
+  return false;
+}
+
+function sanitizeProductOverlayDescriptor(value) {
+  const text = decodeHtmlEntities(String(value || ""))
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+  if (!text || looksLikeStorefrontNavigationText(text)) return "";
+  return Array.from(text).slice(0, 64).join("").trim();
+}
+
+function sanitizeProductOverlayTitle(value) {
+  const text = sanitizeProductTitleForCard(value);
+  return looksLikeStorefrontNavigationText(text) ? "" : text;
+}
+
 export function getCarouselProductLabelPresentation(product, fallbackTitle = "") {
-  const rawTitle = String(
+  const rawTitleCandidate = String(
     product?.locked_product_title || product?.title || product?.item_title || fallbackTitle || ""
   ).replace(/\s+/gu, " ").trim();
+  const rawTitle = sanitizeProductOverlayTitle(rawTitleCandidate) || sanitizeProductOverlayTitle(fallbackTitle);
   const brand = String(
     product?.locked_product_brand || product?.product_brand || product?.brand || product?.brand_name || ""
   ).replace(/\s+/gu, " ").trim();
   const titleParts = rawTitle.split(/\s+[–—-]\s+/u).map((part) => part.trim()).filter(Boolean);
   const modelTitle = stripBrandPrefixFromProductTitle(titleParts[0] || rawTitle, brand) || rawTitle;
-  const displayType = String(
+  const displayType = sanitizeProductOverlayDescriptor(
     product?.product_display_type || product?.locked_product_category || product?.category || titleParts[1] || ""
-  ).replace(/\s+/gu, " ").trim();
+  );
   // Prefer the colour wording from the locked title because retailer metadata
   // often appends translated aliases (for example black/white/svart).
   // The final title segment is the variant/colour. Using every segment after
   // the product type can duplicate descriptive words already present in
   // product_display_type (for example "T-shirt - bas · bas - ghost").
   const titleColor = titleParts.length >= 3 ? titleParts[titleParts.length - 1] : "";
-  const color = String(titleColor || product?.locked_product_color || product?.product_color || "")
-    .replace(/\s+/gu, " ")
-    .trim();
+  const color = sanitizeProductOverlayDescriptor(
+    titleColor || product?.locked_product_color || product?.product_color || ""
+  );
 
   // Supporting copy must add information. Never repeat a generic category that
   // already appears inside the main product/model name.
@@ -2269,8 +2297,8 @@ function buildTransparentProductTypographyPrompt({
     : "The earlier placement analysis suggested a lighter/medium source area, but the supplied reference image is authoritative: choose lettering that has strong real contrast against the CURRENT pixels in the reserved area.";
 
   return `
-Create ONLY a finished transparent typography overlay for the supplied ecommerce product image.
-The supplied image is visual context only. Do not reproduce, redraw, alter or include the product image in the output.
+Create ONLY a finished transparent typography overlay for a premium ecommerce social post.
+Reference image 1 is the actual finished square composition. If reference image 2 is supplied, it is the verified ecommerce product used only to anchor product identity. Use the references strictly for art direction, contrast and placement; do not reproduce, redraw, alter or include either reference image in the output.
 
 Output contract:
 - Square transparent RGBA canvas.
@@ -2283,6 +2311,7 @@ Output contract:
 Exact visible text:
 ${exactTextLines}
 - Use only the supplied text above. Do not invent slogans, features, prices, discounts, claims, calls to action or extra words.
+- Never render website navigation, breadcrumbs, category paths, URLs, slugs or strings such as "Home > Candy > Jelly".
 - Do not translate, rename, abbreviate, omit or replace product-name words.
 - Balanced capitalization and line breaks are allowed, but spelling must remain exact.
 - The main product name must be immediately readable on a phone and must be the visually dominant text element.
@@ -2396,6 +2425,7 @@ async function createTransparentProductTypographyOverlay({
   openai,
   rule,
   referenceBuffer,
+  productReferenceBuffer = null,
   productTitle,
   productBrand = "",
   productDescriptor = "",
@@ -2411,9 +2441,22 @@ async function createTransparentProductTypographyOverlay({
     .resize({ width: 1024, height: 1024, fit: "fill" })
     .png({ compressionLevel: 9 })
     .toBuffer();
-  const referenceFile = await toFile(reference, "product-layout-reference.png", {
+  const referenceFiles = [await toFile(reference, "finished-product-layout-reference.png", {
     type: "image/png",
-  });
+  })];
+
+  // v144.110 mirrors the proven AI-video typography workflow: the finished
+  // composition drives art direction/placement while a second verified source
+  // image anchors product identity. The model still returns typography only.
+  if (productReferenceBuffer?.length) {
+    const productReference = await sharp(productReferenceBuffer)
+      .rotate()
+      .resize({ width: 768, height: 768, fit: "contain", withoutEnlargement: true, background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png({ compressionLevel: 9 })
+      .toBuffer();
+    referenceFiles.push(await toFile(productReference, "verified-product-reference.png", { type: "image/png" }));
+  }
+
   const prompt = buildTransparentProductTypographyPrompt({
     rule,
     productTitle,
@@ -2426,7 +2469,7 @@ async function createTransparentProductTypographyOverlay({
   const response = await openai.images.edit(
     {
       model: IMAGE_MODEL,
-      image: referenceFile,
+      image: referenceFiles,
       prompt,
       size: "1024x1024",
       quality: "medium",
@@ -2717,6 +2760,7 @@ export async function renderCarouselProductSlideImage({
               openai,
               rule,
               referenceBuffer,
+              productReferenceBuffer: sourceBuffer,
               productTitle,
               productBrand,
               productDescriptor,

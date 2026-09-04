@@ -1,0 +1,277 @@
+/* Spreelo v144.110 — admin workbench polish + activation clarity.
+   Visual-only overrides. Product typography rendering lives server-side. */
+
+/* -------------------------------------------------------------------------- */
+/* Admin post workbench: compact iPhone-like app icons with notification badge. */
+/* -------------------------------------------------------------------------- */
+html body .admin-v14401-workbench .admin-v144110-icon-tabs {
+  width: auto !important;
+  display: inline-grid !important;
+  grid-template-columns: repeat(4, minmax(70px, 82px)) !important;
+  gap: 9px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+html body .admin-v14401-workbench .admin-v144110-icon-tabs > button {
+  min-width: 0 !important;
+  min-height: 72px !important;
+  display: grid !important;
+  grid-template-rows: 38px auto !important;
+  place-items: center !important;
+  gap: 5px !important;
+  padding: 8px 6px 7px !important;
+  border: 1px solid #e3e7ee !important;
+  border-radius: 17px !important;
+  background: rgba(255,255,255,.86) !important;
+  color: #687487 !important;
+  box-shadow: 0 6px 17px rgba(29,39,57,.045) !important;
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease, background .16s ease !important;
+}
+
+html body .admin-v14401-workbench .admin-v144110-icon-tabs > button:hover {
+  transform: translateY(-1px) !important;
+  border-color: #d3dae4 !important;
+  background: #fff !important;
+  box-shadow: 0 10px 24px rgba(29,39,57,.075) !important;
+}
+
+html body .admin-v14401-workbench .admin-v144110-icon-tabs > button.active {
+  border-color: rgba(238,95,64,.34) !important;
+  background: linear-gradient(145deg,#fff9f6,#fff) !important;
+  color: #172033 !important;
+  box-shadow: 0 9px 24px rgba(225,83,52,.09) !important;
+}
+
+html body .admin-v14401-workbench .admin-v144110-icon-tabs > button > span:last-child {
+  font-size: 9.5px !important;
+  line-height: 1 !important;
+  font-weight: 850 !important;
+  white-space: nowrap !important;
+}
+
+html body .admin-v14401-workbench .admin-v144110-tab-icon {
+  position: relative !important;
+  width: 38px !important;
+  height: 38px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 12px !important;
+  background: #f1f4f8 !important;
+  color: #4d5a6e !important;
+  box-shadow: inset 0 0 0 1px rgba(30,43,62,.035) !important;
+}
+
+html body .admin-v14401-workbench .admin-v144110-icon-tabs > button.active .admin-v144110-tab-icon {
+  background: linear-gradient(145deg,#ff7358,#e95236) !important;
+  color: #fff !important;
+  box-shadow: 0 7px 16px rgba(231,82,52,.18) !important;
+}
+
+html body .admin-v14401-workbench .admin-v144110-tab-icon > b {
+  position: absolute !important;
+  top: -7px !important;
+  right: -9px !important;
+  min-width: 19px !important;
+  height: 19px !important;
+  display: grid !important;
+  place-items: center !important;
+  padding: 0 5px !important;
+  border: 2px solid #fff !important;
+  border-radius: 999px !important;
+  background: #e94f3b !important;
+  color: #fff !important;
+  font-size: 8.5px !important;
+  line-height: 1 !important;
+  font-weight: 950 !important;
+  box-shadow: 0 4px 10px rgba(185,52,36,.22) !important;
+}
+
+/* Toolbar gets one additional compact destructive test-data action. */
+html body .admin-v14401-workbench .admin-v14401-toolbar {
+  grid-template-columns: minmax(240px,1fr) minmax(150px,190px) minmax(150px,190px) auto !important;
+}
+
+html body .admin-v14401-workbench .admin-v144110-clean-testdata {
+  min-height: 40px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 7px !important;
+  padding: 0 12px !important;
+  border: 1px solid #ead8d4 !important;
+  border-radius: 10px !important;
+  background: #fff9f7 !important;
+  color: #b94832 !important;
+  font-size: 10.5px !important;
+  font-weight: 850 !important;
+  white-space: nowrap !important;
+  cursor: pointer !important;
+}
+
+html body .admin-v14401-workbench .admin-v144110-clean-testdata:hover:not(:disabled) {
+  border-color: #e3bcb3 !important;
+  background: #fff4f0 !important;
+}
+
+html body .admin-v14401-workbench .admin-v144110-clean-testdata:disabled {
+  opacity: .55 !important;
+  cursor: wait !important;
+}
+
+html body .admin-v14401-workbench .admin-v14401-safety-note {
+  grid-column: 1 / -1 !important;
+  min-height: 36px !important;
+  white-space: normal !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Plan activation: clear channel prerequisite + shorter, stronger desktop CTA. */
+/* -------------------------------------------------------------------------- */
+html body .automation-page.plan-v70-active .plan-v70-activate-card:not(.saved) {
+  grid-template-columns: 50px minmax(0,1fr) !important;
+  grid-template-rows: auto !important;
+  align-items: center !important;
+  row-gap: 12px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-activate-card:not(.saved) .plan-v70-activate-visual {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-activate-card:not(.saved) .plan-v70-activate-copy {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v144110-channel-warning {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+  display: grid !important;
+  grid-template-columns: auto minmax(0,1fr) auto !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 11px 12px !important;
+  border: 1px solid #f1c9be !important;
+  border-radius: 12px !important;
+  background: linear-gradient(110deg,#fff6f2,#fffaf8) !important;
+  color: #a94932 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v144110-channel-warning > svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v144110-channel-warning > div {
+  min-width: 0 !important;
+  display: grid !important;
+  gap: 2px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v144110-channel-warning strong {
+  color: #893e2e !important;
+  font-size: 11.5px !important;
+  line-height: 1.25 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v144110-channel-warning span {
+  color: #8d655b !important;
+  font-size: 10.5px !important;
+  line-height: 1.4 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v144110-channel-warning a {
+  min-height: 34px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 11px !important;
+  border: 1px solid rgba(213,77,48,.22) !important;
+  border-radius: 9px !important;
+  background: #fff !important;
+  color: #c54d34 !important;
+  font-size: 10.5px !important;
+  font-weight: 900 !important;
+  text-decoration: none !important;
+  white-space: nowrap !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-activate-card:not(.saved) .plan-v70-activate-actions {
+  grid-column: 1 / -1 !important;
+  grid-row: auto !important;
+  width: min(520px,100%) !important;
+  justify-self: center !important;
+  margin: 2px auto 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-activate-card:not(.saved) .plan-v70-activate-actions > button {
+  width: 100% !important;
+  min-height: 56px !important;
+  border-radius: 14px !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-activate-card:not(.saved) .plan-v70-activate-actions > span {
+  margin-top: 7px !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-activate-card:not(.saved) .plan-v74-approval-publishing-note,
+html body .automation-page.plan-v70-active .plan-v70-activate-card:not(.saved) .plan-v70-activate-message {
+  grid-column: 1 / -1 !important;
+  grid-row: auto !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+html body .automation-page.plan-v70-active .plan-v70-activate-card:not(.saved) .plan-v70-activate-message {
+  position: static !important;
+  margin: 0 !important;
+  padding: 9px 11px !important;
+  border-radius: 10px !important;
+  background: #fff6f2 !important;
+  color: #a44631 !important;
+  font-size: 10.5px !important;
+  line-height: 1.4 !important;
+}
+
+@media (max-width: 1050px) {
+  html body .admin-v14401-workbench .admin-v14401-toolbar {
+    grid-template-columns: minmax(0,1fr) minmax(160px,200px) !important;
+  }
+  html body .admin-v14401-workbench .admin-v144110-clean-testdata {
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 760px) {
+  html body .admin-v14401-workbench .admin-v144110-icon-tabs {
+    width: 100% !important;
+    grid-template-columns: repeat(4,minmax(0,1fr)) !important;
+    gap: 6px !important;
+  }
+  html body .admin-v14401-workbench .admin-v144110-icon-tabs > button {
+    min-height: 66px !important;
+    padding-inline: 3px !important;
+  }
+  html body .admin-v14401-workbench .admin-v144110-icon-tabs > button > span:last-child {
+    font-size: 8.5px !important;
+  }
+  html body .admin-v14401-workbench .admin-v14401-toolbar {
+    grid-template-columns: 1fr !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v144110-channel-warning {
+    grid-template-columns: auto minmax(0,1fr) !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v144110-channel-warning a {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+  }
+  html body .automation-page.plan-v70-active .plan-v70-activate-card:not(.saved) .plan-v70-activate-actions {
+    width: 100% !important;
+  }
+}

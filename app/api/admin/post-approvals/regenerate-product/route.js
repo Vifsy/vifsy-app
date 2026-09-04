@@ -489,6 +489,8 @@ export async function POST(request) {
           ...(occurrence?.metadata || {}),
           admin_product_items: [product],
           admin_regenerated_at: new Date().toISOString(),
+          admin_rescue_resolved_at: new Date().toISOString(),
+          admin_failure_resolved_by: context.user.id,
         },
       }).eq("id", occurrenceId);
     }
@@ -497,16 +499,19 @@ export async function POST(request) {
       reason: "after_admin_product_regeneration",
       createdBy: context.user.id,
     });
+    const resolvedWorkItemPatch = {
+      post_id: post.id,
+      status: "approval",
+      rescue_status: "used",
+      failure_code: null,
+      failure_stage: null,
+      failure_message: null,
+      updated_at: new Date().toISOString(),
+    };
     if (workItemId) {
-      await context.admin.from("admin_generation_work_items").update({
-        post_id: post.id,
-        status: "approval",
-        rescue_status: "used",
-        failure_code: null,
-        failure_stage: null,
-        failure_message: null,
-        updated_at: new Date().toISOString(),
-      }).eq("id", workItemId);
+      await context.admin.from("admin_generation_work_items").update(resolvedWorkItemPatch).eq("id", workItemId);
+    } else if (occurrenceId) {
+      await context.admin.from("admin_generation_work_items").update(resolvedWorkItemPatch).eq("occurrence_id", occurrenceId);
     }
 
     return Response.json({

@@ -86,6 +86,8 @@ function statusMeta(status, t) {
 }
 
 const CAROUSEL_PRODUCT_COUNT = 5;
+const ADMIN_WORKBENCH_TABS = [["upcoming", "Kommande"], ["queue", "Godkännande"], ["failed", "Misslyckat"], ["history", "Historik"]];
+const ADMIN_WORKBENCH_TAB_ICONS = { upcoming: Clock3, queue: FileCheck2, failed: AlertTriangle, history: CheckCircle2 };
 const POSTS_PER_PAGE = 15;
 const emptyCarouselProduct = () => ({
   title: "",
@@ -247,6 +249,9 @@ export default function AdminPostApprovalsPage() {
     return ["upcoming", "queue", "failed", "history"].includes(view) ? view : "upcoming";
   });
   const [posts, setPosts] = useState([]);
+  const [tabCounts, setTabCounts] = useState({ upcoming: 0, queue: 0, failed: 0 });
+  const [cleaningTestData, setCleaningTestData] = useState(false);
+  const [cleanupMessage, setCleanupMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [savingId, setSavingId] = useState("");
@@ -518,9 +523,20 @@ export default function AdminPostApprovalsPage() {
     try {
       const headers = await getHeaders();
       const batchQuery = !["all", "tests", "normal"].includes(testFilter) ? `&testBatch=${encodeURIComponent(testFilter)}` : "";
-      const response = await fetch(`/api/admin/post-approvals?status=${encodeURIComponent(filter)}${batchQuery}`, { headers, cache: "no-store" });
+      const [response, countsResponse] = await Promise.all([
+        fetch(`/api/admin/post-approvals?status=${encodeURIComponent(filter)}${batchQuery}`, { headers, cache: "no-store" }),
+        fetch("/api/admin/post-approvals/counts", { headers, cache: "no-store" }),
+      ]);
       const payload = await response.json().catch(() => ({}));
+      const countsPayload = await countsResponse.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.error || t("admin.approvals.loadError"));
+      if (countsResponse.ok && countsPayload?.counts) {
+        setTabCounts({
+          upcoming: Number(countsPayload.counts.upcoming || 0),
+          queue: Number(countsPayload.counts.queue || 0),
+          failed: Number(countsPayload.counts.failed || 0),
+        });
+      }
       const nextPosts = payload?.posts || [];
       setPosts(nextPosts);
       const nextDrafts = {};
@@ -541,6 +557,34 @@ export default function AdminPostApprovalsPage() {
       setError(loadError.message || t("admin.approvals.loadError"));
     } finally {
       if (!silent) setLoading(false);
+    }
+  }
+
+  async function cleanupCurrentAdminTestData() {
+    const confirmation = window.prompt(
+      "Detta stoppar dina aktiva testplaner och rensar dina egna inlägg från Kommande, Godkännande, Misslyckat och Historik. Kundkonton påverkas inte.\n\nSkriv RADERA MIN TESTDATA för att fortsätta."
+    );
+    if (confirmation !== "RADERA MIN TESTDATA") return;
+
+    setCleaningTestData(true);
+    setCleanupMessage("");
+    setError("");
+    try {
+      const response = await fetch("/api/admin/test-data-cleanup", {
+        method: "POST",
+        headers: await getHeaders(),
+        body: JSON.stringify({ confirmation }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || "Kunde inte rensa testdata.");
+      setSelectedPostId("");
+      setSelectedIds([]);
+      setCleanupMessage(`Testdata rensad. ${Number(payload?.ended_rules || 0)} testplaner stoppades${Number(payload?.released_credits || 0) ? ` och ${Number(payload.released_credits)} reserverade krediter återställdes` : ""}.`);
+      await loadPosts();
+    } catch (cleanupError) {
+      setError(cleanupError?.message || "Kunde inte rensa testdata.");
+    } finally {
+      setCleaningTestData(false);
     }
   }
 
@@ -1108,8 +1152,12 @@ KRAV PÅ image_url: direkt HTTPS-bild från kundens webbplats eller dess riktiga
           ><span /></button>
         </section>
 
-        <div className="admin-approval-tabs admin-v14370-review-tabs">
-          {[["upcoming", "Kommande"], ["queue", "Godkännande"], ["failed", "Misslyckat"], ["history", t("admin.approvals.history")]].map(([value, label]) => (
+        <div className="admin-approval-tabs admin-v14370-review-tabs admin-v144110-icon-tabs" aria-label="Admin inläggsvyer">
+          {ADMIN_WORKBENCH_TABS.map(([value, staticLabel]) => {
+            const Icon = ADMIN_WORKBENCH_TAB_ICONS[value];
+            const label = value === "history" ? t("admin.approvals.history") : staticLabel;
+            const count = value === "upcoming" ? tabCounts.upcoming : value === "queue" ? tabCounts.queue : value === "failed" ? tabCounts.failed : 0;
+            return (
             <button type="button" key={value} className={filter === value ? "active" : ""} onClick={() => {
               setSelectedPostId("");
               setSelectedIds([]);
@@ -1119,8 +1167,12 @@ KRAV PÅ image_url: direkt HTTPS-bild från kundens webbplats eller dess riktiga
                 nextUrl.searchParams.set("view", value);
                 window.history.replaceState({}, "", nextUrl);
               }
-            }}>{label}</button>
-          ))}
+            }}>
+              <span className="admin-v144110-tab-icon"><Icon size={21} aria-hidden="true" />{count > 0 ? <b>{count > 99 ? "99+" : count}</b> : null}</span>
+              <span>{label}</span>
+            </button>
+            );
+          })}
         </div>
         <section className="admin-v14370-queue-intro">
           <div>
@@ -1134,6 +1186,10 @@ KRAV PÅ image_url: direkt HTTPS-bild från kundens webbplats eller dess riktiga
           <label className="admin-v14401-search"><Search size={16} /><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Sök företag, text eller plattform…" /></label>
           <label className="admin-v14401-format-filter"><span>Format</span><select value={formatFilter} onChange={(event) => setFormatFilter(event.target.value)}><option value="all">Alla format</option>{availableFormats.map((format) => <option key={format} value={format}>{format}</option>)}</select></label>
           <label className="admin-v14401-format-filter"><span>Typ</span><select value={testFilter} onChange={(event) => setTestFilter(event.target.value)}><option value="all">Alla inlägg</option><option value="normal">Vanliga</option><option value="tests">Alla masstest</option>{availableTestBatches.map((id) => <option key={id} value={id}>Testbatch {id.slice(0, 8)}</option>)}</select></label>
+          <button type="button" className="admin-v144110-clean-testdata" onClick={cleanupCurrentAdminTestData} disabled={cleaningTestData}>
+            {cleaningTestData ? <LoaderCircle className="admin-spin" size={16} /> : <Trash2 size={16} />}
+            <span>{cleaningTestData ? "Rensar…" : "Rensa mina testinlägg"}</span>
+          </button>
           <div className="admin-v14401-safety-note"><ShieldCheck size={16} /><span>Fel och avbrutna genereringar stannar alltid i admin.</span></div>
         </section>
         {selectedIds.length ? (
@@ -1143,6 +1199,7 @@ KRAV PÅ image_url: direkt HTTPS-bild från kundens webbplats eller dess riktiga
           </div>
         ) : null}
 
+        {cleanupMessage ? <div className="admin-alert success">{cleanupMessage}</div> : null}
         {error ? <div className="admin-alert error">{error}</div> : null}
 
         {loading ? (

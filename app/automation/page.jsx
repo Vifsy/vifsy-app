@@ -9925,8 +9925,9 @@ function toggleContentType(typeId) {
       return;
     }
 
-    if (!platform) {
-      setMessage(t("automation.errorConnectChannel"));
+    if (!connectedPlatformOptions.length || !platform) {
+      setMessage("");
+      setShowSocialChannelRequiredModal(true);
       return;
     }
 
@@ -11850,6 +11851,16 @@ function blockFormatCardClickAfterDrag(event) {
                       : t("automation.redesign.readyText")}
                   </p>
                 </div>
+                {!savedPlanSummary && !loadingConnectedPlatforms && connectedPlatformOptions.length === 0 ? (
+                  <div className="plan-v144110-channel-warning" role="status">
+                    <AlertTriangle size={18} aria-hidden="true" />
+                    <div>
+                      <strong>{t("automation.connectSocialChannelFirst")}</strong>
+                      <span>{t("automation.connectSocialChannelFirstText")}</span>
+                    </div>
+                    <a href="/social-channels">{t("automation.goToSocialChannels")}</a>
+                  </div>
+                ) : null}
                 {savedPlanSummary ? (
                   <div className="plan-v70-success-actions">
                     <button type="button" onClick={startAnotherPlan}>{t("automation.createAnotherPlan")}</button>

@@ -144,6 +144,13 @@ export async function GET(request) {
     }
   }
 
+  // v144.110 defensive cleanup: a successfully used rescue item is no longer
+  // actionable even if an older row was left with status=failed. Keep the row
+  // in the database for audit/history, but never show it in Misslyckat.
+  if (status === "failed") {
+    workItemRows = workItemRows.filter((item) => String(item?.rescue_status || "") !== "used");
+  }
+
   // The durable work queue is the source of truth. If the legacy posts query
   // window did not include a linked approval/history post, fetch that exact post
   // so the admin tabs never silently lose a durable work item.
@@ -189,6 +196,18 @@ export async function GET(request) {
 
   const occurrenceRows = (occurrenceResult.data || []).filter((occurrence) => {
     if (testBatch && occurrence.admin_test_batch_id !== testBatch) return false;
+
+    // v144.110: a terminal automatic attempt remains preserved as audit history,
+    // but once admin rescue/regeneration has successfully produced a replacement
+    // post it must no longer stay in the actionable Failed queue. Older repaired
+    // rows already carry admin_regenerated_at; new rows also get the explicit
+    // admin_rescue_resolved_at marker.
+    const failureResolvedByAdmin = Boolean(
+      occurrence?.metadata?.admin_rescue_resolved_at ||
+      occurrence?.metadata?.admin_regenerated_at
+    );
+    if (occurrence.status === "failed_terminal" && failureResolvedByAdmin) return false;
+
     if (status === "failed") return occurrence.status === "failed_terminal";
     if (status === "creating") return !["completed", "failed_terminal"].includes(occurrence.status);
     return true;
