@@ -120,17 +120,26 @@ async function releaseJob({ supabase, job, updates }) {
   });
 }
 
-async function saveSecurityFallbackState({ supabase, job, error }) {
+function isDirectWebsiteFallbackError(error) {
+  return ["WEBSITE_SECURITY_BLOCKED", "WEBSITE_FETCH_TIMEOUT"].includes(
+    String(error?.code || "")
+  );
+}
+
+async function saveDirectAccessFallbackState({ supabase, job, error }) {
+  const timedOut = error?.code === "WEBSITE_FETCH_TIMEOUT";
   const providerLabel = String(error?.providerLabel || "website security");
-  const message = `${providerLabel} blocked Spreelo's direct connection. The analysis has switched to secure web research and will continue in the background.`;
+  const message = timedOut
+    ? "Spreelo's direct website connection timed out. The analysis has switched to secure web research and will continue in the background."
+    : `${providerLabel} blocked Spreelo's direct connection. The analysis has switched to secure web research and will continue in the background.`;
 
   await supabase
     .from("brand_profiles")
     .update({
-      website_access_status: "security_blocked",
-      website_security_provider: error?.provider || "unknown",
-      website_security_confidence: error?.confidence || "low",
-      website_access_status_code: Number(error?.status || 403),
+      website_access_status: timedOut ? "direct_fetch_timeout" : "security_blocked",
+      website_security_provider: timedOut ? "unknown" : error?.provider || "unknown",
+      website_security_confidence: timedOut ? "low" : error?.confidence || "low",
+      website_access_status_code: timedOut ? 408 : Number(error?.status || 403),
       website_access_message: message,
       website_access_checked_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -138,14 +147,14 @@ async function saveSecurityFallbackState({ supabase, job, error }) {
     .eq("id", job.brand_profile_id)
     .eq("user_id", job.user_id);
 
-  return message;
+  return { message, timedOut };
 }
 
-async function submitWebResearchAndRelease({ supabase, job, blockError }) {
-  const message = await saveSecurityFallbackState({
+async function submitWebResearchAndRelease({ supabase, job, accessError }) {
+  const { message, timedOut } = await saveDirectAccessFallbackState({
     supabase,
     job,
-    error: blockError,
+    error: accessError,
   });
   const research = await submitBlockedWebsiteResearch({ job });
 
@@ -181,7 +190,9 @@ async function submitWebResearchAndRelease({ supabase, job, blockError }) {
       status: "pending",
       step: "web_research_waiting",
       progress: 42,
-      userMessageCode: "website_blocked_background_research",
+      userMessageCode: timedOut
+        ? "website_direct_access_background_research"
+        : "website_blocked_background_research",
       userMessage: message,
       openaiResponseId: research.id,
       webResearchSources: research.sources,
@@ -405,15 +416,28 @@ async function processClaimedJob({ supabase, job }) {
     await sendCompletionEmail({ supabase, job: completedJob });
     return { completed: true, jobId: job.id };
   } catch (error) {
-    if (error?.code === "WEBSITE_SECURITY_BLOCKED" && job.website_url) {
+    if (isDirectWebsiteFallbackError(error) && job.website_url) {
+      console.warn("Brand analysis direct website access failed; switching to web research", {
+        jobId: job.id,
+        code: error?.code || "unknown",
+        message: error?.message,
+        websiteUrl: job.website_url,
+      });
+
       const resumedJob = await submitWebResearchAndRelease({
         supabase,
         job,
-        blockError: error,
+        accessError: error,
       });
 
       if (!resumedJob) {
-        return { deferred: true, reason: "website_security_fallback" };
+        return {
+          deferred: true,
+          reason:
+            error?.code === "WEBSITE_FETCH_TIMEOUT"
+              ? "website_timeout_fallback"
+              : "website_security_fallback",
+        };
       }
 
       const completedJob = await runBrandAnalysisJob({

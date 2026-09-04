@@ -411,6 +411,12 @@ export default function BrandProfile() {
     shouldAnalyze,
   ]);
 
+  const showAnalysisFailureState =
+    !showGeneratedFields &&
+    !isEditing &&
+    !analyzing &&
+    !autoAnalyzeRequested;
+
   const mainButtonLabel = useMemo(() => {
     if (saving) return t("brand.saving");
     if (analyzing) return t("brand.analyzing");
@@ -547,7 +553,10 @@ export default function BrandProfile() {
       } else {
         setShowGeneratedFields(false);
       }
-      setIsEditing(!hasGeneratedProfile && !shouldAutoAnalyze);
+      // Never auto-open the fixed edit dialog just because an analysis is
+      // incomplete. The page shows a clear recovery state instead, and the
+      // user can explicitly choose to edit the details.
+      setIsEditing(false);
       setAutoAnalyzeRequested(shouldAutoAnalyze);
 
       setLoading(false);
@@ -1033,7 +1042,7 @@ export default function BrandProfile() {
       setShowAnalysisResult(true);
     } catch (error) {
       setMessage(error.message || t("brand.errorAnalyze"));
-      setIsEditing(true);
+      setIsEditing(false);
       setAnalysisResultStep("error");
        } finally {
       clearInterval(progressInterval);
@@ -1448,7 +1457,13 @@ export default function BrandProfile() {
                 <button
                   type="button"
                   className="brand-profile-edit-button subtle"
-                  onClick={() => window.location.reload()}
+                  onClick={() => {
+                    setIsEditing(false);
+                    setShowAnalysisResult(false);
+                    setMessage(
+                      message || t("brand.analysisFailedText")
+                    );
+                  }}
                   aria-label={t("common.close")}
                 >
                   <X size={16} />
@@ -1586,6 +1601,38 @@ export default function BrandProfile() {
                     <p className="brand-v14496-preview-note">{logoUrl ? t("brand.logoPreviewUsesOwn") : t("brand.logoPreviewUsesExample")}</p>
                   </div>
                 </section>
+              </div>
+            ) : showAnalysisFailureState ? (
+              <div className="brand-analysis-failed-state" role="status">
+                <span className="brand-analysis-failed-icon" aria-hidden="true">
+                  <Sparkles size={22} />
+                </span>
+                <div className="brand-analysis-failed-copy">
+                  <p className="dashboard-eyebrow">{t("brand.analysisFailedEyebrow")}</p>
+                  <h4>{t("brand.analysisFailedTitle")}</h4>
+                  <p>{message || t("brand.analysisFailedText")}</p>
+                </div>
+                <div className="brand-analysis-failed-actions">
+                  <button
+                    type="button"
+                    className="brand-analysis-retry-button"
+                    onClick={analyzeBrand}
+                    disabled={!brandProfileId}
+                  >
+                    {t("brand.analysisRetry")}
+                  </button>
+                  <button
+                    type="button"
+                    className="brand-analysis-edit-details-button"
+                    onClick={() => {
+                      setMessage("");
+                      setIsEditing(true);
+                    }}
+                  >
+                    <Pencil size={15} />
+                    {t("brand.analysisEditDetails")}
+                  </button>
+                </div>
               </div>
             ) : (
               <>
@@ -1755,7 +1802,7 @@ export default function BrandProfile() {
               </>
             )}
 
-            {!analyzing && (isEditing || !showGeneratedFields) && !autoAnalyzeRequested ? (
+            {!analyzing && !showAnalysisFailureState && (isEditing || !showGeneratedFields) && !autoAnalyzeRequested ? (
               <button
                 className="brand-profile-primary-button"
                 type="button"
@@ -1816,7 +1863,7 @@ export default function BrandProfile() {
 
             {message && <p className="brand-profile-message">{message}</p>}
 
-            {isEditing || !showGeneratedFields ? <p className="brand-profile-disclaimer">{t("brand.disclaimer")}</p> : null}
+            {!showAnalysisFailureState && (isEditing || !showGeneratedFields) ? <p className="brand-profile-disclaimer">{t("brand.disclaimer")}</p> : null}
           </section>
         </section>
 
@@ -1887,7 +1934,7 @@ export default function BrandProfile() {
                   <p className="dashboard-eyebrow">{t("brand.analysisTitle")}</p>
                   <h2>{t("brand.errorAnalyze")}</h2>
                   <p className="brand-result-lead">{message}</p>
-                  <button type="button" className="brand-result-primary" onClick={() => setShowAnalysisResult(false)}>{t("common.close")}</button>
+                  <button type="button" className="brand-result-primary" onClick={() => { setShowAnalysisResult(false); setIsEditing(false); }}>{t("common.close")}</button>
                 </div>
               )}
             </section>

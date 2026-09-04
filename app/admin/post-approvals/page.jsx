@@ -10,6 +10,7 @@ import {
   Clock3,
   ExternalLink,
   FileCheck2,
+  Download,
   ImageIcon,
   Link2,
   LoaderCircle,
@@ -73,6 +74,7 @@ function getGenerationCostEvents(post) {
 }
 
 function statusMeta(status, t) {
+  if (status === "planned") return { label: "Kommande", className: "pending", Icon: Clock3 };
   if (status === "creating") return { label: t("admin.approvals.statusCreating"), className: "pending", Icon: LoaderCircle };
   if (status === "needs_repair") return { label: t("admin.approvals.statusNeedsRepair"), className: "failed", Icon: AlertTriangle };
   if (status === "sent_directly") return { label: t("admin.approvals.statusSentDirectly"), className: "approved", Icon: CheckCircle2 };
@@ -93,6 +95,8 @@ const emptyCarouselProduct = () => ({
   preview_image_url: "",
   product_brand: "",
   product_identifier: "",
+  price: "",
+  currency: "",
   product_display_type: "",
   product_color: "",
   product_image_width: null,
@@ -126,7 +130,7 @@ function isCarouselPost(post) {
 }
 function isSyntheticAdminCaseId(id) {
   const value = String(id || "");
-  return value.startsWith("occurrence-") || value.startsWith("review-case-");
+  return value.startsWith("occurrence-") || value.startsWith("review-case-") || value.startsWith("work-item-");
 }
 
 function getKlingRejectedAudit(post) {
@@ -238,9 +242,9 @@ function MediaPreview({ post, t, onOpen }) {
 export default function AdminPostApprovalsPage() {
   const { t } = useUiText(["admin"]);
   const [filter, setFilter] = useState(() => {
-    if (typeof window === "undefined") return "queue";
+    if (typeof window === "undefined") return "upcoming";
     const view = new URLSearchParams(window.location.search).get("view");
-    return ["queue", "failed", "history"].includes(view) ? view : "queue";
+    return ["upcoming", "queue", "failed", "history"].includes(view) ? view : "upcoming";
   });
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -276,6 +280,9 @@ export default function AdminPostApprovalsPage() {
   });
   const [restoringVersionId, setRestoringVersionId] = useState("");
   const [copyingTestDiagnostic, setCopyingTestDiagnostic] = useState(false);
+  const [rescueUploading, setRescueUploading] = useState(false);
+  const [rescueMessage, setRescueMessage] = useState("");
+  const [rescueError, setRescueError] = useState("");
   const [page, setPage] = useState(1);
   const [pageInput, setPageInput] = useState("1");
   const postCopyRef = useRef(null);
@@ -389,6 +396,8 @@ export default function AdminPostApprovalsPage() {
       setProductDirty(false);
       setManualEditingIndices([]);
       setSourceUrl("");
+      setRescueMessage("");
+      setRescueError("");
       return;
     }
     // Do not let the 15-second admin polling overwrite an open edit session.
@@ -412,6 +421,8 @@ export default function AdminPostApprovalsPage() {
     setOutroRemoved(false);
     setRegenerationError("");
     setRegenerationSuccess("");
+    setRescueMessage("");
+    setRescueError("");
     setLightboxIndex(null);
     setEditorPostId(selectedPost.id);
     setEditorDirty(false);
@@ -478,6 +489,8 @@ export default function AdminPostApprovalsPage() {
             <label><span>{t("admin.approvals.productType")}</span><input value={item.product_display_type || ""} onChange={(event) => setField("product_display_type", event.target.value)} /></label>
             <label><span>{t("admin.approvals.variant")}</span><input value={item.product_color || ""} onChange={(event) => setField("product_color", event.target.value)} /></label>
             <label><span>{t("admin.approvals.sku")}</span><input value={item.product_identifier || ""} onChange={(event) => setField("product_identifier", event.target.value)} /></label>
+            <label><span>Pris</span><input value={item.price || ""} onChange={(event) => setField("price", event.target.value)} placeholder="349 kr" /></label>
+            <label><span>Valuta</span><input value={item.currency || ""} onChange={(event) => setField("currency", event.target.value)} placeholder="SEK" /></label>
           </div>
         </details>
         <div className="admin-product-manual-actions">
@@ -642,7 +655,7 @@ export default function AdminPostApprovalsPage() {
     setRegenerationSuccess("");
     try {
       const headers = await getHeaders();
-      const response = await fetch("/api/admin/post-approvals/regenerate", { method: "POST", headers, body: JSON.stringify({ post_id: selectedPost.status === "failed" ? null : selectedPost.id, occurrence_id: selectedPost.occurrence_id || null, review_case_id: selectedPost.failure?.review_case_id || null, content: postCopy, product_items: materials, preserve_outro: !outroRemoved && Boolean(outroSlide?.image_url), outro_slide: !outroRemoved ? outroSlide : null }) });
+      const response = await fetch("/api/admin/post-approvals/regenerate", { method: "POST", headers, body: JSON.stringify({ post_id: selectedPost.status === "failed" ? null : selectedPost.id, occurrence_id: selectedPost.occurrence_id || null, review_case_id: selectedPost.failure?.review_case_id || null, work_item_id: selectedPost.work_item_id || null, content: postCopy, product_items: materials, preserve_outro: !outroRemoved && Boolean(outroSlide?.image_url), outro_slide: !outroRemoved ? outroSlide : null }) });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result?.error || "Regeneration failed.");
       setEditorDirty(false);
@@ -672,6 +685,7 @@ export default function AdminPostApprovalsPage() {
           post_id: selectedPost.status === "failed" ? null : selectedPost.id,
           occurrence_id: selectedPost.occurrence_id || null,
           review_case_id: selectedPost.failure?.review_case_id || null,
+          work_item_id: selectedPost.work_item_id || null,
           product_url: materials[0].url,
           product_item: materials[0],
         }),
@@ -713,6 +727,7 @@ export default function AdminPostApprovalsPage() {
           post_id: selectedPost.status === "failed" ? null : selectedPost.id,
           occurrence_id: selectedPost.occurrence_id || null,
           review_case_id: selectedPost.failure?.review_case_id || null,
+          work_item_id: selectedPost.work_item_id || null,
           source_url: sourceUrl,
           content: postCopy,
           mode,
@@ -859,6 +874,159 @@ export default function AdminPostApprovalsPage() {
     } catch (uploadError) { setError(uploadError.message || "Image upload failed."); }
   }
 
+  function buildRescuePrompt(post) {
+    if (!post) return "";
+    const count = Math.max(1, Number(post.requirement_count || (isCarouselPost(post) ? 5 : 1)));
+    const ruleSnapshot = post.rule_snapshot || post.work_item?.rule_snapshot || {};
+    const matchTerms = Array.isArray(post.product_match_terms) ? post.product_match_terms.filter(Boolean) : [];
+    const searchQueries = Array.isArray(post.product_search_queries) ? post.product_search_queries.filter(Boolean) : [];
+    const strategy = post.product_strategy || ruleSnapshot.product_search_intent || (matchTerms.length ? `Tema/sökord: ${matchTerms.join(", ")}` : "Random/lämplig aktuell produkt enligt originaluppdraget.");
+    const language = ruleSnapshot.language || ruleSnapshot.content_language || "sv";
+    const campaignGoal = ruleSnapshot.campaign_goal || "";
+    const campaignTheme = ruleSnapshot.campaign_theme || ruleSnapshot.campaign_opportunity_title || "";
+    const marketingAngle = ruleSnapshot.marketing_angle || "";
+    const customerNeed = ruleSnapshot.target_customer_need || "";
+    return `Du hjälper Spreelo att rädda ett misslyckat planerat inlägg. Använd ChatGPTs webbsökning/webbläsning för att ta fram VERKLIGT material från kundens offentliga webbplats och skapa en färdig ZIP-fil som jag kan ladda upp tillbaka till Spreelo.
+
+KUND / UPPDRAG
+Företag: ${post.brand_name || "—"}
+Webbplats: ${post.brand_website_url || post.source_url || "—"}
+Källa för jobbet: ${post.source_url || post.brand_website_url || "—"}
+Inläggstyp: ${post.content_type_label || post.post_type || "—"}
+Format: ${post.content_format || "—"}
+Plattform: ${post.platform || "—"}
+Plan/kampanj: ${post.work_item?.plan_name || post.content || "—"}
+Schemalagt till: ${post.scheduled_for || "—"}
+Språk enligt originalrecept: ${language}
+Kampanjmål: ${campaignGoal || "—"}
+Kampanjtema: ${campaignTheme || "—"}
+Marknadsföringsvinkel: ${marketingAngle || "—"}
+Kundbehov: ${customerNeed || "—"}
+Produktstrategi: ${strategy}
+Matchningsord: ${matchTerms.length ? matchTerms.join(", ") : "—"}
+Sökfrågor från originalreceptet: ${searchQueries.length ? searchQueries.join(" | ") : "—"}
+Antal produkter som krävs: ${count}
+Fel som Spreelo fick: ${post.failure?.failure_code || "—"} / ${post.failure?.failure_stage || "—"}
+
+ORIGINALUPPDRAG / STRATEGI
+${post.prompt_snapshot || ruleSnapshot.prompt || "—"}
+${post.strategy_snapshot || ruleSnapshot.strategy_notes || ""}
+
+KRAV
+Ta fram exakt ${count} ${count === 1 ? "produkt" : "produkter"} som matchar uppdraget. Produkterna ska vara riktiga produkter från kundens egen webbplats. För varje produkt ska du verifiera att produktnamn, produktlänk och produktbild hör till exakt samma produkt. Använd inte kategoribilder, bilder från andra produkter eller AI-genererade ersättningsbilder. Hämta den bästa tillgängliga riktiga produktbilden. Ta med pris endast om det går att verifiera. Skriv en kort saklig produktbeskrivning utan att hitta på egenskaper. Om temat kräver flera produkter ska urvalet tillsammans passa temat, inte bara var och en löst.
+
+LEVERERA EN FAKTISK ZIP-FIL med denna struktur:
+rescue-package.zip
+├── manifest.json
+${Array.from({ length: count }, (_, i) => `├── product-${i + 1}.jpg`).join("\n")}
+
+Bildfiler får även vara .png eller .webp, men image_file i manifest.json måste exakt matcha filnamnet.
+
+manifest.json ska vara giltig JSON med:
+{
+  "version": 1,
+  "source_type": "chatgpt_rescue",
+  "post_type": ${JSON.stringify(post.content_type_id || post.content_format || "product_post")},
+  "website_url": ${JSON.stringify(post.brand_website_url || post.source_url || "")},
+  "campaign_goal": ${JSON.stringify(campaignGoal || post.work_item?.plan_name || "")},
+  "theme": ${JSON.stringify(campaignTheme || strategy)},
+  "language": ${JSON.stringify(language)},
+  "products": [
+    {
+      "slot": 1,
+      "product_name": "...",
+      "product_url": "https://...",
+      "article_number": "...",
+      "price": "...",
+      "currency": "SEK",
+      "description": "...",
+      "brand": "...",
+      "product_type": "...",
+      "color": "...",
+      "image_file": "product-1.jpg",
+      "verification_note": "Kort förklaring till hur produkt och bild verifierades"
+    }
+  ]
+}
+
+VIKTIGT: Lägg själva riktiga produktbildfilerna i ZIP-filen. Svara inte bara med bildlänkar. Om du inte kan verifiera ${count} kompletta produkter ska du säga det istället för att fylla ut med osäkert material.`;
+  }
+
+  async function copyRescuePromptAndOpenChatGpt() {
+    if (!selectedPost) return;
+    const prompt = buildRescuePrompt(selectedPost);
+    setRescueError("");
+    setRescueMessage("");
+    // Open the tab synchronously from the click so normal popup blockers do not
+    // reject it after the asynchronous clipboard permission step.
+    window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setRescueMessage("Rescue-uppdraget är kopierat. Klistra in det i ChatGPT och skicka. När ZIP-filen är klar laddar du upp den här.");
+    } catch {
+      setRescueError("ChatGPT öppnades, men uppdraget kunde inte kopieras automatiskt. Kopiera texten manuellt från rutan nedan.");
+    }
+  }
+
+  function downloadRescueBrief() {
+    if (!selectedPost) return;
+    const prompt = buildRescuePrompt(selectedPost);
+    const payload = {
+      work_item_id: selectedPost.work_item_id || null,
+      brand_name: selectedPost.brand_name || null,
+      website_url: selectedPost.brand_website_url || selectedPost.source_url || null,
+      content_type_id: selectedPost.content_type_id || null,
+      content_type_label: selectedPost.content_type_label || selectedPost.post_type || null,
+      content_format: selectedPost.content_format || null,
+      platform: selectedPost.platform || null,
+      scheduled_for: selectedPost.scheduled_for || null,
+      requirement_count: Math.max(1, Number(selectedPost.requirement_count || (isCarouselPost(selectedPost) ? 5 : 1))),
+      product_strategy: selectedPost.product_strategy || null,
+      product_match_terms: selectedPost.product_match_terms || [],
+      product_search_queries: selectedPost.product_search_queries || [],
+      failure: selectedPost.failure || null,
+      prompt,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `spreelo-rescue-${selectedPost.work_item_id || selectedPost.occurrence_id || "job"}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function importRescueZip(file) {
+    if (!file || !selectedPost?.work_item_id) return;
+    setRescueUploading(true);
+    setRescueError("");
+    setRescueMessage("");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const form = new FormData();
+      form.append("work_item_id", selectedPost.work_item_id);
+      form.append("file", file);
+      const response = await fetch("/api/admin/post-approvals/rescue-import", {
+        method: "POST",
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+        body: form,
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || "Rescue-ZIP kunde inte importeras.");
+      setMaterials((result.products || []).map((item) => ({ ...emptyCarouselProduct(), ...item })));
+      setEditorDirty(true);
+      setProductDirty(true);
+      setManualEditingIndices([]);
+      setRescueMessage(`${result.product_count} ${result.product_count === 1 ? "produkt" : "produkter"} importerades. Kontrollera allt nedan och regenerera först när materialet ser rätt ut.`);
+      await loadPosts(selectedPost.id);
+      setSelectedPostId(selectedPost.id);
+    } catch (uploadError) {
+      setRescueError(uploadError.message || "Rescue-ZIP kunde inte importeras.");
+    } finally {
+      setRescueUploading(false);
+    }
+  }
+
   async function archiveSelected(ids) {
     const postIds = ids.filter((id) => !isSyntheticAdminCaseId(id));
     if (!postIds.length) return;
@@ -931,7 +1099,7 @@ export default function AdminPostApprovalsPage() {
         </section>
 
         <div className="admin-approval-tabs admin-v14370-review-tabs">
-          {[["queue", t("admin.approvals.queue")], ["failed", t("admin.approvals.needsRepair")], ["history", t("admin.approvals.history")]].map(([value, label]) => (
+          {[["upcoming", "Kommande"], ["queue", "Godkännande"], ["failed", "Misslyckat"], ["history", t("admin.approvals.history")]].map(([value, label]) => (
             <button type="button" key={value} className={filter === value ? "active" : ""} onClick={() => {
               setSelectedPostId("");
               setSelectedIds([]);
@@ -946,9 +1114,9 @@ export default function AdminPostApprovalsPage() {
         </div>
         <section className="admin-v14370-queue-intro">
           <div>
-            <span>{filter === "history" ? t("admin.approvals.historyEyebrow") : filter === "failed" ? t("admin.approvals.repairEyebrow") : t("admin.approvals.queueEyebrow")}</span>
-            <strong>{filter === "history" ? t("admin.approvals.historyTitle") : filter === "failed" ? t("admin.approvals.repairTitle") : t("admin.approvals.queueTitle")}</strong>
-            <p>{filter === "history" ? t("admin.approvals.historyText") : filter === "failed" ? t("admin.approvals.repairText") : t("admin.approvals.queueText")}</p>
+            <span>{filter === "upcoming" ? "PLANERAT" : filter === "history" ? t("admin.approvals.historyEyebrow") : filter === "failed" ? "FELKÖ" : "GODKÄNNANDE"}</span>
+            <strong>{filter === "upcoming" ? "Kommande inlägg" : filter === "history" ? t("admin.approvals.historyTitle") : filter === "failed" ? "Misslyckade inlägg" : "Klara för godkännande"}</strong>
+            <p>{filter === "upcoming" ? "Arbetsordern skapas redan när kunden aktiverar planen. Här ser du vad Spreelo väntar på att skapa innan genereringen börjar." : filter === "history" ? t("admin.approvals.historyText") : filter === "failed" ? "Alla terminala fel samlas här med felorsak, teknisk information och möjlighet att rädda produktmaterial via ZIP." : "Endast lyckade genereringar som väntar på Spreelo-granskning visas här."}</p>
           </div>
           <b>{filteredPosts.length}</b>
         </section>
@@ -984,13 +1152,17 @@ export default function AdminPostApprovalsPage() {
               const meta = statusMeta(displayStatus, t);
               return (
                 <button type="button" className="admin-v74-approval-row admin-v14370-review-row" key={post.id} onClick={() => setSelectedPostId(post.id)}>
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.includes(post.id)}
-                    onClick={(event) => event.stopPropagation()}
-                    onChange={(event) => setSelectedIds((ids) => event.target.checked ? [...ids, post.id] : ids.filter((id) => id !== post.id))}
-                    aria-label={t("admin.approvals.selectPost")}
-                  />
+                  {isSyntheticAdminCaseId(post.id) ? (
+                    <span className="admin-v144106-work-item-dot" aria-hidden="true" />
+                  ) : (
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(post.id)}
+                      onClick={(event) => event.stopPropagation()}
+                      onChange={(event) => setSelectedIds((ids) => event.target.checked ? [...ids, post.id] : ids.filter((id) => id !== post.id))}
+                      aria-label={t("admin.approvals.selectPost")}
+                    />
+                  )}
                   <span className="admin-v14370-review-thumb">
                     {(post.slides?.[0]?.image_url || post.image_url) ? <img src={post.slides?.[0]?.image_url || post.image_url} alt="" /> : post.video_url ? <Video size={20} /> : <ImageIcon size={20} />}
                   </span>
@@ -1140,6 +1312,7 @@ export default function AdminPostApprovalsPage() {
                                     <div><span>{t("admin.approvals.productType")}</span><strong>{item.product_display_type || "—"}</strong></div>
                                     <div><span>{t("admin.approvals.variant")}</span><strong>{item.product_color || "—"}</strong></div>
                                     <div><span>{t("admin.approvals.sku")}</span><strong>{item.product_identifier || "—"}</strong></div>
+                                    <div><span>Pris</span><strong>{item.price || "—"}{item.currency && !String(item.price || "").includes(item.currency) ? ` ${item.currency}` : ""}</strong></div>
                                     <div><span>{t("admin.approvals.sourceImage")}</span><strong>{width && height ? `${width} × ${height}` : "—"}</strong></div>
                                   </div>
                                 ) : <p className="admin-product-url-help">{t("admin.approvals.pasteProductUrl")}</p>}
@@ -1205,6 +1378,7 @@ export default function AdminPostApprovalsPage() {
                                 <div><span>{t("admin.approvals.productType")}</span><strong>{item.product_display_type || "—"}</strong></div>
                                 <div><span>{t("admin.approvals.variant")}</span><strong>{item.product_color || "—"}</strong></div>
                                 <div><span>{t("admin.approvals.sku")}</span><strong>{item.product_identifier || "—"}</strong></div>
+                                <div><span>Pris</span><strong>{item.price || "—"}{item.currency && !String(item.price || "").includes(item.currency) ? ` ${item.currency}` : ""}</strong></div>
                                 <div><span>{t("admin.approvals.sourceImage")}</span><strong>{item.product_image_width && item.product_image_height ? `${item.product_image_width} × ${item.product_image_height}` : "—"}</strong></div>
                               </div>
                             ) : <p className="admin-product-url-help">{t("admin.approvals.pasteProductUrl")}</p>}
@@ -1270,6 +1444,39 @@ export default function AdminPostApprovalsPage() {
                           </div>
                         ))}
                       </div>
+                    </div>
+                  ) : null}
+
+                  {selectedPost.status === "planned" ? (
+                    <div className="admin-v144106-work-order-card">
+                      <div className="admin-v144106-work-order-head"><Clock3 size={18} /><div><strong>Arbetsorder skapad</strong><span>Inget innehåll är genererat ännu.</span></div></div>
+                      <dl>
+                        <div><dt>Inläggstyp</dt><dd>{selectedPost.content_type_label || selectedPost.post_type || "—"}</dd></div>
+                        <div><dt>Format</dt><dd>{selectedPost.content_format || "—"}</dd></div>
+                        <div><dt>Produktstrategi</dt><dd>{selectedPost.product_strategy || (selectedPost.product_match_terms?.length ? selectedPost.product_match_terms.join(", ") : "Automatisk")}</dd></div>
+                        <div><dt>Behöver hämta</dt><dd>{Number(selectedPost.requirement_count || 0) > 0 ? `${selectedPost.requirement_count} produkt${Number(selectedPost.requirement_count) === 1 ? "" : "er"}` : "Webb-/varumärkesunderlag enligt receptet"}</dd></div>
+                      </dl>
+                      {selectedPost.prompt_snapshot ? <details><summary>Visa originaluppdrag</summary><pre>{selectedPost.prompt_snapshot}</pre></details> : null}
+                    </div>
+                  ) : null}
+
+                  {selectedPost.status === "failed" && selectedPost.work_item_id ? (
+                    <div className="admin-v144106-rescue-card">
+                      <div className="admin-v144106-rescue-head">
+                        <div><PackageCheck size={19} /><span><strong>AI Rescue</strong><small>Ta fram material i ChatGPT, importera ZIP, kontrollera och regenerera utan ny webbplatshämtning.</small></span></div>
+                        <span className={`admin-v144106-rescue-status ${selectedPost.work_item?.rescue_status || selectedPost.rescue_status || "needed"}`}>{selectedPost.work_item?.rescue_status === "ready" || selectedPost.rescue_status === "ready" ? "Material klart" : "Behöver material"}</span>
+                      </div>
+                      <div className="admin-v144106-rescue-actions">
+                        <button type="button" onClick={copyRescuePromptAndOpenChatGpt}><ExternalLink size={15} /> Öppna uppdrag i ChatGPT</button>
+                        <button type="button" onClick={downloadRescueBrief}><Download size={15} /> Ladda ner rescue-underlag</button>
+                        <label className="admin-v144106-rescue-upload">
+                          {rescueUploading ? <LoaderCircle className="admin-spin" size={15} /> : <Upload size={15} />} {rescueUploading ? "Importerar…" : "Ladda upp rescue-ZIP"}
+                          <input type="file" accept=".zip,application/zip" disabled={rescueUploading} onChange={(event) => { const file = event.target.files?.[0]; if (file) importRescueZip(file); event.target.value = ""; }} />
+                        </label>
+                      </div>
+                      {rescueMessage ? <div className="admin-alert success"><CheckCircle2 size={15} /><span>{rescueMessage}</span></div> : null}
+                      {rescueError ? <div className="admin-alert error"><AlertTriangle size={15} /><span>{rescueError}</span></div> : null}
+                      <details className="admin-v144106-rescue-prompt"><summary>Visa exakt ChatGPT-uppdrag</summary><pre>{buildRescuePrompt(selectedPost)}</pre></details>
                     </div>
                   ) : null}
 
@@ -1346,13 +1553,13 @@ export default function AdminPostApprovalsPage() {
                       {t("admin.approvals.saveChanges")}
                     </button>
                   ) : null}
-                  {!selectedKlingRejectedAudit ? (
+                  {!selectedKlingRejectedAudit && selectedPost.status !== "planned" ? (
                     <button type="button" className="admin-review-secondary-action admin-review-regenerate-action admin-v14401-regenerate-main" disabled={regenerating || (isCarouselPost(selectedPost) ? !carouselReady : materials.length ? !singleProductReady : false)} onClick={() => regenerateCurrent("all")}>
                       {regenerating ? <LoaderCircle className="admin-spin" size={16} /> : <RefreshCw size={16} />}
                       Regenerera inlägg
                     </button>
                   ) : null}
-                  {!selectedKlingRejectedAudit && !isCarouselPost(selectedPost) && !materials.length ? (
+                  {!selectedKlingRejectedAudit && selectedPost.status !== "planned" && !isCarouselPost(selectedPost) && !materials.length ? (
                     <div className="admin-v14401-partial-actions">
                       <button type="button" disabled={regenerating} onClick={() => regenerateCurrent("text")}>Bara text</button>
                       <button type="button" disabled={regenerating} onClick={() => regenerateCurrent("media")}>Bara bild</button>

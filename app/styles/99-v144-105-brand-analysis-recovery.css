@@ -1,0 +1,90 @@
+/* Spreelo v144.105 — durable brand-analysis recovery UI. */
+
+html body .brand-v14495-page .brand-analysis-failed-state {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  margin: 22px 0 8px;
+  padding: 22px;
+  border: 1px solid rgba(236, 141, 112, .28);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(255, 250, 248, .96), rgba(248, 250, 255, .92));
+  box-shadow: 0 14px 36px rgba(33, 44, 66, .06);
+}
+
+html body .brand-v14495-page .brand-analysis-failed-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 15px;
+  background: linear-gradient(145deg, #fff0ea, #ffe3d8);
+  color: #ef5b3f;
+}
+
+html body .brand-v14495-page .brand-analysis-failed-copy { min-width: 0; }
+html body .brand-v14495-page .brand-analysis-failed-copy .dashboard-eyebrow { margin: 0 0 5px; }
+html body .brand-v14495-page .brand-analysis-failed-copy h4 {
+  margin: 0 0 6px;
+  color: #142036;
+  font-size: 19px;
+  line-height: 1.25;
+}
+html body .brand-v14495-page .brand-analysis-failed-copy > p:last-child {
+  margin: 0;
+  color: #617087;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+html body .brand-v14495-page .brand-analysis-failed-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+html body .brand-v14495-page .brand-analysis-retry-button,
+html body .brand-v14495-page .brand-analysis-edit-details-button {
+  min-height: 42px;
+  padding: 0 15px;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+html body .brand-v14495-page .brand-analysis-retry-button {
+  border: 1px solid #ee684c;
+  background: linear-gradient(180deg, #ff694b, #d94d34);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(218, 77, 52, .18);
+}
+html body .brand-v14495-page .brand-analysis-edit-details-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(173, 187, 207, .6);
+  background: rgba(255, 255, 255, .82);
+  color: #334158;
+}
+
+@media (max-width: 760px) {
+  html body .brand-v14495-page .brand-analysis-failed-state {
+    grid-template-columns: 46px minmax(0, 1fr);
+    gap: 14px;
+    padding: 18px;
+  }
+  html body .brand-v14495-page .brand-analysis-failed-icon {
+    width: 46px;
+    height: 46px;
+  }
+  html body .brand-v14495-page .brand-analysis-failed-actions {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+  html body .brand-v14495-page .brand-analysis-retry-button,
+  html body .brand-v14495-page .brand-analysis-edit-details-button {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+}

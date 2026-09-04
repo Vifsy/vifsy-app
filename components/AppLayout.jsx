@@ -411,13 +411,19 @@ export default function AppLayout({ active, children }) {
 
   function getBusinessNameFromWebsite(value) {
     try {
-      const hostname = new URL(value).hostname.replace(/^www\./i, "");
+      // Treat numbered web front doors such as www2.hm.com as infrastructure,
+      // never as the customer-facing company name.
+      const hostname = new URL(value).hostname.replace(/^www\d*\./i, "");
       const label = hostname.split(".")[0] || hostname;
-      return label
+      const words = label
         .split(/[-_]+/)
         .filter(Boolean)
-        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-        .join(" ") || hostname;
+        .map((part) =>
+          part.length <= 3
+            ? part.toUpperCase()
+            : part.charAt(0).toUpperCase() + part.slice(1)
+        );
+      return words.join(" ") || hostname;
     } catch {
       return "";
     }

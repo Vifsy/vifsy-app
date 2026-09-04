@@ -12043,6 +12043,64 @@ async function setRuleError(supabase, ruleId, message) {
     .eq("id", ruleId);
 }
 
+// v144.106: the admin queue is created before generation starts. A small
+// number of failures can happen before automation_occurrences is claimed, so
+// those failures must update the pre-created work item directly or they would
+// otherwise only exist in logs/email. Missing-table errors are ignored during
+// rolling deploys so the cron remains backwards compatible until SQL is run.
+async function markAdminWorkItemFailedBeforeOccurrence({
+  supabase,
+  rule,
+  scheduledFor,
+  runLogId = null,
+  stage = null,
+  failureCode = null,
+  message,
+  productItems = [],
+  workerName = null,
+}) {
+  if (!rule?.id || !scheduledFor) return;
+  const now = new Date().toISOString();
+  try {
+    const payload = {
+      status: "failed",
+      run_log_id: runLogId || null,
+      failure_code: failureCode || "generation_failed_before_occurrence_claim",
+      failure_stage: stage || "unhandled_before_occurrence_claim",
+      failure_message: String(message || "Generation failed before occurrence claim").slice(0, 4000),
+      rescue_status: "needed",
+      technical_log: {
+        failure_before_occurrence_claim: true,
+        worker_name: workerName || null,
+        run_log_id: runLogId || null,
+        failed_at: now,
+        product_items: Array.isArray(productItems) ? productItems.slice(0, 5) : [],
+      },
+      updated_at: now,
+    };
+    const { error } = await supabase
+      .from("admin_generation_work_items")
+      .update(payload)
+      .eq("automation_rule_id", rule.id)
+      .eq("scheduled_for", scheduledFor);
+    if (error && !/admin_generation_work_items|schema cache|does not exist/i.test(String(error.message || ""))) {
+      console.warn("Could not mark admin work item failed before occurrence claim", {
+        ruleId: rule.id,
+        scheduledFor,
+        message: error.message,
+      });
+    }
+  } catch (error) {
+    if (!/admin_generation_work_items|schema cache|does not exist/i.test(String(error?.message || ""))) {
+      console.warn("Could not mark admin work item failed before occurrence claim", {
+        ruleId: rule.id,
+        scheduledFor,
+        message: error?.message || String(error),
+      });
+    }
+  }
+}
+
 function classifyAutomationCreationFailure(errorOrMessage, stage = "unhandled") {
   const message = String(errorOrMessage?.message || errorOrMessage || "Unknown automation error");
   const normalized = message.toLowerCase();
@@ -12995,7 +13053,24 @@ async function failAutomationOccurrenceTerminal({
   incidentContext = {},
 }) {
   if (!occurrenceId) {
-    await setRuleError(supabase, rule.id, String(errorOrMessage?.message || errorOrMessage || "Automation failed"));
+    const internalMessage = String(errorOrMessage?.message || errorOrMessage || "Automation failed");
+    const failure = classifyAutomationCreationFailure(errorOrMessage, stage);
+    await setRuleError(supabase, rule.id, internalMessage);
+    await markAdminWorkItemFailedBeforeOccurrence({
+      supabase,
+      rule,
+      scheduledFor: scheduledFor || getScheduledPublishAtIso(rule, new Date()),
+      runLogId: incidentContext?.runLogId || metadata?.run_log_id || null,
+      stage: stage || "unhandled_before_occurrence_claim",
+      failureCode: failure.code || errorOrMessage?.code || "generation_failed_before_occurrence_claim",
+      message: internalMessage,
+      productItems: Array.isArray(metadata?.admin_product_items)
+        ? metadata.admin_product_items
+        : Array.isArray(metadata?.partial_products)
+          ? metadata.partial_products
+          : [],
+      workerName: incidentContext?.workerName || metadata?.worker_name || null,
+    });
     return { handled: false, refundedCredits: 0, notificationStatus: "not_applicable" };
   }
 
@@ -13023,6 +13098,21 @@ async function failAutomationOccurrenceTerminal({
         ? metadata.partial_products
         : []
   ).slice(0, 5);
+
+  // Keep the pre-created work item authoritative even if the terminal-failure
+  // RPC or a later review-case write fails. The occurrence trigger will merge
+  // richer metadata afterwards when it succeeds.
+  await markAdminWorkItemFailedBeforeOccurrence({
+    supabase,
+    rule,
+    scheduledFor: scheduledFor || getScheduledPublishAtIso(rule, new Date()),
+    runLogId: incidentContext?.runLogId || metadata?.run_log_id || null,
+    stage: stage || "unhandled",
+    failureCode: failure.code || errorOrMessage?.code || "generation_failed",
+    message: internalMessage,
+    productItems: repairProductItems,
+    workerName: incidentContext?.workerName || metadata?.worker_name || null,
+  });
 
   const repairCaseValues = {
     occurrence_id: occurrenceId,
@@ -44754,6 +44844,17 @@ product_research_model_used: websitePreparedRule.uses_website_content
           summary.errors += 1;
         } else {
           await setRuleError(supabase, rule.id, message);
+          await markAdminWorkItemFailedBeforeOccurrence({
+            supabase,
+            rule,
+            scheduledFor: scheduledPublishAtIso,
+            runLogId: automationRunLogId,
+            stage: failureStage || "unhandled_before_occurrence_claim",
+            failureCode: error?.code || "generation_failed_before_occurrence_claim",
+            message,
+            productItems: automationRunWebsiteItems,
+            workerName,
+          });
           if (automationWorkerActivityEntry) {
             automationWorkerActivityEntry.status = "failed";
             automationWorkerActivityEntry.stage = failureStage || "unhandled_before_occurrence_claim";

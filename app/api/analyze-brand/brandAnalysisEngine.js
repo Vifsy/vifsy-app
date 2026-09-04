@@ -555,6 +555,19 @@ export async function fetchWebsiteHtml(websiteUrl, options = {}) {
       url: safeWebsiteUrl,
       html,
     };
+  } catch (error) {
+    if (controller.signal.aborted) {
+      const timeoutError = new Error(
+        `Website request timed out after ${timeoutMs} ms.`
+      );
+      timeoutError.name = "WebsiteFetchTimeoutError";
+      timeoutError.code = "WEBSITE_FETCH_TIMEOUT";
+      timeoutError.timeoutMs = timeoutMs;
+      timeoutError.url = safeWebsiteUrl;
+      throw timeoutError;
+    }
+
+    throw error;
   } finally {
     clearTimeout(timeoutId);
   }

@@ -29,6 +29,8 @@ function normalizeProduct(product, productUrl) {
     preview_image_url: "",
     product_brand: product?.product_brand || product?.locked_product_brand || "",
     product_identifier: product?.product_identifier || product?.locked_product_identifier || "",
+    price: product?.price || "",
+    currency: String(product?.currency || "").trim().toUpperCase(),
     product_display_type:
       product?.product_display_type ||
       product?.display_product_type ||
@@ -68,11 +70,12 @@ export async function POST(request) {
   const postId = String(body?.post_id || "").trim();
   const requestedOccurrenceId = String(body?.occurrence_id || "").trim();
   const reviewCaseId = String(body?.review_case_id || "").trim();
+  const workItemId = String(body?.work_item_id || "").trim();
   const suppliedProduct = normalizeProduct(body?.product_item || {}, String(body?.product_url || "").trim());
   const productUrl = String(body?.product_url || suppliedProduct.url || "").trim();
   const useManualOverride = suppliedProduct.manual_override === true;
-  if (!postId && !requestedOccurrenceId && !reviewCaseId) {
-    return Response.json({ ok: false, error: "A post, occurrence or review-case ID is required." }, { status: 400 });
+  if (!postId && !requestedOccurrenceId && !reviewCaseId && !workItemId) {
+    return Response.json({ ok: false, error: "A post, occurrence, review-case or work-item ID is required." }, { status: 400 });
   }
   if (
     useManualOverride
@@ -93,6 +96,14 @@ export async function POST(request) {
   let post = null;
   let occurrence = null;
   let reviewCase = null;
+  let workItem = null;
+  if (workItemId) {
+    const result = await context.admin.from("admin_generation_work_items").select("*").eq("id", workItemId).maybeSingle();
+    if (result.error || !result.data) {
+      return Response.json({ ok: false, error: result.error?.message || "Work item not found." }, { status: 404 });
+    }
+    workItem = result.data;
+  }
   if (postId) {
     const result = await context.admin.from("posts").select("*").eq("id", postId).maybeSingle();
     if (result.error || !result.data) {
@@ -115,12 +126,12 @@ export async function POST(request) {
     }
     occurrence = result.data;
   }
-  const repairSource = post || occurrence || reviewCase;
+  const repairSource = post || occurrence || reviewCase || workItem;
   if (!repairSource) {
     return Response.json({ ok: false, error: "The failed generation could not be loaded." }, { status: 404 });
   }
 
-  const ruleId = post?.automation_rule_id || occurrence?.automation_rule_id || reviewCase?.automation_rule_id || null;
+  const ruleId = post?.automation_rule_id || occurrence?.automation_rule_id || reviewCase?.automation_rule_id || workItem?.automation_rule_id || null;
   const { data: rule } = ruleId
     ? await context.admin.from("automation_rules").select("*").eq("id", ruleId).maybeSingle()
     : { data: null };
@@ -141,7 +152,7 @@ export async function POST(request) {
       { status: 409 }
     );
   }
-  const brandProfileId = post?.brand_profile_id || occurrence?.brand_profile_id || reviewCase?.brand_profile_id || rule?.brand_profile_id || null;
+  const brandProfileId = post?.brand_profile_id || occurrence?.brand_profile_id || reviewCase?.brand_profile_id || workItem?.brand_profile_id || rule?.brand_profile_id || null;
   const { data: brandProfile } = brandProfileId
     ? await context.admin.from("brand_profiles").select("*").eq("id", brandProfileId).maybeSingle()
     : { data: null };
@@ -152,7 +163,7 @@ export async function POST(request) {
       suppliedProduct.url ||
       ""
   ).trim();
-  const repairUserId = post?.user_id || occurrence?.user_id || reviewCase?.user_id || rule?.user_id || null;
+  const repairUserId = post?.user_id || occurrence?.user_id || reviewCase?.user_id || workItem?.user_id || rule?.user_id || null;
   if (!repairUserId) {
     return Response.json({ ok: false, error: "The customer account for this failed generation is missing." }, { status: 400 });
   }
@@ -260,7 +271,7 @@ export async function POST(request) {
         approval_token: crypto.randomBytes(32).toString("hex"),
         admin_review_status: "pending",
         admin_product_items: [product],
-        scheduled_for: occurrence?.scheduled_for || reviewCase?.scheduled_for || new Date().toISOString(),
+        scheduled_for: occurrence?.scheduled_for || reviewCase?.scheduled_for || workItem?.scheduled_for || new Date().toISOString(),
         image_status: "generating",
         video_status: isAnimated ? "rendering" : "none",
         created_at: now,
@@ -288,6 +299,9 @@ export async function POST(request) {
           status: "creating",
           updated_at: now,
         }).eq("id", reviewCaseId);
+      }
+      if (workItemId) {
+        await context.admin.from("admin_generation_work_items").update({ post_id: post.id, status: "running", updated_at: now }).eq("id", workItemId);
       }
     }
 
@@ -483,6 +497,17 @@ export async function POST(request) {
       reason: "after_admin_product_regeneration",
       createdBy: context.user.id,
     });
+    if (workItemId) {
+      await context.admin.from("admin_generation_work_items").update({
+        post_id: post.id,
+        status: "approval",
+        rescue_status: "used",
+        failure_code: null,
+        failure_stage: null,
+        failure_message: null,
+        updated_at: new Date().toISOString(),
+      }).eq("id", workItemId);
+    }
 
     return Response.json({
       ok: true,

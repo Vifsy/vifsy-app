@@ -15,11 +15,12 @@ export async function GET(request) {
   const status = String(url.searchParams.get("status") || "all");
   const testBatch = String(url.searchParams.get("testBatch") || "").trim();
 
+  const postSelect =
+    "id, user_id, brand_profile_id, automation_rule_id, status, content, platform, post_type, content_type_id, content_format, image_url, image_storage_path, image_status, image_prompt, video_url, video_status, video_error, video_provider, video_duration_seconds, video_background_selection, kling_prompt, kling_reference_image_url, kling_task_id, scheduled_for, created_at, updated_at, approved_at, approval_token, approval_email_sent_at, admin_review_status, admin_reviewed_at, admin_review_note, admin_product_items, admin_archived_at, website_url, is_admin_test, admin_test_batch_id, admin_test_job_key";
+
   let query = context.admin
     .from("posts")
-    .select(
-      "id, user_id, brand_profile_id, automation_rule_id, status, content, platform, post_type, content_type_id, content_format, image_url, image_storage_path, image_status, image_prompt, video_url, video_status, video_error, video_provider, video_duration_seconds, video_background_selection, kling_prompt, kling_reference_image_url, kling_task_id, scheduled_for, created_at, updated_at, approved_at, approval_token, approval_email_sent_at, admin_review_status, admin_reviewed_at, admin_review_note, admin_product_items, admin_archived_at, website_url, is_admin_test, admin_test_batch_id, admin_test_job_key"
-    )
+    .select(postSelect)
     .in("status", Array.from(VISIBLE_STATUSES))
     .is("admin_archived_at", null)
     .order("created_at", { ascending: false })
@@ -34,6 +35,7 @@ export async function GET(request) {
   }
 
   let postRows = posts || [];
+  if (status === "upcoming") postRows = [];
   const completedAdminReviewStates = new Set(["approved_by_spreelo", "released", "archived", "not_required"]);
   if (status === "queue") {
     postRows = postRows.filter((post) => {
@@ -42,10 +44,7 @@ export async function GET(request) {
         post.status === "pending_approval" &&
         !completedAdminReviewStates.has(reviewStatus) &&
         reviewStatus !== "not_required";
-      const needsRepair =
-        post.status === "failed" ||
-        reviewStatus === "needs_repair";
-      return pendingReview || needsRepair;
+      return pendingReview;
     });
   } else if (status === "history") {
     postRows = postRows.filter((post) =>
@@ -65,7 +64,7 @@ export async function GET(request) {
   // looking empty while the customer is waiting. We intentionally keep
   // short-lived `running` rows in the Creating view only to avoid queue noise.
   const [failedOccurrenceResult, activeOccurrenceResult] = await Promise.all([
-    ["all", "failed", "queue"].includes(status)
+    ["all", "failed"].includes(status)
       ? context.admin
           .from("automation_occurrences")
           .select(occurrenceSelect)
@@ -80,14 +79,7 @@ export async function GET(request) {
           .in("status", ["running", "retry_pending"])
           .order("started_at", { ascending: false })
           .limit(200)
-      : status === "queue"
-        ? context.admin
-            .from("automation_occurrences")
-            .select(occurrenceSelect)
-            .eq("status", "retry_pending")
-            .order("started_at", { ascending: false })
-            .limit(200)
-        : Promise.resolve({ data: [], error: null }),
+      : Promise.resolve({ data: [], error: null }),
   ]);
   const occurrenceError =
     failedOccurrenceResult.error || activeOccurrenceResult.error;
@@ -102,7 +94,7 @@ export async function GET(request) {
     error: null,
   };
 
-  const reviewCaseResult = ["all", "failed", "queue"].includes(status)
+  const reviewCaseResult = ["all", "failed"].includes(status)
     ? await context.admin
         .from("admin_review_cases")
         .select("id, occurrence_id, post_id, user_id, brand_profile_id, automation_rule_id, status, scheduled_for, campaign_title, content_type_label, content_format, product_items, failure_code, failure_stage, failure_message, needs_review, created_at, updated_at, is_admin_test, admin_test_batch_id, admin_test_job_key")
@@ -118,6 +110,81 @@ export async function GET(request) {
     )
   ) {
     return Response.json({ ok: false, error: reviewCaseResult.error.message }, { status: 500 });
+  }
+
+  const workItemStatuses =
+    status === "upcoming" ? ["planned", "running"] :
+    status === "queue" ? ["approval"] :
+    status === "failed" ? ["failed"] :
+    status === "history" ? ["history"] :
+    status === "all" ? ["planned", "running", "approval", "failed", "history"] : [];
+  let workItemRows = [];
+  if (workItemStatuses.length) {
+    const workItemSelect = "id, user_id, brand_profile_id, automation_rule_id, is_admin_test, admin_test_batch_id, admin_test_job_key, occurrence_id, post_id, run_log_id, scheduled_for, status, plan_name, platform, content_type_id, content_type_label, content_format, source_url, source_scope, product_strategy, product_match_terms, product_search_queries, requirement_count, prompt_snapshot, strategy_snapshot, rule_snapshot, failure_code, failure_stage, failure_message, technical_log, rescue_status, rescue_data, rescue_imported_at, created_at, updated_at";
+    const pageSize = 500;
+    for (let from = 0; ; from += pageSize) {
+      let workItemQuery = context.admin
+        .from("admin_generation_work_items")
+        .select(workItemSelect)
+        .in("status", workItemStatuses)
+        .order(status === "upcoming" ? "scheduled_for" : "updated_at", { ascending: status === "upcoming" })
+        .range(from, from + pageSize - 1);
+      if (testBatch) workItemQuery = workItemQuery.eq("admin_test_batch_id", testBatch);
+      const workItemResult = await workItemQuery;
+      if (workItemResult.error) {
+        if (!/admin_generation_work_items|schema cache|does not exist/i.test(String(workItemResult.error.message || ""))) {
+          return Response.json({ ok: false, error: workItemResult.error.message }, { status: 500 });
+        }
+        workItemRows = [];
+        break;
+      }
+      const pageRows = workItemResult.data || [];
+      workItemRows.push(...pageRows);
+      if (pageRows.length < pageSize) break;
+    }
+  }
+
+  // The durable work queue is the source of truth. If the legacy posts query
+  // window did not include a linked approval/history post, fetch that exact post
+  // so the admin tabs never silently lose a durable work item.
+  const existingPostIds = new Set(postRows.map((item) => item.id));
+  const missingWorkPostIds = Array.from(new Set(
+    workItemRows.map((item) => item.post_id).filter((id) => id && !existingPostIds.has(id))
+  ));
+  for (let offset = 0; offset < missingWorkPostIds.length; offset += 100) {
+    const ids = missingWorkPostIds.slice(offset, offset + 100);
+    let missingQuery = context.admin.from("posts").select(postSelect).in("id", ids).is("admin_archived_at", null);
+    if (testBatch) missingQuery = missingQuery.eq("admin_test_batch_id", testBatch);
+    const missingResult = await missingQuery;
+    if (missingResult.error) {
+      return Response.json({ ok: false, error: missingResult.error.message }, { status: 500 });
+    }
+    const matchingRows = (missingResult.data || []).filter((post) => {
+      if (status === "queue") {
+        const reviewStatus = String(post.admin_review_status || "").toLowerCase();
+        return post.status === "pending_approval" && !completedAdminReviewStates.has(reviewStatus) && reviewStatus !== "not_required";
+      }
+      if (status === "history") {
+        return ["approved", "rejected"].includes(post.status) || completedAdminReviewStates.has(String(post.admin_review_status || "").toLowerCase());
+      }
+      return true;
+    });
+    postRows.push(...matchingRows.filter((post) => !existingPostIds.has(post.id)));
+    matchingRows.forEach((post) => existingPostIds.add(post.id));
+  }
+
+  const workRunLogIds = Array.from(new Set(workItemRows.map((item) => item.run_log_id).filter(Boolean)));
+  let workRunLogMap = new Map();
+  if (workRunLogIds.length) {
+    const runLogResult = await context.admin
+      .from("automation_run_logs")
+      .select("id, occurrence_id, rule_id, status, started_at, finished_at, duration_ms, error_message, content_type_id, content_format, products_selected, search_methods, product_titles, product_urls, metadata")
+      .in("id", workRunLogIds);
+    if (!runLogResult.error) {
+      workRunLogMap = new Map((runLogResult.data || []).map((item) => [item.id, item]));
+    } else if (!/automation_run_logs|schema cache|does not exist/i.test(String(runLogResult.error.message || ""))) {
+      console.warn("Admin work-item run logs could not be loaded", { message: runLogResult.error.message });
+    }
   }
 
   const occurrenceRows = (occurrenceResult.data || []).filter((occurrence) => {
@@ -150,7 +217,7 @@ export async function GET(request) {
       (!reviewCase.occurrence_id || !orphanOccurrenceIds.has(reviewCase.occurrence_id))
   );
 
-  const adminQueueRows = [...postRows, ...orphanFailures, ...reviewOnlyFailures];
+  const adminQueueRows = [...postRows, ...orphanFailures, ...reviewOnlyFailures, ...workItemRows];
   const brandIds = Array.from(new Set(adminQueueRows.map((item) => item.brand_profile_id).filter(Boolean)));
   const userIds = Array.from(new Set(adminQueueRows.map((item) => item.user_id).filter(Boolean)));
   const postIds = postRows.map((item) => item.id);
@@ -335,6 +402,40 @@ export async function GET(request) {
     return role.includes("outro") || role.includes("cta") || String(slide?.metadata?.slide_type || "").toLowerCase() === "product_outro";
   }) || null;
 
+  const workItemByOccurrence = new Map(workItemRows.filter((item) => item.occurrence_id).map((item) => [item.occurrence_id, item]));
+  const workItemByPost = new Map(workItemRows.filter((item) => item.post_id).map((item) => [item.post_id, item]));
+  const representedWorkItemIds = new Set();
+  for (const item of postRows) {
+    const workItem = workItemByPost.get(item.id);
+    if (workItem?.id) representedWorkItemIds.add(workItem.id);
+  }
+  for (const item of orphanFailures) {
+    const workItem = workItemByOccurrence.get(item.id);
+    if (workItem?.id) representedWorkItemIds.add(workItem.id);
+  }
+  for (const item of reviewOnlyFailures) {
+    const workItem = item.occurrence_id ? workItemByOccurrence.get(item.occurrence_id) : null;
+    if (workItem?.id) representedWorkItemIds.add(workItem.id);
+  }
+  const syntheticWorkItems = workItemRows.filter((item) => status === "upcoming" || !representedWorkItemIds.has(item.id));
+  const workItemProducts = (item) => Array.isArray(item?.rescue_data?.products) ? item.rescue_data.products : [];
+  const workItemFailure = (item) => ({
+    id: item.occurrence_id || item.id,
+    work_item_id: item.id,
+    review_case_id: item.occurrence_id ? reviewCaseByOccurrence.get(item.occurrence_id)?.id || null : null,
+    status: item.status === "failed" ? "failed_terminal" : item.status,
+    scheduled_for: item.scheduled_for,
+    content_type_label: item.content_type_label,
+    content_format: item.content_format,
+    campaign_title: item.plan_name,
+    failure_code: item.failure_code,
+    failure_stage: item.failure_stage,
+    failure_message_internal: item.failure_message,
+    technical_log: item.technical_log || {},
+    technical_run_log: item.run_log_id ? workRunLogMap.get(item.run_log_id) || null : null,
+    rescue_status: item.rescue_status || "none",
+  });
+
   return Response.json({
     ok: true,
     posts: [...postRows.map((item) => ({
@@ -360,13 +461,17 @@ export async function GET(request) {
       slides: slidesMap[item.id] || [],
       outro_slide: getOutroSlide(item.id),
       versions: versionsMap[item.id] || [],
+      work_item_id: workItemByPost.get(item.id)?.id || null,
+      work_item: workItemByPost.get(item.id) || null,
       failure: reviewCaseByPost.get(item.id)
         ? {
             ...reviewCaseByPost.get(item.id),
             review_case_id: reviewCaseByPost.get(item.id).id,
             failure_message_internal: reviewCaseByPost.get(item.id).failure_message || item.video_error || null,
+            technical_log: workItemByPost.get(item.id)?.technical_log || {},
+            technical_run_log: workItemByPost.get(item.id)?.run_log_id ? workRunLogMap.get(workItemByPost.get(item.id)?.run_log_id) || null : null,
           }
-        : null,
+        : (workItemByPost.get(item.id)?.status === "failed" ? workItemFailure(workItemByPost.get(item.id)) : null),
     })), ...orphanFailures.map((occurrence) => ({
       id: `occurrence-${occurrence.id}`,
       occurrence_id: occurrence.id,
@@ -405,8 +510,16 @@ export async function GET(request) {
       brand_website_url: brandDetailsMap[occurrence.brand_profile_id]?.website_url || "",
       rejection: null,
       slides: [],
+      work_item_id: workItemByOccurrence.get(occurrence.id)?.id || null,
+      work_item: workItemByOccurrence.get(occurrence.id) || null,
       failure: {
         ...occurrence,
+        ...(workItemByOccurrence.get(occurrence.id) ? {
+          work_item_id: workItemByOccurrence.get(occurrence.id).id,
+          technical_log: workItemByOccurrence.get(occurrence.id).technical_log || {},
+          technical_run_log: workItemByOccurrence.get(occurrence.id).run_log_id ? workRunLogMap.get(workItemByOccurrence.get(occurrence.id).run_log_id) || null : null,
+          rescue_status: workItemByOccurrence.get(occurrence.id).rescue_status || "none",
+        } : {}),
         ...(reviewCaseByOccurrence.get(occurrence.id)
           ? {
               review_case_id: reviewCaseByOccurrence.get(occurrence.id).id,
@@ -456,6 +569,8 @@ export async function GET(request) {
       brand_website_url: brandDetailsMap[reviewCase.brand_profile_id]?.website_url || "",
       rejection: null,
       slides: [],
+      work_item_id: reviewCase.occurrence_id ? workItemByOccurrence.get(reviewCase.occurrence_id)?.id || null : null,
+      work_item: reviewCase.occurrence_id ? workItemByOccurrence.get(reviewCase.occurrence_id) || null : null,
       failure: {
         id: reviewCase.occurrence_id || reviewCase.id,
         review_case_id: reviewCase.id,
@@ -468,6 +583,54 @@ export async function GET(request) {
         failure_stage: reviewCase.failure_stage,
         failure_message_internal: reviewCase.failure_message,
       },
+    })), ...syntheticWorkItems.map((workItem) => ({
+      id: `work-item-${workItem.id}`,
+      work_item_id: workItem.id,
+      work_item: workItem,
+      occurrence_id: workItem.occurrence_id || null,
+      user_id: workItem.user_id,
+      brand_profile_id: workItem.brand_profile_id,
+      automation_rule_id: workItem.automation_rule_id,
+      status: workItem.status === "failed"
+        ? "failed"
+        : workItem.status === "running"
+          ? "creating"
+          : workItem.status === "approval"
+            ? "pending_approval"
+            : workItem.status === "history"
+              ? "approved"
+              : "planned",
+      content: workItem.plan_name || workItem.content_type_label || "",
+      platform: workItem.platform || ruleMap[workItem.automation_rule_id]?.platform || null,
+      content_type_id: workItem.content_type_id || ruleMap[workItem.automation_rule_id]?.content_type_id || null,
+      content_type_label: workItem.content_type_label || ruleMap[workItem.automation_rule_id]?.content_type_label || null,
+      is_admin_test: workItem.is_admin_test === true || ruleMap[workItem.automation_rule_id]?.is_admin_test === true,
+      admin_test_batch_id: workItem.admin_test_batch_id || ruleMap[workItem.automation_rule_id]?.admin_test_batch_id || null,
+      admin_test_job_key: workItem.admin_test_job_key || ruleMap[workItem.automation_rule_id]?.admin_test_job_key || null,
+      admin_test_campaign: ruleMap[workItem.automation_rule_id]?.queue_source === "campaign" ? ruleMap[workItem.automation_rule_id]?.name || null : null,
+      post_type: workItem.content_type_label || "Planerat inlägg",
+      content_format: workItem.content_format || null,
+      scheduled_for: workItem.scheduled_for,
+      created_at: workItem.created_at,
+      updated_at: workItem.updated_at,
+      admin_review_status: workItem.status === "failed" ? "needs_repair" : workItem.status === "approval" ? "pending" : workItem.status === "history" ? "approved_by_spreelo" : "planned",
+      admin_product_items: workItemProducts(workItem),
+      brand_name: brandMap[workItem.brand_profile_id] || "",
+      brand_admin_review_required: brands?.find((brand) => brand.id === workItem.brand_profile_id)?.admin_review_required ?? null,
+      customer_email: userMap[workItem.user_id] || "",
+      source_url: workItem.source_url || getAdminSourceUrl(workItem),
+      brand_website_url: brandDetailsMap[workItem.brand_profile_id]?.website_url || "",
+      rejection: null,
+      slides: [],
+      failure: workItem.status === "failed" ? workItemFailure(workItem) : null,
+      rescue_status: workItem.rescue_status || "none",
+      requirement_count: workItem.requirement_count || 0,
+      product_strategy: workItem.product_strategy || null,
+      product_match_terms: workItem.product_match_terms || [],
+      product_search_queries: workItem.product_search_queries || [],
+      prompt_snapshot: workItem.prompt_snapshot || null,
+      strategy_snapshot: workItem.strategy_snapshot || null,
+      rule_snapshot: workItem.rule_snapshot || {},
     }))],
   }, {
     headers: {

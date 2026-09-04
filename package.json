@@ -113,6 +113,7 @@
     "test:v144.02": "node scripts/test-v144-02-tiktok-integration.mjs",
     "test:v144.03": "node scripts/test-v144-03-tiktok-media-polish.mjs",
     "test:v144.04": "node scripts/test-v144-04-approval-recovery.mjs",
+    "test:v144.105": "node scripts/test-v144-105-brand-analysis-recovery.mjs",
     "test:v144.05": "node scripts/test-v144-05-approval-orchestration-durable-research.mjs",
     "test:v144.06": "node scripts/test-v144-06-premium-approval-variety-cover.mjs",
     "test:v144.07": "node scripts/test-v144-07-kling-ai-video.mjs",
@@ -178,7 +179,8 @@
     "test:v144.92": "node scripts/test-v144-92-product-research-url-normalization.mjs",
     "test:v144.93": "node scripts/test-v144-93-home-mobile-reference.mjs",
     "test:v144.96": "node scripts/test-v144-96-brand-profile-logo-preview-responsive.mjs",
-    "test:v144.97": "node scripts/test-v144-97-unified-calendar-campaign-studio.mjs"
+    "test:v144.97": "node scripts/test-v144-97-unified-calendar-campaign-studio.mjs",
+    "test:v144.106": "node scripts/test-v144-106-admin-queue-rescue.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

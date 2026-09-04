@@ -1,0 +1,143 @@
+/* Spreelo v144.106 — durable admin queue + rescue ZIP */
+.admin-v144106-work-order-card,
+.admin-v144106-rescue-card {
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 18px;
+  background: rgba(255,255,255,0.92);
+  padding: 16px;
+  box-shadow: 0 10px 30px rgba(15,23,42,0.05);
+  margin-top: 14px;
+}
+.admin-v144106-work-order-head,
+.admin-v144106-rescue-head,
+.admin-v144106-rescue-head > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.admin-v144106-work-order-head > div,
+.admin-v144106-rescue-head > div > span {
+  display: grid;
+  gap: 3px;
+}
+.admin-v144106-work-order-head span,
+.admin-v144106-rescue-head small {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.admin-v144106-work-order-card dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0 0;
+}
+.admin-v144106-work-order-card dl > div {
+  display: grid;
+  gap: 3px;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 10px 12px;
+}
+.admin-v144106-work-order-card dt {
+  color: #64748b;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.admin-v144106-work-order-card dd {
+  margin: 0;
+  color: #0f172a;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.admin-v144106-work-order-card details,
+.admin-v144106-rescue-prompt {
+  margin-top: 12px;
+}
+.admin-v144106-work-order-card summary,
+.admin-v144106-rescue-prompt summary {
+  cursor: pointer;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+.admin-v144106-work-order-card pre,
+.admin-v144106-rescue-prompt pre {
+  max-height: 340px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.admin-v144106-rescue-card {
+  border-color: rgba(249, 115, 22, .22);
+  background: linear-gradient(180deg, rgba(255,247,237,.94), rgba(255,255,255,.96));
+}
+.admin-v144106-rescue-head {
+  justify-content: space-between;
+}
+.admin-v144106-rescue-status {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 6px 9px;
+  background: #fff7ed;
+  color: #c2410c;
+  font-size: 11px;
+  font-weight: 800;
+}
+.admin-v144106-rescue-status.ready,
+.admin-v144106-rescue-status.used {
+  background: #ecfdf5;
+  color: #047857;
+}
+.admin-v144106-rescue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.admin-v144106-rescue-actions button,
+.admin-v144106-rescue-upload {
+  min-height: 38px;
+  border: 1px solid rgba(15,23,42,.12);
+  border-radius: 11px;
+  background: #fff;
+  color: #0f172a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 11px;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.admin-v144106-rescue-upload {
+  background: #0f172a;
+  color: #fff;
+  border-color: #0f172a;
+}
+.admin-v144106-rescue-upload input { display: none; }
+.admin-v144106-rescue-card .admin-alert { margin-top: 10px; }
+
+@media (max-width: 760px) {
+  .admin-v144106-work-order-card dl { grid-template-columns: 1fr; }
+  .admin-v144106-rescue-head { flex-direction: column; }
+  .admin-v144106-rescue-actions { display: grid; grid-template-columns: 1fr; }
+  .admin-v144106-rescue-actions button,
+  .admin-v144106-rescue-upload { width: 100%; }
+}
+.admin-v144106-work-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #f59e0b;
+  box-shadow: 0 0 0 4px rgba(245,158,11,.12);
+  margin: 0 6px;
+}

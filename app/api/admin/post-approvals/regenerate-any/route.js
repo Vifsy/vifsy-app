@@ -51,10 +51,17 @@ async function uploadPng(admin, { userId, postId, imageBase64 }) {
   return { imageUrl: data.publicUrl, imageStoragePath: path };
 }
 
-async function loadSource(context, { postId, occurrenceId, reviewCaseId }) {
+async function loadSource(context, { postId, occurrenceId, reviewCaseId, workItemId }) {
   let post = null;
   let occurrence = null;
   let reviewCase = null;
+  let workItem = null;
+
+  if (workItemId) {
+    const result = await context.admin.from("admin_generation_work_items").select("*").eq("id", workItemId).maybeSingle();
+    if (result.error || !result.data) throw new Error(result.error?.message || "Work item not found.");
+    workItem = result.data;
+  }
 
   if (postId) {
     const result = await context.admin.from("posts").select("*").eq("id", postId).maybeSingle();
@@ -74,9 +81,9 @@ async function loadSource(context, { postId, occurrenceId, reviewCaseId }) {
     occurrence = result.data;
   }
 
-  const source = post || occurrence || reviewCase;
+  const source = post || occurrence || reviewCase || workItem;
   if (!source) throw new Error("The generation could not be loaded.");
-  return { post, occurrence, reviewCase, source, occurrenceId: resolvedOccurrenceId };
+  return { post, occurrence, reviewCase, workItem, source, occurrenceId: resolvedOccurrenceId };
 }
 
 export async function POST(request) {
@@ -87,21 +94,23 @@ export async function POST(request) {
   const postId = String(body?.post_id || "").trim();
   const occurrenceId = String(body?.occurrence_id || "").trim();
   const reviewCaseId = String(body?.review_case_id || "").trim();
+  const workItemId = String(body?.work_item_id || "").trim();
   const mode = normalizeMode(body?.mode);
   const requestedSourceUrl = cleanUrl(body?.source_url);
 
-  if (!postId && !occurrenceId && !reviewCaseId) {
-    return Response.json({ ok: false, error: "A post, occurrence or review-case ID is required." }, { status: 400 });
+  if (!postId && !occurrenceId && !reviewCaseId && !workItemId) {
+    return Response.json({ ok: false, error: "A post, occurrence, review-case or work-item ID is required." }, { status: 400 });
   }
 
   try {
-    let { post, occurrence, reviewCase, source, occurrenceId: resolvedOccurrenceId } = await loadSource(context, {
+    let { post, occurrence, reviewCase, workItem, source, occurrenceId: resolvedOccurrenceId } = await loadSource(context, {
       postId,
       occurrenceId,
       reviewCaseId,
+      workItemId,
     });
 
-    const ruleId = post?.automation_rule_id || occurrence?.automation_rule_id || reviewCase?.automation_rule_id || null;
+    const ruleId = post?.automation_rule_id || occurrence?.automation_rule_id || reviewCase?.automation_rule_id || workItem?.automation_rule_id || null;
     if (!ruleId) throw new Error("The original automation recipe is missing.");
 
     const { data: rule, error: ruleError } = await context.admin
@@ -111,7 +120,7 @@ export async function POST(request) {
       .maybeSingle();
     if (ruleError || !rule) throw new Error(ruleError?.message || "The original automation recipe could not be loaded.");
 
-    const brandProfileId = post?.brand_profile_id || occurrence?.brand_profile_id || reviewCase?.brand_profile_id || rule.brand_profile_id || null;
+    const brandProfileId = post?.brand_profile_id || occurrence?.brand_profile_id || reviewCase?.brand_profile_id || workItem?.brand_profile_id || rule.brand_profile_id || null;
     const { data: brandProfile } = brandProfileId
       ? await context.admin.from("brand_profiles").select("*").eq("id", brandProfileId).maybeSingle()
       : { data: null };
@@ -123,7 +132,7 @@ export async function POST(request) {
       );
     }
 
-    const userId = post?.user_id || occurrence?.user_id || reviewCase?.user_id || rule.user_id;
+    const userId = post?.user_id || occurrence?.user_id || reviewCase?.user_id || workItem?.user_id || rule.user_id;
     if (!userId) throw new Error("The customer account for this generation is missing.");
 
     const sourceUrl = requestedSourceUrl || cleanUrl(post?.website_url) || cleanUrl(rule.content_source_url) || cleanUrl(rule.website_url) || cleanUrl(brandProfile?.website_url);
@@ -199,7 +208,7 @@ export async function POST(request) {
         approval_required: true,
         approval_token: crypto.randomBytes(32).toString("hex"),
         admin_review_status: "pending",
-        scheduled_for: occurrence?.scheduled_for || reviewCase?.scheduled_for || now,
+        scheduled_for: occurrence?.scheduled_for || reviewCase?.scheduled_for || workItem?.scheduled_for || now,
         image_status: wantsImage ? "generating" : "none",
         video_status: "none",
         created_at: now,
@@ -208,6 +217,9 @@ export async function POST(request) {
       if (insert.error || !insert.data) throw new Error(insert.error?.message || "Could not create repaired post.");
       post = insert.data;
       try { await costTracker.bindPost(post.id); } catch {}
+      if (workItemId) {
+        await context.admin.from("admin_generation_work_items").update({ post_id: post.id, status: "running", updated_at: now }).eq("id", workItemId);
+      }
     }
 
     let imageUrl = mode === "text" ? post.image_url || null : post.image_url || null;
@@ -346,6 +358,13 @@ export async function POST(request) {
       reason: `after_admin_regeneration_${mode}`,
       createdBy: context.user.id,
     });
+
+    if (workItemId) {
+      await context.admin.from("admin_generation_work_items").update({
+        post_id: post.id, status: "approval", rescue_status: workItem?.rescue_status === "ready" ? "used" : workItem?.rescue_status || "none",
+        failure_code: null, failure_stage: null, failure_message: null, updated_at: new Date().toISOString(),
+      }).eq("id", workItemId);
+    }
 
     return Response.json({
       ok: true,
