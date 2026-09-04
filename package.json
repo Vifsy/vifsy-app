@@ -182,7 +182,8 @@
     "test:v144.97": "node scripts/test-v144-97-unified-calendar-campaign-studio.mjs",
     "test:v144.106": "node scripts/test-v144-106-admin-queue-rescue.mjs",
     "test:v144.107": "node scripts/test-v144-107-fail-fast-rescue-handoff.mjs",
-    "test:v144.108": "node scripts/test-v144-108-rescue-remote-images.mjs"
+    "test:v144.108": "node scripts/test-v144-108-rescue-remote-images.mjs",
+    "test:v144.109": "node scripts/test-v144-109-rescue-center-annual-calendar-emails.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",

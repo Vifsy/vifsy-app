@@ -14,6 +14,8 @@ export const BRAND_ANALYSIS_JOB_SELECT = [
   "country_code",
   "content_language",
   "notification_locale",
+  "analysis_kind",
+  "target_calendar_year",
   "result",
   "error_message",
   "internal_error",
@@ -102,6 +104,8 @@ export async function updateBrandAnalysisJob({
   webResearchSources,
   analysisCompletedEmailSentAt,
   analysisCompletedEmailError,
+  analysisKind,
+  targetCalendarYear,
   attemptCount,
   expectedLeaseToken,
 }) {
@@ -197,6 +201,15 @@ export async function updateBrandAnalysisJob({
   if (analysisCompletedEmailError !== undefined) {
     updatePayload.analysis_completed_email_error =
       analysisCompletedEmailError;
+  }
+
+  if (analysisKind !== undefined) {
+    updatePayload.analysis_kind = analysisKind;
+  }
+
+  if (targetCalendarYear !== undefined) {
+    const year = Number(targetCalendarYear);
+    updatePayload.target_calendar_year = Number.isFinite(year) ? Math.round(year) : null;
   }
 
   if (attemptCount !== undefined) {

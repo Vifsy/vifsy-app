@@ -2015,6 +2015,8 @@ export async function POST(request) {
   let supabase = null;
   let user = null;
   let brandProfileId = "";
+  let requestedWebsiteUrl = "";
+  let resolvedWebsiteUrl = "";
 
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -2073,6 +2075,8 @@ export async function POST(request) {
     brandProfileId = String(body?.brandProfileId || "").trim();
     const businessName = String(body?.businessName || "").trim();
     const websiteUrl = normalizeWebsiteUrl(body?.websiteUrl);
+    requestedWebsiteUrl = websiteUrl;
+    resolvedWebsiteUrl = websiteUrl;
     const brandDescription = String(body?.brandDescription || "").trim();
 
   const requestedMarketSetup = inferMarketSetup({
@@ -2143,6 +2147,7 @@ let detectedWebsiteContentLanguage = "";
 if (websiteUrl) {
   const website = await fetchWebsiteHtml(websiteUrl);
   finalWebsiteUrl = website.url;
+  resolvedWebsiteUrl = website.url;
 
   if (!requestedContentLanguage) {
     const deterministicLanguage = inferContentLanguageFromWebsiteSignals(
@@ -2281,6 +2286,36 @@ contentLanguage: finalContentLanguage,
           })
           .eq("id", brandProfileId)
           .eq("user_id", user.id);
+
+        // v144.109: the legacy synchronous analysis route can still be used in
+        // a few flows. Surface its terminal security block in the same Admin
+        // Rescue Center as durable background-analysis failures.
+        const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        if (serviceRoleKey && supabaseUrl) {
+          const admin = createClient(supabaseUrl, serviceRoleKey, {
+            auth: { autoRefreshToken: false, persistSession: false },
+          });
+          const now = new Date().toISOString();
+          await admin.from("brand_profiles").update({
+            analysis_rescue_required: true,
+            updated_at: now,
+          }).eq("id", brandProfileId).eq("user_id", user.id);
+          await admin.from("admin_rescue_cases").upsert({
+            case_type: "brand_analysis",
+            user_id: user.id,
+            brand_profile_id: brandProfileId,
+            target_year: 0,
+            status: "needed",
+            error_code: "WEBSITE_SECURITY_BLOCKED",
+            error_message: customerMessage,
+            source_context: {
+              website_url: resolvedWebsiteUrl || requestedWebsiteUrl || "",
+              analysis_route: "legacy_sync",
+            },
+            updated_at: now,
+          }, { onConflict: "brand_profile_id,case_type,target_year" });
+        }
       } catch (statusError) {
         console.error("Could not save website security block status:", {
           brandProfileId,

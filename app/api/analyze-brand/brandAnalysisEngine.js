@@ -2800,7 +2800,11 @@ export async function runBrandAnalysisJob({
 
   const now = new Date();
   const currentDate = now.toISOString().slice(0, 10);
-  const campaignCalendarYear = now.getUTCFullYear();
+  const requestedCalendarYear = Number(job.target_calendar_year || 0);
+  const campaignCalendarYear =
+    Number.isInteger(requestedCalendarYear) && requestedCalendarYear >= now.getUTCFullYear() && requestedCalendarYear <= now.getUTCFullYear() + 2
+      ? requestedCalendarYear
+      : now.getUTCFullYear();
 
   let analysis;
   let finalWebsiteUrl = websiteUrl;

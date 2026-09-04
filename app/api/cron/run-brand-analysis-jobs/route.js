@@ -48,23 +48,61 @@ function nextAttemptIso(seconds) {
   return new Date(Date.now() + seconds * 1000).toISOString();
 }
 
+async function syncAnnualRenewalCompleted({ supabase, job }) {
+  if (job?.analysis_kind !== "annual_calendar_refresh") return;
+  const targetYear = Number(job.target_calendar_year || job?.result?.profile?.campaign_calendar_year || 0);
+  if (!targetYear) return;
+  const { error } = await supabase.from("brand_calendar_renewals").upsert({
+    user_id: job.user_id,
+    brand_profile_id: job.brand_profile_id,
+    target_year: targetYear,
+    mode: "automatic",
+    status: "completed",
+    analysis_job_id: job.id,
+    campaign_count: Number(job?.result?.campaign_opportunities_count || 0),
+    last_error: null,
+    completed_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "brand_profile_id,target_year" });
+  if (error) throw error;
+}
+
 async function sendCompletionEmail({ supabase, job }) {
   if (!job?.id || !job?.user_id || job.analysis_completed_email_sent_at) return;
 
+  const isAnnualRefresh = job.analysis_kind === "annual_calendar_refresh";
+  const targetYear = Number(job.target_calendar_year || new Date().getUTCFullYear());
+
   try {
-    await sendLifecycleEmail({
-      supabaseAdmin: supabase,
-      userId: job.user_id,
-      emailType: "analysis_completed",
-      entityKey: job.id,
-      locale: job.notification_locale || "en",
-      brandName:
-        job?.result?.profile?.business_name || job.business_name || "Spreelo",
-      campaignCount: Number(job?.result?.campaign_opportunities_count || 0),
-      destinationPath: `/onboarding/ready?brandId=${encodeURIComponent(
-        job.brand_profile_id
-      )}`,
-    });
+    if (isAnnualRefresh) {
+      await syncAnnualRenewalCompleted({ supabase, job });
+      await sendLifecycleEmail({
+        supabaseAdmin: supabase,
+        userId: job.user_id,
+        emailType: "calendar_updated",
+        entityKey: `${job.brand_profile_id}:${targetYear}`,
+        locale: job.notification_locale || "en",
+        brandName:
+          job?.result?.profile?.business_name || job.business_name || "Spreelo",
+        campaignCount: Number(job?.result?.campaign_opportunities_count || 0),
+        calendarYear: targetYear,
+        destinationPath: "/calendar",
+      });
+    } else {
+      await sendLifecycleEmail({
+        supabaseAdmin: supabase,
+        userId: job.user_id,
+        emailType: "analysis_completed",
+        entityKey: job.id,
+        locale: job.notification_locale || "en",
+        brandName:
+          job?.result?.profile?.business_name || job.business_name || "Spreelo",
+        campaignCount: Number(job?.result?.campaign_opportunities_count || 0),
+        destinationPath: `/onboarding/ready?brandId=${encodeURIComponent(
+          job.brand_profile_id
+        )}`,
+      });
+    }
 
     await supabase
       .from("brand_analysis_jobs")
@@ -76,7 +114,7 @@ async function sendCompletionEmail({ supabase, job }) {
       .eq("id", job.id)
       .is("analysis_completed_email_sent_at", null);
   } catch (error) {
-    console.error("Brand analysis completion email failed", {
+    console.error(isAnnualRefresh ? "Calendar update email failed" : "Brand analysis completion email failed", {
       jobId: job.id,
       message: error?.message,
     });
@@ -89,6 +127,72 @@ async function sendCompletionEmail({ supabase, job }) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", job.id);
+  }
+}
+
+async function createManualRescueCaseForFailedJob({ supabase, job, error, customerError }) {
+  const isAnnualRefresh = job.analysis_kind === "annual_calendar_refresh";
+  const targetYear = isAnnualRefresh
+    ? Number(job.target_calendar_year || new Date().getUTCFullYear() + 1)
+    : 0;
+  const now = new Date().toISOString();
+
+  const { data: existingCase, error: existingCaseError } = await supabase
+    .from("admin_rescue_cases")
+    .select("id,status")
+    .eq("brand_profile_id", job.brand_profile_id)
+    .eq("case_type", isAnnualRefresh ? "annual_calendar" : "brand_analysis")
+    .eq("target_year", targetYear)
+    .maybeSingle();
+  if (existingCaseError) throw existingCaseError;
+
+  if (!existingCase) {
+    const { error: rescueCaseError } = await supabase.from("admin_rescue_cases").insert({
+      case_type: isAnnualRefresh ? "annual_calendar" : "brand_analysis",
+      user_id: job.user_id,
+      brand_profile_id: job.brand_profile_id,
+      source_job_id: job.id,
+      target_year: targetYear,
+      status: "needed",
+      error_code: String(error?.code || "analysis_failed").slice(0, 160),
+      error_message: String(customerError || error?.message || "Analysis failed").slice(0, 4000),
+      source_context: {
+        website_url: job.website_url || "",
+        business_name: job.business_name || "",
+        content_market: job.content_market || "",
+        country_code: job.country_code || "",
+        content_language: job.content_language || "",
+        analysis_kind: job.analysis_kind || "brand_analysis",
+        target_calendar_year: targetYear || null,
+      },
+      updated_at: now,
+    });
+    if (rescueCaseError) throw rescueCaseError;
+  }
+
+  if (isAnnualRefresh) {
+    const protectedStatus = existingCase?.status === "imported"
+      ? "rescue_imported"
+      : existingCase?.status === "completed"
+        ? "completed"
+        : "rescue_needed";
+    const { error: renewalError } = await supabase.from("brand_calendar_renewals").upsert({
+      user_id: job.user_id,
+      brand_profile_id: job.brand_profile_id,
+      target_year: targetYear,
+      mode: "manual_rescue",
+      status: protectedStatus,
+      analysis_job_id: job.id,
+      last_error: String(customerError || error?.message || "Annual calendar refresh failed").slice(0, 4000),
+      updated_at: now,
+    }, { onConflict: "brand_profile_id,target_year" });
+    if (renewalError) throw renewalError;
+  } else {
+    const { error: profileError } = await supabase.from("brand_profiles").update({
+      analysis_rescue_required: true,
+      updated_at: now,
+    }).eq("id", job.brand_profile_id).eq("user_id", job.user_id);
+    if (profileError) throw profileError;
   }
 }
 
@@ -399,6 +503,21 @@ async function processClaimedJob({ supabase, job }) {
       ...updates,
     });
 
+  if (job.analysis_kind === "annual_calendar_refresh" && job.target_calendar_year) {
+    const { error: renewalRunningError } = await supabase.from("brand_calendar_renewals").upsert({
+      user_id: job.user_id,
+      brand_profile_id: job.brand_profile_id,
+      target_year: Number(job.target_calendar_year),
+      mode: "automatic",
+      status: "running",
+      analysis_job_id: job.id,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "brand_profile_id,target_year" });
+    if (renewalRunningError) {
+      console.error("Could not mark annual calendar renewal as running", { jobId: job.id, message: renewalRunningError.message });
+    }
+  }
+
   try {
     if (job.step === "web_research_waiting" && job.openai_response_id) {
       analysisJob = await resumeWebResearch({ supabase, job });
@@ -486,6 +605,7 @@ async function processClaimedJob({ supabase, job }) {
         userMessageCode: "analysis_failed",
       },
     });
+    await createManualRescueCaseForFailedJob({ supabase, job, error, customerError });
     throw error;
   }
 }

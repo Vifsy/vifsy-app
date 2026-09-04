@@ -443,6 +443,16 @@ export default function AdminDashboardPage() {
                 </div>
                 <strong>{t("admin.approvals.open")} →</strong>
               </a>
+
+              <a className="admin-tool-card" href="/admin/rescue-center">
+                <span className="admin-tool-icon"><AlertTriangle size={24} aria-hidden="true" /></span>
+                <div>
+                  <span className="admin-card-kicker">ADMIN · RESCUE</span>
+                  <h2>Rescue Center</h2>
+                  <p>Hantera misslyckade analyser, produkt-rescue och manuella årliga kalenderuppdateringar på ett ställe.</p>
+                </div>
+                <strong>Öppna Rescue Center →</strong>
+              </a>
             </section>
 
             <section className="admin-panel admin-insights-panel">
