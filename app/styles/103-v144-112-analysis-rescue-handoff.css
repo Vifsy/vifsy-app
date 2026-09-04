@@ -1,0 +1,164 @@
+/* v144.112 — customer-facing analysis rescue handoff */
+.analysis-rescue-customer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(9, 24, 38, 0.58);
+  backdrop-filter: blur(12px);
+}
+
+.analysis-rescue-customer-modal {
+  width: min(100%, 620px);
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-radius: 28px;
+  padding: 34px;
+  background: rgba(255, 253, 250, 0.97);
+  box-shadow: 0 28px 80px rgba(10, 28, 43, 0.24);
+  text-align: center;
+}
+
+.analysis-rescue-customer-icon {
+  width: 58px;
+  height: 58px;
+  margin: 0 auto 16px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #173b55, #0e263a);
+  color: #fff;
+  box-shadow: 0 12px 28px rgba(20, 55, 79, 0.22);
+}
+
+.analysis-rescue-customer-eyebrow,
+.brand-result-rescue .dashboard-eyebrow {
+  margin: 0 0 8px;
+  color: #e25b42;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.analysis-rescue-customer-modal h2,
+.brand-result-rescue h2 {
+  margin: 0;
+  color: #152334;
+  font-size: clamp(26px, 4vw, 34px);
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+}
+
+.analysis-rescue-customer-lead,
+.brand-result-rescue .brand-result-lead {
+  max-width: 520px;
+  margin: 14px auto 0;
+  color: #667085;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.analysis-rescue-customer-points {
+  display: grid;
+  gap: 9px;
+  margin: 24px 0;
+  text-align: left;
+}
+
+.analysis-rescue-customer-points article {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  padding: 13px 14px;
+  border: 1px solid #eadfd8;
+  border-radius: 15px;
+  background: #fff9f4;
+  color: #344054;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.analysis-rescue-customer-points article svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: #e25b42;
+}
+
+.analysis-rescue-customer-primary {
+  min-width: min(100%, 310px);
+  min-height: 52px;
+  border: 0;
+  border-radius: 14px;
+  padding: 0 22px;
+  background: #ef6045;
+  color: #fff;
+  font: inherit;
+  font-weight: 850;
+  cursor: pointer;
+  box-shadow: 0 12px 24px rgba(239, 96, 69, 0.22);
+}
+
+.brand-result-rescue {
+  text-align: center;
+}
+
+.brand-result-rescue .analysis-rescue-customer-points {
+  max-width: 540px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.brand-analysis-rescue-pending-state {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  padding: 20px;
+  border: 1px solid rgba(30, 84, 116, 0.16);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(244, 250, 253, 0.94), rgba(255, 250, 246, 0.96));
+}
+
+.brand-analysis-rescue-pending-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: #153c58;
+  color: #fff;
+}
+
+.brand-analysis-rescue-pending-state h4 {
+  margin: 2px 0 6px;
+  color: #152334;
+  font-size: 18px;
+}
+
+.brand-analysis-rescue-pending-state p:last-child {
+  margin: 0;
+  color: #667085;
+  line-height: 1.6;
+}
+
+@media (max-width: 640px) {
+  .analysis-rescue-customer-backdrop {
+    padding: 14px;
+    align-items: end;
+  }
+
+  .analysis-rescue-customer-modal {
+    padding: 26px 20px 22px;
+    border-radius: 24px;
+  }
+
+  .analysis-rescue-customer-primary {
+    width: 100%;
+  }
+
+  .brand-analysis-rescue-pending-state {
+    grid-template-columns: 1fr;
+  }
+}

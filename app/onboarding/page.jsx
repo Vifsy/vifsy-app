@@ -102,6 +102,16 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function getAnalysisRescueReason(code) {
+  if (code === "analysis_manual_rescue_security") return "security";
+  if (code === "analysis_manual_rescue_timeout") return "timeout";
+  return "generic";
+}
+
+function isManualAnalysisRescueCode(code) {
+  return String(code || "").startsWith("analysis_manual_rescue_");
+}
+
 function getCurrentAnalysisStage(progress) {
   const currentStage =
     [...analysisProgressStages]
@@ -195,6 +205,9 @@ async function pollAnalysisStatus({
     }
 
     if (job?.status === "failed") {
+      if (isManualAnalysisRescueCode(job?.user_message_code)) {
+        return job;
+      }
       throw new Error(job?.error_message || "Could not analyze brand.");
     }
 
@@ -224,6 +237,8 @@ export default function OnboardingPage() {
   const [message, setMessage] = useState("");
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [analysisNoticeCode, setAnalysisNoticeCode] = useState("background");
+  const [analysisRescuePending, setAnalysisRescuePending] = useState(false);
+  const [analysisRescueReason, setAnalysisRescueReason] = useState("generic");
   const analysisStartedAtRef = useRef(0);
   const reportedProgressRef = useRef(0);
 
@@ -393,6 +408,8 @@ export default function OnboardingPage() {
     setLoading(true);
     setAnalysisProgress(1);
     setAnalysisNoticeCode("background");
+    setAnalysisRescuePending(false);
+    setAnalysisRescueReason("generic");
     setMessage("");
 
     try {
@@ -503,6 +520,16 @@ export default function OnboardingPage() {
           }
         },
       });
+
+      if (isManualAnalysisRescueCode(completedJob?.user_message_code)) {
+        setAnalysisProgress(100);
+        analysisStartedAtRef.current = 0;
+        setLoading(false);
+        setMessage("");
+        setAnalysisRescueReason(getAnalysisRescueReason(completedJob.user_message_code));
+        setAnalysisRescuePending(true);
+        return;
+      }
 
       const result = completedJob.result || {};
       const profile = result.profile || {};
@@ -742,6 +769,25 @@ export default function OnboardingPage() {
           )}
         </section>
       </section>
+
+      {analysisRescuePending && (
+        <div className="analysis-rescue-customer-backdrop" role="presentation">
+          <section className="analysis-rescue-customer-modal" role="dialog" aria-modal="true" aria-labelledby="onboarding-rescue-title">
+            <div className="analysis-rescue-customer-icon" aria-hidden="true"><ShieldCheck size={28} /></div>
+            <p className="analysis-rescue-customer-eyebrow">{t("onboarding.rescue.eyebrow")}</p>
+            <h2 id="onboarding-rescue-title">{t("onboarding.rescue.title")}</h2>
+            <p className="analysis-rescue-customer-lead">{t(analysisRescueReason === "security" ? "onboarding.rescue.reasonSecurity" : analysisRescueReason === "timeout" ? "onboarding.rescue.reasonTimeout" : "onboarding.rescue.text")}</p>
+            <div className="analysis-rescue-customer-points">
+              <article><Check size={18} aria-hidden="true" /><span>{t("onboarding.rescue.noAction")}</span></article>
+              <article><CalendarHeart size={18} aria-hidden="true" /><span>{t("onboarding.rescue.calendar")}</span></article>
+              <article><ArrowRight size={18} aria-hidden="true" /><span>{t("onboarding.rescue.email")}</span></article>
+            </div>
+            <button type="button" className="analysis-rescue-customer-primary" onClick={() => { setAnalysisRescuePending(false); window.location.href = "/"; }}>
+              {t("onboarding.rescue.button")}
+            </button>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

@@ -6,12 +6,6 @@ import {
   getCustomerFriendlyAnalysisError,
   updateBrandAnalysisJob,
 } from "../../analyze-brand/jobHelpers.js";
-import {
-  isWebResearchIncomplete,
-  isWebResearchTerminalFailure,
-  retrieveBlockedWebsiteResearch,
-  submitBlockedWebsiteResearch,
-} from "../../analyze-brand/webResearch.js";
 import { sendLifecycleEmail } from "../../../../lib/lifecycleEmails.js";
 
 export const dynamic = "force-dynamic";
@@ -21,10 +15,9 @@ export const maxDuration = 300;
 // Longer than Vercel's 300-second invocation limit so a replacement worker
 // never overlaps a still-running invocation. A timed-out lease is reclaimed.
 const WORKER_LEASE_SECONDS = 330;
-const WEB_RESEARCH_POLL_SECONDS = 25;
 const MAX_ANALYSIS_ATTEMPTS = 5;
-const MAX_WEB_RESEARCH_RECOVERY_SUBMISSIONS = 2;
-const MIN_PARTIAL_WEB_RESEARCH_EVIDENCE_CHARS = 800;
+const MAX_DIRECT_TIMEOUT_ATTEMPTS = 2;
+const DIRECT_TIMEOUT_RETRY_SECONDS = 15;
 
 function isAuthorized(request) {
   const cronSecret = process.env.CRON_SECRET;
@@ -224,270 +217,159 @@ async function releaseJob({ supabase, job, updates }) {
   });
 }
 
-function isDirectWebsiteFallbackError(error) {
-  return ["WEBSITE_SECURITY_BLOCKED", "WEBSITE_FETCH_TIMEOUT"].includes(
-    String(error?.code || "")
-  );
+function isWebsiteSecurityBlocked(error) {
+  return String(error?.code || "") === "WEBSITE_SECURITY_BLOCKED";
 }
 
-async function saveDirectAccessFallbackState({ supabase, job, error }) {
-  const timedOut = error?.code === "WEBSITE_FETCH_TIMEOUT";
+function isWebsiteFetchTimeout(error) {
+  return String(error?.code || "") === "WEBSITE_FETCH_TIMEOUT";
+}
+
+async function saveWebsiteAccessState({ supabase, job, error, manualRescue = false }) {
+  const timedOut = isWebsiteFetchTimeout(error);
   const providerLabel = String(error?.providerLabel || "website security");
-  const message = timedOut
-    ? "Spreelo's direct website connection timed out. The analysis has switched to secure web research and will continue in the background."
-    : `${providerLabel} blocked Spreelo's direct connection. The analysis has switched to secure web research and will continue in the background.`;
+  const message = manualRescue
+    ? timedOut
+      ? "Spreelo could not reliably read the website after a short retry. The brand analysis and campaign calendar will be completed through manual rescue."
+      : `${providerLabel} blocked Spreelo's automatic website analysis. The brand analysis and campaign calendar will be completed through manual rescue.`
+    : "Spreelo's direct website connection timed out. One short automatic retry will be made before the analysis is handed to manual rescue.";
+
+  const profileUpdates = {
+    website_access_status: timedOut ? "direct_fetch_timeout" : "security_blocked",
+    website_security_provider: timedOut ? "unknown" : error?.provider || "unknown",
+    website_security_confidence: timedOut ? "low" : error?.confidence || "low",
+    website_access_status_code: timedOut ? 408 : Number(error?.status || 403),
+    website_access_message: message,
+    website_access_checked_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  if (manualRescue && job.analysis_kind !== "annual_calendar_refresh") {
+    profileUpdates.analysis_rescue_required = true;
+  }
 
   await supabase
     .from("brand_profiles")
-    .update({
-      website_access_status: timedOut ? "direct_fetch_timeout" : "security_blocked",
-      website_security_provider: timedOut ? "unknown" : error?.provider || "unknown",
-      website_security_confidence: timedOut ? "low" : error?.confidence || "low",
-      website_access_status_code: timedOut ? 408 : Number(error?.status || 403),
-      website_access_message: message,
-      website_access_checked_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
+    .update(profileUpdates)
     .eq("id", job.brand_profile_id)
     .eq("user_id", job.user_id);
 
-  return { message, timedOut };
+  return message;
 }
 
-async function submitWebResearchAndRelease({ supabase, job, accessError }) {
-  const { message, timedOut } = await saveDirectAccessFallbackState({
+async function handoffToManualRescue({ supabase, job, error }) {
+  const customerError = isWebsiteSecurityBlocked(error)
+    ? "Spreelo could not read this website automatically because its security protection blocked the analysis connection."
+    : isWebsiteFetchTimeout(error)
+      ? "Spreelo could not read this website reliably after a short automatic retry."
+      : getCustomerFriendlyAnalysisError(error);
+
+  await saveWebsiteAccessState({
     supabase,
     job,
-    error: accessError,
-  });
-  const research = await submitBlockedWebsiteResearch({ job });
-
-  if (research.status === "completed" && research.evidence) {
-    await updateBrandAnalysisJob({
-      supabase,
-      userId: job.user_id,
+    error,
+    manualRescue: true,
+  }).catch((stateError) => {
+    console.error("Could not persist website access state before analysis rescue", {
       jobId: job.id,
-      expectedLeaseToken: job.lease_token,
-      status: "running",
-      step: "web_research_ready",
-      progress: 55,
-      userMessageCode: "web_research_completed",
-      userMessage: message,
-      openaiResponseId: research.id,
-      webResearchEvidence: research.evidence,
-      webResearchSources: research.sources,
-      lastHeartbeatAt: new Date().toISOString(),
+      message: stateError?.message,
     });
+  });
 
-    return {
-      ...job,
-      web_research_evidence: research.evidence,
-      web_research_sources: research.sources,
-      openai_response_id: research.id,
-    };
-  }
+  const rescueMessageCode = isWebsiteSecurityBlocked(error)
+    ? "analysis_manual_rescue_security"
+    : isWebsiteFetchTimeout(error)
+      ? "analysis_manual_rescue_timeout"
+      : "analysis_manual_rescue_pending";
 
   await releaseJob({
     supabase,
     job,
     updates: {
-      status: "pending",
-      step: "web_research_waiting",
-      progress: 42,
-      userMessageCode: timedOut
-        ? "website_direct_access_background_research"
-        : "website_blocked_background_research",
-      userMessage: message,
-      openaiResponseId: research.id,
-      webResearchSources: research.sources,
-      nextAttemptAt: nextAttemptIso(WEB_RESEARCH_POLL_SECONDS),
+      status: "failed",
+      step: "manual_rescue_pending",
+      progress: 100,
+      errorMessage: customerError,
+      internalError: String(error?.message || "Unknown error").slice(0, 2000),
+      failedAt: new Date().toISOString(),
+      userMessageCode: rescueMessageCode,
+      userMessage:
+        "Automatic analysis stopped. Spreelo will complete the brand analysis and personal campaign calendar manually and email the customer when everything is ready.",
+      nextAttemptAt: null,
+      openaiResponseId: null,
+      webResearchEvidence: "",
+      webResearchSources: [],
     },
   });
 
-  return null;
-}
-
-function hasUsableWebResearchEvidence(research, job) {
-  const evidence = String(research?.evidence || "").trim();
-  if (evidence.length < MIN_PARTIAL_WEB_RESEARCH_EVIDENCE_CHARS) return false;
-
-  const sources = Array.isArray(research?.sources) ? research.sources : [];
-  if (sources.some((source) => /^https?:\/\//i.test(String(source?.url || "")))) {
-    return true;
-  }
-
-  try {
-    const hostname = new URL(job?.website_url || "").hostname
-      .replace(/^www\./i, "")
-      .toLowerCase();
-    return Boolean(hostname && evidence.toLowerCase().includes(hostname));
-  } catch {
-    return false;
-  }
-}
-
-async function promoteWebResearchEvidence({ supabase, job, research, partial }) {
-  await updateBrandAnalysisJob({
+  await createManualRescueCaseForFailedJob({
     supabase,
-    userId: job.user_id,
+    job,
+    error,
+    customerError,
+  });
+
+  console.warn("Brand analysis handed directly to manual rescue", {
     jobId: job.id,
-    expectedLeaseToken: job.lease_token,
-    status: "running",
-    step: "web_research_ready",
-    progress: 55,
-    userMessageCode: "web_research_completed",
-    userMessage: partial
-      ? "Spreelo recovered sufficient official evidence from an interrupted web-research response and is completing the analysis."
-      : job.user_message,
-    openaiResponseId: research.id || job.openai_response_id,
-    webResearchEvidence: research.evidence,
-    webResearchSources: research.sources,
-    internalError: partial
-      ? `Recovered partial web research (${research?.incompleteDetails?.reason || "unknown reason"}).`
-      : "",
-    lastHeartbeatAt: new Date().toISOString(),
+    brandProfileId: job.brand_profile_id,
+    code: error?.code || "analysis_failed",
+    websiteUrl: job.website_url || "",
   });
 
   return {
-    ...job,
-    step: "web_research_ready",
-    progress: 55,
-    openai_response_id: research.id || job.openai_response_id,
-    web_research_evidence: research.evidence,
-    web_research_sources: research.sources,
+    rescued: true,
+    jobId: job.id,
+    reason: isWebsiteSecurityBlocked(error)
+      ? "website_security_manual_rescue"
+      : isWebsiteFetchTimeout(error)
+        ? "website_timeout_manual_rescue"
+        : "analysis_manual_rescue",
   };
 }
 
-async function resumeWebResearch({ supabase, job }) {
-  const research = await retrieveBlockedWebsiteResearch(
-    job.openai_response_id
-  );
-
-  if (research.status === "completed") {
-    if (!research.evidence) {
-      throw new Error("Background web research completed without evidence.");
-    }
-
-    return promoteWebResearchEvidence({
-      supabase,
-      job,
-      research,
-      partial: false,
+async function scheduleOneDirectTimeoutRetry({ supabase, job, error }) {
+  await saveWebsiteAccessState({
+    supabase,
+    job,
+    error,
+    manualRescue: false,
+  }).catch((stateError) => {
+    console.error("Could not persist website timeout state", {
+      jobId: job.id,
+      message: stateError?.message,
     });
-  }
-
-  if (isWebResearchIncomplete(research.status)) {
-    const incompleteReason =
-      research?.incompleteDetails?.reason || "unknown_reason";
-
-    if (hasUsableWebResearchEvidence(research, job)) {
-      console.warn("Incomplete background web research contained sufficient official evidence; continuing analysis", {
-        jobId: job.id,
-        responseId: research.id,
-        incompleteReason,
-        evidenceChars: research.evidence.length,
-        sourceCount: research.sources.length,
-      });
-      return promoteWebResearchEvidence({
-        supabase,
-        job,
-        research,
-        partial: true,
-      });
-    }
-
-    const currentSubmissionCount = Math.max(1, Number(job.attempt_count || 1));
-    if (currentSubmissionCount < MAX_WEB_RESEARCH_RECOVERY_SUBMISSIONS) {
-      const retryResearch = await submitBlockedWebsiteResearch({
-        job,
-        compactRetry: true,
-        previousEvidence: research.evidence,
-      });
-
-      console.warn("Incomplete background web research restarted once with a compact recovery request", {
-        jobId: job.id,
-        previousResponseId: research.id,
-        newResponseId: retryResearch.id,
-        incompleteReason,
-        previousEvidenceChars: research.evidence.length,
-        newStatus: retryResearch.status,
-      });
-
-      if (
-        retryResearch.status === "completed" ||
-        (
-          isWebResearchIncomplete(retryResearch.status) &&
-          hasUsableWebResearchEvidence(retryResearch, job)
-        )
-      ) {
-        return promoteWebResearchEvidence({
-          supabase,
-          job,
-          research: retryResearch,
-          partial: retryResearch.status !== "completed",
-        });
-      }
-
-      if (isWebResearchTerminalFailure(retryResearch.status)) {
-        throw new Error(
-          `Background web research recovery ${retryResearch.status}: ${JSON.stringify(
-            retryResearch.error || retryResearch.incompleteDetails || {}
-          )}`
-        );
-      }
-
-      await releaseJob({
-        supabase,
-        job,
-        updates: {
-          status: "pending",
-          step: "web_research_waiting",
-          progress: 48,
-          attemptCount: currentSubmissionCount + 1,
-          userMessageCode: "website_blocked_background_research",
-          userMessage:
-            "The first secure web-research response was interrupted. Spreelo restarted it in a smaller bounded form and will continue automatically.",
-          openaiResponseId: retryResearch.id,
-          webResearchSources: retryResearch.sources,
-          internalError: `Web research incomplete (${incompleteReason}); compact recovery submitted.`,
-          nextAttemptAt: nextAttemptIso(WEB_RESEARCH_POLL_SECONDS),
-        },
-      });
-
-      return null;
-    }
-
-    throw new Error(
-      `Background web research remained incomplete after bounded recovery: ${JSON.stringify(
-        research.incompleteDetails || {}
-      )}`
-    );
-  }
-
-  if (isWebResearchTerminalFailure(research.status)) {
-    throw new Error(
-      `Background web research ${research.status}: ${JSON.stringify(
-        research.error || research.incompleteDetails || {}
-      )}`
-    );
-  }
+  });
 
   await releaseJob({
     supabase,
     job,
     updates: {
       status: "pending",
-      step: "web_research_waiting",
-      progress: Math.max(42, Number(job.progress || 0)),
-      userMessageCode: "website_blocked_background_research",
+      step: "retry_waiting",
+      progress: Math.max(10, Math.min(35, Number(job.progress || 10))),
+      errorMessage: "",
+      internalError: String(error?.message || "Website fetch timeout").slice(0, 2000),
+      userMessageCode: "website_timeout_retry",
       userMessage:
-        job.user_message ||
-        "The website blocked Spreelo's direct connection. Secure web research is continuing in the background.",
-      nextAttemptAt: nextAttemptIso(WEB_RESEARCH_POLL_SECONDS),
+        "The website connection timed out. Spreelo will make one short automatic retry before handing the analysis to manual rescue.",
+      nextAttemptAt: nextAttemptIso(DIRECT_TIMEOUT_RETRY_SECONDS),
     },
   });
 
-  return null;
+  return {
+    deferred: true,
+    reason: "website_timeout_retry",
+    attemptCount: Number(job.attempt_count || 1),
+  };
+}
+
+async function convertLegacyWebResearchJobToRescue({ supabase, job }) {
+  const error = new Error(
+    "Legacy blocked-website web research was stopped by v144.112 fail-fast rescue policy."
+  );
+  error.code = job.user_message_code === "website_direct_access_background_research"
+    ? "WEBSITE_FETCH_TIMEOUT"
+    : "WEBSITE_SECURITY_BLOCKED";
+  return handoffToManualRescue({ supabase, job, error });
 }
 
 async function processClaimedJob({ supabase, job }) {
@@ -519,11 +401,8 @@ async function processClaimedJob({ supabase, job }) {
   }
 
   try {
-    if (job.step === "web_research_waiting" && job.openai_response_id) {
-      analysisJob = await resumeWebResearch({ supabase, job });
-      if (!analysisJob) {
-        return { deferred: true, reason: "web_research_running" };
-      }
+    if (job.step === "web_research_waiting") {
+      return convertLegacyWebResearchJobToRescue({ supabase, job });
     }
 
     const completedJob = await runBrandAnalysisJob({
@@ -535,38 +414,19 @@ async function processClaimedJob({ supabase, job }) {
     await sendCompletionEmail({ supabase, job: completedJob });
     return { completed: true, jobId: job.id };
   } catch (error) {
-    if (isDirectWebsiteFallbackError(error) && job.website_url) {
-      console.warn("Brand analysis direct website access failed; switching to web research", {
-        jobId: job.id,
-        code: error?.code || "unknown",
-        message: error?.message,
-        websiteUrl: job.website_url,
-      });
+    if (isWebsiteSecurityBlocked(error) && job.website_url) {
+      // v144.112: a confirmed security block is terminal for automatic analysis.
+      // Do not spend money on hosted web research or keep the customer waiting.
+      return handoffToManualRescue({ supabase, job, error });
+    }
 
-      const resumedJob = await submitWebResearchAndRelease({
-        supabase,
-        job,
-        accessError: error,
-      });
-
-      if (!resumedJob) {
-        return {
-          deferred: true,
-          reason:
-            error?.code === "WEBSITE_FETCH_TIMEOUT"
-              ? "website_timeout_fallback"
-              : "website_security_fallback",
-        };
+    if (isWebsiteFetchTimeout(error) && job.website_url) {
+      const attemptCount = Number(job.attempt_count || 1);
+      if (attemptCount < MAX_DIRECT_TIMEOUT_ATTEMPTS) {
+        return scheduleOneDirectTimeoutRetry({ supabase, job, error });
       }
 
-      const completedJob = await runBrandAnalysisJob({
-        supabase,
-        userId: job.user_id,
-        job: resumedJob,
-        updateJob,
-      });
-      await sendCompletionEmail({ supabase, job: completedJob });
-      return { completed: true, jobId: job.id, usedWebResearch: true };
+      return handoffToManualRescue({ supabase, job, error });
     }
 
     const customerError = getCustomerFriendlyAnalysisError(error);

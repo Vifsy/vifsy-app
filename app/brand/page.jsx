@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bookmark, Building2, Check, ChevronRight, Globe2, Heart, Languages, MessageCircle, Pencil, Send, Sparkles, Users, X } from "lucide-react";
+import { Bookmark, Building2, Check, ChevronRight, Globe2, Heart, Languages, MessageCircle, Pencil, Send, ShieldCheck, Sparkles, Users, X } from "lucide-react";
 import AppLayout from "../../components/AppLayout";
 import { supabase } from "../../lib/supabaseClient";
 import { getValidAnalysisAccessToken } from "../../lib/analysisSession";
@@ -136,6 +136,16 @@ const ALLOWED_LOGO_FILE_TYPES = new Set([
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getAnalysisRescueReason(code) {
+  if (code === "analysis_manual_rescue_security") return "security";
+  if (code === "analysis_manual_rescue_timeout") return "timeout";
+  return "generic";
+}
+
+function isManualAnalysisRescueCode(code) {
+  return String(code || "").startsWith("analysis_manual_rescue_");
 }
 
 function getCurrentAnalysisStage(progress) {
@@ -313,6 +323,8 @@ export default function BrandProfile() {
   const [autoAnalyzeRequested, setAutoAnalyzeRequested] = useState(false);
   const [showAnalysisResult, setShowAnalysisResult] = useState(false);
   const [analysisResultStep, setAnalysisResultStep] = useState("result");
+  const [analysisRescuePending, setAnalysisRescuePending] = useState(false);
+  const [analysisRescueReason, setAnalysisRescueReason] = useState("generic");
   const autoAnalysisStartedRef = useRef(false);
 
   const [allBrands, setAllBrands] = useState([]);
@@ -413,6 +425,7 @@ export default function BrandProfile() {
 
   const showAnalysisFailureState =
     !showGeneratedFields &&
+    !analysisRescuePending &&
     !isEditing &&
     !analyzing &&
     !autoAnalyzeRequested;
@@ -483,7 +496,7 @@ export default function BrandProfile() {
       const { data, error } = await supabase
         .from("brand_profiles")
         .select(
-          "id, business_name, website_url, brand_description, industry, target_audience, content_market, country_code, content_language, logo_url, logo_storage_path, logo_enabled_by_default, is_default, created_at"
+          "id, business_name, website_url, brand_description, industry, target_audience, content_market, country_code, content_language, logo_url, logo_storage_path, logo_enabled_by_default, analysis_rescue_required, website_access_status, is_default, created_at"
         )
         .eq("user_id", user.id)
         .eq("id", brandIdToLoad)
@@ -530,6 +543,8 @@ export default function BrandProfile() {
       setCountryCode(loadedCountryCode);
       setContentLanguage(loadedContentLanguage);
       setContentSettingsTouched(false);
+      setAnalysisRescuePending(data.analysis_rescue_required === true);
+      setAnalysisRescueReason(data.website_access_status === "security_blocked" ? "security" : data.website_access_status === "direct_fetch_timeout" ? "timeout" : "generic");
 
       const query = typeof window !== "undefined"
         ? new URLSearchParams(window.location.search)
@@ -874,6 +889,9 @@ export default function BrandProfile() {
       }
 
       if (job.status === "failed") {
+        if (isManualAnalysisRescueCode(job.user_message_code)) {
+          return job;
+        }
         throw new Error(
           getFriendlyAnalysisError(
             job.error_message || t("brand.errorFinishAnalysis")
@@ -913,6 +931,8 @@ export default function BrandProfile() {
 
     setAnalysisProgress(1);
     setAnalysisNoticeCode("background");
+    setAnalysisRescuePending(false);
+    setAnalysisRescueReason("generic");
     setAnalysisResultStep("analyzing");
     setShowAnalysisResult(true);
     setAnalyzing(true);
@@ -995,6 +1015,17 @@ export default function BrandProfile() {
         jobId,
         displayStartedAt,
       });
+
+      if (isManualAnalysisRescueCode(completedJob?.user_message_code)) {
+        setAnalysisProgress(100);
+        setAnalysisRescueReason(getAnalysisRescueReason(completedJob.user_message_code));
+        setAnalysisRescuePending(true);
+        setMessage("");
+        setIsEditing(false);
+        setAnalysisResultStep("rescue");
+        setShowAnalysisResult(true);
+        return;
+      }
 
       const result = completedJob.result || {};
       const profile = result.profile || {};
@@ -1602,6 +1633,15 @@ export default function BrandProfile() {
                   </div>
                 </section>
               </div>
+            ) : analysisRescuePending ? (
+              <div className="brand-analysis-rescue-pending-state" role="status">
+                <span className="brand-analysis-rescue-pending-icon" aria-hidden="true"><ShieldCheck size={22} /></span>
+                <div className="brand-analysis-failed-copy">
+                  <p className="dashboard-eyebrow">{t("brand.rescuePending.eyebrow")}</p>
+                  <h4>{t("brand.rescuePending.title")}</h4>
+                  <p>{t("brand.rescuePending.text")}</p>
+                </div>
+              </div>
             ) : showAnalysisFailureState ? (
               <div className="brand-analysis-failed-state" role="status">
                 <span className="brand-analysis-failed-icon" aria-hidden="true">
@@ -1802,7 +1842,7 @@ export default function BrandProfile() {
               </>
             )}
 
-            {!analyzing && !showAnalysisFailureState && (isEditing || !showGeneratedFields) && !autoAnalyzeRequested ? (
+            {!analyzing && !analysisRescuePending && !showAnalysisFailureState && (isEditing || !showGeneratedFields) && !autoAnalyzeRequested ? (
               <button
                 className="brand-profile-primary-button"
                 type="button"
@@ -1863,7 +1903,7 @@ export default function BrandProfile() {
 
             {message && <p className="brand-profile-message">{message}</p>}
 
-            {!showAnalysisFailureState && (isEditing || !showGeneratedFields) ? <p className="brand-profile-disclaimer">{t("brand.disclaimer")}</p> : null}
+            {!analysisRescuePending && !showAnalysisFailureState && (isEditing || !showGeneratedFields) ? <p className="brand-profile-disclaimer">{t("brand.disclaimer")}</p> : null}
           </section>
         </section>
 
@@ -1929,6 +1969,19 @@ export default function BrandProfile() {
                   </div>
                   <button type="button" className="brand-result-primary" onClick={() => { setShowAnalysisResult(false); window.location.href = "/social-channels"; }}>{t("brand.result.connectChannels")}</button>
                 </>
+              ) : analysisResultStep === "rescue" ? (
+                <div className="brand-result-rescue">
+                  <div className="analysis-rescue-customer-icon" aria-hidden="true"><ShieldCheck size={28} /></div>
+                  <p className="dashboard-eyebrow">{t("brand.rescuePending.eyebrow")}</p>
+                  <h2>{t("brand.rescuePending.title")}</h2>
+                  <p className="brand-result-lead">{t(analysisRescueReason === "security" ? "brand.rescuePending.reasonSecurity" : analysisRescueReason === "timeout" ? "brand.rescuePending.reasonTimeout" : "brand.rescuePending.text")}</p>
+                  <div className="analysis-rescue-customer-points">
+                    <article><Check size={18} aria-hidden="true" /><span>{t("brand.rescuePending.noAction")}</span></article>
+                    <article><Sparkles size={18} aria-hidden="true" /><span>{t("brand.rescuePending.calendar")}</span></article>
+                    <article><Send size={18} aria-hidden="true" /><span>{t("brand.rescuePending.email")}</span></article>
+                  </div>
+                  <button type="button" className="brand-result-primary" onClick={() => { setShowAnalysisResult(false); setIsEditing(false); }}>{t("brand.rescuePending.button")}</button>
+                </div>
               ) : (
                 <div className="brand-result-error">
                   <p className="dashboard-eyebrow">{t("brand.analysisTitle")}</p>
