@@ -4,6 +4,8 @@ import { getAdminMassTestFormats, buildMassTestRule, mapCampaignPostContentType,
 
 export const dynamic = "force-dynamic";
 
+const ADMIN_TEST_PLATFORMS = ["facebook", "instagram", "linkedin", "tiktok", "pinterest", "threads", "youtube"];
+
 function platformLabel(value) {
   const v = String(value || "").toLowerCase();
   return ({ facebook:"Facebook", instagram:"Instagram", linkedin:"LinkedIn", tiktok:"TikTok", pinterest:"Pinterest", threads:"Threads", youtube:"YouTube" })[v] || value;
@@ -51,6 +53,7 @@ async function loadSetup(context) {
   return {
     brands:(brands||[]).map((brand)=>({ ...brand, connected_platforms:connectionsByBrand[brand.id]||[], campaigns:campaignsByBrand[brand.id]||[] })),
     formats:getAdminMassTestFormats(formatsResult.data || []),
+    test_platforms: ADMIN_TEST_PLATFORMS.map((value)=>({ value, label:platformLabel(value) })),
     batches:batchesResult.data || [],
   };
 }
@@ -79,9 +82,16 @@ export async function POST(request) {
     const brand = brandMap[String(requested?.brandProfileId||"")];
     if (!brand) return Response.json({ok:false,error:"Ett valt varumärke tillhör inte ditt adminkonto."},{status:400});
     const requestedPlatforms = Array.isArray(requested.platforms) ? requested.platforms.map((p)=>String(p).toLowerCase()) : [];
-    const allowedPlatforms = requestedPlatforms.filter((p)=>brand.connected_platforms.includes(p));
-    if (!allowedPlatforms.length) return Response.json({ok:false,error:`${brand.business_name || "Varumärket"} saknar vald ansluten plattform.`},{status:400});
-    const platform=buildPlatformValue(allowedPlatforms);
+    const supportedRequestedPlatforms = requestedPlatforms.filter((p)=>ADMIN_TEST_PLATFORMS.includes(p));
+    const connectedDefaults = (brand.connected_platforms || []).filter((p)=>ADMIN_TEST_PLATFORMS.includes(p)).slice(0,2);
+    // v144.103: mass tests generate content but do not publish. A live social connection
+    // is therefore not required just to exercise the real platform-specific generation path.
+    const testPlatforms = supportedRequestedPlatforms.length
+      ? supportedRequestedPlatforms
+      : connectedDefaults.length
+      ? connectedDefaults
+      : ["facebook", "instagram"];
+    const platform=buildPlatformValue(testPlatforms);
     const repeats=Math.max(1,Math.min(5,Number(requested?.studio?.repeats||1)||1));
     const specialConfig=requested?.studio?.special || {};
     const selectedTypes=[...new Set((requested?.studio?.contentTypeIds||[]).map(String))].filter((id)=>formatMap[id]);
