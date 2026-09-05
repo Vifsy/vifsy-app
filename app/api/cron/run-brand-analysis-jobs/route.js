@@ -294,7 +294,9 @@ async function handoffToManualRescue({ supabase, job, error }) {
       userMessageCode: rescueMessageCode,
       userMessage:
         "Automatic analysis stopped. Spreelo will complete the brand analysis and personal campaign calendar manually and email the customer when everything is ready.",
-      nextAttemptAt: null,
+      // Keep the existing non-null next_attempt_at value. The durable queue schema
+      // defines next_attempt_at as NOT NULL; status="failed" already makes this job
+      // ineligible for future claims, so clearing the timestamp is unnecessary.
       openaiResponseId: null,
       webResearchEvidence: "",
       webResearchSources: [],
