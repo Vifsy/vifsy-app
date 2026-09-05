@@ -401,9 +401,9 @@ async function planFinishedKlingAdvertisingCreative({ openai, post, selection, f
       "Write all visible copy in the same language as the social caption. The headline must be 3-6 words, max 48 characters, semantically complete, and specifically connected to the verified product, its explicit motif/theme, category or supplied campaign angle. " +
       "Reject empty generic advertising language such as 'classic comfort for every occasion', 'quality for every day', 'made for every moment', or equivalents unless the supplied product facts genuinely support it. " +
       "Do not invent material, comfort, durability, fit, performance, reviews, scarcity, prices, discounts or other claims. For graphic apparel, you may use the printed theme/motif only when it is explicit in the product title or caption. " +
-      "The optional subheadline must add new factual context in 2-5 words, max 36 characters; otherwise return an empty string. The CTA must be 1-4 words, max 24 characters, natural in the same language and consistent with the CTA setting. " +
+      "The subheadline is OPTIONAL and should usually be empty. Return an empty string unless a short 2-5 word line adds clear advertising value beyond the headline. Never use filler, product-category labels, gender labels, material facts or catalogue descriptors as the subheadline. The CTA must be 1-4 words, max 24 characters, natural in the same language and consistent with the CTA setting. " +
       "Choose main_placement from top_left, top_right, middle_left, middle_right, lower_left, lower_right so the headline avoids the advertised product and especially its print/design, plus faces, hands and the main action ACROSS ALL supplied frames. " +
-      "Choose cta_placement independently for the final frame. Prefer clear negative space and avoid the right-edge social UI zone and the lowest 20% of the frame. Return strict JSON only.",
+      "Choose cta_placement independently for the final frame, and prefer a different safe region from the main placement whenever possible. Prefer clear negative space and avoid the right-edge social UI zone and the lowest 20% of the frame. Return strict JSON only.",
   }];
   for (const frame of frames) {
     content.push({
@@ -849,7 +849,92 @@ async function placeFinishedKlingTypographyInSafeArea(buffer, placement) {
   return normalizeFinishedKlingTypography(canvas);
 }
 
-async function createKlingCtaOverlay({ supabase, post, selection, creativePlan }) {
+async function extractVisibleTypographyBand(buffer, band, padding = 24) {
+  const { data, info } = await sharp(buffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const topBound = Math.max(0, Math.floor(Number(band?.top) || 0));
+  const bottomBound = Math.min(info.height - 1, Math.ceil(Number(band?.bottom) || 0));
+  let minX = info.width;
+  let minY = info.height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = topBound; y <= bottomBound; y += 1) {
+    for (let x = 0; x < info.width; x += 1) {
+      const alpha = data[(y * info.width + x) * info.channels + 3];
+      if (alpha < 24) continue;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+
+  if (maxX < minX || maxY < minY) {
+    throw new Error("Combined Kling overlay split could not locate visible typography bounds");
+  }
+
+  const left = Math.max(0, minX - padding);
+  const top = Math.max(0, minY - padding);
+  const right = Math.min(info.width - 1, maxX + padding);
+  const bottom = Math.min(info.height - 1, maxY + padding);
+  return sharp(buffer)
+    .extract({
+      left,
+      top,
+      width: Math.max(1, right - left + 1),
+      height: Math.max(1, bottom - top + 1),
+    })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
+async function splitCombinedKlingTypographyOverlay(buffer) {
+  const { data, info } = await sharp(buffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const visibleRows = [];
+  for (let y = 0; y < info.height; y += 1) {
+    let count = 0;
+    for (let x = 0; x < info.width; x += 1) {
+      const alpha = data[(y * info.width + x) * info.channels + 3];
+      if (alpha >= 24) count += 1;
+    }
+    if (count >= 10) visibleRows.push(y);
+  }
+
+  if (!visibleRows.length) {
+    throw new Error("Combined Kling overlay split found no visible typography rows");
+  }
+
+  const bands = [];
+  let start = visibleRows[0];
+  let prev = visibleRows[0];
+  for (let index = 1; index < visibleRows.length; index += 1) {
+    const row = visibleRows[index];
+    if (row - prev <= 120) {
+      prev = row;
+      continue;
+    }
+    bands.push({ top: start, bottom: prev });
+    start = row;
+    prev = row;
+  }
+  bands.push({ top: start, bottom: prev });
+
+  if (bands.length < 2) {
+    throw new Error("Combined Kling overlay split did not detect a separate CTA group");
+  }
+
+  const headlineBand = {
+    top: bands[0].top,
+    bottom: bands[Math.max(0, bands.length - 2)].bottom,
+  };
+  const ctaBand = bands[bands.length - 1];
+  return {
+    headline: await extractVisibleTypographyBand(buffer, headlineBand, 28),
+    cta: await extractVisibleTypographyBand(buffer, ctaBand, 24),
+  };
+}
+
+async function createKlingCtaOverlay({ supabase, post, selection, creativePlan, sourceBuffer = null }) {
   if (String(selection?.cta_overlay_url || "").trim()) return selection;
   const cta =
     normalizeKlingCreativeLine(creativePlan?.cta, { maxWords: 4, maxChars: 24 }) ||
@@ -857,6 +942,31 @@ async function createKlingCtaOverlay({ supabase, post, selection, creativePlan }
   if (!cta) return selection;
   const placement = creativePlan?.cta_placement || "lower_left";
   const box = getKlingPlacementBox(placement, "lower_left");
+
+  if (sourceBuffer) {
+    const normalized = await placeFinishedKlingTypographyInSafeArea(sourceBuffer, placement);
+    const uploaded = await uploadKlingCtaOverlay({ supabase, post, buffer: normalized.buffer });
+    return {
+      ...selection,
+      cta_overlay_url: uploaded.imageUrl,
+      cta_overlay_storage_path: uploaded.storagePath,
+      cta_overlay_provider: "gpt-image-2-shared-overlay-split",
+      cta_overlay_copy: cta,
+      cta_overlay_placement: placement,
+      cta_overlay_created_at: new Date().toISOString(),
+      cta_overlay_analysis: {
+        visible_ratio: Number(normalized.visibleRatio.toFixed(4)),
+        strong_ratio: Number(normalized.strongRatio.toFixed(4)),
+        low_alpha_ratio: Number((normalized.lowAlphaRatio || 0).toFixed(4)),
+        edge_ratio: Number((normalized.edgeRatio || 0).toFixed(4)),
+        bbox_width_ratio: Number((normalized.bboxWidthRatio || 0).toFixed(4)),
+        bbox_height_ratio: Number((normalized.bboxHeightRatio || 0).toFixed(4)),
+        bbox_area_ratio: Number((normalized.bboxAreaRatio || 0).toFixed(4)),
+        bbox_fill_ratio: Number((normalized.bboxFillRatio || 0).toFixed(4)),
+      },
+    };
+  }
+
   const profile = getProductTypographyProfile(cta);
   const family = escapeProductSvg(profile?.family || "Noto Sans");
   const direction = profile?.direction === "rtl" ? "rtl" : "ltr";
@@ -1073,11 +1183,17 @@ async function createFinishedKlingTypographyOnce({ openai, supabase, post, task,
     const frames = await sampleRemoteVideoFrames({
       videoUrl: task.videoUrl,
       durationSeconds,
-      // Two representative frames art-direct the typography; the late frame
-      // also becomes the deliberate closing hero hold used after Kling motion.
-      fractions: [0.28, 0.72, 0.975],
+      // Two representative frames art-direct the typography. The closing hero
+      // frame is sampled separately from the exact delivered end of motion.
+      fractions: [0.28, 0.72],
     });
-    const closingFrame = frames[frames.length - 1];
+    const closingFrames = await sampleRemoteVideoFrames({
+      videoUrl: task.videoUrl,
+      durationSeconds,
+      timesSeconds: [Math.max(0.05, durationSeconds - 0.02)],
+    });
+    const closingFrame = closingFrames[0] || null;
+    if (closingFrame?.buffer) frames.push(closingFrame);
     if (closingFrame?.buffer) {
       const closingHeroBuffer = await sharp(closingFrame.buffer)
         .resize({ width: 1080, height: 1920, fit: "cover" })
@@ -1147,6 +1263,7 @@ The supplied images are real frames from the FINISHED video, followed optionally
 EXACT VISIBLE TEXT — render exactly these words, with exact spelling and language:
 Main headline: "${headline}"
 ${subheadline ? `Subheadline: "${subheadline}"` : "No subheadline."}
+CTA ending text: "${creativePlan.cta || getFallbackKlingCta(post)}"
 
 DESIGN:
 - Make the typography feel specifically art-directed for the finished video and product, as a professional short commercial rather than generic system text.
@@ -1155,8 +1272,11 @@ DESIGN:
 - Mostly light/white or dark high-contrast lettering as the frames require.
 - You MAY make the typography more alive with a restrained accent color, a compact underline, a SMALL brush stroke, a SMALL crown/flourish, or another SMALL graphic accent when it genuinely suits the content.
 - Decorative accents must stay visually attached to the lettering and close to the text. They are part of the typography design, never a background.
-- Keep the typography composition compact. Spreelo will crop this transparent artwork and place it deterministically inside a scene-safe region chosen from the supplied finished frames. Do not try to fill the canvas.
-- NO card, panel, badge, sticker base, banner, rectangle, capsule, ribbon or opaque plate behind the text.
+- Create TWO separate compact text groups on the same transparent canvas: (1) one grouped main-message design containing the headline and optional subheadline, and (2) one smaller grouped CTA design that feels art-directed in the same visual language.
+- Keep a LARGE transparent gap between the main-message group and the CTA group so Spreelo can separate them into timed layers after this single generation.
+- The CTA design may be plain text or a compact bespoke accent shape if it genuinely suits the ad, but NEVER a generic app-style button.
+- Keep the overall composition compact. Spreelo will crop the main-message group and the CTA group separately and place them deterministically inside scene-safe regions chosen from the supplied finished frames. Do not try to fill the canvas.
+- NO large card, panel, sticker base, banner, rectangle or opaque plate behind the text. A small CTA accent shape is allowed only when it is tightly fitted to the CTA lettering.
 - NO shadow of any kind (including drop shadow, soft shadow or long shadow), no glow, haze, mist, blur or atmospheric halo. Use crisp lettering and crisp decorative accents instead.
 
 TRANSPARENCY / LAYER RULE — CRITICAL:
@@ -1170,7 +1290,7 @@ TRANSPARENCY / LAYER RULE — CRITICAL:
 OUTPUT RULES:
 - Transparent RGBA PNG portrait overlay intended for a final 9:16 video composition.
 - No black/white/colored background, no checkerboard, no scene, no photo, no clothing, no person, no product, no mockup, no logo recreation, no watermark.
-- Do not invent or rewrite any words. Do not add a price, offer, CTA, slogan or hashtag.
+- Do not invent or rewrite any words. Render only the exact headline, optional subheadline and CTA text provided above. Do not add a price, offer, extra slogan or hashtag.
 - Return ONLY the transparent typography overlay layer and nothing else.
 `.trim();
     const response = await openai.images.edit({
@@ -1184,8 +1304,12 @@ OUTPUT RULES:
     }, { timeout: 75_000, maxRetries: 0 });
     const base64 = response?.data?.[0]?.b64_json;
     if (!base64) throw new Error("GPT-Image-2 returned no transparent Kling typography image");
+    const combinedOverlay = await normalizeFinishedKlingTypography(
+      Buffer.from(base64, "base64")
+    );
+    const splitOverlay = await splitCombinedKlingTypographyOverlay(combinedOverlay.buffer);
     const normalized = await placeFinishedKlingTypographyInSafeArea(
-      Buffer.from(base64, "base64"),
+      splitOverlay.headline,
       creativePlan.main_placement
     );
     const uploaded = await uploadKlingTypographyOverlay({ supabase, post, buffer: normalized.buffer });
@@ -1193,7 +1317,7 @@ OUTPUT RULES:
       ...workingSelection,
       text_overlay_url: uploaded.imageUrl,
       text_overlay_storage_path: uploaded.storagePath,
-      text_overlay_provider: "gpt-image-2-finished-video-transparent-typography",
+      text_overlay_provider: "gpt-image-2-finished-video-shared-overlay",
       text_overlay_prompt: prompt,
       text_overlay_status: "ready",
       text_overlay_generated_at: new Date().toISOString(),
@@ -1201,11 +1325,13 @@ OUTPUT RULES:
         visible_ratio: Number(normalized.visibleRatio.toFixed(4)),
         strong_ratio: Number(normalized.strongRatio.toFixed(4)),
         low_alpha_ratio: Number((normalized.lowAlphaRatio || 0).toFixed(4)),
-        edge_ratio: Number(normalized.edgeRatio.toFixed(4)),
+        edge_ratio: Number((normalized.edgeRatio || 0).toFixed(4)),
         bbox_width_ratio: Number((normalized.bboxWidthRatio || 0).toFixed(4)),
         bbox_height_ratio: Number((normalized.bboxHeightRatio || 0).toFixed(4)),
         bbox_area_ratio: Number((normalized.bboxAreaRatio || 0).toFixed(4)),
         bbox_fill_ratio: Number((normalized.bboxFillRatio || 0).toFixed(4)),
+        shared_overlay_visible_ratio: Number(combinedOverlay.visibleRatio.toFixed(4)),
+        shared_overlay_bbox_area_ratio: Number((combinedOverlay.bboxAreaRatio || 0).toFixed(4)),
       },
     };
     completedSelection = await createKlingCtaOverlay({
@@ -1213,6 +1339,7 @@ OUTPUT RULES:
       post,
       selection: completedSelection,
       creativePlan,
+      sourceBuffer: splitOverlay.cta,
     });
     const { error: persistError } = await supabase
       .from("posts")
@@ -1230,6 +1357,7 @@ OUTPUT RULES:
       placementConfidence: creativePlan.placement_confidence,
       referenceFrames: frames.length,
       provider: completedSelection.text_overlay_provider,
+      sharedOverlay: completedSelection.cta_overlay_provider === "gpt-image-2-shared-overlay-split",
     });
     return completedSelection;
   } catch (error) {
@@ -1288,18 +1416,23 @@ OUTPUT RULES:
   }
 }
 
-async function ensureKlingClosingHeroFrame({ supabase, post, task, selection }) {
+async function ensureKlingClosingHeroFrame({ supabase, post, task, selection, durationSeconds: durationOverride = null, sourceTimeSeconds = null }) {
   if (String(selection?.closing_hero_frame_url || "").trim()) return selection;
 
   const durationSeconds = normalizeVideoDurationSeconds(
+    durationOverride,
     task.durationSeconds,
     post.video_duration_seconds,
     6
   );
+  const targetTimeSeconds = Math.max(
+    0.05,
+    Math.min(durationSeconds - 0.02, Number(sourceTimeSeconds) || durationSeconds - 0.02)
+  );
   const frames = await sampleRemoteVideoFrames({
     videoUrl: task.videoUrl,
     durationSeconds,
-    fractions: [0.975],
+    timesSeconds: [targetTimeSeconds],
   });
   const closingFrame = frames[0];
   if (!closingFrame?.buffer) throw new Error("Could not sample Kling closing hero frame");
@@ -1383,6 +1516,8 @@ async function getKlingFinalVideoSource({ openai, supabase, post, task, costTrac
       post,
       task,
       selection: postprocess,
+      durationSeconds,
+      sourceTimeSeconds: Math.max(0.05, durationSeconds - 0.02),
     });
     const closingHoldSeconds = String(postprocess.closing_hero_frame_url || "").trim()
       ? Math.max(0.6, Math.min(1.5, Number(postprocess.closing_hero_hold_seconds) || KLING_CLOSING_HERO_HOLD_SECONDS))
