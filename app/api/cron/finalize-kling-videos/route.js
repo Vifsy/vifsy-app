@@ -45,6 +45,58 @@ function truncate(value, maxLength = 1200) {
   return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
 }
 
+// v144.114: finished-video copy and typography are planned against real
+// delivered frames. The model chooses only among these conservative regions;
+// the generated artwork is then deterministically cropped and placed inside the
+// chosen box so GPT Image cannot drift back over the product.
+const KLING_FINISHED_TYPOGRAPHY_PLACEMENTS = {
+  top_left: { left: 64, top: 190, width: 440, height: 300 },
+  top_right: { left: 576, top: 190, width: 440, height: 300 },
+  middle_left: { left: 64, top: 620, width: 420, height: 320 },
+  middle_right: { left: 596, top: 620, width: 420, height: 320 },
+  lower_left: { left: 64, top: 1080, width: 420, height: 300 },
+  lower_right: { left: 596, top: 1080, width: 420, height: 300 },
+};
+
+function normalizeKlingCreativeLine(value, { maxWords = 7, maxChars = 52 } = {}) {
+  const cleaned = String(value || "")
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/www\.\S+/gi, " ")
+    .replace(/#[\p{L}\p{N}_-]+/gu, " ")
+    .replace(/[\p{Extended_Pictographic}\uFE0F]/gu, " ")
+    .replace(/^[\s\-–—:|•·]+|[\s\-–—:|•·]+$/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/[.,;:!?]+$/g, "")
+    .trim();
+  if (!cleaned) return "";
+  if (cleaned.split(/\s+/).filter(Boolean).length > maxWords) return "";
+  if (Array.from(cleaned).length > maxChars) return "";
+  return cleaned;
+}
+
+function getFallbackKlingCta(post) {
+  const language = String(post?.language || "").toLowerCase();
+  const swedish = language.includes("swedish") || language.includes("svenska") || language === "sv";
+  const raw = String(post?.cta_type || "").toLowerCase();
+  if (swedish) {
+    if (raw.includes("contact")) return "Kontakta oss";
+    if (raw.includes("book")) return "Boka nu";
+    if (raw.includes("visit")) return "Besök webbplatsen";
+    if (raw.includes("shop")) return "Se produkten";
+    return "Läs mer";
+  }
+  if (raw.includes("contact")) return "Contact us";
+  if (raw.includes("book")) return "Book now";
+  if (raw.includes("visit")) return "Visit website";
+  if (raw.includes("shop")) return "View product";
+  return "Learn more";
+}
+
+function getKlingPlacementBox(name, fallback = "top_left") {
+  return KLING_FINISHED_TYPOGRAPHY_PLACEMENTS[name] || KLING_FINISHED_TYPOGRAPHY_PLACEMENTS[fallback];
+}
+
+
 function getMaxPendingHours() {
   return Math.max(
     1,
@@ -315,6 +367,107 @@ function getOpenAiTextOutput(response) {
     .trim();
 }
 
+async function planFinishedKlingAdvertisingCreative({ openai, post, selection, frames }) {
+  const fallbackCopy = selection?.text_overlay_copy || {};
+  const fallbackHeadline =
+    normalizeKlingCreativeLine(fallbackCopy?.headline, { maxWords: 7, maxChars: 52 }) ||
+    normalizeKlingCreativeLine(selection?.verified_product_title, { maxWords: 9, maxChars: 62 }) ||
+    "Featured product";
+  const fallbackSubheadline = normalizeKlingCreativeLine(fallbackCopy?.subheadline, { maxWords: 5, maxChars: 38 });
+  const fallbackCta = normalizeKlingCreativeLine(getFallbackKlingCta(post), { maxWords: 4, maxChars: 28 }) || "Learn more";
+  const fallbackPlan = {
+    headline: fallbackHeadline,
+    subheadline: fallbackSubheadline,
+    cta: fallbackCta,
+    main_placement: "top_left",
+    cta_placement: "lower_left",
+    main_text_tone: "light",
+    cta_text_tone: "light",
+    placement_confidence: 0,
+    source: "deterministic_fallback",
+  };
+  if (!openai || !Array.isArray(frames) || frames.length === 0) return fallbackPlan;
+
+  const productTitle = String(selection?.verified_product_title || "verified product").trim();
+  const context = selection?.music_context || {};
+  const postCopy = String(post?.content || context?.post_copy || "").slice(0, 1200);
+  const content = [{
+    type: "input_text",
+    text:
+      `Plan the on-video advertising copy and placement for the finished 9:16 product commercial for "${productTitle}". ` +
+      `The supplied frames come from the FINISHED delivered video. Existing social caption: ${JSON.stringify(postCopy)}. ` +
+      `CTA setting: ${JSON.stringify(post?.cta_type || "Learn more")}. Campaign goal: ${JSON.stringify(context?.goal || "")}. ` +
+      `Product category: ${JSON.stringify(context?.product_category || "")}. Existing draft headline: ${JSON.stringify(fallbackHeadline)}. ` +
+      "Write all visible copy in the same language as the social caption. The headline must be 3-6 words, max 48 characters, semantically complete, and specifically connected to the verified product, its explicit motif/theme, category or supplied campaign angle. " +
+      "Reject empty generic advertising language such as 'classic comfort for every occasion', 'quality for every day', 'made for every moment', or equivalents unless the supplied product facts genuinely support it. " +
+      "Do not invent material, comfort, durability, fit, performance, reviews, scarcity, prices, discounts or other claims. For graphic apparel, you may use the printed theme/motif only when it is explicit in the product title or caption. " +
+      "The optional subheadline must add new factual context in 2-5 words, max 36 characters; otherwise return an empty string. The CTA must be 1-4 words, max 24 characters, natural in the same language and consistent with the CTA setting. " +
+      "Choose main_placement from top_left, top_right, middle_left, middle_right, lower_left, lower_right so the headline avoids the advertised product and especially its print/design, plus faces, hands and the main action ACROSS ALL supplied frames. " +
+      "Choose cta_placement independently for the final frame. Prefer clear negative space and avoid the right-edge social UI zone and the lowest 20% of the frame. Return strict JSON only.",
+  }];
+  for (const frame of frames) {
+    content.push({
+      type: "input_image",
+      image_url: `data:image/jpeg;base64,${frame.buffer.toString("base64")}`,
+      detail: "high",
+    });
+  }
+  try {
+    const response = await openai.responses.create({
+      model: KLING_PRODUCT_IDENTITY_AUDIT_MODEL,
+      input: [{ role: "user", content }],
+      max_output_tokens: 500,
+      text: {
+        format: {
+          type: "json_schema",
+          name: "kling_finished_ad_creative_plan",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              headline: { type: "string" },
+              subheadline: { type: "string" },
+              cta: { type: "string" },
+              main_placement: { type: "string", enum: Object.keys(KLING_FINISHED_TYPOGRAPHY_PLACEMENTS) },
+              cta_placement: { type: "string", enum: Object.keys(KLING_FINISHED_TYPOGRAPHY_PLACEMENTS) },
+              main_text_tone: { type: "string", enum: ["light", "dark"] },
+              cta_text_tone: { type: "string", enum: ["light", "dark"] },
+              placement_confidence: { type: "number", minimum: 0, maximum: 1 },
+            },
+            required: [
+              "headline", "subheadline", "cta", "main_placement", "cta_placement",
+              "main_text_tone", "cta_text_tone", "placement_confidence"
+            ],
+          },
+        },
+      },
+    }, { timeout: 24_000, maxRetries: 0 });
+    const parsed = JSON.parse(getOpenAiTextOutput(response));
+    const headline = normalizeKlingCreativeLine(parsed?.headline, { maxWords: 6, maxChars: 48 }) || fallbackHeadline;
+    const subheadline = normalizeKlingCreativeLine(parsed?.subheadline, { maxWords: 5, maxChars: 36 });
+    const cta = normalizeKlingCreativeLine(parsed?.cta, { maxWords: 4, maxChars: 24 }) || fallbackCta;
+    return {
+      headline,
+      subheadline,
+      cta,
+      main_placement: KLING_FINISHED_TYPOGRAPHY_PLACEMENTS[parsed?.main_placement] ? parsed.main_placement : fallbackPlan.main_placement,
+      cta_placement: KLING_FINISHED_TYPOGRAPHY_PLACEMENTS[parsed?.cta_placement] ? parsed.cta_placement : fallbackPlan.cta_placement,
+      main_text_tone: parsed?.main_text_tone === "dark" ? "dark" : "light",
+      cta_text_tone: parsed?.cta_text_tone === "dark" ? "dark" : "light",
+      placement_confidence: Math.max(0, Math.min(1, Number(parsed?.placement_confidence) || 0)),
+      source: "gpt-4.1-mini-finished-video-creative-plan",
+    };
+  } catch (error) {
+    console.warn("Kling finished-video creative planning unavailable; using safe fallback copy/placement", {
+      postId: post?.id || null,
+      message: truncate(error?.message || String(error), 500),
+    });
+    return fallbackPlan;
+  }
+}
+
+
 async function validateFinishedKlingProductIdentity({ openai, supabase, post, task }) {
   const selection = post?.video_background_selection;
   if (!selection || typeof selection !== "object" || Array.isArray(selection)) {
@@ -529,6 +682,19 @@ async function uploadKlingTypographyOverlay({ supabase, post, buffer }) {
   return { imageUrl, storagePath };
 }
 
+async function uploadKlingCtaOverlay({ supabase, post, buffer }) {
+  const storagePath = `${post.user_id}/${post.id}-kling-cta-overlay.png`;
+  const { error: uploadError } = await supabase.storage
+    .from(POST_IMAGES_BUCKET)
+    .upload(storagePath, buffer, { contentType: "image/png", upsert: true });
+  if (uploadError) throw new Error(uploadError.message || "Could not store Kling CTA overlay");
+  const { data } = supabase.storage.from(POST_IMAGES_BUCKET).getPublicUrl(storagePath);
+  const imageUrl = data?.publicUrl || null;
+  if (!imageUrl) throw new Error("Could not create public URL for Kling CTA overlay");
+  return { imageUrl, storagePath };
+}
+
+
 async function uploadKlingClosingHeroFrame({ supabase, post, buffer }) {
   const storagePath = `${post.user_id}/${post.id}-kling-closing-hero.jpg`;
   const { error: uploadError } = await supabase.storage
@@ -644,6 +810,87 @@ async function normalizeFinishedKlingTypography(buffer) {
   return { buffer: normalized, ...analysis };
 }
 
+
+async function placeFinishedKlingTypographyInSafeArea(buffer, placement) {
+  const box = getKlingPlacementBox(placement);
+  const trimmed = await sharp(buffer)
+    .rotate()
+    .ensureAlpha()
+    .trim({ background: { r: 0, g: 0, b: 0, alpha: 0 }, threshold: 8 })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  const artwork = await sharp(trimmed)
+    .resize({
+      width: Math.max(120, Math.round(box.width * 0.92)),
+      height: Math.max(100, Math.round(box.height * 0.88)),
+      fit: "inside",
+      withoutEnlargement: false,
+      kernel: sharp.kernel.lanczos3,
+    })
+    .ensureAlpha()
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  const metadata = await sharp(artwork).metadata();
+  const width = Number(metadata.width || 1);
+  const height = Number(metadata.height || 1);
+  const left = Math.max(0, Math.round(box.left + (box.width - width) / 2));
+  const top = Math.max(0, Math.round(box.top + (box.height - height) / 2));
+  const canvas = await sharp({
+    create: {
+      width: 1080,
+      height: 1920,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
+    .composite([{ input: artwork, left, top }])
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  return normalizeFinishedKlingTypography(canvas);
+}
+
+async function createKlingCtaOverlay({ supabase, post, selection, creativePlan }) {
+  if (String(selection?.cta_overlay_url || "").trim()) return selection;
+  const cta =
+    normalizeKlingCreativeLine(creativePlan?.cta, { maxWords: 4, maxChars: 24 }) ||
+    normalizeKlingCreativeLine(getFallbackKlingCta(post), { maxWords: 4, maxChars: 28 });
+  if (!cta) return selection;
+  const placement = creativePlan?.cta_placement || "lower_left";
+  const box = getKlingPlacementBox(placement, "lower_left");
+  const profile = getProductTypographyProfile(cta);
+  const family = escapeProductSvg(profile?.family || "Noto Sans");
+  const direction = profile?.direction === "rtl" ? "rtl" : "ltr";
+  const fontSize = Array.from(cta).length > 18 ? 38 : Array.from(cta).length > 12 ? 42 : 46;
+  const estimatedTextWidth = Math.round(Array.from(cta).length * fontSize * 0.58);
+  const pillWidth = Math.max(230, Math.min(box.width - 12, estimatedTextWidth + 120));
+  const pillHeight = 96;
+  const x = Math.round(box.left + (box.width - pillWidth) / 2);
+  const y = Math.round(box.top + (box.height - pillHeight) / 2);
+  const lightText = creativePlan?.cta_text_tone === "light";
+  const fill = lightText ? "#111827" : "#FFFFFF";
+  const textFill = lightText ? "#FFFFFF" : "#111827";
+  const border = lightText ? "#FFFFFF" : "#111827";
+  const textX = x + Math.round(pillWidth / 2) - 14;
+  const textY = y + 61;
+  const arrowX = x + pillWidth - 38;
+  const svg = `<svg width="1080" height="1920" viewBox="0 0 1080 1920" xmlns="http://www.w3.org/2000/svg">
+    <rect x="${x}" y="${y}" width="${pillWidth}" height="${pillHeight}" rx="48" fill="${fill}" fill-opacity="0.92" stroke="${border}" stroke-opacity="0.7" stroke-width="2"/>
+    <text x="${textX}" y="${textY}" text-anchor="middle" font-family="${family}, Noto Sans, sans-serif" font-size="${fontSize}" font-weight="800" fill="${textFill}" direction="${direction}" unicode-bidi="plaintext">${escapeProductSvg(cta)}</text>
+    <text x="${arrowX}" y="${textY}" text-anchor="middle" font-family="Noto Sans, sans-serif" font-size="42" font-weight="800" fill="${textFill}">→</text>
+  </svg>`;
+  const buffer = await sharp(Buffer.from(svg)).ensureAlpha().png({ compressionLevel: 9 }).toBuffer();
+  const uploaded = await uploadKlingCtaOverlay({ supabase, post, buffer });
+  return {
+    ...selection,
+    cta_overlay_url: uploaded.imageUrl,
+    cta_overlay_storage_path: uploaded.storagePath,
+    cta_overlay_provider: "deterministic-scene-aware-cta",
+    cta_overlay_copy: cta,
+    cta_overlay_placement: placement,
+    cta_overlay_created_at: new Date().toISOString(),
+  };
+}
+
 function layoutDeterministicTypography(value, { maxWidth, maxLines, sizes }) {
   const text = String(value || "").replace(/\s+/gu, " ").trim();
   const profile = getProductTypographyProfile(text);
@@ -726,10 +973,25 @@ async function createDeterministicKlingTypographyFallback({ supabase, post, sele
     .ensureAlpha()
     .png({ compressionLevel: 9 })
     .toBuffer();
-  const normalized = await normalizeFinishedKlingTypography(rendered);
+  const creativePlan = selection?.ad_creative_plan || {
+    headline,
+    subheadline,
+    cta: getFallbackKlingCta(post),
+    main_placement: "top_left",
+    cta_placement: "lower_left",
+    main_text_tone: "light",
+    cta_text_tone: "light",
+    placement_confidence: 0,
+    source: "fallback_without_scene_plan",
+  };
+  const normalized = await placeFinishedKlingTypographyInSafeArea(
+    rendered,
+    creativePlan.main_placement
+  );
   const uploaded = await uploadKlingTypographyOverlay({ supabase, post, buffer: normalized.buffer });
-  const completedSelection = {
+  let completedSelection = {
     ...selection,
+    ad_creative_plan: creativePlan,
     text_overlay_url: uploaded.imageUrl,
     text_overlay_storage_path: uploaded.storagePath,
     text_overlay_provider: "deterministic-svg-transparent-fallback",
@@ -742,6 +1004,12 @@ async function createDeterministicKlingTypographyFallback({ supabase, post, sele
       edge_ratio: Number(normalized.edgeRatio.toFixed(4)),
     },
   };
+  completedSelection = await createKlingCtaOverlay({
+    supabase,
+    post,
+    selection: completedSelection,
+    creativePlan,
+  });
   const { error: persistError } = await supabase
     .from("posts")
     .update({ video_background_selection: completedSelection, updated_at: new Date().toISOString() })
@@ -782,9 +1050,9 @@ async function createFinishedKlingTypographyOnce({ openai, supabase, post, task,
     });
   }
   const copy = selection?.text_overlay_copy || {};
-  const headline = String(copy?.headline || "").trim();
-  const subheadline = String(copy?.subheadline || "").trim();
-  if (!headline) throw new Error("Kling typography exact headline is missing");
+  const fallbackHeadline = String(copy?.headline || "").trim();
+  const fallbackSubheadline = String(copy?.subheadline || "").trim();
+  if (!fallbackHeadline) throw new Error("Kling typography exact headline is missing");
 
   const claimedSelection = {
     ...selection,
@@ -828,6 +1096,32 @@ async function createFinishedKlingTypographyOnce({ openai, supabase, post, task,
         closing_hero_hold_seconds: KLING_CLOSING_HERO_HOLD_SECONDS,
       };
     }
+
+    const creativePlan = await planFinishedKlingAdvertisingCreative({
+      openai,
+      post,
+      selection: {
+        ...workingSelection,
+        text_overlay_copy: { headline: fallbackHeadline, subheadline: fallbackSubheadline },
+      },
+      frames,
+    });
+    const headline = creativePlan.headline || fallbackHeadline;
+    const subheadline = creativePlan.subheadline || "";
+    workingSelection = {
+      ...workingSelection,
+      ad_creative_plan: creativePlan,
+      text_overlay_copy: { headline, subheadline },
+    };
+    const { error: creativePlanPersistError } = await supabase
+      .from("posts")
+      .update({ video_background_selection: workingSelection, updated_at: new Date().toISOString() })
+      .eq("id", post.id)
+      .eq("video_provider", "kling");
+    if (creativePlanPersistError) {
+      throw new Error(`Could not persist Kling finished-video creative plan: ${creativePlanPersistError.message}`);
+    }
+
     const referenceFiles = [];
     for (let index = 0; index < frames.length; index += 1) {
       const frame = await sharp(frames[index].buffer)
@@ -861,7 +1155,7 @@ DESIGN:
 - Mostly light/white or dark high-contrast lettering as the frames require.
 - You MAY make the typography more alive with a restrained accent color, a compact underline, a SMALL brush stroke, a SMALL crown/flourish, or another SMALL graphic accent when it genuinely suits the content.
 - Decorative accents must stay visually attached to the lettering and close to the text. They are part of the typography design, never a background.
-- Keep the entire design compact enough to avoid the advertised product, its verified print/design, faces, hands and the main action across the supplied frames.
+- Keep the typography composition compact. Spreelo will crop this transparent artwork and place it deterministically inside a scene-safe region chosen from the supplied finished frames. Do not try to fill the canvas.
 - NO card, panel, badge, sticker base, banner, rectangle, capsule, ribbon or opaque plate behind the text.
 - NO shadow of any kind (including drop shadow, soft shadow or long shadow), no glow, haze, mist, blur or atmospheric halo. Use crisp lettering and crisp decorative accents instead.
 
@@ -890,9 +1184,12 @@ OUTPUT RULES:
     }, { timeout: 75_000, maxRetries: 0 });
     const base64 = response?.data?.[0]?.b64_json;
     if (!base64) throw new Error("GPT-Image-2 returned no transparent Kling typography image");
-    const normalized = await normalizeFinishedKlingTypography(Buffer.from(base64, "base64"));
+    const normalized = await placeFinishedKlingTypographyInSafeArea(
+      Buffer.from(base64, "base64"),
+      creativePlan.main_placement
+    );
     const uploaded = await uploadKlingTypographyOverlay({ supabase, post, buffer: normalized.buffer });
-    const completedSelection = {
+    let completedSelection = {
       ...workingSelection,
       text_overlay_url: uploaded.imageUrl,
       text_overlay_storage_path: uploaded.storagePath,
@@ -911,6 +1208,12 @@ OUTPUT RULES:
         bbox_fill_ratio: Number((normalized.bboxFillRatio || 0).toFixed(4)),
       },
     };
+    completedSelection = await createKlingCtaOverlay({
+      supabase,
+      post,
+      selection: completedSelection,
+      creativePlan,
+    });
     const { error: persistError } = await supabase
       .from("posts")
       .update({ video_background_selection: completedSelection, updated_at: new Date().toISOString() })
@@ -921,6 +1224,10 @@ OUTPUT RULES:
       postId: post.id,
       headline,
       hasSubheadline: Boolean(subheadline),
+      cta: completedSelection.cta_overlay_copy || null,
+      mainPlacement: creativePlan.main_placement,
+      ctaPlacement: creativePlan.cta_placement,
+      placementConfidence: creativePlan.placement_confidence,
       referenceFrames: frames.length,
       provider: completedSelection.text_overlay_provider,
     });
@@ -1099,6 +1406,7 @@ async function getKlingFinalVideoSource({ openai, supabase, post, task, costTrac
     const edit = buildVideoOverlayEdit({
       videoUrl: task.videoUrl,
       textOverlayUrl: postprocess.text_overlay_url,
+      ctaOverlayUrl: postprocess.cta_overlay_url || null,
       closingFrameUrl: postprocess.closing_hero_frame_url,
       durationSeconds,
       overlayStartSeconds,
@@ -1129,6 +1437,7 @@ async function getKlingFinalVideoSource({ openai, supabase, post, task, costTrac
       music_variety_bonus: musicSelection?.varietyBonus ?? null,
       music_eligible_track_count: musicSelection?.eligibleTrackCount ?? null,
       shotstack_closing_hero_applied: Boolean(postprocess.closing_hero_frame_url),
+      shotstack_cta_overlay_applied: Boolean(postprocess.cta_overlay_url),
       shotstack_render_id: renderId,
       shotstack_status: "rendering",
       shotstack_started_at: new Date().toISOString(),
@@ -1151,6 +1460,8 @@ async function getKlingFinalVideoSource({ openai, supabase, post, task, costTrac
       klingTaskId: post.kling_task_id,
       shotstackRenderId: renderId,
       overlayProvider: postprocess.text_overlay_provider || null,
+      ctaOverlayProvider: postprocess.cta_overlay_provider || null,
+      ctaCopy: postprocess.cta_overlay_copy || null,
       musicAssetId: musicSelection?.id || null,
       musicAssetName: musicSelection?.name || null,
       musicTrimStartSeconds: musicSelection?.trimStartSeconds ?? null,
@@ -1302,7 +1613,7 @@ export async function GET(request) {
     const { data: posts, error } = await supabase
       .from("posts")
       .select(
-        "id, user_id, brand_profile_id, status, video_provider, video_status, video_duration_seconds, video_error, video_background_selection, kling_generation_count, kling_task_id, kling_task_status, kling_submitted_at, kling_last_polled_at, kling_model, kling_resolution, kling_audio, updated_at"
+        "id, user_id, brand_profile_id, status, content, cta_type, language, website_url, video_provider, video_status, video_duration_seconds, video_error, video_background_selection, kling_generation_count, kling_task_id, kling_task_status, kling_submitted_at, kling_last_polled_at, kling_model, kling_resolution, kling_audio, updated_at"
       )
       .eq("video_provider", "kling")
       .in("video_status", pendingStatuses)
