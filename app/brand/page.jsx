@@ -1556,107 +1556,62 @@ export default function BrandProfile() {
 
         {isReadOnlyBrandView ? (
           <section className="brand-v144118-board" aria-label={t("brand.profileOverview")}>
-            <section className="brand-v144118-card brand-v144118-overview">
-              <div className="brand-v144118-section-head">
-                <p className="dashboard-eyebrow">{t("brand.profileOverview")}</p>
-              </div>
-              <div className="brand-v144118-overview-grid">
-                <div className="brand-v144118-overview-brand">
-                  <span className="brand-v144118-brand-mark" aria-hidden="true">{brandInitials}</span>
-                  <div className="brand-v144118-overview-copy">
-                    <h3>{businessName || t("brand.brandSetup")}</h3>
-                    <p>{t("brand.profileOverviewText")}</p>
-                    <div className="brand-v144118-chip-row">
-                      <span className="brand-v144118-chip">{compactIndustryLabel}</span>
-                      <span className="brand-v144118-chip">{resolvedMarketLabel}</span>
-                      <span className="brand-v144118-chip">{resolvedLanguageLabel}</span>
-                      <button
-                        type="button"
-                        className="brand-v144118-chip brand-v144118-chip-action"
-                        onClick={() => {
-                          setIsEditing(true);
-                          setMessage("");
-                        }}
-                      >
-                        + {locale === "sv" ? "Lägg till tagg" : "Add tag"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="brand-v144118-overview-description">
-                  <p>{summaryDescription}</p>
-                </div>
-
-                <div className="brand-v144118-overview-facts">
-                  <article>
-                    <span className="brand-v144118-fact-icon"><Building2 size={17} /></span>
-                    <div>
-                      <small>{locale === "sv" ? "Sedan" : "Since"}</small>
-                      <strong>{createdYear || "—"}</strong>
-                    </div>
-                  </article>
-                  <article>
-                    <span className="brand-v144118-fact-icon"><Globe2 size={17} /></span>
-                    <div>
-                      <small>{t("brand.campaignMarket")}</small>
-                      <strong>{resolvedMarketLabel}</strong>
-                    </div>
-                  </article>
-                  <article>
-                    <span className="brand-v144118-fact-icon"><Users size={17} /></span>
-                    <div>
-                      <small>{t("brand.targetAudience")}</small>
-                      <strong>{audienceHeadline}</strong>
-                    </div>
-                  </article>
-                </div>
-              </div>
-            </section>
-
-            <aside className="brand-v144118-card brand-v144118-preview">
+            <aside className="brand-v144118-card brand-v144118-preview brand-v144124-preview-card">
               <p className="dashboard-eyebrow">{t("brand.logoPlacementExample")}</p>
-              <div className="brand-v144118-preview-shell">
-                <div className="brand-v144118-preview-head">
+              <div className="brand-v144118-preview-shell brand-v144124-preview-shell">
+                <div className="brand-v144118-preview-head brand-v144124-preview-head">
                   <span className={`brand-v144118-preview-avatar ${logoUrl ? "has-logo" : "is-example"}`}>
-                    {logoUrl ? <img src={logoUrl} alt="" /> : <span>{brandInitials}</span>}
+                    {logoUrl ? <img src={logoUrl} alt="" /> : <span>{businessName ? businessName.charAt(0) : brandInitials}</span>}
                   </span>
                   <span className="brand-v144118-preview-account">
                     <strong>{businessName || t("brand.brandSetup")}</strong>
-                    <small>{t("brand.logoPostSponsored")}</small>
+                    <small>{locale === "sv" ? "Sponsrat" : "Sponsored"}</small>
                   </span>
                   <span className="brand-v144118-preview-more" aria-hidden="true">•••</span>
                 </div>
-                <div className={`brand-v144118-preview-media ${previewCopy.theme}`}>
-                  <div className="brand-v144118-preview-product-scene" aria-hidden="true">
-                    <span className="brand-v144118-preview-orb" />
-                    <span className="brand-v144118-preview-stand" />
-                    <span className="brand-v144118-preview-product product-back" />
-                    <span className="brand-v144118-preview-product product-front" />
-                    <span className="brand-v144118-preview-product product-accent" />
+                <div className="brand-v144124-preview-media-frame">
+                  <div className="brand-v144124-preview-media" aria-hidden="true">
+                    <div className="brand-v144124-preview-overlay" />
+                    <div className="brand-v144124-preview-body">
+                      <span className="brand-v144124-preview-shirt" />
+                      <span className="brand-v144124-preview-arm" />
+                      <span className="brand-v144124-preview-thigh left" />
+                      <span className="brand-v144124-preview-thigh right" />
+                      <span className="brand-v144124-preview-shorts" />
+                      <span className="brand-v144124-preview-hem" />
+                    </div>
+                    <div className="brand-v144124-preview-copy">
+                      <strong>TRAIN.
+MOVE.
+UNWIND.</strong>
+                      <span>Comfort and style for active days.</span>
+                      <div className="brand-v144124-preview-product-pill">
+                        <em>Unisex training shorts</em>
+                        <small>from Stanley/Stella</small>
+                      </div>
+                      <b>SHOP THE PRODUCT</b>
+                    </div>
+                    <span className={`brand-v144124-preview-logo-corner ${logoUrl ? "has-logo" : "is-example"}`}>
+                      {logoUrl ? (
+                        <img src={logoUrl} alt={t("brand.logoPreviewAlt")} />
+                      ) : (
+                        <small>{businessName || t("brand.brandSetup")}</small>
+                      )}
+                    </span>
                   </div>
-                  <div className="brand-v144118-preview-copy">
-                    <strong>{previewCopy.headline}</strong>
-                    <span>{previewCopy.text}</span>
-                    <b>{previewCopy.cta}</b>
-                  </div>
-                  <span className={`brand-v144118-preview-logo ${logoUrl ? "has-logo" : "is-example"}`}>
-                    {logoUrl ? (
-                      <img src={logoUrl} alt={t("brand.logoPreviewAlt")} />
-                    ) : (
-                      <small>{businessName || t("brand.brandSetup")}</small>
-                    )}
-                  </span>
                 </div>
-                <div className="brand-v144118-preview-actions" aria-hidden="true">
+                <div className="brand-v144118-preview-actions brand-v144124-preview-actions" aria-hidden="true">
                   <span><Heart size={18} /></span>
                   <span><MessageCircle size={18} /></span>
                   <span><Send size={18} /></span>
                   <span className="brand-v144118-preview-save"><Bookmark size={18} /></span>
                 </div>
-                <p className="brand-v144118-preview-caption">
-                  {logoUrl ? t("brand.logoPreviewUsesOwn") : t("brand.logoPreviewUsesExample")}
-                </p>
+                <div className="brand-v144124-preview-caption-wrap">
+                  <p className="brand-v144124-preview-caption-text">
+                    <strong>{businessName || t("brand.brandSetup")}</strong> Move in comfort with lightweight unisex training shorts designed for active days, relaxed weekends and everyday wear.
+                  </p>
+                  <p className="brand-v144124-preview-hashtags">#activewear #trainingstyle #unisexshorts #comfortfirst</p>
+                </div>
               </div>
             </aside>
 
