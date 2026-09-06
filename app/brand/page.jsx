@@ -1641,7 +1641,14 @@ export default function BrandProfile() {
                     <b>{previewCopy.cta}</b>
                   </div>
                   <span className={`brand-v144118-preview-logo ${logoUrl ? "has-logo" : "is-example"}`}>
-                    {logoUrl ? <img src={logoUrl} alt={t("brand.logoPreviewAlt")} /> : <span>{brandInitials}</span>}
+                    {logoUrl ? (
+                      <img src={logoUrl} alt={t("brand.logoPreviewAlt")} />
+                    ) : (
+                      <>
+                        <span>{brandInitials}</span>
+                        <small>{businessName || t("brand.brandSetup")}</small>
+                      </>
+                    )}
                   </span>
                 </div>
                 <div className="brand-v144118-preview-actions" aria-hidden="true">
@@ -1733,9 +1740,15 @@ export default function BrandProfile() {
               <div className="brand-v144118-logo-checker">
                 <p>{locale === "sv" ? "Din logotyp" : "Your logo"}</p>
                 <div className={`brand-v144118-logo-mark ${logoUrl ? "has-logo" : "is-example"}`}>
-                  {logoUrl ? <img src={logoUrl} alt={t("brand.logoPreviewAlt")} /> : <span>{brandInitials}</span>}
+                  {logoUrl ? (
+                    <img src={logoUrl} alt={t("brand.logoPreviewAlt")} />
+                  ) : (
+                    <div className="brand-v144120-logo-example" aria-label={t("brand.logoPreviewAlt")}>
+                      <span className="brand-v144120-logo-example-mark">{brandInitials}</span>
+                      <span className="brand-v144120-logo-example-name">{businessName || t("brand.brandSetup")}</span>
+                    </div>
+                  )}
                 </div>
-                <strong>{businessName || t("brand.brandSetup")}</strong>
               </div>
               <div className="brand-v144118-logo-actions">
                 <button
