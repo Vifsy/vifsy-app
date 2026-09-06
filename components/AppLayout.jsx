@@ -610,18 +610,15 @@ export default function AppLayout({ active, children }) {
           {checkingSession || translationsLoading ? (
             <>
               <div className="workspace-loader-motion" aria-hidden="true">
-                <span className="workspace-loader-aura aura-one" />
-                <span className="workspace-loader-aura aura-two" />
-                <span className="workspace-loader-ring ring-one">
-                  <span className="workspace-loader-dot dot-one" />
-                  <span className="workspace-loader-dot dot-two" />
+                <img src="/brand/spreelo-loader-symbol-mockup.png" alt="" className="workspace-loader-symbol-art" />
+                <span className="workspace-loader-orbit-guide orbit-primary">
+                  <span className="workspace-loader-orbit-ball ball-primary" />
                 </span>
-                <span className="workspace-loader-ring ring-two">
-                  <span className="workspace-loader-dot dot-three" />
-                  <span className="workspace-loader-dot dot-four" />
+                <span className="workspace-loader-orbit-guide orbit-secondary">
+                  <span className="workspace-loader-orbit-ball ball-secondary" />
                 </span>
-                <span className="workspace-loader-core">
-                  <img src="/brand/spreelo-mark.png" alt="" className="workspace-loader-core-mark" />
+                <span className="workspace-loader-orbit-guide orbit-tertiary">
+                  <span className="workspace-loader-orbit-ball ball-tertiary" />
                 </span>
               </div>
               <div className="workspace-loader-copy">
