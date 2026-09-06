@@ -1,0 +1,79 @@
+/* v144.122 — page background should use only subtle magical lights/lines behind cards */
+
+html body .content.spreelo-content:has(.brand-v144118-readonly-active) {
+  background-color: #eef1f6 !important;
+  background-image:
+    radial-gradient(circle at 12% 8%, rgba(255,244,236,.46) 0%, rgba(255,244,236,0) 18%),
+    radial-gradient(circle at 90% 7%, rgba(228,228,255,.22) 0%, rgba(228,228,255,0) 20%),
+    linear-gradient(180deg, rgba(239,242,248,.92) 0%, rgba(239,242,248,.94) 100%),
+    url("/backgrounds/spreelo-plan-reference-magic-v95.svg") !important;
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat !important;
+  background-position: left top, right top, center top, center 110px !important;
+  background-size: auto, auto, 100% 100%, 100% auto !important;
+}
+
+html body .brand-v14495-page.brand-v144118-readonly-active::before {
+  content: "";
+  position: absolute;
+  inset: 236px 0 0 0;
+  border-radius: 34px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 86% 14%, rgba(229,225,255,.18) 0%, rgba(229,225,255,0) 18%),
+    radial-gradient(circle at 12% 22%, rgba(255,232,220,.14) 0%, rgba(255,232,220,0) 18%),
+    url("/backgrounds/spreelo-plan-reference-magic-v95.svg") center top / cover no-repeat;
+  opacity: .90;
+  z-index: 0;
+}
+
+html body .brand-v144118-readonly-active .brand-v144118-card,
+html body .brand-v144118-readonly-active .brand-v14495-danger,
+html body .brand-v144118-readonly-active .brand-v144118-preview-shell,
+html body .brand-v144118-readonly-active .brand-v144118-info-card,
+html body .brand-v144118-readonly-active .brand-v144118-logo-tip,
+html body .brand-v144118-readonly-active .brand-v144118-logo-checker {
+  background: linear-gradient(145deg, rgba(255,255,255,.32), rgba(248,250,255,.14)) !important;
+  backdrop-filter: blur(28px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(140%) !important;
+}
+
+html body .brand-v144118-readonly-active .brand-v144118-overview,
+html body .brand-v144118-readonly-active .brand-v144118-info,
+html body .brand-v144118-readonly-active .brand-v144118-logo,
+html body .brand-v144118-readonly-active .brand-v144118-preview {
+  background: linear-gradient(145deg, rgba(255,255,255,.28), rgba(248,250,255,.12)) !important;
+}
+
+@media (max-width: 900px) {
+  html body .content.spreelo-content:has(.brand-v144118-readonly-active) {
+    background-position: left top, right top, center top, center 100px !important;
+    background-size: auto, auto, 100% 100%, 1260px auto !important;
+  }
+
+  html body .brand-v14495-page.brand-v144118-readonly-active::before {
+    inset: 216px 0 0 0;
+    background-size: 1200px auto !important;
+    background-position: center top !important;
+  }
+}
+
+@media (max-width: 820px) {
+  html body .content.spreelo-content:has(.brand-v144118-readonly-active) {
+    background-image:
+      radial-gradient(circle at 12% 8%, rgba(255,244,236,.42) 0%, rgba(255,244,236,0) 18%),
+      linear-gradient(180deg, rgba(239,242,248,.93) 0%, rgba(239,242,248,.95) 100%),
+      url("/backgrounds/spreelo-plan-reference-magic-v95.svg") !important;
+    background-repeat: no-repeat, no-repeat, no-repeat !important;
+    background-position: left top, center top, center 92px !important;
+    background-size: auto, 100% 100%, 1180px auto !important;
+  }
+
+  html body .brand-v14495-page.brand-v144118-readonly-active::before {
+    inset: 258px 0 0 0;
+    border-radius: 24px;
+    background:
+      radial-gradient(circle at 10% 16%, rgba(255,232,220,.12) 0%, rgba(255,232,220,0) 18%),
+      url("/backgrounds/spreelo-plan-reference-magic-v95.svg") center top / 1100px auto no-repeat;
+    opacity: .82;
+  }
+}
