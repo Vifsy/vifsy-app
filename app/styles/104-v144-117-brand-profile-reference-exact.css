@@ -1,0 +1,1001 @@
+/* v144.117 — Brand profile reference rebuild.
+   Visual-only/read-only restructuring. Existing analysis, edit, logo, delete and save
+   behavior stays in app/brand/page.jsx. Scoped to the brand page. */
+
+html body .content.spreelo-content:has(.brand-profile-page.brand-v14495-page) {
+  background-color: #f4f6fb !important;
+  background-image:
+    linear-gradient(180deg, rgba(247,249,253,.12), rgba(246,248,252,.38)),
+    url("/backgrounds/spreelo-plan-reference-magic-v95.svg") !important;
+  background-repeat: no-repeat, no-repeat !important;
+  background-position: center top, center top !important;
+  background-size: 100% 100%, 100% 930px !important;
+}
+
+html body .brand-profile-page.brand-v14495-page {
+  width: min(1480px, calc(100% - 48px)) !important;
+  max-width: none !important;
+  margin: 0 auto !important;
+  padding: 25px 0 52px !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Hero — mirrors the supplied reference and reuses Spreelo's existing AI art. */
+/* -------------------------------------------------------------------------- */
+html body .brand-v14495-page .brand-v144117-hero {
+  position: relative !important;
+  min-height: 202px !important;
+  height: 202px !important;
+  padding: 27px 36px !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(255,255,255,.9) !important;
+  border-radius: 20px !important;
+  background:
+    radial-gradient(circle at 91% 12%, rgba(231,224,255,.35), transparent 28%),
+    linear-gradient(108deg, rgba(255,255,255,.86) 0%, rgba(255,255,255,.74) 48%, rgba(255,255,255,.36) 100%) !important;
+  box-shadow: 0 18px 52px rgba(38,54,83,.065), inset 0 1px 0 rgba(255,255,255,.94) !important;
+  backdrop-filter: blur(22px) saturate(118%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(118%) !important;
+}
+
+html body .brand-v14495-page .brand-v144117-hero-copy {
+  position: relative !important;
+  z-index: 3 !important;
+  width: min(620px, 49%) !important;
+  max-width: 49% !important;
+  padding: 0 !important;
+}
+
+html body .brand-v14495-page .brand-v144117-hero .dashboard-eyebrow {
+  margin: 0 0 12px !important;
+  color: #f15a3c !important;
+  font-size: 11px !important;
+  line-height: 1 !important;
+  font-weight: 900 !important;
+  letter-spacing: .12em !important;
+  text-transform: uppercase !important;
+}
+
+html body .brand-v14495-page .brand-v144117-hero h2 {
+  margin: 0 !important;
+  color: #0c1a31 !important;
+  font-size: clamp(38px, 3.05vw, 50px) !important;
+  line-height: .98 !important;
+  font-weight: 900 !important;
+  letter-spacing: -.047em !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+}
+
+html body .brand-v14495-page .brand-v144117-hero-identity {
+  display: block !important;
+  margin-top: 12px !important;
+  color: #536987 !important;
+  font-size: 15px !important;
+  line-height: 1.28 !important;
+  font-weight: 560 !important;
+}
+
+html body .brand-v14495-page .brand-v144117-hero-copy > span {
+  display: block !important;
+  max-width: 540px !important;
+  margin-top: 14px !important;
+  color: #62748f !important;
+  font-size: 12.5px !important;
+  line-height: 1.45 !important;
+  font-weight: 500 !important;
+}
+
+html body .brand-v14495-page .brand-v144117-hero-edit {
+  position: absolute !important;
+  z-index: 5 !important;
+  top: 36px !important;
+  left: 43.4% !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  min-height: 42px !important;
+  padding: 0 17px !important;
+  border: 1.5px solid #ff6a50 !important;
+  border-radius: 10px !important;
+  background: rgba(255,255,255,.62) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.92), 0 8px 22px rgba(219,83,57,.05) !important;
+  color: #ef593c !important;
+  font-size: 12.5px !important;
+  line-height: 1 !important;
+  font-weight: 800 !important;
+  cursor: pointer !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}
+
+html body .brand-v14495-page .brand-v144117-hero-edit:hover {
+  background: rgba(255,248,245,.9) !important;
+  box-shadow: 0 9px 24px rgba(225,91,63,.11) !important;
+}
+
+html body .brand-v14495-page .brand-v144117-hero-art {
+  position: absolute !important;
+  z-index: 1 !important;
+  inset: 0 0 0 auto !important;
+  width: 57% !important;
+  opacity: .94 !important;
+  pointer-events: none !important;
+  background-image: url("/backgrounds/spreelo-brand-intelligence-v143-38.png") !important;
+  background-repeat: no-repeat !important;
+  background-size: 880px auto !important;
+  background-position: 44% 44% !important;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.16) 10%, rgba(0,0,0,.86) 29%, #000 100%) !important;
+  mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.16) 10%, rgba(0,0,0,.86) 29%, #000 100%) !important;
+}
+
+html body .brand-v14495-page .brand-v144117-hero-art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(255,255,255,.38), transparent 23%, transparent 82%, rgba(255,255,255,.18));
+}
+
+html body .brand-v14495-page .brand-v144117-hero-art-tagline {
+  position: absolute !important;
+  z-index: 3 !important;
+  top: 102px !important;
+  right: 31px !important;
+  width: 116px !important;
+  color: #557099 !important;
+  font-size: 15px !important;
+  line-height: 1.13 !important;
+  font-weight: 720 !important;
+  letter-spacing: -.01em !important;
+}
+
+html body .brand-v14495-page .brand-v144117-hero-art-tagline i {
+  display: block !important;
+  width: 29px !important;
+  height: 3px !important;
+  margin-top: 11px !important;
+  border-radius: 999px !important;
+  background: #ff6044 !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Read-only profile. The old arrow-list header remains only for edit/setup.  */
+/* -------------------------------------------------------------------------- */
+html body .brand-v14495-page .brand-v14495-layout {
+  margin-top: 14px !important;
+}
+
+html body .brand-v14495-page .brand-v14495-shell:not(.editing) > .brand-v14495-profile-strip {
+  display: none !important;
+}
+
+html body .brand-v14495-page .brand-v144117-readonly {
+  display: grid !important;
+  gap: 14px !important;
+  width: 100% !important;
+}
+
+html body .brand-v14495-page .brand-v144117-overview-card,
+html body .brand-v14495-page .brand-v144117-company-card,
+html body .brand-v14495-page .brand-v144117-logo-panel {
+  border: 1px solid rgba(255,255,255,.86) !important;
+  background: linear-gradient(145deg, rgba(255,255,255,.64), rgba(255,255,255,.37)) !important;
+  box-shadow: 0 14px 38px rgba(35,50,79,.055), inset 0 1px 0 rgba(255,255,255,.86) !important;
+  backdrop-filter: blur(19px) saturate(118%) !important;
+  -webkit-backdrop-filter: blur(19px) saturate(118%) !important;
+}
+
+html body .brand-v14495-page .brand-v144117-overview-card {
+  display: grid !important;
+  grid-template-columns: minmax(360px, 1.28fr) minmax(290px, .82fr) minmax(250px, .72fr) !important;
+  align-items: stretch !important;
+  min-height: 160px !important;
+  padding: 18px 22px !important;
+  border-radius: 18px !important;
+  overflow: hidden !important;
+}
+
+html body .brand-v14495-page .brand-v144117-overview-identity {
+  display: grid !important;
+  grid-template-columns: 58px minmax(0,1fr) !important;
+  gap: 15px !important;
+  align-items: start !important;
+  min-width: 0 !important;
+  padding: 5px 22px 4px 0 !important;
+}
+
+html body .brand-v14495-page .brand-v144117-brand-mark {
+  display: grid !important;
+  place-items: center !important;
+  width: 58px !important;
+  height: 58px !important;
+  border: 1px solid rgba(255,255,255,.92) !important;
+  border-radius: 14px !important;
+  background: linear-gradient(145deg, rgba(255,247,243,.98), rgba(255,229,219,.82)) !important;
+  box-shadow: 0 10px 24px rgba(232,86,57,.095), inset 0 1px 0 rgba(255,255,255,.96) !important;
+  color: #f05b3d !important;
+  font-size: 25px !important;
+  line-height: 1 !important;
+  font-weight: 900 !important;
+  letter-spacing: -.05em !important;
+  text-transform: lowercase !important;
+}
+
+html body .brand-v14495-page .brand-v144117-overview-identity-copy {
+  min-width: 0 !important;
+}
+
+html body .brand-v14495-page .brand-v144117-overview-identity .dashboard-eyebrow {
+  margin: 0 0 5px !important;
+  color: #f15b3e !important;
+  font-size: 10.5px !important;
+  line-height: 1 !important;
+  font-weight: 900 !important;
+  letter-spacing: .1em !important;
+  text-transform: uppercase !important;
+}
+
+html body .brand-v14495-page .brand-v144117-overview-identity h3 {
+  margin: 0 !important;
+  color: #12213a !important;
+  font-size: 18px !important;
+  line-height: 1.15 !important;
+  font-weight: 870 !important;
+  letter-spacing: -.025em !important;
+}
+
+html body .brand-v14495-page .brand-v144117-overview-identity-copy > p:not(.dashboard-eyebrow) {
+  margin: 4px 0 0 !important;
+  color: #687a94 !important;
+  font-size: 11.5px !important;
+  line-height: 1.36 !important;
+}
+
+html body .brand-v14495-page .brand-v144117-tags {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  margin-top: 17px !important;
+}
+
+html body .brand-v14495-page .brand-v144117-tags span {
+  display: inline-flex !important;
+  align-items: center !important;
+  max-width: 160px !important;
+  min-height: 31px !important;
+  padding: 0 12px !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(164,151,235,.34) !important;
+  border-radius: 9px !important;
+  background: rgba(248,247,255,.58) !important;
+  color: #5863bb !important;
+  font-size: 11px !important;
+  font-weight: 690 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+html body .brand-v14495-page .brand-v144117-overview-summary {
+  display: flex !important;
+  align-items: center !important;
+  min-width: 0 !important;
+  padding: 7px 28px !important;
+  border-left: 1px solid rgba(175,190,212,.36) !important;
+  border-right: 1px solid rgba(175,190,212,.36) !important;
+}
+
+html body .brand-v14495-page .brand-v144117-overview-summary p {
+  margin: 0 !important;
+  color: #4f6280 !important;
+  font-size: 11.5px !important;
+  line-height: 1.52 !important;
+  font-weight: 520 !important;
+  overflow-wrap: anywhere !important;
+}
+
+html body .brand-v14495-page .brand-v144117-overview-meta {
+  display: grid !important;
+  align-content: center !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+  padding: 3px 0 3px 25px !important;
+}
+
+html body .brand-v14495-page .brand-v144117-meta-item {
+  display: grid !important;
+  grid-template-columns: 30px minmax(0,1fr) !important;
+  align-items: center !important;
+  gap: 9px !important;
+  min-width: 0 !important;
+}
+
+html body .brand-v14495-page .brand-v144117-meta-icon {
+  display: grid !important;
+  place-items: center !important;
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 10px !important;
+  background: rgba(255,240,235,.74) !important;
+  color: #f05a3c !important;
+}
+
+html body .brand-v14495-page .brand-v144117-meta-item > span:last-child {
+  display: grid !important;
+  min-width: 0 !important;
+}
+
+html body .brand-v14495-page .brand-v144117-meta-item small {
+  color: #7a8aa0 !important;
+  font-size: 10px !important;
+  line-height: 1.1 !important;
+  font-weight: 560 !important;
+}
+
+html body .brand-v14495-page .brand-v144117-meta-item strong {
+  display: -webkit-box !important;
+  margin-top: 1px !important;
+  overflow: hidden !important;
+  color: #15243a !important;
+  font-size: 11.5px !important;
+  line-height: 1.25 !important;
+  font-weight: 800 !important;
+  -webkit-box-orient: vertical !important;
+  -webkit-line-clamp: 2 !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Lower row: Company information + logo/placement reference.                 */
+/* -------------------------------------------------------------------------- */
+html body .brand-v14495-page .brand-v144117-main-grid {
+  display: grid !important;
+  grid-template-columns: minmax(440px, .92fr) minmax(620px, 1.18fr) !important;
+  align-items: stretch !important;
+  gap: 14px !important;
+  width: 100% !important;
+}
+
+html body .brand-v14495-page .brand-v144117-company-card {
+  min-width: 0 !important;
+  padding: 16px !important;
+  border-radius: 18px !important;
+}
+
+html body .brand-v14495-page .brand-v144117-section-title {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-height: 22px !important;
+  margin: 0 2px 10px !important;
+}
+
+html body .brand-v14495-page .brand-v144117-section-title > span {
+  display: block !important;
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 999px !important;
+  background: #ffd8ca !important;
+}
+
+html body .brand-v14495-page .brand-v144117-section-title p {
+  margin: 0 !important;
+  color: #60738e !important;
+  font-size: 9.7px !important;
+  line-height: 1 !important;
+  font-weight: 900 !important;
+  letter-spacing: .11em !important;
+  text-transform: uppercase !important;
+}
+
+html body .brand-v14495-page .brand-v144117-company-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+}
+
+html body .brand-v14495-page .brand-v144117-info-tile {
+  display: grid !important;
+  grid-template-columns: 39px minmax(0,1fr) !important;
+  align-items: start !important;
+  gap: 11px !important;
+  min-width: 0 !important;
+  min-height: 101px !important;
+  padding: 13px 12px !important;
+  border: 1px solid rgba(207,218,234,.64) !important;
+  border-radius: 12px !important;
+  background: rgba(255,255,255,.26) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6) !important;
+}
+
+html body .brand-v14495-page .brand-v144117-tile-icon {
+  display: grid !important;
+  place-items: center !important;
+  width: 38px !important;
+  height: 38px !important;
+  border-radius: 11px !important;
+}
+
+html body .brand-v14495-page .brand-v144117-tile-icon.cool {
+  border: 1px solid rgba(174,210,252,.58) !important;
+  background: rgba(232,246,255,.78) !important;
+  color: #347fdc !important;
+}
+
+html body .brand-v14495-page .brand-v144117-tile-icon.warm {
+  border: 1px solid rgba(255,206,187,.6) !important;
+  background: rgba(255,239,232,.78) !important;
+  color: #f15b3e !important;
+}
+
+html body .brand-v14495-page .brand-v144117-info-tile > div {
+  min-width: 0 !important;
+}
+
+html body .brand-v14495-page .brand-v144117-info-tile small {
+  display: block !important;
+  margin: 0 0 3px !important;
+  color: #70839e !important;
+  font-size: 9.7px !important;
+  line-height: 1.2 !important;
+  font-weight: 800 !important;
+}
+
+html body .brand-v14495-page .brand-v144117-info-tile strong {
+  display: block !important;
+  margin: 0 !important;
+  color: #17253b !important;
+  font-size: 12.5px !important;
+  line-height: 1.28 !important;
+  font-weight: 830 !important;
+  overflow-wrap: anywhere !important;
+}
+
+html body .brand-v14495-page .brand-v144117-info-tile p,
+html body .brand-v14495-page .brand-v144117-info-tile a {
+  display: block !important;
+  margin: 4px 0 0 !important;
+  color: #7487a2 !important;
+  font-size: 10.2px !important;
+  line-height: 1.42 !important;
+  font-weight: 520 !important;
+  overflow-wrap: anywhere !important;
+  text-decoration: none !important;
+}
+
+html body .brand-v14495-page .brand-v144117-info-tile a:hover {
+  color: #3f72bd !important;
+  text-decoration: underline !important;
+}
+
+/* The existing functional logo panel is retained, only calibrated to the reference. */
+html body .brand-v14495-page .brand-v144117-logo-panel {
+  grid-template-columns: minmax(330px, 1fr) minmax(260px, 300px) !important;
+  gap: 20px !important;
+  min-width: 0 !important;
+  padding: 18px 18px 18px 20px !important;
+  border-radius: 18px !important;
+  background:
+    radial-gradient(circle at 93% 4%, rgba(255,224,212,.32), transparent 31%),
+    linear-gradient(145deg, rgba(255,255,255,.64), rgba(255,255,255,.37)) !important;
+}
+
+html body .brand-v14495-page .brand-v144117-logo-panel .brand-v14496-logo-heading-icon {
+  width: 36px !important;
+  height: 36px !important;
+  flex-basis: 36px !important;
+}
+
+html body .brand-v14495-page .brand-v144117-logo-panel .brand-v14496-logo-heading .dashboard-eyebrow {
+  margin-bottom: 4px !important;
+  font-size: 9.7px !important;
+}
+
+html body .brand-v14495-page .brand-v144117-logo-panel .brand-v14496-logo-heading h3 {
+  font-size: 15.5px !important;
+}
+
+html body .brand-v14495-page .brand-v144117-logo-panel .brand-v14496-logo-description {
+  margin: 10px 0 0 48px !important;
+  font-size: 11px !important;
+  line-height: 1.48 !important;
+}
+
+html body .brand-v14495-page .brand-v144117-logo-panel .brand-v14496-logo-benefits {
+  gap: 7px !important;
+  margin: 11px 0 0 48px !important;
+}
+
+html body .brand-v14495-page .brand-v144117-logo-panel .brand-v14496-logo-benefits li {
+  font-size: 10.7px !important;
+  line-height: 1.35 !important;
+}
+
+html body .brand-v14495-page .brand-v144117-logo-panel .brand-v14496-current-logo {
+  margin-top: 14px !important;
+  padding: 11px !important;
+  border-radius: 11px !important;
+}
+
+html body .brand-v14495-page .brand-v144117-logo-panel .brand-v14496-current-logo > p {
+  margin-bottom: 8px !important;
+  font-size: 9.8px !important;
+}
+
+html body .brand-v14495-page .brand-v144117-logo-panel .brand-v14496-current-logo-row {
+  grid-template-columns: 42px minmax(0,1fr) auto !important;
+  gap: 9px !important;
+}
+
+html body .brand-v14495-page .brand-v144117-logo-panel .brand-v14496-current-logo-mark {
+  width: 42px !important;
+  height: 42px !important;
+}
+
+html body .brand-v14495-page .brand-v144117-logo-panel .brand-v14496-current-logo-meta strong {
+  font-size: 12px !important;
+}
+
+html body .brand-v14495-page .brand-v144117-logo-panel .brand-v14496-current-logo-meta small {
+  font-size: 9.3px !important;
+}
+
+html body .brand-v14495-page .brand-v144117-logo-panel .brand-v14496-logo-action {
+  min-height: 32px !important;
+  font-size: 10px !important;
+}
+
+html body .brand-v14495-page .brand-v144117-logo-panel .brand-v14496-logo-tip {
+  margin-top: 9px !important;
+  padding: 7px 8px !important;
+}
+
+html body .brand-v14495-page .brand-v144117-logo-panel .brand-v14496-logo-tip p {
+  font-size: 9.2px !important;
+  line-height: 1.35 !important;
+}
+
+html body .brand-v14495-page .brand-v144117-preview-wrap {
+  padding: 10px !important;
+  border-radius: 14px !important;
+}
+
+html body .brand-v14495-page .brand-v144117-preview-wrap .brand-v14496-preview-label {
+  margin-bottom: 8px !important;
+  font-size: 9px !important;
+}
+
+html body .brand-v14495-page .brand-v144117-preview-wrap .brand-v14496-social-card {
+  border-radius: 10px !important;
+  box-shadow: 0 7px 20px rgba(44,55,76,.075) !important;
+}
+
+html body .brand-v14495-page .brand-v144117-preview-wrap .brand-v14496-social-creative {
+  min-height: 235px !important;
+}
+
+html body .brand-v14495-page .brand-v144117-preview-wrap .brand-v14496-social-creative > img {
+  min-height: 235px !important;
+  height: 235px !important;
+  object-fit: cover !important;
+}
+
+html body .brand-v14495-page .brand-v144117-preview-wrap .brand-v14496-preview-note {
+  display: none !important;
+}
+
+/* Danger zone height/rhythm from the reference. */
+html body .brand-v14495-page > .danger-zone-card.brand-v14495-danger {
+  min-height: 90px !important;
+  margin-top: 14px !important;
+  padding: 13px 18px !important;
+  border: 1px solid rgba(247,159,146,.48) !important;
+  border-radius: 15px !important;
+  background: linear-gradient(145deg, rgba(255,248,246,.71), rgba(255,239,236,.54)) !important;
+  box-shadow: 0 10px 28px rgba(105,45,37,.035), inset 0 1px 0 rgba(255,255,255,.82) !important;
+}
+
+html body .brand-v14495-page > .danger-zone-card.brand-v14495-danger h3 {
+  margin-top: 2px !important;
+  margin-bottom: 3px !important;
+  font-size: 14px !important;
+}
+
+html body .brand-v14495-page > .danger-zone-card.brand-v14495-danger p {
+  font-size: 10.5px !important;
+  line-height: 1.38 !important;
+}
+
+html body .brand-v14495-page > .danger-zone-card.brand-v14495-danger .danger-button {
+  min-height: 37px !important;
+  padding: 0 15px !important;
+  border-radius: 9px !important;
+  font-size: 10.5px !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Responsive system.                                                        */
+/* -------------------------------------------------------------------------- */
+@media (max-width: 1260px) {
+  html body .brand-v14495-page .brand-v144117-hero-edit {
+    left: 42% !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-overview-card {
+    grid-template-columns: minmax(330px, 1.15fr) minmax(260px, .85fr) minmax(220px, .68fr) !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-main-grid {
+    grid-template-columns: minmax(390px, .86fr) minmax(570px, 1.14fr) !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-logo-panel {
+    grid-template-columns: minmax(300px,1fr) 270px !important;
+  }
+}
+
+@media (max-width: 1120px) {
+  html body .brand-v14495-page .brand-v144117-hero-copy {
+    width: 54% !important;
+    max-width: 54% !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-hero-edit {
+    top: 32px !important;
+    left: auto !important;
+    right: 36px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-hero-art {
+    width: 52% !important;
+    opacity: .74 !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-hero-art-tagline {
+    display: none !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-overview-card {
+    grid-template-columns: 1.12fr .88fr !important;
+    row-gap: 15px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-overview-summary {
+    border-right: 0 !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-overview-meta {
+    grid-column: 1 / -1 !important;
+    grid-template-columns: repeat(3, minmax(0,1fr)) !important;
+    padding: 14px 0 0 !important;
+    border-top: 1px solid rgba(175,190,212,.32) !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-main-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-logo-panel {
+    grid-template-columns: minmax(380px,1fr) minmax(260px,320px) !important;
+  }
+}
+
+@media (max-width: 820px) {
+  html body .brand-profile-page.brand-v14495-page {
+    width: calc(100% - 28px) !important;
+    padding-top: 18px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-hero {
+    min-height: 220px !important;
+    height: auto !important;
+    padding: 25px 25px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-hero-copy {
+    width: 64% !important;
+    max-width: 64% !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-hero h2 {
+    font-size: clamp(32px, 6vw, 42px) !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-hero-edit {
+    position: relative !important;
+    top: auto !important;
+    right: auto !important;
+    left: auto !important;
+    margin-top: 16px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-hero-art {
+    width: 50% !important;
+    background-size: 700px auto !important;
+    background-position: 45% 42% !important;
+    opacity: .53 !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-overview-card {
+    grid-template-columns: 1fr !important;
+    padding: 18px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-overview-identity {
+    padding-right: 0 !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-overview-summary {
+    padding: 15px 0 !important;
+    border: 0 !important;
+    border-top: 1px solid rgba(175,190,212,.32) !important;
+    border-bottom: 1px solid rgba(175,190,212,.32) !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-overview-meta {
+    grid-column: auto !important;
+    grid-template-columns: repeat(3, minmax(0,1fr)) !important;
+    padding-top: 3px !important;
+    border-top: 0 !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-company-grid {
+    gap: 10px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-logo-panel {
+    grid-template-columns: 1fr !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-preview-wrap {
+    width: min(360px, 100%) !important;
+    margin: 0 auto !important;
+  }
+}
+
+@media (max-width: 620px) {
+  html body .content.spreelo-content:has(.brand-profile-page.brand-v14495-page) {
+    background-size: 100% 100%, 100% 780px !important;
+  }
+
+  html body .brand-profile-page.brand-v14495-page {
+    width: calc(100% - 20px) !important;
+    padding: 12px 0 30px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-hero {
+    min-height: 244px !important;
+    padding: 21px 19px !important;
+    border-radius: 18px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-hero-copy {
+    width: 78% !important;
+    max-width: 78% !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-hero .dashboard-eyebrow {
+    margin-bottom: 9px !important;
+    font-size: 9.5px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-hero h2 {
+    font-size: clamp(29px, 8.5vw, 38px) !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-hero-identity {
+    margin-top: 9px !important;
+    font-size: 13px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-hero-copy > span {
+    max-width: 92% !important;
+    margin-top: 9px !important;
+    font-size: 10.7px !important;
+    line-height: 1.42 !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-hero-edit {
+    min-height: 38px !important;
+    margin-top: 12px !important;
+    padding: 0 13px !important;
+    font-size: 10.8px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-hero-art {
+    right: -16% !important;
+    width: 72% !important;
+    background-image: url("/backgrounds/spreelo-brand-intelligence-v143-39-mobile.webp") !important;
+    background-size: cover !important;
+    background-position: 54% 50% !important;
+    opacity: .43 !important;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.45) 36%, #000 70%) !important;
+    mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.45) 36%, #000 70%) !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-overview-card,
+  html body .brand-v14495-page .brand-v144117-company-card,
+  html body .brand-v14495-page .brand-v144117-logo-panel {
+    border-radius: 16px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-overview-identity {
+    grid-template-columns: 48px minmax(0,1fr) !important;
+    gap: 12px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-brand-mark {
+    width: 48px !important;
+    height: 48px !important;
+    border-radius: 12px !important;
+    font-size: 21px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-tags {
+    margin-top: 12px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-tags span {
+    min-height: 29px !important;
+    max-width: 145px !important;
+    font-size: 10px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-overview-meta {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-company-card {
+    padding: 14px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-company-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-info-tile {
+    min-height: 0 !important;
+    padding: 12px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-logo-panel {
+    padding: 16px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-logo-panel .brand-v14496-logo-description,
+  html body .brand-v14495-page .brand-v144117-logo-panel .brand-v14496-logo-benefits {
+    margin-left: 0 !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-logo-panel .brand-v14496-current-logo-row {
+    grid-template-columns: 40px minmax(0,1fr) !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-logo-panel .brand-v14496-logo-action {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+  }
+
+  html body .brand-v14495-page > .danger-zone-card.brand-v14495-danger {
+    margin-top: 12px !important;
+    padding: 15px !important;
+  }
+}
+
+/* Desktop-only placement card spans the overview and lower row, as in reference. */
+@media (min-width: 1380px) {
+  html body .brand-v14495-page .brand-v144117-readonly {
+    position: relative !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-overview-card {
+    padding-right: 344px !important;
+    grid-template-columns: minmax(340px, 1.25fr) minmax(270px, .9fr) minmax(215px, .68fr) !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-logo-panel {
+    display: block !important;
+    min-height: 388px !important;
+    padding-right: 338px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-preview-wrap {
+    position: absolute !important;
+    z-index: 4 !important;
+    top: 32px !important;
+    right: 13px !important;
+    width: 304px !important;
+    min-height: 520px !important;
+    margin: 0 !important;
+    padding: 11px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-preview-wrap .brand-v14496-social-creative {
+    min-height: 330px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-preview-wrap .brand-v14496-social-creative > img {
+    height: 330px !important;
+    min-height: 330px !important;
+  }
+}
+
+html body .brand-v14495-page .brand-v144117-social-caption {
+  margin: 0 !important;
+  padding: 8px 9px 10px !important;
+  border-top: 1px solid rgba(225,229,235,.7) !important;
+  color: #56667e !important;
+  font-size: 9px !important;
+  line-height: 1.4 !important;
+  font-weight: 520 !important;
+}
+
+
+/* Intermediate desktop/tablet widths: collapse before the fixed sidebar can squeeze cards. */
+@media (min-width: 821px) and (max-width: 1379px) {
+  html body .brand-v14495-page .brand-v144117-overview-card {
+    grid-template-columns: minmax(300px, 1.08fr) minmax(240px, .92fr) !important;
+    row-gap: 14px !important;
+    padding-right: 22px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-overview-summary {
+    border-right: 0 !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-overview-meta {
+    grid-column: 1 / -1 !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    padding: 13px 0 0 !important;
+    border-top: 1px solid rgba(175,190,212,.32) !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-main-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-logo-panel {
+    display: grid !important;
+    grid-template-columns: minmax(320px,1fr) minmax(250px,300px) !important;
+    min-height: 0 !important;
+    padding-right: 18px !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-preview-wrap {
+    position: static !important;
+    width: auto !important;
+    min-height: 0 !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-hero-art-tagline {
+    display: none !important;
+  }
+}
+
+@media (min-width: 821px) and (max-width: 1000px) {
+  html body .brand-v14495-page .brand-v144117-overview-card {
+    grid-template-columns: 1fr !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-overview-summary {
+    padding: 14px 0 !important;
+    border: 0 !important;
+    border-top: 1px solid rgba(175,190,212,.32) !important;
+    border-bottom: 1px solid rgba(175,190,212,.32) !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-overview-meta {
+    grid-column: auto !important;
+    padding-top: 2px !important;
+    border-top: 0 !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-logo-panel {
+    grid-template-columns: 1fr !important;
+  }
+
+  html body .brand-v14495-page .brand-v144117-preview-wrap {
+    width: min(360px,100%) !important;
+    margin: 0 auto !important;
+  }
+}

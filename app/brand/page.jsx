@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bookmark, Building2, CalendarDays, Check, FileText, Globe2, Heart, Languages, Link2, Megaphone, MessageCircle, Pencil, Send, ShieldCheck, Sparkles, Tag, Users, X } from "lucide-react";
+import { Bookmark, Building2, CalendarDays, Check, Globe2, Heart, Languages, MessageCircle, Pencil, Send, ShieldCheck, Sparkles, Users, X } from "lucide-react";
 import AppLayout from "../../components/AppLayout";
 import { supabase } from "../../lib/supabaseClient";
 import { getValidAnalysisAccessToken } from "../../lib/analysisSession";
@@ -159,19 +159,6 @@ function getCurrentAnalysisStage(progress) {
 
 function getBrandStorageKey(userId) {
   return `spreelo_current_brand_id_${userId}`;
-}
-
-function truncateText(value, maxChars = 180) {
-  const text = String(value || "").replace(/s+/g, " ").trim();
-
-  if (!text) return "";
-  if (text.length <= maxChars) return text;
-
-  return `${text.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
-}
-
-function shortenChipLabel(value, maxChars = 22) {
-  return truncateText(value, maxChars);
 }
 
 function normalizeWebsiteUrl(value) {
@@ -403,56 +390,13 @@ export default function BrandProfile() {
     return `${words[0][0] || ""}${words[1][0] || ""}`.toLowerCase();
   }, [businessName]);
 
-  const visibleLanguageOptions = useMemo(() => languageOptions, []);
-  const isSwedishLocale = String(locale || "").toLowerCase().startsWith("sv");
-  const currentBrandName = businessName || t("brand.brandSetup");
-  const selectedMarketOption = useMemo(
-    () => visibleMarketOptions.find((market) => market.label === contentMarket) || { label: contentMarket, countryCode },
-    [visibleMarketOptions, contentMarket, countryCode]
-  );
-  const marketLabel = useMemo(
-    () => getMarketOptionLabel(t, selectedMarketOption),
-    [t, selectedMarketOption]
-  );
-  const languageLabel = useMemo(
-    () => getLanguageOptionLabel(t, normalizedContentLanguage),
-    [t, normalizedContentLanguage]
-  );
   const brandCreatedYear = useMemo(() => {
-    const date = brandCreatedAt ? new Date(brandCreatedAt) : null;
-    return Number.isFinite(date?.getTime?.()) ? String(date.getFullYear()) : String(new Date().getFullYear());
+    if (!brandCreatedAt) return "";
+    const createdDate = new Date(brandCreatedAt);
+    return Number.isNaN(createdDate.getTime()) ? "" : String(createdDate.getFullYear());
   }, [brandCreatedAt]);
-  const heroLeadText = isSwedishLocale
-    ? "Din varumärkesidentitet samlad på ett ställe."
-    : "Your brand identity, all in one place.";
-  const heroSupportText = isSwedishLocale
-    ? "Ange din företagskontext, marknad och språk. Spreelo använder detta för att skapa bättre vanliga inlägg, kampanjidéer och innehållsplaner."
-    : "Set your business context, market and language. Spreelo uses this to create better regular posts, campaign ideas and content plans.";
-  const summaryFallbackText = isSwedishLocale
-    ? "Här samlas din webbplatsanalys, marknad, målgrupp och språk för framtida innehåll."
-    : "Your website analysis, market, audience and language live here for future content.";
-  const overviewNarrative = useMemo(() => {
-    const description = truncateText(brandDescription, 220);
-    if (description) return description;
-    const combined = truncateText([industry, targetAudience].filter(Boolean).join(" "), 220);
-    return combined || summaryFallbackText;
-  }, [brandDescription, industry, targetAudience, summaryFallbackText]);
-  const infoDescriptionText = useMemo(() => {
-    const description = truncateText(brandDescription, 120);
-    if (description) return description;
-    return truncateText(overviewNarrative, 120);
-  }, [brandDescription, overviewNarrative]);
-  const industryChip = shortenChipLabel(industry, 22) || (isSwedishLocale ? "Bransch" : "Industry");
-  const targetAudienceShort = truncateText(targetAudience, 72) || (isSwedishLocale ? "Ingen målgrupp angiven än." : "No audience added yet.");
-  const websiteDisplayLabel = normalizedWebsiteUrl || (isSwedishLocale ? "Ingen webbplats" : "No website");
-  const previewHeadline = isSwedishLocale ? "Ditt varumärke. Dina regler." : "Your brand. Your rules.";
-  const previewBodyText = isSwedishLocale
-    ? "Exempel på AI-genererat innehåll där din logotyp syns diskret i hörnet."
-    : "Example AI-generated content with your logo placed discreetly in the corner.";
-  const previewCaption = isSwedishLocale
-    ? "Skapa något unikt. Med dina bilder, din text och din identitet."
-    : "Create something unique with your images, text and identity.";
-  const previewCta = isSwedishLocale ? "Se mer" : "See more";
+
+  const visibleLanguageOptions = useMemo(() => languageOptions, []);
 
   const isBrandProfileReady = useMemo(() => {
     const hasBusinessName = Boolean(businessName.trim());
@@ -1514,296 +1458,249 @@ export default function BrandProfile() {
 
   return (
     <AppLayout active="brand">
-      <div className="brand-profile-page brand-v14495-page brand-v144117-page">
+      <div className="brand-profile-page brand-v14495-page">
         <header className="brand-profile-hero brand-v14495-hero brand-v144117-hero">
+          <div className="brand-v14495-hero-copy brand-v144117-hero-copy">
+            <p className="dashboard-eyebrow">{t("brand.eyebrow")}</p>
+            <h2>{businessName || t("brand.heroTitle")}</h2>
+            <strong className="brand-v144117-hero-identity">{t("brand.heroIdentityText")}</strong>
+            <span>{t("brand.heroText")}</span>
+          </div>
+
           {showGeneratedFields && !isEditing && !analyzing ? (
-            <>
-              <div className="brand-v144117-hero-copy">
-                <p className="dashboard-eyebrow">{t("brand.eyebrow")}</p>
-                <h2>{currentBrandName}</h2>
-                <p className="brand-v144117-hero-lead">{heroLeadText}</p>
-                <span>{heroSupportText}</span>
-              </div>
-              <button
-                type="button"
-                className="brand-profile-edit-button brand-v14495-edit-button brand-v144117-hero-edit"
-                onClick={() => {
-                  setIsEditing(true);
-                  setMessage("");
-                }}
-              >
-                <Pencil size={16} />
-                {t("brand.editButton")}
-              </button>
-              <div className="brand-v144117-hero-art" aria-hidden="true">
-                <span className="brand-v144117-hero-card">
-                  <span className="brand-v144117-hero-card-avatar" />
-                  <span className="brand-v144117-hero-card-lines">
-                    <i />
-                    <i />
-                  </span>
-                  <span className="brand-v144117-hero-card-dots">
-                    <i />
-                    <i />
-                    <i />
-                    <i />
-                  </span>
-                </span>
-                <span className="brand-v144117-hero-orb" />
-                <span className="brand-v144117-hero-badge brand-v144117-hero-badge-one" />
-                <span className="brand-v144117-hero-badge brand-v144117-hero-badge-two" />
-                <span className="brand-v144117-hero-badge brand-v144117-hero-badge-three" />
-                <span className="brand-v144117-hero-people">
-                  <i />
-                  <i />
-                  <i />
-                </span>
-                <span className="brand-v144117-hero-tagline">{isSwedishLocale ? "Starkare
-varumärken
-med AI" : "Stronger
-brands
-with AI"}</span>
-                <span className="brand-v144117-hero-accent" />
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="brand-v14495-hero-copy">
-                <p className="dashboard-eyebrow">{t("brand.eyebrow")}</p>
-                <h2>{t("brand.heroTitle")}</h2>
-                <span>{t("brand.heroText")}</span>
-              </div>
-              <div className="brand-v14495-hero-art" aria-hidden="true" />
-            </>
-          )}
+            <button
+              type="button"
+              className="brand-v144117-hero-edit"
+              onClick={() => {
+                setIsEditing(true);
+                setMessage("");
+              }}
+            >
+              <Pencil size={16} />
+              {t("brand.editButton")}
+            </button>
+          ) : null}
+
+          <div className="brand-v14495-hero-art brand-v144117-hero-art" aria-hidden="true">
+            <span className="brand-v144117-hero-art-tagline">
+              {t("brand.heroArtTagline")}
+              <i />
+            </span>
+          </div>
         </header>
 
         <section className="brand-profile-layout brand-v14495-layout">
-          <section className={`brand-profile-form-card brand-v14495-shell brand-v144117-shell${isEditing ? " editing" : ""}`}>
-            {!(showGeneratedFields && !isEditing && !analyzing) ? (
-              <div className="brand-profile-form-header brand-v14495-profile-strip">
-                <div className="brand-v14495-profile-main">
-                  <span className="brand-v14495-brand-mark" aria-hidden="true">{brandInitials}</span>
-                  <div>
-                    <p className="dashboard-eyebrow">{t("brand.profileOverview")}</p>
-                    <h3>{businessName || t("brand.brandSetup")}</h3>
-                    <p className="brand-profile-form-intro">{t("brand.profileOverviewText")}</p>
-                  </div>
+          <section className={`brand-profile-form-card brand-v14495-shell${isEditing ? " editing" : ""}`}>
+            <div className="brand-profile-form-header brand-v14495-profile-strip">
+              <div className="brand-v14495-profile-main">
+                <span className="brand-v14495-brand-mark" aria-hidden="true">{brandInitials}</span>
+                <div>
+                  <p className="dashboard-eyebrow">{t("brand.profileOverview")}</p>
+                  <h3>{businessName || t("brand.brandSetup")}</h3>
+                  <p className="brand-profile-form-intro">{t("brand.profileOverviewText")}</p>
                 </div>
-
-                {isEditing ? (
-                  <button
-                    type="button"
-                    className="brand-profile-edit-button subtle"
-                    onClick={() => {
-                      setIsEditing(false);
-                      setShowAnalysisResult(false);
-                      setMessage(
-                        message || t("brand.analysisFailedText")
-                      );
-                    }}
-                    aria-label={t("common.close")}
-                  >
-                    <X size={16} />
-                    {t("common.close")}
-                  </button>
-                ) : (
-                  <span>{t("brand.currentBrand")}</span>
-                )}
               </div>
-            ) : null}
+
+              {showGeneratedFields && !isEditing && !analyzing ? (
+                <button
+                  type="button"
+                  className="brand-profile-edit-button brand-v14495-edit-button"
+                  onClick={() => {
+                    setIsEditing(true);
+                    setMessage("");
+                  }}
+                >
+                  <Pencil size={16} />
+                  {t("brand.editButton")}
+                </button>
+              ) : isEditing ? (
+                <button
+                  type="button"
+                  className="brand-profile-edit-button subtle"
+                  onClick={() => {
+                    setIsEditing(false);
+                    setShowAnalysisResult(false);
+                    setMessage(
+                      message || t("brand.analysisFailedText")
+                    );
+                  }}
+                  aria-label={t("common.close")}
+                >
+                  <X size={16} />
+                  {t("common.close")}
+                </button>
+              ) : (
+                <span>{t("brand.currentBrand")}</span>
+              )}
+            </div>
 
             {showGeneratedFields && !isEditing && !analyzing ? (
-              <div className="brand-v144117-dashboard">
+              <div className="brand-v144117-readonly">
                 <section className="brand-v144117-overview-card">
-                  <div className="brand-v144117-overview-main">
-                    <span className={`brand-v144117-brand-mark ${logoUrl ? "has-logo" : "is-example"}`} aria-hidden="true">
-                      {logoUrl ? <img src={logoUrl} alt="" /> : <span>{brandInitials}</span>}
-                    </span>
-                    <div className="brand-v144117-overview-copy">
+                  <div className="brand-v144117-overview-identity">
+                    <span className="brand-v144117-brand-mark" aria-hidden="true">{brandInitials}</span>
+                    <div className="brand-v144117-overview-identity-copy">
                       <p className="dashboard-eyebrow">{t("brand.profileOverview")}</p>
-                      <h3>{currentBrandName}</h3>
+                      <h3>{businessName || t("brand.brandSetup")}</h3>
                       <p>{t("brand.profileOverviewText")}</p>
-                      <div className="brand-v144117-chip-row">
-                        <span>{industryChip}</span>
-                        <span>{marketLabel}</span>
-                        <span>{languageLabel}</span>
+                      <div className="brand-v144117-tags" aria-label={t("brand.profileOverview")}>
+                        {industry ? <span>{industry}</span> : null}
+                        <span>{getMarketOptionLabel(t, visibleMarketOptions.find((market) => market.label === contentMarket) || { label: contentMarket, countryCode })}</span>
+                        <span>{getLanguageOptionLabel(t, normalizedContentLanguage)}</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="brand-v144117-overview-story">
-                    <p>{overviewNarrative}</p>
+                  <div className="brand-v144117-overview-summary">
+                    <p>{brandDescription || targetAudience || t("brand.heroText")}</p>
                   </div>
 
-                  <div className="brand-v144117-overview-stats">
-                    <div className="brand-v144117-stat-item">
-                      <span className="brand-v144117-stat-icon" aria-hidden="true"><CalendarDays size={16} /></span>
-                      <div>
-                        <small>{isSwedishLocale ? "Sedan" : "Since"}</small>
-                        <strong>{brandCreatedYear}</strong>
+                  <div className="brand-v144117-overview-meta">
+                    {brandCreatedYear ? (
+                      <div className="brand-v144117-meta-item">
+                        <span className="brand-v144117-meta-icon"><CalendarDays size={17} /></span>
+                        <span><small>{t("brand.since")}</small><strong>{brandCreatedYear}</strong></span>
                       </div>
+                    ) : null}
+                    <div className="brand-v144117-meta-item">
+                      <span className="brand-v144117-meta-icon"><Globe2 size={17} /></span>
+                      <span><small>{t("brand.campaignMarket")}</small><strong>{getMarketOptionLabel(t, visibleMarketOptions.find((market) => market.label === contentMarket) || { label: contentMarket, countryCode })}</strong></span>
                     </div>
-                    <div className="brand-v144117-stat-item">
-                      <span className="brand-v144117-stat-icon" aria-hidden="true"><Globe2 size={16} /></span>
-                      <div>
-                        <small>{t("brand.campaignMarket")}</small>
-                        <strong>{marketLabel}</strong>
-                      </div>
-                    </div>
-                    <div className="brand-v144117-stat-item">
-                      <span className="brand-v144117-stat-icon" aria-hidden="true"><Users size={16} /></span>
-                      <div>
-                        <small>{t("brand.targetAudience")}</small>
-                        <strong>{targetAudienceShort}</strong>
-                      </div>
+                    <div className="brand-v144117-meta-item">
+                      <span className="brand-v144117-meta-icon"><Users size={17} /></span>
+                      <span><small>{t("brand.targetAudience")}</small><strong>{targetAudience || "—"}</strong></span>
                     </div>
                   </div>
                 </section>
 
                 <div className="brand-v144117-main-grid">
-                  <section className="brand-v144117-info-panel">
-                    <div className="brand-v144117-panel-head">
-                      <p className="dashboard-eyebrow">{t("brand.businessDetails")}</p>
+                  <section className="brand-v144117-company-card" aria-labelledby="brand-v144117-company-title">
+                    <div className="brand-v144117-section-title">
+                      <span aria-hidden="true" />
+                      <p id="brand-v144117-company-title">{t("brand.companyInfoTitle")}</p>
                     </div>
-                    <div className="brand-v144117-info-grid">
-                      <article className="brand-v144117-info-card">
-                        <span className="brand-v144117-info-icon" aria-hidden="true"><Link2 size={18} /></span>
-                        <small>{isSwedishLocale ? "Hemsida" : "Website"}</small>
-                        <strong>{currentBrandName}</strong>
-                        {normalizedWebsiteUrl ? (
-                          <a href={normalizedWebsiteUrl} target="_blank" rel="noreferrer">{normalizedWebsiteUrl}</a>
-                        ) : (
-                          <p>{websiteDisplayLabel}</p>
-                        )}
+
+                    <div className="brand-v144117-company-grid">
+                      <article className="brand-v144117-info-tile">
+                        <span className="brand-v144117-tile-icon cool"><Globe2 size={19} /></span>
+                        <div><small>{t("brand.websiteUrl")}</small><strong>{businessName || "—"}</strong>{normalizedWebsiteUrl ? <a href={normalizedWebsiteUrl} target="_blank" rel="noreferrer">{normalizedWebsiteUrl}</a> : <p>—</p>}</div>
                       </article>
-                      <article className="brand-v144117-info-card">
-                        <span className="brand-v144117-info-icon" aria-hidden="true"><Tag size={18} /></span>
-                        <small>{t("brand.industry")}</small>
-                        <strong>{industryChip}</strong>
-                        <p>{truncateText(industry, 80) || "—"}</p>
+
+                      <article className="brand-v144117-info-tile">
+                        <span className="brand-v144117-tile-icon cool"><Sparkles size={19} /></span>
+                        <div><small>{t("brand.industry")}</small><strong>{industry || "—"}</strong></div>
                       </article>
-                      <article className="brand-v144117-info-card">
-                        <span className="brand-v144117-info-icon" aria-hidden="true"><Users size={18} /></span>
-                        <small>{t("brand.targetAudience")}</small>
-                        <strong>{truncateText(targetAudience, 28) || "—"}</strong>
-                        <p>{truncateText(targetAudience, 80) || "—"}</p>
+
+                      <article className="brand-v144117-info-tile">
+                        <span className="brand-v144117-tile-icon warm"><Users size={19} /></span>
+                        <div><small>{t("brand.targetAudience")}</small><strong>{getMarketOptionLabel(t, visibleMarketOptions.find((market) => market.label === contentMarket) || { label: contentMarket, countryCode })}</strong><p>{targetAudience || "—"}</p></div>
                       </article>
-                      <article className="brand-v144117-info-card">
-                        <span className="brand-v144117-info-icon" aria-hidden="true"><Languages size={18} /></span>
-                        <small>{t("brand.postLanguage")}</small>
-                        <strong>{languageLabel}</strong>
-                        <p>{languageLabel}</p>
+
+                      <article className="brand-v144117-info-tile">
+                        <span className="brand-v144117-tile-icon warm"><Languages size={19} /></span>
+                        <div><small>{t("brand.postLanguage")}</small><strong>{getLanguageOptionLabel(t, normalizedContentLanguage)}</strong><p>{t("brand.postLanguageHelp")}</p></div>
                       </article>
-                      <article className="brand-v144117-info-card">
-                        <span className="brand-v144117-info-icon" aria-hidden="true"><Megaphone size={18} /></span>
-                        <small>{t("brand.campaignMarket")}</small>
-                        <strong>{marketLabel}</strong>
-                        <p>{isSwedishLocale ? "Primär marknad för marknadsföring och kampanjer." : "Primary market used for campaign timing and marketing."}</p>
+
+                      <article className="brand-v144117-info-tile">
+                        <span className="brand-v144117-tile-icon warm"><Send size={19} /></span>
+                        <div><small>{t("brand.campaignMarket")}</small><strong>{getMarketOptionLabel(t, visibleMarketOptions.find((market) => market.label === contentMarket) || { label: contentMarket, countryCode })}</strong><p>{t("brand.campaignMarketHelp")}</p></div>
                       </article>
-                      <article className="brand-v144117-info-card brand-v144117-info-card-wide">
-                        <span className="brand-v144117-info-icon" aria-hidden="true"><FileText size={18} /></span>
-                        <small>{isSwedishLocale ? "Företagsbeskrivning" : "Business description"}</small>
-                        <strong>{t("brand.profileOverview")}</strong>
-                        <p>{infoDescriptionText}</p>
+
+                      <article className="brand-v144117-info-tile">
+                        <span className="brand-v144117-tile-icon cool"><Building2 size={19} /></span>
+                        <div><small>{t("brand.companyDescription")}</small><p>{brandDescription || t("brand.heroText")}</p></div>
                       </article>
                     </div>
                   </section>
 
-                  <section className="brand-v144117-logo-panel" aria-labelledby="brand-v144117-logo-title">
-                    <div className="brand-v144117-panel-head brand-v144117-logo-heading">
-                      <span className="brand-v144117-heading-icon" aria-hidden="true"><Sparkles size={18} /></span>
-                      <div>
-                        <p className="dashboard-eyebrow">{t("brand.logoSectionEyebrow")}</p>
-                        <h3 id="brand-v144117-logo-title">{isSwedishLocale ? "Din logotyp i allt AI-genererat innehåll" : "Your logo in all AI-generated content"}</h3>
-                      </div>
-                    </div>
-                    <p className="brand-v144117-logo-description">{t("brand.logoSectionDescription")}</p>
-                    <ul className="brand-v144117-logo-benefits">
-                      <li><span><Check size={14} /></span>{t("brand.logoBenefitPlacement")}</li>
-                      <li><span><Check size={14} /></span>{t("brand.logoBenefitRecognition")}</li>
-                      <li><span><Check size={14} /></span>{t("brand.logoBenefitChannels")}</li>
-                    </ul>
-                    <div className="brand-v144117-logo-tip">
-                      <span aria-hidden="true">i</span>
-                      <p>{t("brand.logoRecommendation")}</p>
-                    </div>
-                    <div className="brand-v144117-logo-preview-box">
-                      <small>{logoUrl ? t("brand.logoCurrentTitle") : t("brand.logoExampleTitle")}</small>
-                      <div className="brand-v144117-logo-checkerboard">
-                        {logoUrl ? (
-                          <img src={logoUrl} alt={t("brand.logoPreviewAlt")} />
-                        ) : (
-                          <div className="brand-v144117-logo-fallback">
-                            <span>{brandInitials}</span>
-                            <strong>{currentBrandName}</strong>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="brand-v144117-logo-actions">
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        onClick={() => {
-                          setLogoMessage("");
-                          setShowLogoModal(true);
-                        }}
-                        disabled={analyzing || saving || deletingBrand}
-                      >
-                        {logoUrl ? t("brand.logoManageButton") : t("brand.logoAddButton")}
-                      </button>
-                      {logoUrl ? (
-                        <button
-                          type="button"
-                          className="secondary-button brand-v144117-logo-remove"
-                          onClick={handleRemoveLogo}
-                          disabled={logoUploading || analyzing || saving || deletingBrand}
-                        >
-                          {t("brand.logoRemove")}
-                        </button>
-                      ) : null}
-                    </div>
-                    {logoMessage ? <p className="brand-logo-message">{logoMessage}</p> : null}
-                  </section>
-
-                  <aside className="brand-v144117-preview-panel">
-                    <p className="brand-v144117-preview-label">{t("brand.logoPlacementExample")}</p>
-                    <div className="brand-v144117-social-card">
-                      <div className="brand-v144117-social-head">
-                        <span className={`brand-v144117-social-avatar ${logoUrl ? "has-logo" : "is-example"}`}>
-                          {logoUrl ? <img src={logoUrl} alt="" /> : <span>{brandInitials}</span>}
-                        </span>
-                        <span className="brand-v144117-social-account">
-                          <strong>{currentBrandName}</strong>
-                          <small>{t("brand.logoPostSponsored")}</small>
-                        </span>
-                        <span className="brand-v144117-social-more" aria-hidden="true">•••</span>
-                      </div>
-
-                      <div className="brand-v144117-social-creative">
-                        <img src="/brand/logo-preview-beauty-v144-96.webp" alt={t("brand.logoPostPreviewAlt")} />
-                        <div className="brand-v144117-social-copy">
-                          <strong>{previewHeadline}</strong>
-                          <span>{previewBodyText}</span>
-                          <b>{previewCta}</b>
+                  <section className="brand-v14496-logo-panel brand-v144117-logo-panel" aria-labelledby="brand-v14496-logo-title">
+                    <div className="brand-v14496-logo-copy">
+                      <div className="brand-v14496-logo-heading">
+                        <span className="brand-v14496-logo-heading-icon" aria-hidden="true"><Sparkles size={18} /></span>
+                        <div>
+                          <p className="dashboard-eyebrow">{t("brand.logoSectionEyebrow")}</p>
+                          <h3 id="brand-v14496-logo-title">{t("brand.logoCompactTitle")}</h3>
                         </div>
-                        <span className="brand-v144117-social-logo">
-                          {logoUrl ? <img src={logoUrl} alt={t("brand.logoPreviewAlt")} /> : <span>{brandInitials}</span>}
-                        </span>
                       </div>
 
-                      <div className="brand-v144117-social-actions" aria-hidden="true">
-                        <span><Heart size={18} /></span>
-                        <span><MessageCircle size={18} /></span>
-                        <span><Send size={18} /></span>
-                        <span className="brand-v144117-social-save"><Bookmark size={18} /></span>
-                      </div>
+                      <p className="brand-v14496-logo-description">{t("brand.logoSectionDescription")}</p>
 
-                      <p className="brand-v144117-preview-caption">{previewCaption}</p>
+                      <ul className="brand-v14496-logo-benefits">
+                        <li><span><Check size={14} /></span>{t("brand.logoBenefitPlacement")}</li>
+                        <li><span><Check size={14} /></span>{t("brand.logoBenefitRecognition")}</li>
+                        <li><span><Check size={14} /></span>{t("brand.logoBenefitChannels")}</li>
+                      </ul>
+
+                      <div className="brand-v14496-current-logo">
+                        <p>{logoUrl ? t("brand.logoCurrentTitle") : t("brand.logoExampleTitle")}</p>
+                        <div className="brand-v14496-current-logo-row">
+                          <span className={`brand-v14496-current-logo-mark ${logoUrl ? "has-logo" : "is-example"}`}>
+                            {logoUrl ? (
+                              <img src={logoUrl} alt={t("brand.logoPreviewAlt")} />
+                            ) : (
+                              <span>{brandInitials}</span>
+                            )}
+                          </span>
+                          <span className="brand-v14496-current-logo-meta">
+                            <strong>{businessName || t("brand.brandSetup")}</strong>
+                            <small>{logoUrl ? t("brand.logoFileHint") : t("brand.logoExampleHint")}</small>
+                          </span>
+                          <button
+                            type="button"
+                            className="brand-v14496-logo-action"
+                            onClick={() => {
+                              setLogoMessage("");
+                              setShowLogoModal(true);
+                            }}
+                            disabled={analyzing || saving || deletingBrand}
+                          >
+                            {logoUrl ? t("brand.logoManageButton") : t("brand.logoAddButton")}
+                          </button>
+                        </div>
+                        <div className="brand-v14496-logo-tip">
+                          <span aria-hidden="true">i</span>
+                          <p>{t("brand.logoRecommendation")}</p>
+                        </div>
+                      </div>
                     </div>
-                    <p className="brand-v144117-preview-note">{logoUrl ? t("brand.logoPreviewUsesOwn") : t("brand.logoPreviewUsesExample")}</p>
-                  </aside>
+
+                    <div className="brand-v14496-preview-wrap brand-v144117-preview-wrap">
+                      <p className="brand-v14496-preview-label">{t("brand.logoPlacementExample")}</p>
+                      <div className="brand-v14496-social-card">
+                        <div className="brand-v14496-social-head">
+                          <span className={`brand-v14496-social-avatar ${logoUrl ? "has-logo" : "is-example"}`}>
+                            {logoUrl ? <img src={logoUrl} alt="" /> : <span>{brandInitials}</span>}
+                          </span>
+                          <span className="brand-v14496-social-account">
+                            <strong>{businessName || t("brand.brandSetup")}</strong>
+                            <small>{t("brand.logoPostSponsored")}</small>
+                          </span>
+                          <span className="brand-v14496-social-more" aria-hidden="true">•••</span>
+                        </div>
+
+                        <div className="brand-v14496-social-creative">
+                          <img src="/brand/logo-preview-beauty-v144-96.webp" alt={t("brand.logoPostPreviewAlt")} />
+                          <div className="brand-v14496-social-copy">
+                            <strong>{t("brand.logoPostHeadline")}</strong>
+                            <span>{t("brand.logoPostText")}</span>
+                            <b>{t("brand.logoPostCta")}</b>
+                          </div>
+                          <span className="brand-v14496-social-logo">
+                            {logoUrl ? <img src={logoUrl} alt={t("brand.logoPreviewAlt")} /> : <span>{brandInitials}</span>}
+                          </span>
+                        </div>
+
+                        <div className="brand-v14496-social-actions" aria-hidden="true">
+                          <span><Heart size={18} /></span>
+                          <span><MessageCircle size={18} /></span>
+                          <span><Send size={18} /></span>
+                          <span className="brand-v14496-social-save"><Bookmark size={18} /></span>
+                        </div>
+                        <p className="brand-v144117-social-caption">{t("brand.logoPostCaption")}</p>
+                      </div>
+                      <p className="brand-v14496-preview-note">{logoUrl ? t("brand.logoPreviewUsesOwn") : t("brand.logoPreviewUsesExample")}</p>
+                    </div>
+                  </section>
                 </div>
               </div>
             ) : analysisRescuePending ? (
