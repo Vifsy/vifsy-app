@@ -1,0 +1,82 @@
+/* v144.131 — revert to the first orbit loader, keep only the official Spreelo S in the center, and glass the card more */
+
+html body .workspace-loader-page {
+  background:
+    radial-gradient(circle at 82% 8%, rgba(255, 184, 155, 0.22), transparent 28%),
+    radial-gradient(circle at 10% 28%, rgba(168, 180, 236, 0.18), transparent 30%),
+    linear-gradient(180deg, rgba(242, 244, 249, 0.82), rgba(237, 240, 247, 0.90)),
+    url("/backgrounds/spreelo-plan-reference-magic-v95.svg") center/cover no-repeat,
+    var(--onboarding-canvas) !important;
+}
+
+html body .workspace-loader-card {
+  border: 1px solid rgba(255, 255, 255, 0.92) !important;
+  background: linear-gradient(145deg, rgba(255,255,255,.34), rgba(248,250,255,.16)) !important;
+  box-shadow: 0 30px 76px rgba(28, 41, 66, 0.10), inset 0 1px 0 rgba(255,255,255,.94) !important;
+  backdrop-filter: blur(34px) saturate(155%) !important;
+  -webkit-backdrop-filter: blur(34px) saturate(155%) !important;
+}
+
+html body .workspace-loader-card::before {
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.60), rgba(255,255,255,0) 46%),
+    radial-gradient(circle at 84% 14%, rgba(255,193,170,.20), transparent 26%),
+    radial-gradient(circle at 16% 84%, rgba(169, 150, 255, .10), transparent 24%) !important;
+}
+
+html body .workspace-loader-motion {
+  width: 118px !important;
+  height: 118px !important;
+}
+
+html body .workspace-loader-core {
+  inset: 28px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  z-index: 2 !important;
+}
+
+html body .workspace-loader-core::before,
+html body .workspace-loader-core::after {
+  content: none !important;
+}
+
+html body .workspace-loader-core-mark {
+  width: 44px !important;
+  height: 44px !important;
+  object-fit: contain !important;
+  filter: drop-shadow(0 6px 16px rgba(150, 78, 255, 0.18)) !important;
+}
+
+html body .workspace-loader-copy strong {
+  font-size: 21px !important;
+}
+
+html body .workspace-loader-copy p {
+  font-size: 13.9px !important;
+}
+
+@media (max-width: 560px) {
+  html body .workspace-loader-card {
+    backdrop-filter: blur(28px) saturate(150%) !important;
+    -webkit-backdrop-filter: blur(28px) saturate(150%) !important;
+  }
+
+  html body .workspace-loader-motion {
+    width: 110px !important;
+    height: 110px !important;
+  }
+
+  html body .workspace-loader-core {
+    inset: 26px !important;
+  }
+
+  html body .workspace-loader-core-mark {
+    width: 40px !important;
+    height: 40px !important;
+  }
+}
