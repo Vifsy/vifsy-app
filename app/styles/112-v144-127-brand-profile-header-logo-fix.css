@@ -1,0 +1,57 @@
+/* v144.127 — official Spreelo logo in dark shell + brand-profile mobile header clearance */
+
+html body .spreelo-logo-lockup.spreelo-logo-lockup-official {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 0 !important;
+  line-height: 1 !important;
+  color: inherit !important;
+}
+
+html body .spreelo-logo-lockup-official .spreelo-official-logo-image {
+  display: block !important;
+  width: 132px !important;
+  height: auto !important;
+  max-width: 100% !important;
+  object-fit: contain !important;
+  object-position: left center !important;
+}
+
+html body .spreelo-sidebar .spreelo-logo-lockup-official .spreelo-official-logo-image {
+  width: 136px !important;
+}
+
+@media (max-width: 900px) {
+  html body .spreelo-mobile-topbar .spreelo-logo-lockup-official {
+    min-width: 0 !important;
+  }
+
+  html body .spreelo-mobile-topbar .spreelo-logo-lockup-official .spreelo-official-logo-image {
+    width: 138px !important;
+    max-height: 38px !important;
+  }
+
+  /* Brand profile: always clear both fixed mobile header rows before the hero starts. */
+  html body .content.spreelo-content:has(.brand-profile-page.brand-v14495-page),
+  html body .content.spreelo-content:has(.brand-v144118-readonly-active) {
+    padding-top: calc(var(--spreelo-mobile-header-total, 106px) + 22px) !important;
+  }
+
+  html body .brand-profile-page.brand-v14495-page,
+  html body .brand-v14495-page.brand-v144118-readonly-active {
+    margin-top: 0 !important;
+  }
+}
+
+@media (max-width: 520px) {
+  html body .spreelo-mobile-topbar .spreelo-logo-lockup-official .spreelo-official-logo-image {
+    width: 132px !important;
+    max-height: 36px !important;
+  }
+
+  html body .content.spreelo-content:has(.brand-profile-page.brand-v14495-page),
+  html body .content.spreelo-content:has(.brand-v144118-readonly-active) {
+    padding-top: calc(var(--spreelo-mobile-header-total, 106px) + 18px) !important;
+  }
+}

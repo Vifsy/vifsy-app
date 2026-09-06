@@ -1556,65 +1556,6 @@ export default function BrandProfile() {
 
         {isReadOnlyBrandView ? (
           <section className="brand-v144118-board" aria-label={t("brand.profileOverview")}>
-            <aside className="brand-v144118-card brand-v144118-preview brand-v144124-preview-card">
-              <p className="dashboard-eyebrow">{t("brand.logoPlacementExample")}</p>
-              <div className="brand-v144118-preview-shell brand-v144124-preview-shell">
-                <div className="brand-v144118-preview-head brand-v144124-preview-head">
-                  <span className={`brand-v144118-preview-avatar ${logoUrl ? "has-logo" : "is-example"}`}>
-                    {logoUrl ? <img src={logoUrl} alt="" /> : <span>{businessName ? businessName.charAt(0) : brandInitials}</span>}
-                  </span>
-                  <span className="brand-v144118-preview-account">
-                    <strong>{businessName || t("brand.brandSetup")}</strong>
-                    <small>{locale === "sv" ? "Sponsrat" : "Sponsored"}</small>
-                  </span>
-                  <span className="brand-v144118-preview-more" aria-hidden="true">•••</span>
-                </div>
-                <div className="brand-v144124-preview-media-frame">
-                  <div className="brand-v144124-preview-media" aria-hidden="true">
-                    <div className="brand-v144124-preview-overlay" />
-                    <div className="brand-v144124-preview-body">
-                      <span className="brand-v144124-preview-shirt" />
-                      <span className="brand-v144124-preview-arm" />
-                      <span className="brand-v144124-preview-thigh left" />
-                      <span className="brand-v144124-preview-thigh right" />
-                      <span className="brand-v144124-preview-shorts" />
-                      <span className="brand-v144124-preview-hem" />
-                    </div>
-                    <div className="brand-v144124-preview-copy">
-                      <strong>TRAIN.
-MOVE.
-UNWIND.</strong>
-                      <span>Comfort and style for active days.</span>
-                      <div className="brand-v144124-preview-product-pill">
-                        <em>Unisex training shorts</em>
-                        <small>from Stanley/Stella</small>
-                      </div>
-                      <b>SHOP THE PRODUCT</b>
-                    </div>
-                    <span className={`brand-v144124-preview-logo-corner ${logoUrl ? "has-logo" : "is-example"}`}>
-                      {logoUrl ? (
-                        <img src={logoUrl} alt={t("brand.logoPreviewAlt")} />
-                      ) : (
-                        <small>{businessName || t("brand.brandSetup")}</small>
-                      )}
-                    </span>
-                  </div>
-                </div>
-                <div className="brand-v144118-preview-actions brand-v144124-preview-actions" aria-hidden="true">
-                  <span><Heart size={18} /></span>
-                  <span><MessageCircle size={18} /></span>
-                  <span><Send size={18} /></span>
-                  <span className="brand-v144118-preview-save"><Bookmark size={18} /></span>
-                </div>
-                <div className="brand-v144124-preview-caption-wrap">
-                  <p className="brand-v144124-preview-caption-text">
-                    <strong>{businessName || t("brand.brandSetup")}</strong> Move in comfort with lightweight unisex training shorts designed for active days, relaxed weekends and everyday wear.
-                  </p>
-                  <p className="brand-v144124-preview-hashtags">#activewear #trainingstyle #unisexshorts #comfortfirst</p>
-                </div>
-              </div>
-            </aside>
-
             <section className="brand-v144118-card brand-v144118-info">
               <div className="brand-v144118-section-head">
                 <p className="dashboard-eyebrow">{locale === "sv" ? "Företagsinformation" : "Business information"}</p>
@@ -1725,6 +1666,50 @@ UNWIND.</strong>
                 ) : null}
               </div>
             </section>
+
+            <aside className="brand-v144118-card brand-v144118-preview brand-v144124-preview-card">
+              <p className="dashboard-eyebrow">{t("brand.logoPlacementExample")}</p>
+              <div className="brand-v144118-preview-shell brand-v144124-preview-shell">
+                <div className="brand-v144118-preview-head brand-v144124-preview-head">
+                  <span className={`brand-v144118-preview-avatar ${logoUrl ? "has-logo" : "is-example"}`}>
+                    {logoUrl ? <img src={logoUrl} alt="" /> : <span>{businessName ? businessName.charAt(0) : brandInitials}</span>}
+                  </span>
+                  <span className="brand-v144118-preview-account">
+                    <strong>{businessName || t("brand.brandSetup")}</strong>
+                    <small>{locale === "sv" ? "Sponsrat" : "Sponsored"}</small>
+                  </span>
+                  <span className="brand-v144118-preview-more" aria-hidden="true">•••</span>
+                </div>
+                <div className="brand-v144124-preview-media-frame">
+                  <div className="brand-v144124-preview-media">
+                    <img
+                      src="/brand-profile/brand-profile-preview-training-shorts-v144126.png"
+                      alt={locale === "sv" ? "Exempel på inlägg med träningsshorts" : "Example training shorts post"}
+                      className="brand-v144124-preview-image"
+                    />
+                    <span className={`brand-v144124-preview-logo-corner ${logoUrl ? "has-logo" : "is-example"}`}>
+                      {logoUrl ? (
+                        <img src={logoUrl} alt={t("brand.logoPreviewAlt")} />
+                      ) : (
+                        <small>{businessName || t("brand.brandSetup")}</small>
+                      )}
+                    </span>
+                  </div>
+                </div>
+                <div className="brand-v144118-preview-actions brand-v144124-preview-actions" aria-hidden="true">
+                  <span><Heart size={18} /></span>
+                  <span><MessageCircle size={18} /></span>
+                  <span><Send size={18} /></span>
+                  <span className="brand-v144118-preview-save"><Bookmark size={18} /></span>
+                </div>
+                <div className="brand-v144124-preview-caption-wrap">
+                  <p className="brand-v144124-preview-caption-text">
+                    <strong>{businessName || t("brand.brandSetup")}</strong> Move in comfort with lightweight unisex training shorts designed for active days, relaxed weekends and everyday wear.
+                  </p>
+                  <p className="brand-v144124-preview-hashtags">#activewear #trainingstyle #unisexshorts #comfortfirst</p>
+                </div>
+              </div>
+            </aside>
           </section>
         ) : null}
 

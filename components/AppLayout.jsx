@@ -116,9 +116,13 @@ function SidebarMenuIcon({ Icon }) {
 
 function SpreeloLogo() {
   return (
-    <span className="spreelo-logo-lockup" aria-label="Spreelo">
-      <span className="spreelo-logo-mark" aria-hidden="true">S</span>
-      <span className="spreelo-logo-word" aria-hidden="true">spreelo</span>
+    <span className="spreelo-logo-lockup spreelo-logo-lockup-official" aria-label="Spreelo">
+      <img
+        src="/brand/spreelologo-on-dark.png"
+        alt=""
+        className="spreelo-official-logo-image"
+        aria-hidden="true"
+      />
     </span>
   );
 }
