@@ -1,0 +1,226 @@
+/* v144.128 — premium animated loader with official Spreelo mark orbit */
+
+html body .workspace-loader-page {
+  background:
+    radial-gradient(circle at 82% 8%, rgba(255, 184, 155, 0.20), transparent 28%),
+    radial-gradient(circle at 10% 28%, rgba(168, 180, 236, 0.16), transparent 30%),
+    linear-gradient(180deg, rgba(241, 243, 249, 0.92), rgba(238, 241, 247, 0.98)),
+    url("/backgrounds/spreelo-plan-reference-magic-v95.svg") center/cover no-repeat,
+    var(--onboarding-canvas) !important;
+}
+
+html body .workspace-loader-card {
+  width: min(420px, calc(100vw - 34px)) !important;
+  min-height: 300px !important;
+  padding: 32px 34px 29px !important;
+  border-radius: 28px !important;
+  border: 1px solid rgba(255, 255, 255, 0.88) !important;
+  background: linear-gradient(145deg, rgba(255,255,255,.46), rgba(248,250,255,.24)) !important;
+  box-shadow: 0 28px 70px rgba(28, 41, 66, 0.12), inset 0 1px 0 rgba(255,255,255,.92) !important;
+  backdrop-filter: blur(28px) saturate(145%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(145%) !important;
+}
+
+html body .workspace-loader-card::before {
+  border-radius: 27px !important;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.56), rgba(255,255,255,0) 46%),
+    radial-gradient(circle at 88% 16%, rgba(255,193,170,.18), transparent 26%) !important;
+}
+
+html body .workspace-loader-brand {
+  min-height: 42px !important;
+}
+
+html body .workspace-loader-logo {
+  width: 152px !important;
+}
+
+html body .workspace-loader-motion {
+  position: relative !important;
+  width: 112px !important;
+  height: 112px !important;
+  margin: 24px auto 18px !important;
+  display: grid !important;
+  place-items: center !important;
+  isolation: isolate !important;
+}
+
+html body .workspace-loader-aura,
+html body .workspace-loader-ring,
+html body .workspace-loader-core {
+  position: absolute !important;
+}
+
+html body .workspace-loader-aura {
+  border-radius: 999px !important;
+  pointer-events: none !important;
+}
+
+html body .workspace-loader-aura.aura-one {
+  inset: 14px !important;
+  background: radial-gradient(circle, rgba(255,152,117,.18) 0%, rgba(255,152,117,0) 72%) !important;
+  filter: blur(10px) !important;
+}
+
+html body .workspace-loader-aura.aura-two {
+  inset: 6px !important;
+  background: radial-gradient(circle, rgba(148, 112, 255, .12) 0%, rgba(148,112,255,0) 70%) !important;
+  filter: blur(14px) !important;
+}
+
+html body .workspace-loader-ring {
+  inset: 9px !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(255,255,255,.28) !important;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.18) !important;
+  pointer-events: none !important;
+}
+
+html body .workspace-loader-ring::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: conic-gradient(from 120deg, rgba(255,128,99,.0) 0deg, rgba(255,128,99,.68) 62deg, rgba(143,109,255,.62) 190deg, rgba(143,109,255,0) 360deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
+  opacity: .9;
+}
+
+html body .workspace-loader-ring.ring-one {
+  animation: spreeloLoaderOrbitOne 9s linear infinite;
+}
+
+html body .workspace-loader-ring.ring-two {
+  inset: 20px !important;
+  opacity: .92;
+  animation: spreeloLoaderOrbitTwo 6.5s linear infinite;
+}
+
+html body .workspace-loader-ring.ring-two::before {
+  background: conic-gradient(from -45deg, rgba(255,255,255,0) 0deg, rgba(255,154,124,.84) 100deg, rgba(75,145,255,.42) 230deg, rgba(255,255,255,0) 360deg);
+}
+
+html body .workspace-loader-dot {
+  position: absolute !important;
+  width: 10px !important;
+  height: 10px !important;
+  border-radius: 999px !important;
+  box-shadow: 0 0 0 3px rgba(255,255,255,.32), 0 5px 16px rgba(60, 74, 104, 0.18) !important;
+}
+
+html body .workspace-loader-dot.dot-one {
+  top: -4px !important;
+  left: calc(50% - 5px) !important;
+  background: linear-gradient(145deg, #ff8a66, #ff5f59) !important;
+}
+
+html body .workspace-loader-dot.dot-two {
+  right: 8px !important;
+  bottom: 8px !important;
+  background: linear-gradient(145deg, #9d75ff, #6f64ff) !important;
+}
+
+html body .workspace-loader-dot.dot-three {
+  top: calc(50% - 4px) !important;
+  right: -4px !important;
+  width: 8px !important;
+  height: 8px !important;
+  background: linear-gradient(145deg, #ffd39b, #ff9d63) !important;
+}
+
+html body .workspace-loader-dot.dot-four {
+  left: 10px !important;
+  bottom: 10px !important;
+  width: 8px !important;
+  height: 8px !important;
+  background: linear-gradient(145deg, #6fd2ff, #7b9bff) !important;
+}
+
+html body .workspace-loader-core {
+  inset: 28px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 999px !important;
+  background: linear-gradient(150deg, rgba(255,255,255,.98), rgba(250,245,255,.88)) !important;
+  border: 1px solid rgba(255,255,255,.92) !important;
+  box-shadow: 0 12px 30px rgba(49, 63, 91, 0.12), inset 0 1px 0 rgba(255,255,255,.96) !important;
+  z-index: 2 !important;
+}
+
+html body .workspace-loader-core-mark {
+  width: 34px !important;
+  height: 34px !important;
+  object-fit: contain !important;
+  filter: drop-shadow(0 4px 10px rgba(150, 78, 255, 0.16)) !important;
+}
+
+html body .workspace-loader-copy {
+  text-align: center !important;
+}
+
+html body .workspace-loader-copy strong {
+  color: var(--onboarding-ink) !important;
+  font-size: 20px !important;
+  line-height: 1.2 !important;
+  letter-spacing: -.02em !important;
+}
+
+html body .workspace-loader-copy p {
+  color: var(--onboarding-muted) !important;
+  font-size: 13.8px !important;
+  line-height: 1.5 !important;
+}
+
+html body .workspace-loader-progress {
+  height: 5px !important;
+  margin-top: 16px !important;
+  border-radius: 999px !important;
+  background: rgba(204,211,223,.46) !important;
+  overflow: hidden !important;
+}
+
+html body .workspace-loader-progress span {
+  background: linear-gradient(90deg, #ff895f 0%, #ff5d78 52%, #a45dff 100%) !important;
+  box-shadow: 0 0 20px rgba(255,95,120,.25) !important;
+}
+
+@keyframes spreeloLoaderOrbitOne {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes spreeloLoaderOrbitTwo {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+
+@media (max-width: 560px) {
+  html body .workspace-loader-card {
+    min-height: 282px !important;
+    padding: 28px 24px 25px !important;
+  }
+
+  html body .workspace-loader-logo {
+    width: 144px !important;
+  }
+
+  html body .workspace-loader-motion {
+    width: 106px !important;
+    height: 106px !important;
+    margin: 22px auto 16px !important;
+  }
+
+  html body .workspace-loader-core {
+    inset: 27px !important;
+  }
+
+  html body .workspace-loader-copy strong {
+    font-size: 19px !important;
+  }
+
+  html body .workspace-loader-copy p {
+    font-size: 13.6px !important;
+  }
+}

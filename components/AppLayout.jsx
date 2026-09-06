@@ -15,7 +15,6 @@ import {
   Settings,
   Share2,
   ShieldCheck,
-  Sparkles,
   CreditCard,
   Globe2,
   UserRound,
@@ -611,10 +610,18 @@ export default function AppLayout({ active, children }) {
           {checkingSession || translationsLoading ? (
             <>
               <div className="workspace-loader-motion" aria-hidden="true">
-                <span className="workspace-loader-orbit orbit-one" />
-                <span className="workspace-loader-orbit orbit-two" />
+                <span className="workspace-loader-aura aura-one" />
+                <span className="workspace-loader-aura aura-two" />
+                <span className="workspace-loader-ring ring-one">
+                  <span className="workspace-loader-dot dot-one" />
+                  <span className="workspace-loader-dot dot-two" />
+                </span>
+                <span className="workspace-loader-ring ring-two">
+                  <span className="workspace-loader-dot dot-three" />
+                  <span className="workspace-loader-dot dot-four" />
+                </span>
                 <span className="workspace-loader-core">
-                  <Sparkles size={18} strokeWidth={2.2} />
+                  <img src="/brand/spreelo-mark.png" alt="" className="workspace-loader-core-mark" />
                 </span>
               </div>
               <div className="workspace-loader-copy">
