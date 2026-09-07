@@ -1,0 +1,66 @@
+/* Spreelo v144.133 — tightly scoped visual polish only.
+   1) Calm brand-analysis step tracker: neutral steps, coral current state, green only for completed check.
+   2) Home + Settings use the same 276px desktop sidebar width as the rest of the app.
+   No logo positioning, analysis modal layout, functionality, or other page styling is changed. */
+
+/* Brand analysis modal: remove the misaligned dotted connectors completely. */
+html body .brand-result-analysis .brand-result-analysis-steps span:not(:last-child)::after {
+  display: none !important;
+  content: none !important;
+}
+
+/* Keep every step field visually neutral so the tracker does not mix multiple competing palettes. */
+html body .brand-result-analysis .brand-result-analysis-steps span,
+html body .brand-result-analysis .brand-result-analysis-steps span.done,
+html body .brand-result-analysis .brand-result-analysis-steps span.current {
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html body .brand-result-analysis .brand-result-analysis-steps span {
+  color: #6b7788 !important;
+}
+
+/* Upcoming steps: one neutral grey treatment instead of violet/blue variants. */
+html body .brand-result-analysis .brand-result-analysis-steps span b {
+  border-color: #d8dee7 !important;
+  color: #6f7b8c !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+/* Completed: green is reserved for the small completion check only. */
+html body .brand-result-analysis .brand-result-analysis-steps span.done:not(.current) b {
+  border-color: #b9dcc9 !important;
+  color: #25845a !important;
+  background: #f7fcf9 !important;
+  box-shadow: none !important;
+}
+
+/* Current: Spreelo coral is the only strong accent in the tracker. */
+html body .brand-result-analysis .brand-result-analysis-steps span.current {
+  color: #17243a !important;
+  font-weight: 800 !important;
+}
+
+html body .brand-result-analysis .brand-result-analysis-steps span.current b {
+  border-color: #ef5a39 !important;
+  color: #ffffff !important;
+  background: #ef5a39 !important;
+  box-shadow: 0 0 0 4px rgba(239,90,57,.10) !important;
+}
+
+/* Home and Settings: match the 276px desktop shell/sidebar used by the other app pages. */
+@media (min-width: 801px) {
+  html body .app-shell.spreelo-shell:has(.settings-reference-page),
+  html body .app-shell.spreelo-shell:has(.home-reference-page) {
+    grid-template-columns: 276px minmax(0, 1fr) !important;
+  }
+
+  html body .app-shell.spreelo-shell:has(.settings-reference-page) > .sidebar.spreelo-sidebar,
+  html body .app-shell.spreelo-shell:has(.home-reference-page) > .sidebar.spreelo-sidebar {
+    width: 276px !important;
+    min-width: 276px !important;
+  }
+}

@@ -2181,7 +2181,7 @@ export default function BrandProfile() {
                     </div>
                   </div>
                   <div className="brand-result-analysis-progress">
-                    <div className="brand-analysis-current-icon"><Sparkles size={22} /></div>
+                    <div className="brand-analysis-current-icon"><Building2 size={22} /></div>
                     <div className="brand-analysis-current-copy">
                       <div className="brand-analysis-current-line">
                         <strong>{t(getCurrentAnalysisStage(analysisProgress).titleKey)}</strong>
