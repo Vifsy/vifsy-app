@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bookmark, Building2, Check, ChevronRight, Globe2, Heart, Languages, MessageCircle, Pencil, Send, ShieldCheck, Sparkles, Users, X } from "lucide-react";
+import { Bookmark, Building2, Check, ChevronRight, Globe2, Heart, Languages, MessageCircle, Pencil, Search, Send, ShieldCheck, Sparkles, Users, X } from "lucide-react";
 import AppLayout from "../../components/AppLayout";
 import { supabase } from "../../lib/supabaseClient";
 import { getValidAnalysisAccessToken } from "../../lib/analysisSession";
@@ -2181,7 +2181,7 @@ export default function BrandProfile() {
                     </div>
                   </div>
                   <div className="brand-result-analysis-progress">
-                    <div className="brand-analysis-current-icon"><Building2 size={22} /></div>
+                    <div className="brand-analysis-current-icon"><Search size={26} /></div>
                     <div className="brand-analysis-current-copy">
                       <div className="brand-analysis-current-line">
                         <strong>{t(getCurrentAnalysisStage(analysisProgress).titleKey)}</strong>
