@@ -186,6 +186,16 @@ export async function GET(request) {
     });
 
     const analysisCases = cases.filter((item) => item.case_type === "brand_analysis" && item.status !== "completed");
+    const openAnalysisCaseMap = new Map(analysisCases.map((item) => [item.brand_profile_id, item]));
+    const analysisBrandOptions = brands.map((brand) => ({
+      brand_profile_id: brand.id,
+      business_name: brand.business_name || "",
+      website_url: brand.website_url || "",
+      content_language: brand.content_language || "",
+      content_market: brand.content_market || "",
+      has_open_rescue: openAnalysisCaseMap.has(brand.id),
+      open_rescue_case_id: openAnalysisCaseMap.get(brand.id)?.id || null,
+    }));
     const annualCases = cases.filter((item) => item.case_type === "annual_calendar" && Number(item.target_year) === targetYear && item.status !== "completed");
     const completedAnnual = annualBrands.filter((item) => item.status === "completed").length;
     const manualAnnual = annualBrands.filter((item) => ["rescue_needed", "rescue_imported"].includes(item.status)).length;
@@ -201,6 +211,7 @@ export async function GET(request) {
         annualManual: manualAnnual,
       },
       analysisCases,
+      analysisBrandOptions,
       productFailures: (productResult.data || []).map((item) => ({
         ...item,
         brand: brandMap.get(item.brand_profile_id) || null,

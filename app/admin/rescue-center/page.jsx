@@ -61,6 +61,7 @@ export default function AdminRescueCenterPage() {
   const [busyId, setBusyId] = useState("");
   const [files, setFiles] = useState({});
   const [search, setSearch] = useState("");
+  const [manualBrandId, setManualBrandId] = useState("");
   const fileRefs = useRef({});
 
   async function load() {
@@ -95,6 +96,37 @@ export default function AdminRescueCenterPage() {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload?.error || "Kunde inte skapa års-rescue.");
     return payload?.rescueCase;
+  }
+
+  async function createAnalysisCase() {
+    if (!manualBrandId) {
+      setError("Välj ett varumärke först.");
+      return;
+    }
+    setBusyId(`manual-analysis:${manualBrandId}`);
+    setMessage("");
+    setError("");
+    try {
+      const headers = await getAdminHeaders();
+      const response = await fetch("/api/admin/rescue-center", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          action: "prepare_analysis_rescue",
+          brandProfileId: manualBrandId,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || "Kunde inte skapa analys-rescue.");
+      const selectedBrand = (data?.analysisBrandOptions || []).find((item) => item.brand_profile_id === manualBrandId);
+      setMessage(`Analys-rescue skapad för ${selectedBrand?.business_name || "varumärket"}. Du kan nu ladda upp rescue-ZIP-filen i ärendet nedan.`);
+      setManualBrandId("");
+      await load();
+    } catch (actionError) {
+      setError(actionError?.message || "Kunde inte skapa analys-rescue.");
+    } finally {
+      setBusyId("");
+    }
   }
 
   async function fetchBrief(caseId) {
@@ -375,6 +407,37 @@ export default function AdminRescueCenterPage() {
             {tab === "analysis" ? (
               <section className="rescue109-section">
                 <div className="rescue109-section-head"><div><span>WEBBPLATSANALYS</span><h2>Analyser som behöver manuell hjälp</h2><p>Spreelo skapar ett strukturerat ChatGPT-underlag. Importen granskas här innan profilen och kalendern aktiveras.</p></div></div>
+
+                <div className="rescue132-manual-create">
+                  <div className="rescue132-manual-copy">
+                    <span>MANUELLT RESCUEÄRENDE</span>
+                    <strong>Skapa analys-rescue för valfritt varumärke</strong>
+                    <p>Använd detta för demo, test eller när du vill importera ett färdigt rescuepaket utan att först tvinga fram ett webbplatsfel.</p>
+                  </div>
+                  <div className="rescue132-manual-controls">
+                    <label>
+                      <span>Varumärke</span>
+                      <select value={manualBrandId} onChange={(event) => setManualBrandId(event.target.value)}>
+                        <option value="">Välj varumärke…</option>
+                        {(data?.analysisBrandOptions || []).map((brand) => (
+                          <option key={brand.brand_profile_id} value={brand.brand_profile_id}>
+                            {brand.business_name || "Namnlöst varumärke"}{brand.website_url ? ` — ${brand.website_url}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      className="rescue109-primary rescue132-create-button"
+                      disabled={!manualBrandId || busyId === `manual-analysis:${manualBrandId}`}
+                      onClick={createAnalysisCase}
+                    >
+                      {busyId === `manual-analysis:${manualBrandId}` ? <LoaderCircle className="rescue109-spin" size={16} /> : <FileJson2 size={16} />}
+                      Skapa analys-rescue
+                    </button>
+                  </div>
+                </div>
+
                 {(data?.analysisCases || []).length ? (data.analysisCases.map((rescueCase) => {
                   const meta = statusMeta(rescueCase.status);
                   return <article className="rescue109-case" key={rescueCase.id}>
