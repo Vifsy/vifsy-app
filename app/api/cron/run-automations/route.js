@@ -33483,7 +33483,7 @@ function buildWebsiteItemEditorialPostImagePrompt(
   ).trim();
   const editorialCopy = deriveEditorialVisibleCopy(rule, postContent);
   const placementText = placement
-    ? `The exact locked product will later be composited at approximately x=${Math.round((placement.left / 1024) * 100)}%–${Math.round(((placement.left + placement.width) / 1024) * 100)}% and y=${Math.round((placement.top / 1280) * 100)}%–${Math.round(((placement.top + placement.height) / 1280) * 100)}% of the final 4:5 canvas.`
+    ? `Reserve approximately x=${Math.round((placement.left / 1024) * 100)}%–${Math.round(((placement.left + placement.width) / 1024) * 100)}% and y=${Math.round((placement.top / 1280) * 100)}%–${Math.round(((placement.top + placement.height) / 1280) * 100)}% of the final 4:5 canvas for the original product that Spreelo will add afterwards.`
     : "";
 
   const exactCopyBlock = `
@@ -33496,25 +33496,62 @@ ${editorialCopy.supportingLine ? `- Supporting line, exact spelling: "${editoria
 - If a text element is marked as not required, omit it instead of inventing a replacement.
 `.trim();
 
-  const productHandling = nativeTransparent
-    ? `
-PRODUCT FIDELITY MODE — NATIVE TRANSPARENT ORIGINAL:
-- The exact original website product will be composited back into the final image after generation.
-- Do not draw, redraw, duplicate or partially recreate the product yourself.
-- Reserve clean space for the product and design the scene, atmosphere and typography around that future placement so the final result feels naturally art-directed as one composition.
-- Keep the reserved product zone completely free of text and major visual objects.
-- Background ambience, lighting falloff and environmental context may support the product area, but the product silhouette itself must remain empty for later compositing.
-${placementText}
-`.trim()
-    : `
-PRODUCT FIDELITY MODE — SOURCE IMAGE HAS NO USABLE TRANSPARENCY:
-- The supplied image is the verified product-page reference for the exact sold product.
-- Ignore the source photo's old background as a design constraint.
-- Recreate the marketed product inside the new 4:5 composition as faithfully as possible.
-- Preserve the visible silhouette, viewing angle, proportions, exact visible color/variant, materials, panels, seams, stitching, hardware, fasteners, laces, wheel count, handles, logos, printed words, graphics and other identity-defining details.
-- Do not invent an alternate model, colorway, accessory, package, extra product or hidden detail.
-- Keep the product recognizably the same verified item; the new creative freedom belongs to the background, lighting and editorial composition, not to the product identity.
+  if (nativeTransparent) {
+    return `
+Create the BACKGROUND + TYPOGRAPHY LAYER for one premium portrait 4:5 social-media product post.
+
+Spreelo already has the exact original product as a transparent asset. The product itself is NOT part of this generation. Spreelo will place that original product into the finished image afterwards.
+
+Brand profile:
+${brandProfileText}
+
+Product context for choosing a suitable background and typography:
+- Product name: ${productTitle || "Verified website product"}
+- Product brand: ${productBrand || rule?.brand_profile?.business_name || "Not provided"}
+- Product category/context: ${websiteItemText}
+
+Platform: ${rule.platform || "Instagram"}
+Tone: ${rule.tone || "Professional"}
+Language context: ${rule.language || rule?.content_language || "Auto"}
+Website URL: ${rule.brand_profile?.website_url || "Not provided"}
+
+${formatCampaignVisualContextForPrompt(rule)}
+
+Post copy/context the image should support:
+${postContent || "Not provided"}
+
+${exactCopyBlock}
+
+${customVisualDirection ? `Additional visual direction:
+${customVisualDirection}
+
+If this direction contains legacy instructions saying that Product posts must be text-free, use a pre-made background library, preserve the old website-photo background, or generate/recreate the product, ignore those legacy parts. This transparent-original contract is authoritative.` : ""}
+
+TRANSPARENT-ORIGINAL COMPOSITION CONTRACT:
+- Output one 1024×1280 portrait 4:5 image layer.
+- Generate only the background/environment and the visible typography.
+- The generated layer must not contain the product or a stand-in for the product. The exact original transparent product will be added afterwards by Spreelo.
+- ${placementText}
+- Keep that reserved product area visually clear and free of text or foreground objects so the original product can be placed there cleanly.
+- Choose a background that suits this exact product, its category, colors, brand and campaign context.
+- Let the typography style adapt freely to the product and background: modern sans, condensed display, refined serif, editorial type or another professional choice that genuinely fits.
+- Mobile readability is mandatory. Do not use microtext.
+- Keep the visual copy concise and balanced: normally 2–3 visible text elements total.
+- If a headline is supplied above, use that exact headline as written.
+- Show the exact verified product name/model clearly as its own readable element.
+- If a supporting line is supplied above, use it once as written. If none is supplied, omit it rather than inventing a new one.
+- Prefer larger type and fewer words over extra copy.
+- Keep the main text primarily in the lower portion of the 4:5 image and outside the reserved product area.
+- No CTA button, no "SHOP NOW", no fake UI, no price, no star rating, no invented discount, no invented guarantee, no invented material/specification and no unsupported performance claim.
+- If an exact authorized customer-supplied campaign offer is explicitly present in the campaign context, it may be shown exactly as supplied and must not be altered.
+- Do not put text inside white cards, opaque panels, labels, capsules or large text boxes. Typography should feel integrated directly into the design.
+- Preserve campaign identity when this is a calendar-campaign post; do not introduce a competing holiday, season, named campaign or occasion.
+- Keep all important text content inside safe social-media margins.
+- The finished background-and-typography layer should feel premium and intentionally designed for the exact product that will be composited into it.
+
+Return only the background-and-typography image layer.
 `.trim();
+  }
 
   return `
 Create one finished premium portrait 4:5 PRODUCT POST for social media.
@@ -33550,7 +33587,13 @@ ${customVisualDirection}
 
 If this direction contains legacy instructions saying that Product posts must be text-free, use a pre-made background library, or preserve the old website-photo background, ignore those legacy parts. The Product Post contract in this prompt is authoritative.` : ""}
 
-${productHandling}
+PRODUCT FIDELITY MODE — SOURCE IMAGE HAS NO USABLE TRANSPARENCY:
+- The supplied image is the verified product-page reference for the exact sold product.
+- Ignore the source photo's old background as a design constraint.
+- Recreate the marketed product inside the new 4:5 composition as faithfully as possible.
+- Preserve the visible silhouette, viewing angle, proportions, exact visible color/variant, materials, panels, seams, stitching, hardware, fasteners, laces, wheel count, handles, logos, printed words, graphics and other identity-defining details.
+- Do not invent an alternate model, colorway, accessory, package, extra product or hidden detail.
+- Keep the product recognizably the same verified item; the new creative freedom belongs to the background, lighting and editorial composition, not to the product identity.
 
 AUTHORITATIVE PRODUCT-POST DESIGN CONTRACT:
 - Output one 1024×1280 portrait 4:5 image.
