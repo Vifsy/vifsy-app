@@ -490,7 +490,7 @@ function groupOperationalPlans(rules = []) {
   }
   return Array.from(groups.values()).map((group) => {
     const platforms = Array.from(new Set(group.rules.map((rule) => String(rule?.platform || "").trim()).filter(Boolean)));
-    const contentTypes = Array.from(new Set(group.rules.map((rule) => String(rule?.content_type_id || rule?.content_type_label || rule?.post_type || "").trim()).filter(Boolean)));
+    const contentTypes = Array.from(new Set(group.rules.map((rule) => String(rule?.content_type_label || rule?.content_type_id || rule?.post_type || "").trim()).filter(Boolean)));
     const weeklySlots = new Set(
       group.rules
         .filter((rule) => rule?.schedule_type === "weekly")
