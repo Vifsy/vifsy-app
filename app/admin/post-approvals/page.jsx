@@ -73,6 +73,24 @@ function getGenerationCostEvents(post) {
     : [];
 }
 
+function formatGenerationCostEventLabel(event) {
+  const provider = String(event?.provider || "provider").toUpperCase();
+  const model = String(event?.model || event?.service || "API");
+  const operation = String(event?.operation || "").trim();
+  const operationLabels = {
+    "images.edit": "image edit",
+    "images.generate": "image generate",
+    "responses.background": "background response",
+    "responses.create": "response",
+    "responses.retrieve": "response retrieve",
+    "chat.completions.create": "chat completion",
+    "image_to_video": "image-to-video",
+    "render_video": "video render",
+  };
+  const operationLabel = operationLabels[operation] || operation.replaceAll(".", " ");
+  return [provider, model, operationLabel].filter(Boolean).join(" · ");
+}
+
 function statusMeta(status, t) {
   if (status === "planned") return { label: "Kommande", className: "pending", Icon: Clock3 };
   if (status === "creating") return { label: t("admin.approvals.statusCreating"), className: "pending", Icon: LoaderCircle };
@@ -1528,7 +1546,7 @@ KRAV PÅ image_url: direkt HTTPS-bild från kundens webbplats eller dess riktiga
                       <div className="admin-v14412-cost-events">
                         {getGenerationCostEvents(selectedPost).map((event, index) => (
                           <div key={`${event.provider || "provider"}-${event.provider_request_id || index}`}>
-                            <span>{String(event.provider || "").toUpperCase()} · {event.model || event.service || event.operation || "API"}</span>
+                            <span>{formatGenerationCostEventLabel(event)}</span>
                             <strong>{event.amount == null ? `${Number(event.usage_quantity || 0).toFixed(4)} ${event.usage_unit || "units"}` : formatNativeMoney(event.amount, event.currency)}</strong>
                           </div>
                         ))}

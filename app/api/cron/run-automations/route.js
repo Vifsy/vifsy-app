@@ -46,7 +46,7 @@ import {
 } from "../../../../lib/shotstack.js";
 import { submitKlingImageToVideo } from "../../../../lib/kling.js";
 import { selectBestVideoMusic } from "../../../../lib/videoMusicLibrary.js";
-import { createGenerationCostTracker, wrapOpenAIForCostTracking } from "../../../../lib/generationCostTracking.js";
+import { createGenerationCostTracker, ensureOpenAIResponseCostTracked, wrapOpenAIForCostTracking } from "../../../../lib/generationCostTracking.js";
 import {
   buildVideoBackgroundProfile,
   chooseVideoBackground,
@@ -33917,7 +33917,7 @@ async function createWebsiteItemEditorialTypographyOverlay({
   throw lastError || new Error("Editorial transparent typography generation failed");
 }
 
-export async function generateWebsiteItemEditorialPostImage(openai, rule, postContent) {
+export async function generateWebsiteItemEditorialPostImage(openai, rule, postContent, costTracker = null) {
   const sourceImageUrl = rule?.website_item?.image_url;
   if (!sourceImageUrl) {
     throw new Error("Product post requires a verified website product image");
@@ -33960,12 +33960,19 @@ export async function generateWebsiteItemEditorialPostImage(openai, rule, postCo
       { type: "image/png" }
     );
 
-    const response = await openai.images.edit({
+    const imageRequest = {
       model: IMAGE_MODEL,
       image: referenceFile,
       prompt,
       size: "1024x1280",
       quality: "medium",
+    };
+    const response = await openai.images.edit(imageRequest);
+    await ensureOpenAIResponseCostTracked({
+      tracker: costTracker,
+      operation: "images.edit",
+      request: imageRequest,
+      response,
     });
     const imageBase64 = response?.data?.[0]?.b64_json;
     if (!imageBase64) {
@@ -34008,12 +34015,19 @@ export async function generateWebsiteItemEditorialPostImage(openai, rule, postCo
     { type: "image/png" }
   );
 
-  const response = await openai.images.edit({
+  const imageRequest = {
     model: IMAGE_MODEL,
     image: referenceFile,
     prompt,
     size: "1024x1280",
     quality: "medium",
+  };
+  const response = await openai.images.edit(imageRequest);
+  await ensureOpenAIResponseCostTracked({
+    tracker: costTracker,
+    operation: "images.edit",
+    request: imageRequest,
+    response,
   });
   const imageBase64 = response?.data?.[0]?.b64_json;
   if (!imageBase64) {
@@ -34244,7 +34258,7 @@ Output only the image.
 `.trim();
 }
 
-export async function generateWebsiteItemAdImage(openai, rule, postContent) {
+export async function generateWebsiteItemAdImage(openai, rule, postContent, costTracker = null) {
   const sourceImageUrl = rule?.website_item?.image_url;
 
   if (!sourceImageUrl) {
@@ -34278,12 +34292,19 @@ export async function generateWebsiteItemAdImage(openai, rule, postContent) {
     { type: "image/png" }
   );
 
-  const response = await openai.images.edit({
+  const imageRequest = {
     model: IMAGE_MODEL,
     image: referenceFile,
     prompt,
     size: "1024x1280",
     quality: "medium",
+  };
+  const response = await openai.images.edit(imageRequest);
+  await ensureOpenAIResponseCostTracked({
+    tracker: costTracker,
+    operation: "images.edit",
+    request: imageRequest,
+    response,
   });
 
   const imageBase64 = response?.data?.[0]?.b64_json;
@@ -34298,13 +34319,20 @@ export async function generateWebsiteItemAdImage(openai, rule, postContent) {
   };
 }
 
-export async function generateAutomationImage(openai, rule, postContent) {
+export async function generateAutomationImage(openai, rule, postContent, costTracker = null) {
   const prompt = buildImagePrompt(rule, postContent);
 
-const response = await openai.images.generate({
+const imageRequest = {
     model: IMAGE_MODEL,
     prompt,
     size: "1024x1024",
+  };
+  const response = await openai.images.generate(imageRequest);
+  await ensureOpenAIResponseCostTracked({
+    tracker: costTracker,
+    operation: "images.generate",
+    request: imageRequest,
+    response,
   });
 
   const imageBase64 = response?.data?.[0]?.b64_json;
@@ -45038,7 +45066,8 @@ product_research_model_used: websitePreparedRule.uses_website_content
             const { imageBase64, imagePrompt } = await generateWebsiteItemAdImage(
               openai,
               ruleWithBrandProfile,
-              generatedContent
+              generatedContent,
+              activeGenerationCostTracker
             );
 
             const uploadedImage = await uploadGeneratedImageToStorage({
@@ -45176,7 +45205,8 @@ product_research_model_used: websitePreparedRule.uses_website_content
             const generatedProductPost = await generateWebsiteItemEditorialPostImage(
               openai,
               editorialRuleWithBrandProfile,
-              generatedContent
+              generatedContent,
+              activeGenerationCostTracker
             );
 
             const uploadedProductPost = await uploadGeneratedImageToStorage({
@@ -45397,7 +45427,8 @@ product_research_model_used: websitePreparedRule.uses_website_content
     const { imageBase64, imagePrompt } = await generateAutomationImage(
       openai,
       ruleWithBrandProfile,
-      generatedContent
+      generatedContent,
+      activeGenerationCostTracker
     );
 
     const uploadedImage = await uploadGeneratedImageToStorage({

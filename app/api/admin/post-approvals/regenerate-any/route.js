@@ -240,7 +240,7 @@ export async function POST(request) {
         includeLogo = false;
       } else {
         try {
-          const generated = await generateAutomationImage(openai, enhancedRule, generatedContent);
+          const generated = await generateAutomationImage(openai, enhancedRule, generatedContent, costTracker);
           const uploaded = await uploadPng(context.admin, {
             userId,
             postId: post.id,

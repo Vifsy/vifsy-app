@@ -7,6 +7,42 @@ const VISIBLE_STATUSES = new Set(["pending_approval", "approved", "rejected", "f
 const REVIEW_STATUSES = new Set(["new", "reviewing", "resolved"]);
 const REFUND_STATUSES = new Set(["pending_review", "approved", "declined", "credited"]);
 
+function getAdminMissingExpectedCostEvents(post, summary) {
+  const events = Array.isArray(summary?.breakdown?.events) ? summary.breakdown.events : [];
+  const missing = Array.isArray(summary?.breakdown?.missing_expected_events)
+    ? [...summary.breakdown.missing_expected_events]
+    : [];
+  const addMissing = (value) => {
+    if (!missing.includes(value)) missing.push(value);
+  };
+
+  const imageModel = String(post?.image_model_used || "").trim().toLowerCase();
+  const imageStatus = String(post?.image_status || "").trim().toLowerCase();
+  const imageExpected =
+    imageModel.startsWith("gpt-image-2") &&
+    !["", "none", "failed", "not_required", "not-required"].includes(imageStatus);
+  if (imageExpected) {
+    const hasImageEvent = events.some((event) =>
+      String(event?.provider || "").toLowerCase() === "openai" &&
+      String(event?.model || "").toLowerCase().startsWith("gpt-image-2") &&
+      (String(event?.service || "").toLowerCase() === "image_generation" ||
+        ["images.generate", "images.edit"].includes(String(event?.operation || "")))
+    );
+    if (!hasImageEvent) addMissing("openai:gpt-image-2:image_generation");
+  }
+
+  const videoProvider = String(post?.video_provider || "").trim().toLowerCase();
+  const videoStatus = String(post?.video_status || "").trim().toLowerCase();
+  const videoExpected =
+    ["kling", "shotstack"].includes(videoProvider) &&
+    !["", "none", "failed", "not_required", "not-required"].includes(videoStatus);
+  if (videoExpected && !events.some((event) => String(event?.provider || "").toLowerCase() === videoProvider)) {
+    addMissing(`${videoProvider}:video_generation`);
+  }
+
+  return missing;
+}
+
 export async function GET(request) {
   const context = await getAdminContext(request);
   if (context.error) return adminContextError(context);
@@ -16,7 +52,7 @@ export async function GET(request) {
   const testBatch = String(url.searchParams.get("testBatch") || "").trim();
 
   const postSelect =
-    "id, user_id, brand_profile_id, automation_rule_id, status, content, platform, post_type, content_type_id, content_format, image_url, image_storage_path, image_status, image_prompt, video_url, video_status, video_error, video_provider, video_duration_seconds, video_background_selection, kling_prompt, kling_reference_image_url, kling_task_id, scheduled_for, created_at, updated_at, approved_at, approval_token, approval_email_sent_at, admin_review_status, admin_reviewed_at, admin_review_note, admin_product_items, admin_archived_at, website_url, is_admin_test, admin_test_batch_id, admin_test_job_key";
+    "id, user_id, brand_profile_id, automation_rule_id, status, content, platform, post_type, content_type_id, content_format, text_model_used, image_model_used, image_url, image_storage_path, image_status, image_prompt, video_url, video_status, video_error, video_provider, video_duration_seconds, video_background_selection, kling_prompt, kling_reference_image_url, kling_task_id, scheduled_for, created_at, updated_at, approved_at, approval_token, approval_email_sent_at, admin_review_status, admin_reviewed_at, admin_review_note, admin_product_items, admin_archived_at, website_url, is_admin_test, admin_test_batch_id, admin_test_job_key";
 
   let query = context.admin
     .from("posts")
@@ -475,13 +511,20 @@ export async function GET(request) {
 
   return Response.json({
     ok: true,
-    posts: [...postRows.map((item) => ({
+    posts: [...postRows.map((item) => {
+      const generationSummary = generationCostMap[item.id] || null;
+      const missingExpectedCostEvents = getAdminMissingExpectedCostEvents(item, generationSummary);
+      const generationBreakdown = generationSummary?.breakdown || {};
+      return ({
       ...item,
-      generation_cost_amount: generationCostMap[item.id]?.amount ?? null,
-      generation_cost_currency: generationCostMap[item.id]?.currency || null,
-      generation_cost_complete: generationCostMap[item.id]?.complete === true,
-      generation_cost_breakdown: generationCostMap[item.id]?.breakdown || {},
-      generation_cost_updated_at: generationCostMap[item.id]?.updated_at || null,
+      generation_cost_amount: generationSummary?.amount ?? null,
+      generation_cost_currency: generationSummary?.currency || null,
+      generation_cost_complete: generationSummary?.complete === true && missingExpectedCostEvents.length === 0,
+      generation_cost_breakdown: {
+        ...generationBreakdown,
+        missing_expected_events: missingExpectedCostEvents,
+      },
+      generation_cost_updated_at: generationSummary?.updated_at || null,
       content_type_id: ruleMap[item.automation_rule_id]?.content_type_id || null,
       content_type_label: ruleMap[item.automation_rule_id]?.content_type_label || item.post_type || null,
       is_admin_test: item.is_admin_test === true || ruleMap[item.automation_rule_id]?.is_admin_test === true,
@@ -519,7 +562,8 @@ export async function GET(request) {
             };
           })()
         : (workItemByPost.get(item.id)?.status === "failed" ? workItemFailure(workItemByPost.get(item.id)) : null),
-    })), ...orphanFailures.map((occurrence) => ({
+      });
+    }), ...orphanFailures.map((occurrence) => ({
       id: `occurrence-${occurrence.id}`,
       occurrence_id: occurrence.id,
       user_id: occurrence.user_id,

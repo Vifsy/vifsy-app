@@ -39,9 +39,10 @@ assert(tracker.includes('const USD = "USD"'), "current provider billing currency
 
 assert(tracker.includes('"gpt-4.1-mini": { input: 0.4, cachedInput: 0.1, output: 1.6 }'), "GPT-4.1 mini token rates are pinned");
 assert(tracker.includes('"gpt-5.5": { input: 5, cachedInput: 0.5, output: 30'), "GPT-5.5 token rates are pinned");
-assert(tracker.includes('"gpt-image-2": { textInput: 5, cachedTextInput: 1.25, imageInput: 8, cachedImageInput: 2, imageOutput: 30 }'), "GPT-Image-2 text/image/cache/output rates are pinned");
+assert(tracker.includes('"gpt-image-2": { textInput: 2.5, cachedTextInput: 0.625, imageInput: 4, cachedImageInput: 1, imageOutput: 15 }'), "GPT-Image-2 text/image/cache/output rates are pinned to current API pricing");
 assert(tracker.includes("OPENAI_WEB_SEARCH_USD_PER_CALL = 0.01"), "OpenAI web-search tool executions are included");
 assert(tracker.includes('countResponseToolCalls(response, "web_search_call")'), "web-search cost uses actual response tool-call count");
+assert(tracker.includes("GPT_4_1_MINI_WEB_SEARCH_CONTENT_TOKENS_PER_CALL = 8_000"), "GPT-4.1 mini web search includes the provider-billed fixed 8k search-content token block");
 assert(tracker.includes("input_tokens_details?.cached_tokens") || tracker.includes("usage?.input_tokens_details?.cached_tokens"), "cached OpenAI text tokens use actual response usage");
 assert(tracker.includes("cached_tokens_details"), "GPT-Image cache split is used when the provider reports it");
 assert(tracker.includes("refused to guess the monetary amount"), "ambiguous provider billing is marked partial instead of guessed");
@@ -73,6 +74,11 @@ assert(manualBind.includes('.eq("user_id", user.id)') && manualBind.includes("at
 assert(tracker.includes("attachGenerationSessionCostsToPost"), "manual generation sessions can be bound to saved posts in the admin-only ledger");
 
 assert(tracker.includes("Generation cost tracking failed without affecting generation") || runtime.includes("cost tracking failed without affecting"), "cost metering failures are non-fatal to generation");
+assert(tracker.includes('"responses.retrieve"'), "final background Responses retrieval is tracked");
+assert(tracker.includes('operation: "responses.background"'), "background create/retrieve share one canonical ledger operation");
+assert(!tracker.includes("ignoreDuplicates: true"), "final provider usage can update an earlier partial ledger row");
+assert(tracker.includes("missing_expected_events"), "cost summary records missing expected provider events instead of incorrectly marking them exact");
+assert(runtime.includes("ensureOpenAIResponseCostTracked"), "critical image generators explicitly retry cost recording without extra provider calls");
 
 if (process.exitCode) process.exit(process.exitCode);
 console.log("v144.12 exact generation cost tracking static checks passed.");

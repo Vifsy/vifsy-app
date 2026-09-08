@@ -345,7 +345,7 @@ export async function POST(request) {
       videoStoragePath = rendered.videoStoragePath;
       videoRenderId = rendered.renderId;
     } else if (isAiProductAd) {
-      const generated = await generateWebsiteItemAdImage(openai, enhancedRule, generatedContent);
+      const generated = await generateWebsiteItemAdImage(openai, enhancedRule, generatedContent, costTracker);
       const uploaded = await uploadPng(context.admin, {
         userId: repairUserId,
         postId: post.id,
@@ -374,7 +374,8 @@ export async function POST(request) {
       const generated = await generateWebsiteItemEditorialPostImage(
         openai,
         enhancedRule,
-        generatedContent
+        generatedContent,
+        costTracker
       );
       const uploaded = await uploadPng(context.admin, {
         userId: post.user_id,
