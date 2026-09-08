@@ -14,6 +14,7 @@ import {
   getCarouselProductLabelPresentation,
   renderCarouselProductSlideImage,
   resolveLockedProductUrlForUse,
+  shouldUseLogoForEditorialProductPost,
   shouldUseLogoForRule,
 } from "../../../cron/run-automations/route.js";
 
@@ -249,7 +250,9 @@ export async function POST(request) {
     const isAnimated = String(enhancedRule.content_format || "").toLowerCase() === "animated_video";
     const isAiProductAd = String(enhancedRule.content_type_id || "") === "website_item_text_ad";
     const isEditorialProductPost = String(enhancedRule.content_type_id || "") === "website_item";
-    const includeLogo = shouldUseLogoForRule(enhancedRule, brandProfile);
+    const includeLogo = isEditorialProductPost
+      ? shouldUseLogoForEditorialProductPost(enhancedRule, brandProfile)
+      : shouldUseLogoForRule(enhancedRule, brandProfile);
     const now = new Date().toISOString();
 
     // A terminal generation failure may not have produced a posts row at all.

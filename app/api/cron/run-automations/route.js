@@ -33307,8 +33307,8 @@ async function prepareNativeTransparentEditorialReference(sourceImageBuffer) {
   const width = 1024;
   const height = 1280;
   const productAreaTop = 42;
-  const productAreaHeight = 825;
-  const productMaxWidth = 904;
+  const productAreaHeight = 760;
+  const productMaxWidth = 860;
   const native = await extractNativeTransparentProductAsset(sourceImageBuffer);
 
   const metadata = await sharp(native.cutoutBuffer).metadata();
@@ -33485,7 +33485,7 @@ function deriveEditorialVisibleCopy(rule, postContent) {
 function buildWebsiteItemEditorialPostImagePrompt(
   rule,
   postContent,
-  { nativeTransparent = false, lockedPlacement = null } = {}
+  { nativeTransparent = false } = {}
 ) {
   const brandProfileText = formatBrandProfileForPrompt(rule.brand_profile);
   const websiteItemText = formatWebsiteItemForPrompt(rule.website_item);
@@ -33500,37 +33500,35 @@ function buildWebsiteItemEditorialPostImagePrompt(
       ""
   ).trim();
   const editorialCopy = deriveEditorialVisibleCopy(rule, postContent);
-  const lockedPlacementSummary = lockedPlacement
-    ? `- The final product will be composited later in a centered upper/middle hero position. Keep that upper/middle area visually open and balanced so the product sits naturally and remains the clear hero.
-- Keep all typography clearly below the future product footprint with a clearly visible gap between the product and the first line of text.
-- Do not draw any placeholder, outline, frame, guide, bounding box or visible marker for the future product position.`
-    : '- The final product will be added later in the central upper/middle area. Keep that area visually open and keep all typography clearly below it.';
-
   const exactCopyBlock = `
 VISIBLE COPY CONTRACT:
 ${editorialCopy.headline ? `- Headline, exact spelling: "${editorialCopy.headline}"` : "- Headline: create exactly one short unique editorial headline in the same language as the post. It must be concise, premium and product-specific rather than generic."}
 - Product name/model, exact spelling: "${editorialCopy.productName || productTitle || "Featured product"}"
-${editorialCopy.supportingLine ? `- Supporting line, exact spelling: "${editorialCopy.supportingLine}"` : "- Supporting line: optional. If you add one, keep it to a single short supporting sentence. Otherwise omit it."}
-- If a headline or supporting line is marked with exact spelling above, preserve that spelling exactly.
+- Use exactly two visible text roles only: one headline and the exact product/model name.
+- Do not add a supporting sentence, third line of copy, CTA, URL, microcopy or filler text.
+- If a headline is supplied above, preserve its spelling exactly.
 - If a headline is not pre-authored above, invent only that one headline and keep the rest restrained.
 - Do not invent alternate wording for any exact supplied text.
-- Do not add extra slogans, filler microcopy, CTA copy or spelling changes.
-- If a text element is marked as optional and you do not need it, omit it instead of inventing more copy.
+- Do not add extra slogans or spelling changes.
 `.trim();
 
   if (nativeTransparent) {
     return `
-Create the BACKGROUND + TYPOGRAPHY LAYER for one premium portrait 4:5 social-media product post.
+Create one finished premium portrait 4:5 PRODUCT POST for social media.
 
-Spreelo already has the exact original product as a transparent asset. Create the finished background-and-typography layer; Spreelo adds the original product afterwards.
+This is an editorial/product-feature post, NOT a hard-sell advertisement.
 
 Brand profile:
 ${brandProfileText}
 
-Product context for choosing a suitable background and typography:
-- Product name: ${productTitle || "Verified website product"}
-- Product brand: ${productBrand || rule?.brand_profile?.business_name || "Not provided"}
-- Product category/context: ${websiteItemText}
+Verified website product:
+${websiteItemText}
+
+Exact product name to preserve when shown:
+${productTitle || "Use the verified product name from the supplied website item."}
+
+Product brand:
+${productBrand || "Use only verified branding visible in the supplied product information."}
 
 Platform: ${rule.platform || "Instagram"}
 Tone: ${rule.tone || "Professional"}
@@ -33547,42 +33545,45 @@ ${exactCopyBlock}
 ${customVisualDirection ? `Additional visual direction:
 ${customVisualDirection}
 
-If this direction contains legacy instructions saying that Product posts must be text-free, use a pre-made background library, preserve the old website-photo background, or generate/recreate the product, ignore those legacy parts. This transparent-original contract is authoritative.` : ""}
+If this direction contains legacy instructions saying that Product posts must be text-free, use a pre-made background library, preserve the old website-photo background, generate a separate text layer, or place the product later outside the image generation, ignore those legacy parts. This finished Product Post contract is authoritative.` : ""}
 
-TRANSPARENT-ORIGINAL COMPOSITION CONTRACT:
-- Output one 1024×1280 portrait 4:5 image layer.
-- Generate one continuous full-bleed editorial background from edge to edge plus the visible typography.
-- Spreelo will add the exact original transparent product afterwards.
-- Use natural negative space through the upper and middle part of the background so the original product can sit there cleanly when added.
-- ${lockedPlacementSummary}
-- Keep all visible typography completely outside the future product area while leaving that area visually open and unmarked.
-- Typography must live as one balanced centered stack in the lower part of the composition, below the product area, with generous margins and a natural editorial hierarchy.
-- Leave real breathing room between the product footprint and the top line of typography so the product never appears to cover, cut through or sit on top of the text.
-- Keep the bottom text block contained to a comfortable central column; do not create a nearly full-width headline.
-- Treat the canvas as one uninterrupted finished background composition.
-- Choose a background that suits this exact product, its category, colors, brand and campaign context.
+PRODUCT FIDELITY MODE — SOURCE IMAGE HAS REAL TRANSPARENCY:
+- The supplied reference already contains the exact original product placed inside the 4:5 working canvas.
+- Preserve that exact product unchanged. Do not redraw, replace, restyle, recolor, reshape, crop, rotate, mirror, move, shrink, enlarge or cover the product.
+- Preserve the exact visible silhouette, angle, proportions, variant, materials, seams, hardware, logos, printed words, printed graphics and all identity-defining details.
+- Create the finished editorial composition around that already-placed exact product in this same single image generation.
+- Do not output a separate background-only image, separate typography-only image, separate layer sheet or later-placement mockup.
+
+AUTHORITATIVE PRODUCT-POST DESIGN CONTRACT:
+- Output one 1024×1280 portrait 4:5 image.
+- Make the verified product the clear hero and keep it in the upper portion with generous visual space.
+- Create a fresh background specifically suited to this exact product, its category, colors and mood. It may be studio, architectural, lifestyle, outdoors, premium editorial or another fitting environment.
+- Background, lighting, product placement and typography must feel intentionally art-directed as one coherent image, not like separate layers or a generic template.
 - Let the typography style adapt freely to the product and background: modern sans, condensed display, refined serif, editorial type or another professional choice that genuinely fits.
 - Mobile readability is mandatory. Do not use microtext.
 - Keep the main headline short and premium: ideally 2 to 5 words, at most 2 lines, and clearly narrower than the full image width.
 - Avoid generic headline formulas like "Built for...", "Made for...", "Discover...", "Shop..." or storefront CTAs. When you need to create a headline, make it feel specific to this exact product.
-- Keep the visual copy concise and balanced: normally 2–3 visible text elements total.
+- Keep the visual copy concise and balanced: exactly 2 visible text roles total — headline + exact product/model name.
 - If a headline is supplied above, use that exact headline as written.
-- Show the exact verified product name/model clearly as its own readable element.
-- If a supporting line is supplied above, use it once as written. If none is supplied, omit it rather than inventing a new one.
+- Show the exact verified product name/model clearly as its own readable element. Do not rename, abbreviate or translate the product name unless the verified website itself supplies that localized name.
 - Prefer larger type and fewer words over extra copy.
-- Center the headline, product name and optional supporting line horizontally so the text block feels calm and editorial rather than like a wide banner.
+- Keep the main text primarily in the lower portion of the 4:5 image so the product remains dominant and unobstructed.
+- Do not let the headline or product name sit behind the product, extend underneath the product, or get cut by the product silhouette.
+- Leave a clearly visible gap between the bottom of the product and the first line of text.
+- Use a centered editorial text block with generous side margins, not a left-heavy or nearly full-width banner treatment.
 - Optically center the whole text stack on the full canvas with equal-feeling left and right margins; do not center within an off-balance local area or a shifted text box.
 - Keep the text stack inside a comfortable centered column rather than letting it drift left or right.
-- Keep visible text comfortably inside the canvas; the headline should not stretch nearly edge to edge.
-- No CTA button, no "SHOP NOW", no fake UI, no price, no star rating, no invented discount, no invented guarantee, no invented material/specification and no unsupported performance claim.
+- Leave extra breathing room below the final text line so the lowest line never feels cramped against the bottom edge; a clearly visible footer margin must remain under the text stack.
+- Do not add a supporting sentence, third text row, CTA button, website URL, fake UI, price, star rating, invented discount, invented guarantee, invented material/specification or unsupported performance claim.
 - If an exact authorized customer-supplied campaign offer is explicitly present in the campaign context, it may be shown exactly as supplied and must not be altered.
 - Do not put text inside white cards, opaque panels, labels, capsules or large text boxes. Typography should feel integrated directly into the design.
+- Do not add unrelated sellable products or accessories that could be mistaken for items from the customer's catalog.
 - Preserve campaign identity when this is a calendar-campaign post; do not introduce a competing holiday, season, named campaign or occasion.
-- Keep all important text content inside safe social-media margins.
-- Leave extra breathing room below the final text line so the lowest line never feels cramped against the bottom edge; a clearly visible footer margin must remain under the text stack.
-- The finished background-and-typography layer should feel premium and intentionally designed for the exact product that will be composited into it.
+- Do not add any placeholder, frame, outline, dashed box, bounding box, guide or marked placement zone anywhere in the image.
+- Keep all important product and text content inside safe social-media margins.
+- The finished image should feel like a high-quality brand/editorial product post that could realistically appear in a premium Instagram or Facebook feed.
 
-Return only the background-and-typography image layer.
+Return only the finished image.
 `.trim();
   }
 
@@ -33637,13 +33638,12 @@ AUTHORITATIVE PRODUCT-POST DESIGN CONTRACT:
 - Mobile readability is mandatory. Do not use microtext.
 - Keep the main headline short and premium: ideally 2 to 5 words, at most 2 lines, and clearly narrower than the full image width.
 - Avoid generic headline formulas like "Built for...", "Made for...", "Discover...", "Shop..." or storefront CTAs. When you need to create a headline, make it feel specific to this exact product.
-- Keep the visual copy concise and balanced: normally 2–3 visible text elements total.
+- Keep the visual copy concise and balanced: exactly 2 visible text roles total — headline + exact product/model name.
 - If a headline is supplied above, use that exact headline as written.
 - Show the exact verified product name/model clearly as its own readable element. Do not rename, abbreviate or translate the product name unless the verified website itself supplies that localized name.
-- If a supporting line is supplied above, use it once as written. If none is supplied, omit it rather than inventing a new one.
 - Prefer larger type and fewer words over extra copy.
 - Keep the main text primarily in the lower portion of the 4:5 image so the product remains dominant and unobstructed.
-- Do not let the headline, product name or supporting line sit behind the product, extend underneath the product, or get cut by the product silhouette.
+- Do not let the headline or product name sit behind the product, extend underneath the product, or get cut by the product silhouette.
 - Leave a clearly visible gap between the product and the first line of text.
 - Use a centered editorial text block with generous side margins, not a left-heavy or nearly full-width banner treatment.
 - Optically center the whole text stack on the full canvas with equal-feeling left and right margins; do not center within an off-balance local area or a shifted text box.
@@ -33659,6 +33659,185 @@ AUTHORITATIVE PRODUCT-POST DESIGN CONTRACT:
 
 Return only the finished image.
 `.trim();
+}
+
+
+function buildWebsiteItemEditorialTypographyOverlayPrompt(rule, postContent) {
+  const editorialCopy = deriveEditorialVisibleCopy(rule, postContent);
+  const productTitle = String(
+    editorialCopy.productName ||
+      rule?.website_item?.title ||
+      rule?.website_item?.item_title ||
+      "Featured product"
+  ).trim();
+  const brandProfileText = formatBrandProfileForPrompt(rule?.brand_profile || {});
+  const websiteItemText = formatWebsiteItemForPrompt(rule?.website_item || {});
+
+  return `
+Create ONLY a transparent typography artwork for one premium portrait 4:5 editorial product post.
+
+Reference image 1 shows the already-finished background with the exact product composited in place. Use it only to understand mood, contrast and typography style. Do not reproduce the product or background in the output.
+
+Brand profile:
+${brandProfileText}
+
+Product context:
+${websiteItemText}
+
+${formatCampaignVisualContextForPrompt(rule)}
+
+Post context:
+${postContent || "Not provided"}
+
+EXACT VISIBLE TYPOGRAPHY:
+${editorialCopy.headline ? `- Headline, exact spelling: "${editorialCopy.headline}"` : "- Create exactly one short, unique editorial headline in the same language as the post; normally 2–5 words and at most 2 lines."}
+- Product/model name, exact spelling: "${productTitle}"
+- There are exactly TWO text roles: headline + product/model name.
+- Do NOT add a supporting sentence, third copy line, CTA, website URL, hashtags, price, rating, offer, microcopy or filler.
+- Preserve exact supplied spelling. Do not rewrite or translate the exact product/model name.
+
+TRANSPARENT TYPOGRAPHY CONTRACT:
+- Output a square transparent RGBA typography asset.
+- Every pixel outside the letters and very small typography-supporting accents must remain fully transparent.
+- No photo, background, product, person, logo, watermark, frame, panel, card, badge, label, capsule, box, banner, rectangle or opaque plate.
+- Keep the typography as one balanced centered stack.
+- Headline is the primary visual element; product/model name is clearly readable beneath it.
+- Keep the headline narrower than the canvas, ideally 2–5 words and at most 2 lines.
+- Use premium typography that genuinely fits the exact product and reference image: refined serif, modern geometric sans, condensed display, editorial type or another professional treatment.
+- Avoid generic CTA-style headline formulas such as "Built for...", "Made for...", "Discover...", "Shop..." or "Se produkten...".
+- Mobile readability is mandatory.
+- Do not place decorative text or marks far away from the centered text stack.
+
+Return only the transparent typography artwork.
+`.trim();
+}
+
+async function normalizeEditorialTypographyArtwork(generatedBuffer) {
+  const normalized = await sharp(generatedBuffer)
+    .rotate()
+    .resize({ width: 1024, height: 1024, fit: "fill", kernel: sharp.kernel.lanczos3 })
+    .ensureAlpha()
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+
+  const { data, info } = await sharp(normalized)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const pixelCount = Math.max(1, info.width * info.height);
+  const alphaChannel = Buffer.alloc(pixelCount);
+  let visiblePixelCount = 0;
+  for (let pixel = 0; pixel < pixelCount; pixel += 1) {
+    const alpha = data[pixel * info.channels + 3];
+    alphaChannel[pixel] = alpha;
+    if (alpha >= 24) visiblePixelCount += 1;
+  }
+
+  const visibleRatio = visiblePixelCount / pixelCount;
+  if (visibleRatio < 0.0015) {
+    throw new Error("Editorial typography overlay was visually empty");
+  }
+  if (visibleRatio > 0.32) {
+    throw new Error("Editorial typography overlay contained too much opaque artwork");
+  }
+
+  const bounds = findAlphaBounds(alphaChannel, info.width, info.height, 24);
+  if (!bounds) {
+    throw new Error("Editorial typography overlay had no visible alpha bounds");
+  }
+  if (bounds.width > 990 || bounds.height > 920) {
+    throw new Error("Editorial typography overlay looked like a full-frame image instead of typography");
+  }
+
+  return {
+    artworkBuffer: await sharp(normalized)
+      .extract(bounds)
+      .png({ compressionLevel: 9 })
+      .toBuffer(),
+    bounds,
+    visibleRatio: Number(visibleRatio.toFixed(4)),
+  };
+}
+
+async function createWebsiteItemEditorialTypographyOverlay({
+  openai,
+  rule,
+  postContent,
+  layoutReferenceBuffer,
+  productPlacement,
+}) {
+  const referenceFile = await toFile(
+    await sharp(layoutReferenceBuffer)
+      .rotate()
+      .resize({ width: 1024, height: 1280, fit: "fill" })
+      .png({ compressionLevel: 9 })
+      .toBuffer(),
+    "editorial-product-layout-reference.png",
+    { type: "image/png" }
+  );
+  const prompt = buildWebsiteItemEditorialTypographyOverlayPrompt(rule, postContent);
+
+  let lastError = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await openai.images.edit({
+        model: IMAGE_MODEL,
+        image: referenceFile,
+        prompt: attempt === 0
+          ? prompt
+          : `${prompt}\n\nRETRY CORRECTION: Return typography only on real alpha transparency. Keep the artwork compact and centered. No background, product, frame, panel or third line of copy.`,
+        size: "1024x1024",
+        quality: "medium",
+        background: "transparent",
+        output_format: "png",
+      });
+      const imageBase64 = response?.data?.[0]?.b64_json;
+      if (!imageBase64) {
+        throw new Error("OpenAI editorial typography generation returned empty image data");
+      }
+      const normalized = await normalizeEditorialTypographyArtwork(
+        Buffer.from(imageBase64, "base64")
+      );
+
+      const productBottom = Number(productPlacement?.top || 0) + Number(productPlacement?.height || 0);
+      const zoneTop = Math.max(820, Math.min(930, productBottom + 34));
+      const zoneBottom = 1120;
+      const zoneHeight = Math.max(170, zoneBottom - zoneTop);
+      const maxWidth = 800;
+      const sourceMeta = await sharp(normalized.artworkBuffer).metadata();
+      const sourceWidth = Math.max(1, Number(sourceMeta.width || 1));
+      const sourceHeight = Math.max(1, Number(sourceMeta.height || 1));
+      const scale = Math.min(maxWidth / sourceWidth, zoneHeight / sourceHeight, 1.25);
+      const targetWidth = Math.max(1, Math.round(sourceWidth * scale));
+      const targetHeight = Math.max(1, Math.round(sourceHeight * scale));
+      const overlayBuffer = await sharp(normalized.artworkBuffer)
+        .resize({ width: targetWidth, height: targetHeight, fit: "fill", kernel: sharp.kernel.lanczos3 })
+        .png({ compressionLevel: 9 })
+        .toBuffer();
+      const left = Math.round((1024 - targetWidth) / 2);
+      const top = Math.round(zoneTop + Math.max(0, (zoneHeight - targetHeight) / 2));
+
+      return {
+        overlayBuffer,
+        placement: { left, top, width: targetWidth, height: targetHeight },
+        prompt,
+        analysis: {
+          visibleRatio: normalized.visibleRatio,
+          sourceBounds: normalized.bounds,
+          safeZoneTop: zoneTop,
+          safeZoneBottom: zoneBottom,
+        },
+      };
+    } catch (error) {
+      lastError = error;
+      console.warn("Editorial transparent typography attempt failed", {
+        ruleId: rule?.id || null,
+        attempt: attempt + 1,
+        message: error?.message || String(error),
+      });
+    }
+  }
+  throw lastError || new Error("Editorial transparent typography generation failed");
 }
 
 export async function generateWebsiteItemEditorialPostImage(openai, rule, postContent) {
@@ -33679,28 +33858,16 @@ export async function generateWebsiteItemEditorialPostImage(openai, rule, postCo
   if (nativeReference) {
     const prompt = buildWebsiteItemEditorialPostImagePrompt(rule, postContent, {
       nativeTransparent: true,
-      lockedPlacement: nativeReference.placement,
     });
 
-    const response = await openai.images.generate({
-      model: IMAGE_MODEL,
-      prompt,
-      size: "1024x1280",
-      quality: "medium",
-    });
-    const imageBase64 = response?.data?.[0]?.b64_json;
-    if (!imageBase64) {
-      throw new Error("OpenAI transparent product-post background generation returned empty image data");
-    }
-
-    const generatedBuffer = await sharp(Buffer.from(imageBase64, "base64"))
-      .rotate()
-      .resize({ width: 1024, height: 1280, fit: "fill" })
-      .ensureAlpha()
-      .png({ compressionLevel: 9 })
-      .toBuffer();
-
-    const finalBuffer = await sharp(generatedBuffer)
+    const canvasBuffer = await sharp({
+      create: {
+        width: 1024,
+        height: 1280,
+        channels: 4,
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      },
+    })
       .composite([{
         input: nativeReference.lockedProductBuffer,
         left: nativeReference.placement.left,
@@ -33709,7 +33876,25 @@ export async function generateWebsiteItemEditorialPostImage(openai, rule, postCo
       .png({ compressionLevel: 9 })
       .toBuffer();
 
-    console.info("Editorial product post generated with native transparent product compositing", {
+    const referenceFile = await toFile(
+      canvasBuffer,
+      "editorial-native-transparent-product-canvas.png",
+      { type: "image/png" }
+    );
+
+    const response = await openai.images.edit({
+      model: IMAGE_MODEL,
+      image: referenceFile,
+      prompt,
+      size: "1024x1280",
+      quality: "medium",
+    });
+    const imageBase64 = response?.data?.[0]?.b64_json;
+    if (!imageBase64) {
+      throw new Error("OpenAI native transparent editorial product-post generation returned empty image data");
+    }
+
+    console.info("Editorial product post generated in one GPT-Image-2 pass around the native transparent product", {
       ruleId: rule?.id || null,
       productTitle: rule?.website_item?.title || null,
       sourceImageUrl,
@@ -33719,9 +33904,9 @@ export async function generateWebsiteItemEditorialPostImage(openai, rule, postCo
     });
 
     return {
-      imageBase64: finalBuffer.toString("base64"),
+      imageBase64,
       imagePrompt: prompt,
-      productHandlingMode: "native_transparent_composited_original",
+      productHandlingMode: "native_transparent_single_pass",
     };
   }
 
@@ -37322,6 +37507,23 @@ async function resolveBrandLogoPublicUrl(supabase, brandProfile) {
     });
     return null;
   }
+}
+
+export function shouldUseLogoForEditorialProductPost(rule, brandProfile) {
+  if (!brandProfile?.logo_url && !brandProfile?.logo_storage_path) {
+    return false;
+  }
+
+  const imageSource = String(rule?.image_source || "").trim().toLowerCase();
+  if (["uploaded", "none"].includes(imageSource)) {
+    return false;
+  }
+
+  // Editorial Product posts follow the CURRENT brand-profile default. Older
+  // automation rows may contain include_logo=false simply because the logo did
+  // not exist when the rule was first created; that stale snapshot must not
+  // override the current brand setting.
+  return brandProfile.logo_enabled_by_default !== false;
 }
 
 export function shouldUseLogoForRule(rule, brandProfile) {
@@ -44801,6 +45003,13 @@ product_research_model_used: websitePreparedRule.uses_website_content
             imageStoragePath,
           });
 
+          const editorialIncludeLogo = shouldUseLogoForEditorialProductPost(
+            rule,
+            brandProfile
+          );
+          const editorialLogoUrl = editorialIncludeLogo
+            ? await resolveBrandLogoPublicUrl(supabase, brandProfile)
+            : null;
           const logoOverlayResult = await applyLogoOverlayIfNeeded({
             supabase,
             userId: rule.user_id,
@@ -44808,7 +45017,7 @@ product_research_model_used: websitePreparedRule.uses_website_content
             imageUrl,
             imageStoragePath,
             brandProfile,
-            includeLogo: shouldUseLogoForRule(rule, brandProfile),
+            includeLogo: editorialIncludeLogo,
           });
 
           if (logoOverlayResult?.imageUrl) {
@@ -44824,10 +45033,8 @@ product_research_model_used: websitePreparedRule.uses_website_content
               image_storage_path: imageStoragePath,
               image_status: "ready",
               image_prompt: finalImagePrompt,
-              include_logo: shouldUseLogoForRule(rule, brandProfile),
-              logo_url: shouldUseLogoForRule(rule, brandProfile)
-                ? brandProfile?.logo_url || null
-                : null,
+              include_logo: editorialIncludeLogo,
+              logo_url: editorialIncludeLogo ? editorialLogoUrl : null,
               updated_at: nowIso,
             })
             .eq("id", post.id);
