@@ -33385,6 +33385,86 @@ async function prepareNativeTransparentEditorialReference(sourceImageBuffer) {
   };
 }
 
+function normalizeEditorialVisibleCopyText(value, maxLength = 96) {
+  return truncateText(
+    String(value || "")
+      .replace(/https?:\/\/\S+/gi, "")
+      .replace(/#[\p{L}\p{N}_]+/gu, "")
+      .replace(/[​-‍﻿]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/^[-–—:;,.!?'"()\s]+|[-–—:;,.!?'"()\s]+$/g, ""),
+    maxLength
+  );
+}
+
+function deriveEditorialVisibleCopy(rule, postContent) {
+  const rawTitle =
+    rule?.website_item?.title ||
+    rule?.website_item?.item_title ||
+    rule?.content_type_label ||
+    "Featured product";
+  const productName = normalizeEditorialVisibleCopyText(
+    sanitizeProductTitleForCard(rawTitle) || rawTitle,
+    110
+  );
+
+  const lines = String(postContent || "")
+    .split("
+")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !line.startsWith("#"));
+
+  const sentenceCandidates = [];
+  for (const line of lines) {
+    for (const chunk of splitCaptionLineIntoSentenceChunks(line)) {
+      const cleaned = normalizeEditorialVisibleCopyText(chunk, 120);
+      if (!cleaned) continue;
+      if (/^https?:\/\//i.test(cleaned)) continue;
+      if (sentenceCandidates.some((item) => item.toLowerCase() === cleaned.toLowerCase())) continue;
+      sentenceCandidates.push(cleaned);
+    }
+  }
+
+  let headline = "";
+  let supportingLine = "";
+
+  for (const candidate of sentenceCandidates) {
+    const wordCount = candidate.split(/\s+/).filter(Boolean).length;
+    const redundantWithProduct = isProductLabelTextRedundant(productName, candidate);
+
+    if (
+      !headline &&
+      !redundantWithProduct &&
+      wordCount >= 2 &&
+      wordCount <= 6 &&
+      candidate.length <= 42
+    ) {
+      headline = candidate;
+      continue;
+    }
+
+    if (
+      !supportingLine &&
+      !redundantWithProduct &&
+      candidate.length <= 82 &&
+      candidate.toLowerCase() !== headline.toLowerCase() &&
+      !isProductLabelTextRedundant(headline, candidate)
+    ) {
+      supportingLine = candidate;
+    }
+
+    if (headline && supportingLine) break;
+  }
+
+  return {
+    headline,
+    productName,
+    supportingLine,
+  };
+}
+
 function buildWebsiteItemEditorialPostImagePrompt(
   rule,
   postContent,
@@ -33402,18 +33482,29 @@ function buildWebsiteItemEditorialPostImagePrompt(
       rule?.brand_profile?.business_name ||
       ""
   ).trim();
+  const editorialCopy = deriveEditorialVisibleCopy(rule, postContent);
   const placementText = placement
-    ? `The exact locked product occupies approximately x=${Math.round((placement.left / 1024) * 100)}%–${Math.round(((placement.left + placement.width) / 1024) * 100)}% and y=${Math.round((placement.top / 1280) * 100)}%–${Math.round(((placement.top + placement.height) / 1280) * 100)}% of the final 4:5 canvas.`
+    ? `The exact locked product will later be composited at approximately x=${Math.round((placement.left / 1024) * 100)}%–${Math.round(((placement.left + placement.width) / 1024) * 100)}% and y=${Math.round((placement.top / 1280) * 100)}%–${Math.round(((placement.top + placement.height) / 1280) * 100)}% of the final 4:5 canvas.`
     : "";
+
+  const exactCopyBlock = `
+EXACT VISIBLE COPY TO RENDER:
+${editorialCopy.headline ? `- Headline, exact spelling: "${editorialCopy.headline}"` : "- No separate headline is required unless it is already supplied below."}
+- Product name/model, exact spelling: "${editorialCopy.productName || productTitle || "Featured product"}"
+${editorialCopy.supportingLine ? `- Supporting line, exact spelling: "${editorialCopy.supportingLine}"` : "- No supporting line is required unless it is already supplied below."}
+- Use only the exact visible copy listed here.
+- Do not invent alternate wording, extra slogans, filler microcopy or spelling changes.
+- If a text element is marked as not required, omit it instead of inventing a replacement.
+`.trim();
 
   const productHandling = nativeTransparent
     ? `
 PRODUCT FIDELITY MODE — NATIVE TRANSPARENT ORIGINAL:
-- The supplied 4:5 reference already contains the exact original website product at its locked size and position.
-- Do not move, resize, redraw, restyle, recolor, relight, beautify, duplicate or cover that product.
-- Design the scene, atmosphere and typography around the exact locked product placement.
-- The original product pixels will be composited back over your result after generation, so leave the complete product visually unobstructed.
-- You may create a natural grounding shadow, reflected light or environmental interaction immediately around the product, but never paint over the product itself.
+- The exact original website product will be composited back into the final image after generation.
+- Do not draw, redraw, duplicate or partially recreate the product yourself.
+- Reserve clean space for the product and design the scene, atmosphere and typography around that future placement so the final result feels naturally art-directed as one composition.
+- Keep the reserved product zone completely free of text and major visual objects.
+- Background ambience, lighting falloff and environmental context may support the product area, but the product silhouette itself must remain empty for later compositing.
 ${placementText}
 `.trim()
     : `
@@ -33453,6 +33544,8 @@ ${formatCampaignVisualContextForPrompt(rule)}
 Post copy/context the image should support:
 ${postContent || "Not provided"}
 
+${exactCopyBlock}
+
 ${customVisualDirection ? `Additional visual direction:
 ${customVisualDirection}
 
@@ -33468,9 +33561,9 @@ AUTHORITATIVE PRODUCT-POST DESIGN CONTRACT:
 - Let the typography style adapt freely to the product and background: modern sans, condensed display, refined serif, editorial type or another professional choice that genuinely fits.
 - Mobile readability is mandatory. Do not use microtext.
 - Keep the visual copy concise and balanced: normally 2–3 visible text elements total.
-- Use one strong editorial headline, usually 2–5 words.
+- If a headline is supplied above, use that exact headline as written.
 - Show the exact verified product name/model clearly as its own readable element. Do not rename, abbreviate or translate the product name unless the verified website itself supplies that localized name.
-- You may add one short supporting line only when it is grounded in the verified website item or supplied post context.
+- If a supporting line is supplied above, use it once as written. If none is supplied, omit it rather than inventing a new one.
 - Prefer larger type and fewer words over extra copy.
 - Keep the main text primarily in the lower portion of the 4:5 image so the product remains dominant and unobstructed.
 - No CTA button, no "SHOP NOW", no fake UI, no price, no star rating, no invented discount, no invented guarantee, no invented material/specification and no unsupported performance claim.
@@ -33505,28 +33598,16 @@ export async function generateWebsiteItemEditorialPostImage(openai, rule, postCo
       nativeTransparent: true,
       placement: nativeReference.placement,
     });
-    const referenceFile = await toFile(
-      nativeReference.referenceBuffer,
-      "locked-transparent-product-layout.png",
-      { type: "image/png" }
-    );
-    const maskFile = await toFile(
-      nativeReference.maskBuffer,
-      "locked-transparent-product-mask.png",
-      { type: "image/png" }
-    );
 
-    const response = await openai.images.edit({
+    const response = await openai.images.generate({
       model: IMAGE_MODEL,
-      image: referenceFile,
-      mask: maskFile,
       prompt,
       size: "1024x1280",
       quality: "medium",
     });
     const imageBase64 = response?.data?.[0]?.b64_json;
     if (!imageBase64) {
-      throw new Error("OpenAI transparent product-post generation returned empty image data");
+      throw new Error("OpenAI transparent product-post background generation returned empty image data");
     }
 
     const generatedBuffer = await sharp(Buffer.from(imageBase64, "base64"))
@@ -33545,7 +33626,7 @@ export async function generateWebsiteItemEditorialPostImage(openai, rule, postCo
       .png({ compressionLevel: 9 })
       .toBuffer();
 
-    console.info("Editorial product post generated with locked native transparent product", {
+    console.info("Editorial product post generated with native transparent product compositing", {
       ruleId: rule?.id || null,
       productTitle: rule?.website_item?.title || null,
       sourceImageUrl,
@@ -33557,7 +33638,7 @@ export async function generateWebsiteItemEditorialPostImage(openai, rule, postCo
     return {
       imageBase64: finalBuffer.toString("base64"),
       imagePrompt: prompt,
-      productHandlingMode: "native_transparent_locked_original",
+      productHandlingMode: "native_transparent_composited_original",
     };
   }
 
