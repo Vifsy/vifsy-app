@@ -33501,10 +33501,10 @@ function buildWebsiteItemEditorialPostImagePrompt(
   ).trim();
   const editorialCopy = deriveEditorialVisibleCopy(rule, postContent);
   const lockedPlacementSummary = lockedPlacement
-    ? `- Locked product placement in the final 1024×1280 canvas: left ${lockedPlacement.left}px, top ${lockedPlacement.top}px, width ${lockedPlacement.width}px, height ${lockedPlacement.height}px.
-- Treat that placed product box as reserved. No visible letters, words or typographic decorations may sit behind it, touch it, or extend underneath it.
-- Reserve a clean dedicated text zone below the product footprint with a clearly visible gap between the product and the first line of text.`
-    : '- The final product will be added later and occupies the central upper/middle area. Reserve that whole area and keep all typography clearly below it.';
+    ? `- The final product will be composited later in a centered upper/middle hero position. Keep that upper/middle area visually open and balanced so the product sits naturally and remains the clear hero.
+- Keep all typography clearly below the future product footprint with a clearly visible gap between the product and the first line of text.
+- Do not draw any placeholder, outline, frame, guide, bounding box or visible marker for the future product position.`
+    : '- The final product will be added later in the central upper/middle area. Keep that area visually open and keep all typography clearly below it.';
 
   const exactCopyBlock = `
 VISIBLE COPY CONTRACT:
@@ -33555,7 +33555,7 @@ TRANSPARENT-ORIGINAL COMPOSITION CONTRACT:
 - Spreelo will add the exact original transparent product afterwards.
 - Use natural negative space through the upper and middle part of the background so the original product can sit there cleanly when added.
 - ${lockedPlacementSummary}
-- Treat the future product area as a hard no-text zone.
+- Keep all visible typography completely outside the future product area while leaving that area visually open and unmarked.
 - Typography must live as one balanced centered stack in the lower part of the composition, below the product area, with generous margins and a natural editorial hierarchy.
 - Leave real breathing room between the product footprint and the top line of typography so the product never appears to cover, cut through or sit on top of the text.
 - Keep the bottom text block contained to a comfortable central column; do not create a nearly full-width headline.
