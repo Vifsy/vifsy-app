@@ -37,7 +37,7 @@ const FORMAT_DEFINITIONS = [
     label: "Product post",
     category: "product",
     requiresProducts: true,
-    purpose: "Present one verified website product in a clean text-free product image.",
+    purpose: "Create a premium 4:5 editorial product post around one verified website product with concise readable typography.",
   },
   {
     id: "website_item_text_ad",

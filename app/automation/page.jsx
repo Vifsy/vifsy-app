@@ -452,11 +452,11 @@ const contentTypes = [
     label: "Product post",
     shortLabel: "Product post",
     description:
-      "Pick one verified website product and present it in a clean, text-free product image with a matching background when possible.",
+      "Pick one verified website product and let AI create a premium 4:5 editorial product post with readable text and a product-specific background.",
     prompt:
       "Use the website URL from the brand profile. Identify one concrete, verified product with a usable product image from the website. Create a social media post that promotes that specific product in a helpful, trustworthy and sales-focused way. Use only information that clearly appears on the website. Do not substitute a service, listing or generic category, and do not invent prices, discounts, guarantees, features or availability.",
     imagePrompt:
-      "Use the verified website product image without adding product names, prices, labels or other text. If the product image has reliable transparency, place the unchanged product on the best matching uploaded background. Otherwise preserve the original website image and its existing background.",
+      "Create a premium 4:5 editorial product post around the verified product. If the website image already has real transparency, preserve the original product unchanged and design around its locked placement. If it does not have transparency, skip background-removal attempts and faithfully recreate the exact product inside the finished composition. Give the product generous space, use a product-specific background, and integrate a large mobile-readable headline, exact product/model name and at most one short verified supporting line. No CTA button, price, ratings or invented claims.",
     usesWebsiteContent: true,
   },
   {

@@ -10,6 +10,7 @@ import {
   generateAnimatedProductVideo,
   generateLockedProductPostContentForUse,
   generateWebsiteItemAdImage,
+  generateWebsiteItemEditorialPostImage,
   getCarouselProductLabelPresentation,
   renderCarouselProductSlideImage,
   resolveLockedProductUrlForUse,
@@ -247,6 +248,7 @@ export async function POST(request) {
 
     const isAnimated = String(enhancedRule.content_format || "").toLowerCase() === "animated_video";
     const isAiProductAd = String(enhancedRule.content_type_id || "") === "website_item_text_ad";
+    const isEditorialProductPost = String(enhancedRule.content_type_id || "") === "website_item";
     const includeLogo = shouldUseLogoForRule(enhancedRule, brandProfile);
     const now = new Date().toISOString();
 
@@ -355,6 +357,37 @@ export async function POST(request) {
       const logoResult = await applyLogoOverlayIfNeeded({
         supabase: context.admin,
         userId: repairUserId,
+        postId: post.id,
+        imageUrl,
+        imageStoragePath,
+        brandProfile,
+        includeLogo,
+      });
+      if (logoResult?.imageUrl) {
+        imageUrl = logoResult.imageUrl;
+        imageStoragePath = logoResult.imageStoragePath || imageStoragePath;
+      }
+    } else if (isEditorialProductPost) {
+      const generated = await generateWebsiteItemEditorialPostImage(
+        openai,
+        enhancedRule,
+        generatedContent
+      );
+      const uploaded = await uploadPng(context.admin, {
+        userId: post.user_id,
+        postId: post.id,
+        suffix: "admin-product-editorial",
+        imageBase64: generated.imageBase64,
+      });
+      imageUrl = uploaded.imageUrl;
+      imageStoragePath = uploaded.imageStoragePath;
+      imagePrompt = generated.imagePrompt;
+      tiktokCleanImageUrl = imageUrl;
+      tiktokCleanImageStoragePath = imageStoragePath;
+
+      const logoResult = await applyLogoOverlayIfNeeded({
+        supabase: context.admin,
+        userId: post.user_id,
         postId: post.id,
         imageUrl,
         imageStoragePath,

@@ -16945,6 +16945,10 @@ function isWebsiteTextAdRule(rule) {
   return String(rule?.content_type_id || "").trim() === "website_item_text_ad";
 }
 
+function isWebsiteProductPostRule(rule) {
+  return String(rule?.content_type_id || "").trim() === "website_item";
+}
+
 function getAuthorizedCampaignOffer(rule) {
   const source = [rule?.prompt, rule?.image_prompt, rule?.strategy_notes]
     .filter(Boolean)
@@ -33241,6 +33245,367 @@ async function saveCarouselSlidesForPost({
   return rows;
 }
 
+
+async function extractNativeTransparentProductAsset(sourceImageBuffer) {
+  const normalized = await sharp(sourceImageBuffer)
+    .rotate()
+    .resize({
+      width: 1800,
+      height: 1800,
+      fit: "inside",
+      withoutEnlargement: true,
+    })
+    .ensureAlpha()
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+
+  const { data, info } = await sharp(normalized)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const pixelCount = Math.max(1, info.width * info.height);
+  const alphaChannel = Buffer.alloc(pixelCount);
+  let transparentPixelCount = 0;
+
+  for (let pixel = 0; pixel < pixelCount; pixel += 1) {
+    const alpha = data[pixel * info.channels + 3];
+    alphaChannel[pixel] = alpha;
+    if (alpha < 250) transparentPixelCount += 1;
+  }
+
+  // This is detection only. No background removal, AI cutout or synthetic
+  // pixels are created here. A real alpha channel with a measurable transparent
+  // region means the website already supplied a usable transparent product.
+  const transparencyRatio = transparentPixelCount / pixelCount;
+  if (transparencyRatio < 0.001) {
+    throw new Error("Product image does not contain native transparency");
+  }
+
+  const bounds = findAlphaBounds(alphaChannel, info.width, info.height, 18);
+  if (!bounds) {
+    throw new Error("Native transparent product image contained no visible product");
+  }
+
+  const edgeVisibleRatio = getAlphaEdgeRatio(alphaChannel, info.width, info.height, 48);
+  if (edgeVisibleRatio > 0.92) {
+    throw new Error("Product alpha still behaves like a full rectangular image");
+  }
+
+  return {
+    cutoutBuffer: await sharp(normalized).extract(bounds).png({ compressionLevel: 9 }).toBuffer(),
+    analysis: {
+      transparencyRatio: Number(transparencyRatio.toFixed(4)),
+      edgeVisibleRatio: Number(edgeVisibleRatio.toFixed(4)),
+      width: bounds.width,
+      height: bounds.height,
+    },
+  };
+}
+
+async function prepareNativeTransparentEditorialReference(sourceImageBuffer) {
+  const width = 1024;
+  const height = 1280;
+  const productAreaTop = 42;
+  const productAreaHeight = 825;
+  const productMaxWidth = 904;
+  const native = await extractNativeTransparentProductAsset(sourceImageBuffer);
+
+  const metadata = await sharp(native.cutoutBuffer).metadata();
+  const sourceWidth = Math.max(1, Number(metadata.width || 1));
+  const sourceHeight = Math.max(1, Number(metadata.height || 1));
+  const scale = Math.min(
+    productMaxWidth / sourceWidth,
+    productAreaHeight / sourceHeight
+  );
+  const targetWidth = Math.max(1, Math.round(sourceWidth * scale));
+  const targetHeight = Math.max(1, Math.round(sourceHeight * scale));
+
+  const lockedProductBuffer = await sharp(native.cutoutBuffer)
+    .resize({
+      width: targetWidth,
+      height: targetHeight,
+      fit: "fill",
+      kernel: sharp.kernel.lanczos3,
+    })
+    .ensureAlpha()
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+
+  const left = Math.round((width - targetWidth) / 2);
+  const top = Math.round(
+    productAreaTop + Math.max(0, (productAreaHeight - targetHeight) / 2)
+  );
+
+  const referenceBuffer = await sharp({
+    create: {
+      width,
+      height,
+      channels: 4,
+      background: { r: 247, g: 246, b: 242, alpha: 1 },
+    },
+  })
+    .composite([{ input: lockedProductBuffer, left, top }])
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+
+  // GPT-Image-2 masking is guidance, so the original product is composited
+  // back over the generated result afterwards as the final authority. The
+  // alpha-shaped mask primarily tells the model to design around this exact
+  // placement instead of moving the product or covering it with typography.
+  const productMask = await sharp(lockedProductBuffer)
+    .ensureAlpha()
+    .tint({ r: 255, g: 255, b: 255 })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+
+  const maskBuffer = await sharp({
+    create: {
+      width,
+      height,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
+    .composite([{ input: productMask, left, top }])
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+
+  return {
+    referenceBuffer,
+    maskBuffer,
+    lockedProductBuffer,
+    placement: {
+      left,
+      top,
+      width: targetWidth,
+      height: targetHeight,
+    },
+    nativeTransparency: native.analysis,
+  };
+}
+
+function buildWebsiteItemEditorialPostImagePrompt(
+  rule,
+  postContent,
+  { nativeTransparent = false, placement = null } = {}
+) {
+  const brandProfileText = formatBrandProfileForPrompt(rule.brand_profile);
+  const websiteItemText = formatWebsiteItemForPrompt(rule.website_item);
+  const customVisualDirection = String(rule?.image_prompt || "").trim();
+  const productTitle = String(
+    rule?.website_item?.title || rule?.website_item?.item_title || ""
+  ).trim();
+  const productBrand = String(
+    rule?.website_item?.product_brand ||
+      rule?.website_item?.brand ||
+      rule?.brand_profile?.business_name ||
+      ""
+  ).trim();
+  const placementText = placement
+    ? `The exact locked product occupies approximately x=${Math.round((placement.left / 1024) * 100)}%–${Math.round(((placement.left + placement.width) / 1024) * 100)}% and y=${Math.round((placement.top / 1280) * 100)}%–${Math.round(((placement.top + placement.height) / 1280) * 100)}% of the final 4:5 canvas.`
+    : "";
+
+  const productHandling = nativeTransparent
+    ? `
+PRODUCT FIDELITY MODE — NATIVE TRANSPARENT ORIGINAL:
+- The supplied 4:5 reference already contains the exact original website product at its locked size and position.
+- Do not move, resize, redraw, restyle, recolor, relight, beautify, duplicate or cover that product.
+- Design the scene, atmosphere and typography around the exact locked product placement.
+- The original product pixels will be composited back over your result after generation, so leave the complete product visually unobstructed.
+- You may create a natural grounding shadow, reflected light or environmental interaction immediately around the product, but never paint over the product itself.
+${placementText}
+`.trim()
+    : `
+PRODUCT FIDELITY MODE — SOURCE IMAGE HAS NO USABLE TRANSPARENCY:
+- The supplied image is the verified product-page reference for the exact sold product.
+- Ignore the source photo's old background as a design constraint.
+- Recreate the marketed product inside the new 4:5 composition as faithfully as possible.
+- Preserve the visible silhouette, viewing angle, proportions, exact visible color/variant, materials, panels, seams, stitching, hardware, fasteners, laces, wheel count, handles, logos, printed words, graphics and other identity-defining details.
+- Do not invent an alternate model, colorway, accessory, package, extra product or hidden detail.
+- Keep the product recognizably the same verified item; the new creative freedom belongs to the background, lighting and editorial composition, not to the product identity.
+`.trim();
+
+  return `
+Create one finished premium portrait 4:5 PRODUCT POST for social media.
+
+This is an editorial/product-feature post, NOT a hard-sell advertisement.
+
+Brand profile:
+${brandProfileText}
+
+Verified website product:
+${websiteItemText}
+
+Exact product name to preserve when shown:
+${productTitle || "Use the verified product name from the supplied website item."}
+
+Product brand:
+${productBrand || "Use only verified branding visible in the supplied product information."}
+
+Platform: ${rule.platform || "Instagram"}
+Tone: ${rule.tone || "Professional"}
+Language context: ${rule.language || rule?.content_language || "Auto"}
+Website URL: ${rule.brand_profile?.website_url || "Not provided"}
+
+${formatCampaignVisualContextForPrompt(rule)}
+
+Post copy/context the image should support:
+${postContent || "Not provided"}
+
+${customVisualDirection ? `Additional visual direction:
+${customVisualDirection}
+
+If this direction contains legacy instructions saying that Product posts must be text-free, use a pre-made background library, or preserve the old website-photo background, ignore those legacy parts. The Product Post contract in this prompt is authoritative.` : ""}
+
+${productHandling}
+
+AUTHORITATIVE PRODUCT-POST DESIGN CONTRACT:
+- Output one 1024×1280 portrait 4:5 image.
+- Make the verified product the clear hero and give it generous visual space, usually around the upper two-thirds of the composition.
+- Create a fresh background specifically suited to this exact product, its category, colors and mood. It may be studio, architectural, lifestyle, outdoors, premium editorial or another fitting environment.
+- Background, lighting, product placement and typography must feel intentionally art-directed as one coherent image, not like separate layers or a generic template.
+- Let the typography style adapt freely to the product and background: modern sans, condensed display, refined serif, editorial type or another professional choice that genuinely fits.
+- Mobile readability is mandatory. Do not use microtext.
+- Keep the visual copy concise and balanced: normally 2–3 visible text elements total.
+- Use one strong editorial headline, usually 2–5 words.
+- Show the exact verified product name/model clearly as its own readable element. Do not rename, abbreviate or translate the product name unless the verified website itself supplies that localized name.
+- You may add one short supporting line only when it is grounded in the verified website item or supplied post context.
+- Prefer larger type and fewer words over extra copy.
+- Keep the main text primarily in the lower portion of the 4:5 image so the product remains dominant and unobstructed.
+- No CTA button, no "SHOP NOW", no fake UI, no price, no star rating, no invented discount, no invented guarantee, no invented material/specification and no unsupported performance claim.
+- If an exact authorized customer-supplied campaign offer is explicitly present in the campaign context, it may be shown exactly as supplied and must not be altered.
+- Do not put text inside white cards, opaque panels, labels, capsules or large text boxes. Typography should feel integrated directly into the design.
+- Do not add unrelated sellable products or accessories that could be mistaken for items from the customer's catalog.
+- Preserve campaign identity when this is a calendar-campaign post; do not introduce a competing holiday, season, named campaign or occasion.
+- Keep all important product and text content inside safe social-media margins.
+- The finished image should feel like a high-quality brand/editorial product post that could realistically appear in a premium Instagram or Facebook feed.
+
+Return only the finished image.
+`.trim();
+}
+
+export async function generateWebsiteItemEditorialPostImage(openai, rule, postContent) {
+  const sourceImageUrl = rule?.website_item?.image_url;
+  if (!sourceImageUrl) {
+    throw new Error("Product post requires a verified website product image");
+  }
+
+  const sourceImageBuffer = await fetchImageBufferForOverlay(sourceImageUrl);
+  let nativeReference = null;
+
+  try {
+    nativeReference = await prepareNativeTransparentEditorialReference(sourceImageBuffer);
+  } catch {
+    nativeReference = null;
+  }
+
+  if (nativeReference) {
+    const prompt = buildWebsiteItemEditorialPostImagePrompt(rule, postContent, {
+      nativeTransparent: true,
+      placement: nativeReference.placement,
+    });
+    const referenceFile = await toFile(
+      nativeReference.referenceBuffer,
+      "locked-transparent-product-layout.png",
+      { type: "image/png" }
+    );
+    const maskFile = await toFile(
+      nativeReference.maskBuffer,
+      "locked-transparent-product-mask.png",
+      { type: "image/png" }
+    );
+
+    const response = await openai.images.edit({
+      model: IMAGE_MODEL,
+      image: referenceFile,
+      mask: maskFile,
+      prompt,
+      size: "1024x1280",
+      quality: "medium",
+    });
+    const imageBase64 = response?.data?.[0]?.b64_json;
+    if (!imageBase64) {
+      throw new Error("OpenAI transparent product-post generation returned empty image data");
+    }
+
+    const generatedBuffer = await sharp(Buffer.from(imageBase64, "base64"))
+      .rotate()
+      .resize({ width: 1024, height: 1280, fit: "fill" })
+      .ensureAlpha()
+      .png({ compressionLevel: 9 })
+      .toBuffer();
+
+    const finalBuffer = await sharp(generatedBuffer)
+      .composite([{
+        input: nativeReference.lockedProductBuffer,
+        left: nativeReference.placement.left,
+        top: nativeReference.placement.top,
+      }])
+      .png({ compressionLevel: 9 })
+      .toBuffer();
+
+    console.info("Editorial product post generated with locked native transparent product", {
+      ruleId: rule?.id || null,
+      productTitle: rule?.website_item?.title || null,
+      sourceImageUrl,
+      placement: nativeReference.placement,
+      nativeTransparency: nativeReference.nativeTransparency,
+      campaignScoped: isCampaignScopedWebsiteRule(rule),
+    });
+
+    return {
+      imageBase64: finalBuffer.toString("base64"),
+      imagePrompt: prompt,
+      productHandlingMode: "native_transparent_locked_original",
+    };
+  }
+
+  const prompt = buildWebsiteItemEditorialPostImagePrompt(rule, postContent, {
+    nativeTransparent: false,
+  });
+  const normalizedSourceImageBuffer = await sharp(sourceImageBuffer)
+    .rotate()
+    .resize({
+      width: 1536,
+      height: 1536,
+      fit: "inside",
+      withoutEnlargement: true,
+    })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  const referenceFile = await toFile(
+    normalizedSourceImageBuffer,
+    "verified-product-reference.png",
+    { type: "image/png" }
+  );
+
+  const response = await openai.images.edit({
+    model: IMAGE_MODEL,
+    image: referenceFile,
+    prompt,
+    size: "1024x1280",
+    quality: "medium",
+  });
+  const imageBase64 = response?.data?.[0]?.b64_json;
+  if (!imageBase64) {
+    throw new Error("OpenAI editorial product-post generation returned empty image data");
+  }
+
+  console.info("Editorial product post generated with high-fidelity product recreation", {
+    ruleId: rule?.id || null,
+    productTitle: rule?.website_item?.title || null,
+    sourceImageUrl,
+    campaignScoped: isCampaignScopedWebsiteRule(rule),
+  });
+
+  return {
+    imageBase64,
+    imagePrompt: prompt,
+    productHandlingMode: "high_fidelity_recreation",
+  };
+}
+
 function websiteTextContainsAny(value, keywords = []) {
   const haystack = String(value || "").toLowerCase();
   return keywords.some((keyword) => haystack.includes(String(keyword || "").toLowerCase()));
@@ -44164,6 +44529,120 @@ product_research_model_used: websitePreparedRule.uses_website_content
             summary.image_generation_failed += 1;
             summary.warnings += 1;
           }
+        } else if (
+          wantsImage &&
+          isWebsiteProductPostRule(ruleWithBrandProfile) &&
+          websiteItem?.image_url &&
+          useWebsiteImage
+        ) {
+          // v144.135: Product posts now use one coherent GPT-Image-2 4:5
+          // editorial composition. Native transparent website products are
+          // locked and composited back unchanged. Non-transparent website
+          // images skip cutout/background-removal completely and use the
+          // high-fidelity recreation path inside the same image generation.
+          imageUrl = websiteItem.image_url;
+          imageStoragePath = null;
+          finalImagePrompt =
+            "Premium 4:5 GPT-Image-2 editorial product post using the verified website product; native transparent originals stay locked, otherwise the product is recreated faithfully in the finished composition.";
+
+          try {
+            const generatedProductPost = await generateWebsiteItemEditorialPostImage(
+              openai,
+              ruleWithBrandProfile,
+              generatedContent
+            );
+
+            const uploadedProductPost = await uploadGeneratedImageToStorage({
+              supabase,
+              imageBase64: generatedProductPost.imageBase64,
+              userId: rule.user_id,
+              postId: post.id,
+              fileSuffix: "website-product-editorial",
+            });
+
+            imageUrl = uploadedProductPost.imageUrl || imageUrl;
+            imageStoragePath =
+              uploadedProductPost.imageStoragePath || imageStoragePath;
+            finalImagePrompt = generatedProductPost.imagePrompt;
+            summary.image_generated += 1;
+
+            console.info("Editorial website product post ready", {
+              ruleId: rule.id,
+              postId: post.id,
+              productTitle: websiteItem?.title || null,
+              productHandlingMode:
+                generatedProductPost.productHandlingMode || null,
+              campaignScoped: isCampaignScopedWebsiteRule(ruleWithBrandProfile),
+            });
+          } catch (renderError) {
+            // Zero-extra-call delivery fallback: keep the exact verified source
+            // image rather than attempting cutout retries, another image model
+            // call or a low-quality local text card.
+            console.error(
+              "Editorial website product post generation failed; preserving verified original website image",
+              {
+                ruleId: rule.id,
+                postId: post.id,
+                productTitle: websiteItem?.title || null,
+                message: renderError.message,
+              }
+            );
+            finalImagePrompt =
+              "GPT-Image-2 editorial product-post generation failed; the verified original website product image was preserved without additional AI retries.";
+            summary.image_generation_failed += 1;
+            summary.warnings += 1;
+          }
+
+          await persistTikTokCleanSingleImageOverride({
+            supabase,
+            postId: post.id,
+            platform: rule.platform,
+            imageUrl,
+            imageStoragePath,
+          });
+
+          const logoOverlayResult = await applyLogoOverlayIfNeeded({
+            supabase,
+            userId: rule.user_id,
+            postId: post.id,
+            imageUrl,
+            imageStoragePath,
+            brandProfile,
+            includeLogo: shouldUseLogoForRule(rule, brandProfile),
+          });
+
+          if (logoOverlayResult?.imageUrl) {
+            imageUrl = logoOverlayResult.imageUrl;
+            imageStoragePath =
+              logoOverlayResult.imageStoragePath || imageStoragePath;
+          }
+
+          const { error: productImageUpdateError } = await supabase
+            .from("posts")
+            .update({
+              image_url: imageUrl,
+              image_storage_path: imageStoragePath,
+              image_status: "ready",
+              image_prompt: finalImagePrompt,
+              include_logo: shouldUseLogoForRule(rule, brandProfile),
+              logo_url: shouldUseLogoForRule(rule, brandProfile)
+                ? brandProfile?.logo_url || null
+                : null,
+              updated_at: nowIso,
+            })
+            .eq("id", post.id);
+
+          if (productImageUpdateError) {
+            throw new Error(
+              productImageUpdateError.message ||
+                "Could not update post with editorial product image"
+            );
+          }
+
+          usedWebsiteImageUrlsThisRun.add(
+            normalizeComparableValue(websiteItem.image_url)
+          );
+          summary.website_image_used += 1;
         } else if (wantsImage && websiteItem?.image_url && useWebsiteImage) {
           imageUrl = websiteItem.image_url;
           finalImagePrompt =
