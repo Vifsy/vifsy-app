@@ -33337,43 +33337,7 @@ async function prepareNativeTransparentEditorialReference(sourceImageBuffer) {
     productAreaTop + Math.max(0, (productAreaHeight - targetHeight) / 2)
   );
 
-  const referenceBuffer = await sharp({
-    create: {
-      width,
-      height,
-      channels: 4,
-      background: { r: 247, g: 246, b: 242, alpha: 1 },
-    },
-  })
-    .composite([{ input: lockedProductBuffer, left, top }])
-    .png({ compressionLevel: 9 })
-    .toBuffer();
-
-  // GPT-Image-2 masking is guidance, so the original product is composited
-  // back over the generated result afterwards as the final authority. The
-  // alpha-shaped mask primarily tells the model to design around this exact
-  // placement instead of moving the product or covering it with typography.
-  const productMask = await sharp(lockedProductBuffer)
-    .ensureAlpha()
-    .tint({ r: 255, g: 255, b: 255 })
-    .png({ compressionLevel: 9 })
-    .toBuffer();
-
-  const maskBuffer = await sharp({
-    create: {
-      width,
-      height,
-      channels: 4,
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    },
-  })
-    .composite([{ input: productMask, left, top }])
-    .png({ compressionLevel: 9 })
-    .toBuffer();
-
   return {
-    referenceBuffer,
-    maskBuffer,
     lockedProductBuffer,
     placement: {
       left,
@@ -33396,6 +33360,52 @@ function normalizeEditorialVisibleCopyText(value, maxLength = 96) {
       .replace(/^[-–—:;,.!?'"()\s]+|[-–—:;,.!?'"()\s]+$/g, ""),
     maxLength
   );
+}
+
+function looksLikeGenericEditorialHeadline(candidate, {
+  productName = "",
+  brandName = "",
+  websiteUrl = "",
+} = {}) {
+  const normalized = normalizeProductLabelComparisonText(candidate);
+  if (!normalized) return true;
+
+  if (looksLikeStorefrontNavigationText(candidate)) return true;
+  if (isProductLabelTextRedundant(productName, candidate)) return true;
+  if (brandName && isProductLabelTextRedundant(brandName, candidate)) return true;
+
+  const websiteHost = getHostnameFromUrl(websiteUrl).replace(/^www\./, "");
+  if (websiteHost && normalized.includes(normalizeProductLabelComparisonText(websiteHost))) {
+    return true;
+  }
+
+  const genericPatterns = [
+    /^se produkten(?:\s|$)/u,
+    /^upptack(?:\s|$)/u,
+    /^upptack mer(?:\s|$)/u,
+    /^discover(?:\s|$)/u,
+    /^shop(?:\s|$)/u,
+    /^shop now(?:\s|$)/u,
+    /^learn more(?:\s|$)/u,
+    /^built for(?:\s|$)/u,
+    /^made for(?:\s|$)/u,
+    /^designed for(?:\s|$)/u,
+    /^perfect for(?:\s|$)/u,
+    /^perfekt for(?:\s|$)/u,
+    /^ready for(?:\s|$)/u,
+    /^redo for(?:\s|$)/u,
+    /^timeless(?:\s|$)/u,
+    /^tidlos(?:\s|$)/u,
+  ];
+
+  if (genericPatterns.some((pattern) => pattern.test(normalized))) {
+    return true;
+  }
+
+  const tokens = normalized.split(/\s+/u).filter(Boolean);
+  if (tokens.length < 2) return true;
+
+  return false;
 }
 
 function deriveEditorialVisibleCopy(rule, postContent) {
@@ -33436,6 +33446,14 @@ function deriveEditorialVisibleCopy(rule, postContent) {
     if (
       !headline &&
       !redundantWithProduct &&
+      !looksLikeGenericEditorialHeadline(candidate, {
+        productName,
+        brandName:
+          rule?.website_item?.product_brand ||
+          rule?.website_item?.brand ||
+          rule?.brand_profile?.business_name || "",
+        websiteUrl: rule?.brand_profile?.website_url || "",
+      }) &&
       wordCount >= 2 &&
       wordCount <= 6 &&
       candidate.length <= 42
@@ -33467,7 +33485,7 @@ function deriveEditorialVisibleCopy(rule, postContent) {
 function buildWebsiteItemEditorialPostImagePrompt(
   rule,
   postContent,
-  { nativeTransparent = false, placement = null } = {}
+  { nativeTransparent = false } = {}
 ) {
   const brandProfileText = formatBrandProfileForPrompt(rule.brand_profile);
   const websiteItemText = formatWebsiteItemForPrompt(rule.website_item);
@@ -33482,25 +33500,24 @@ function buildWebsiteItemEditorialPostImagePrompt(
       ""
   ).trim();
   const editorialCopy = deriveEditorialVisibleCopy(rule, postContent);
-  const placementText = placement
-    ? `Reserve approximately x=${Math.round((placement.left / 1024) * 100)}%–${Math.round(((placement.left + placement.width) / 1024) * 100)}% and y=${Math.round((placement.top / 1280) * 100)}%–${Math.round(((placement.top + placement.height) / 1280) * 100)}% of the final 4:5 canvas for the original product that Spreelo will add afterwards.`
-    : "";
 
   const exactCopyBlock = `
-EXACT VISIBLE COPY TO RENDER:
-${editorialCopy.headline ? `- Headline, exact spelling: "${editorialCopy.headline}"` : "- No separate headline is required unless it is already supplied below."}
+VISIBLE COPY CONTRACT:
+${editorialCopy.headline ? `- Headline, exact spelling: "${editorialCopy.headline}"` : "- Headline: create exactly one short unique editorial headline in the same language as the post. It must be concise, premium and product-specific rather than generic."}
 - Product name/model, exact spelling: "${editorialCopy.productName || productTitle || "Featured product"}"
-${editorialCopy.supportingLine ? `- Supporting line, exact spelling: "${editorialCopy.supportingLine}"` : "- No supporting line is required unless it is already supplied below."}
-- Use only the exact visible copy listed here.
-- Do not invent alternate wording, extra slogans, filler microcopy or spelling changes.
-- If a text element is marked as not required, omit it instead of inventing a replacement.
+${editorialCopy.supportingLine ? `- Supporting line, exact spelling: "${editorialCopy.supportingLine}"` : "- Supporting line: optional. If you add one, keep it to a single short supporting sentence. Otherwise omit it."}
+- If a headline or supporting line is marked with exact spelling above, preserve that spelling exactly.
+- If a headline is not pre-authored above, invent only that one headline and keep the rest restrained.
+- Do not invent alternate wording for any exact supplied text.
+- Do not add extra slogans, filler microcopy, CTA copy or spelling changes.
+- If a text element is marked as optional and you do not need it, omit it instead of inventing more copy.
 `.trim();
 
   if (nativeTransparent) {
     return `
 Create the BACKGROUND + TYPOGRAPHY LAYER for one premium portrait 4:5 social-media product post.
 
-Spreelo already has the exact original product as a transparent asset. The product itself is NOT part of this generation. Spreelo will place that original product into the finished image afterwards.
+Spreelo already has the exact original product as a transparent asset. Create the finished background-and-typography layer; Spreelo adds the original product afterwards.
 
 Brand profile:
 ${brandProfileText}
@@ -33529,19 +33546,23 @@ If this direction contains legacy instructions saying that Product posts must be
 
 TRANSPARENT-ORIGINAL COMPOSITION CONTRACT:
 - Output one 1024×1280 portrait 4:5 image layer.
-- Generate only the background/environment and the visible typography.
-- The generated layer must not contain the product or a stand-in for the product. The exact original transparent product will be added afterwards by Spreelo.
-- ${placementText}
-- Keep that reserved product area visually clear and free of text or foreground objects so the original product can be placed there cleanly.
+- Generate one continuous full-bleed editorial background from edge to edge plus the visible typography.
+- Spreelo will add the exact original transparent product afterwards.
+- Use natural negative space through the upper and middle part of the background so the original product can sit there cleanly when added.
+- Place the visible typography as one balanced centered stack in the lower part of the composition with generous margins and a natural editorial hierarchy.
+- Treat the canvas as one uninterrupted finished background composition.
 - Choose a background that suits this exact product, its category, colors, brand and campaign context.
 - Let the typography style adapt freely to the product and background: modern sans, condensed display, refined serif, editorial type or another professional choice that genuinely fits.
 - Mobile readability is mandatory. Do not use microtext.
+- Keep the main headline short and premium: ideally 2 to 5 words, at most 2 lines, and clearly narrower than the full image width.
+- Avoid generic headline formulas like "Built for...", "Made for...", "Discover...", "Shop..." or storefront CTAs. When you need to create a headline, make it feel specific to this exact product.
 - Keep the visual copy concise and balanced: normally 2–3 visible text elements total.
 - If a headline is supplied above, use that exact headline as written.
 - Show the exact verified product name/model clearly as its own readable element.
 - If a supporting line is supplied above, use it once as written. If none is supplied, omit it rather than inventing a new one.
 - Prefer larger type and fewer words over extra copy.
-- Keep the main text primarily in the lower portion of the 4:5 image and outside the reserved product area.
+- Center the headline, product name and optional supporting line horizontally so the text block feels calm and editorial rather than like a wide banner.
+- Keep visible text comfortably inside the canvas; the headline should not stretch nearly edge to edge.
 - No CTA button, no "SHOP NOW", no fake UI, no price, no star rating, no invented discount, no invented guarantee, no invented material/specification and no unsupported performance claim.
 - If an exact authorized customer-supplied campaign offer is explicitly present in the campaign context, it may be shown exactly as supplied and must not be altered.
 - Do not put text inside white cards, opaque panels, labels, capsules or large text boxes. Typography should feel integrated directly into the design.
@@ -33602,12 +33623,15 @@ AUTHORITATIVE PRODUCT-POST DESIGN CONTRACT:
 - Background, lighting, product placement and typography must feel intentionally art-directed as one coherent image, not like separate layers or a generic template.
 - Let the typography style adapt freely to the product and background: modern sans, condensed display, refined serif, editorial type or another professional choice that genuinely fits.
 - Mobile readability is mandatory. Do not use microtext.
+- Keep the main headline short and premium: ideally 2 to 5 words, at most 2 lines, and clearly narrower than the full image width.
+- Avoid generic headline formulas like "Built for...", "Made for...", "Discover...", "Shop..." or storefront CTAs. When you need to create a headline, make it feel specific to this exact product.
 - Keep the visual copy concise and balanced: normally 2–3 visible text elements total.
 - If a headline is supplied above, use that exact headline as written.
 - Show the exact verified product name/model clearly as its own readable element. Do not rename, abbreviate or translate the product name unless the verified website itself supplies that localized name.
 - If a supporting line is supplied above, use it once as written. If none is supplied, omit it rather than inventing a new one.
 - Prefer larger type and fewer words over extra copy.
 - Keep the main text primarily in the lower portion of the 4:5 image so the product remains dominant and unobstructed.
+- Use a centered editorial text block with generous side margins, not a left-heavy or nearly full-width banner treatment.
 - No CTA button, no "SHOP NOW", no fake UI, no price, no star rating, no invented discount, no invented guarantee, no invented material/specification and no unsupported performance claim.
 - If an exact authorized customer-supplied campaign offer is explicitly present in the campaign context, it may be shown exactly as supplied and must not be altered.
 - Do not put text inside white cards, opaque panels, labels, capsules or large text boxes. Typography should feel integrated directly into the design.
@@ -33638,7 +33662,6 @@ export async function generateWebsiteItemEditorialPostImage(openai, rule, postCo
   if (nativeReference) {
     const prompt = buildWebsiteItemEditorialPostImagePrompt(rule, postContent, {
       nativeTransparent: true,
-      placement: nativeReference.placement,
     });
 
     const response = await openai.images.generate({
