@@ -37,24 +37,99 @@ function topEntries(map, limit = 5) {
     .slice(0, limit);
 }
 
+function median(values = []) {
+  const sorted = values.map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+  if (!sorted.length) return 0;
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function roundCost(value) {
+  return Math.round((Number(value) || 0) * 1e6) / 1e6;
+}
+
+async function loadGenerationCostInsights(context) {
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: summaries, error } = await context.admin
+    .from("post_generation_cost_summaries")
+    .select("post_id,amount,currency,complete,updated_at")
+    .eq("complete", true)
+    .eq("currency", "USD")
+    .gte("updated_at", since)
+    .not("amount", "is", null)
+    .order("updated_at", { ascending: false })
+    .limit(5000);
+  if (error) throw error;
+  const rows = summaries || [];
+  const ids = [...new Set(rows.map((row) => row.post_id).filter(Boolean))];
+  const postMap = new Map();
+  for (let index = 0; index < ids.length; index += 500) {
+    const chunk = ids.slice(index, index + 500);
+    const { data: posts, error: postError } = await context.admin
+      .from("posts")
+      .select("id,content_type_id,content_format,post_type")
+      .in("id", chunk);
+    if (postError) throw postError;
+    for (const post of posts || []) postMap.set(post.id, post);
+  }
+
+  const groups = new Map();
+  const all = [];
+  for (const row of rows) {
+    const amount = Number(row.amount);
+    if (!Number.isFinite(amount) || amount < 0) continue;
+    all.push(amount);
+    const post = postMap.get(row.post_id) || {};
+    const key = String(post.content_type_id || post.post_type || post.content_format || "unknown");
+    const label = String(post.post_type || post.content_type_id || post.content_format || "Okänd typ");
+    const current = groups.get(key) || { key, label, values: [] };
+    current.values.push(amount);
+    groups.set(key, current);
+  }
+  const formats = [...groups.values()].map((group) => {
+    const values = group.values.sort((a, b) => a - b);
+    const average = values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
+    const p90Index = Math.max(0, Math.ceil(values.length * 0.9) - 1);
+    return {
+      key: group.key,
+      label: group.label,
+      samples: values.length,
+      averageUsd: roundCost(average),
+      medianUsd: roundCost(median(values)),
+      p90Usd: roundCost(values[p90Index] || 0),
+      minUsd: roundCost(values[0] || 0),
+      maxUsd: roundCost(values[values.length - 1] || 0),
+    };
+  }).sort((a, b) => b.samples - a.samples || b.medianUsd - a.medianUsd);
+  return {
+    periodDays: 30,
+    samples: all.length,
+    averageUsd: roundCost(all.length ? all.reduce((sum, value) => sum + value, 0) / all.length : 0),
+    medianUsd: roundCost(median(all)),
+    formats: formats.slice(0, 12),
+  };
+}
+
 async function loadBusinessInsights(context) {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const [postsResult, occurrencesResult, creditResult, brandsResult] = await Promise.all([
-    context.admin.from("posts").select("id, user_id, brand_profile_id, status, platform, content_format, post_type, created_at").gte("created_at", since).limit(10000),
+    context.admin.from("posts").select("id, user_id, brand_profile_id, status, platform, content_format, post_type, created_at, updated_at").gte("created_at", since).limit(10000),
     context.admin.from("automation_occurrences").select("id, user_id, brand_profile_id, status, content_type_id, refunded_credits, started_at").gte("started_at", since).limit(10000),
     context.admin.from("credit_reservation_events").select("user_id, content_type_id, amount, event_type, created_at").gte("created_at", since).limit(10000),
-    context.admin.from("brand_profiles").select("id, user_id, business_name").limit(10000),
+    context.admin.from("brand_profiles").select("id, user_id, business_name, country_code").limit(10000),
   ]);
   if (postsResult.error) throw postsResult.error;
   if (occurrencesResult.error) throw occurrencesResult.error;
   if (creditResult.error) throw creditResult.error;
   if (brandsResult.error) throw brandsResult.error;
 
-  const brandMap = new Map((brandsResult.data || []).map((row) => [row.id, { name: row.business_name || "Unnamed brand", userId: row.user_id }]));
+  const brandMap = new Map((brandsResult.data || []).map((row) => [row.id, { name: row.business_name || "Unnamed brand", userId: row.user_id, countryCode: String(row.country_code || "").toUpperCase() }]));
   const customerUsage = new Map();
   const brandUsage = new Map();
   const formatUsage = new Map();
   const platformUsage = new Map();
+  const countryUsage = new Map();
+  const dailyUsage = new Map();
 
   const bump = (map, key, extra = {}) => {
     const id = String(key || "unknown");
@@ -63,12 +138,24 @@ async function loadBusinessInsights(context) {
     map.set(id, current);
   };
 
+  for (const brand of brandsResult.data || []) {
+    const countryCode = String(brand.country_code || "OTHER").toUpperCase();
+    bump(countryUsage, countryCode, { name: countryCode });
+  }
+
   for (const row of postsResult.data || []) {
     bump(customerUsage, row.user_id, { name: row.user_id || "Unknown customer", userId: row.user_id });
     const brand = brandMap.get(row.brand_profile_id) || {};
     bump(brandUsage, row.brand_profile_id, { name: brand.name || "Unknown brand", userId: brand.userId || row.user_id, brandId: row.brand_profile_id });
-    bump(formatUsage, row.content_format || row.post_type || "unknown", { name: row.content_format || row.post_type || "Unknown" });
+    bump(formatUsage, row.post_type || row.content_format || "unknown", { name: row.post_type || row.content_format || "Unknown" });
     bump(platformUsage, row.platform || "unknown", { name: row.platform || "Unknown" });
+    const day = String(row.created_at || "").slice(0, 10);
+    if (day) {
+      const daily = dailyUsage.get(day) || { date: day, generated: 0, published: 0 };
+      daily.generated += 1;
+      if (row.status === "published") daily.published += 1;
+      dailyUsage.set(day, daily);
+    }
   }
 
   const creditsByUser = new Map();
@@ -114,6 +201,8 @@ async function loadBusinessInsights(context) {
     topBrands: topEntries(brandUsage),
     topFormats: topEntries(formatUsage),
     platforms: topEntries(platformUsage, 8),
+    topCountries: topEntries(countryUsage, 8),
+    daily: [...dailyUsage.values()].sort((a, b) => a.date.localeCompare(b.date)),
     totals: {
       postsCreated: (postsResult.data || []).length,
       postsPublished: published,
@@ -189,7 +278,16 @@ export async function GET(request) {
         unexpectedAutomaticReruns: totals.unexpectedAutomaticReruns + Math.max(0, Number(row.automatic_run_count || 1) - 1),
       }), { refundedCredits: 0, unexpectedAutomaticReruns: 0 });
     }),
-    safeAdminQuery("businessInsights", { periodDays: 30, topCustomersByCredits: [], topCustomersByPosts: [], topBrands: [], topFormats: [], platforms: [], totals: {} }, () => loadBusinessInsights(context)),
+    safeAdminQuery("businessInsights", { periodDays: 30, topCustomersByCredits: [], topCustomersByPosts: [], topBrands: [], topFormats: [], platforms: [], topCountries: [], daily: [], totals: {} }, () => loadBusinessInsights(context)),
+    safeAdminQuery("generationCosts", { periodDays: 30, samples: 0, averageUsd: 0, medianUsd: 0, formats: [] }, () => loadGenerationCostInsights(context)),
+    safeAdminQuery("openRescueCases", 0, () =>
+      countRows(context.admin, "admin_rescue_cases", (query) => query.in("status", ["needed", "imported"]))
+    ),
+    safeAdminQuery("postsThisMonth", 0, () => {
+      const now = new Date();
+      const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+      return countRows(context.admin, "posts", (query) => query.gte("created_at", monthStart));
+    }),
     safeAdminQuery("recentAdjustments", [], async () => {
       const { data, error } = await context.admin
         .from("admin_credit_adjustments")
@@ -217,6 +315,9 @@ export async function GET(request) {
     failedOccurrences,
     monthlyOccurrenceTotals,
     businessInsights,
+    generationCosts,
+    openRescueCases,
+    postsThisMonth,
     recentAdjustments,
   ] = results;
   const warnings = results.map((result) => result.warning).filter(Boolean);
@@ -238,8 +339,12 @@ export async function GET(request) {
       failedOccurrences: failedOccurrences.value,
       refundedCredits: monthlyOccurrenceTotals.value.refundedCredits,
       unexpectedAutomaticReruns: monthlyOccurrenceTotals.value.unexpectedAutomaticReruns,
+      openRescueCases: openRescueCases.value,
+      postsThisMonth: postsThisMonth.value,
+      actionRequired: Number(failedMedia.value || 0) + Number(pendingApproval.value || 0) + Number(openRescueCases.value || 0),
     },
     recentAdjustments: recentAdjustments.value,
     insights: businessInsights.value,
+    generationCosts: generationCosts.value,
   });
 }
