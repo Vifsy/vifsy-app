@@ -213,7 +213,7 @@ export default function HomeReferenceOverview({
                   <span><b>Takt</b>{nextRecurringPlan?.postsPerWeek ? `${nextRecurringPlan.postsPerWeek} inlägg/vecka` : "Återkommande"}</span>
                   <span><b>Kanaler</b>{nextRecurringPlatforms}</span>
                 </div>
-              ) : <div className="home-plan-overview-empty">Inget återkommande schema körs just nu.</div>}
+              ) : null}
             </div>
             {recurringCount ? (
               <button type="button" className={`home-plan-overview-action${showRecurringSchedules ? " open" : ""}`} onClick={() => setShowRecurringSchedules((current) => !current)}>
@@ -283,7 +283,7 @@ export default function HomeReferenceOverview({
                   <span><b>Kanal</b>{nextScheduledItem?.platform || "—"}</span>
                   <span className="home-plan-overview-status">{plannedItemStatus(nextScheduledItem)}</span>
                 </div>
-              ) : <div className="home-plan-overview-empty">Inga engångsinlägg ligger i kö.</div>}
+              ) : null}
             </div>
             {scheduledCount ? (
               <button type="button" className={`home-plan-overview-action${showScheduledItems ? " open" : ""}`} onClick={() => setShowScheduledItems((current) => !current)}>
@@ -344,7 +344,7 @@ export default function HomeReferenceOverview({
                   <span><b>Nästa körning</b>{formatScheduleDate(nextCampaignPlan?.next_run_at, nextCampaignPlan?.rules?.[0]?.timezone)}</span>
                   <span><b>Kanaler</b>{nextCampaignPlatforms}</span>
                 </div>
-              ) : <div className="home-plan-overview-empty">Ingen kalenderkampanj är aktiv just nu.</div>}
+              ) : null}
             </div>
             {campaignCount ? (
               <button type="button" className={`home-plan-overview-action${showCampaignSchedules ? " open" : ""}`} onClick={() => setShowCampaignSchedules((current) => !current)}>

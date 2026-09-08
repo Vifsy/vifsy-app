@@ -1,0 +1,264 @@
+/* v144.151 — flatten Home content-plan details, remove empty filler rows, and let expanded content size naturally. */
+
+/* Old Home calibration used fixed grid rows/heights. Rich plan details must be allowed
+   to grow naturally or an expanded section visually collides with the next category. */
+html body .home-reference-page .home-reference-plans {
+  grid-template-rows:auto !important;
+}
+
+html body .home-reference-plans > article.home-plan-overview-card {
+  height:auto !important;
+  min-height:104px !important;
+  padding-top:16px !important;
+  padding-bottom:16px !important;
+  overflow:visible !important;
+}
+
+/* No secondary empty-state strip. The status chip already says Inga aktiva / Inget planerat. */
+html body .home-plan-overview-empty {
+  display:none !important;
+}
+
+/* Active summary information belongs to the existing row, not in cards inside cards. */
+html body .home-plan-overview-facts {
+  display:grid !important;
+  grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+  gap:0 !important;
+  margin-top:11px !important;
+  padding-top:10px !important;
+  border-top:1px solid #edf0f4 !important;
+}
+
+html body .home-plan-overview-facts > span {
+  min-height:0 !important;
+  padding:0 14px !important;
+  border:0 !important;
+  border-right:1px solid #e7ebf0 !important;
+  border-radius:0 !important;
+  background:transparent !important;
+  font-size:12.5px !important;
+  line-height:1.35 !important;
+}
+
+html body .home-plan-overview-facts > span:first-child {
+  padding-left:0 !important;
+}
+
+html body .home-plan-overview-facts > span:last-child {
+  padding-right:0 !important;
+  border-right:0 !important;
+}
+
+/* Scheduled next-item summary is also an inline information row — never another box. */
+html body .home-plan-overview-next-item {
+  display:grid !important;
+  grid-template-columns:10px minmax(180px,1.4fr) minmax(120px,.8fr) minmax(90px,.6fr) auto !important;
+  align-items:center !important;
+  gap:10px 14px !important;
+  margin-top:11px !important;
+  padding:10px 0 0 !important;
+  border:0 !important;
+  border-top:1px solid #edf0f4 !important;
+  border-radius:0 !important;
+  background:transparent !important;
+}
+
+html body .home-plan-overview-next-item > span:not(.home-plan-overview-dot):not(.home-plan-overview-status) {
+  padding-left:13px !important;
+  border-left:1px solid #e7ebf0 !important;
+}
+
+html body .home-plan-overview-status {
+  min-height:26px !important;
+}
+
+/* Expanded content becomes a continuation of the category row rather than a new panel. */
+html body .home-reference-plan-manager {
+  position:relative !important;
+  z-index:auto !important;
+  width:auto !important;
+  height:auto !important;
+  min-height:0 !important;
+  margin:0 !important;
+  padding:0 23px 14px !important;
+  border:0 !important;
+  border-bottom:1px solid #e1e6ec !important;
+  border-radius:0 !important;
+  background:#fff !important;
+  box-shadow:none !important;
+  overflow:visible !important;
+}
+
+html body .home-reference-plan-manager.scheduled-manager,
+html body .home-reference-plan-manager.campaign-manager {
+  border-left:0 !important;
+}
+
+html body .home-reference-recurring-manager-head {
+  min-height:45px !important;
+  margin:0 !important;
+  padding:10px 0 !important;
+  border-top:1px solid #edf0f4 !important;
+}
+
+html body .home-reference-recurring-manager-head > div {
+  gap:1px !important;
+}
+
+html body .home-reference-recurring-manager-head strong {
+  font-size:13px !important;
+}
+
+html body .home-reference-recurring-manager-head span {
+  font-size:11.5px !important;
+}
+
+html body .home-reference-recurring-list {
+  gap:0 !important;
+}
+
+html body .home-reference-recurring-item {
+  grid-template-columns:minmax(190px,.9fr) minmax(320px,1.55fr) auto !important;
+  gap:16px !important;
+  min-height:68px !important;
+  padding:12px 0 !important;
+  border:0 !important;
+  border-top:1px solid #edf0f4 !important;
+  border-radius:0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+}
+
+html body .home-reference-recurring-meta.home-reference-recurring-meta-rich {
+  grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+  gap:0 !important;
+}
+
+html body .home-reference-recurring-meta.home-reference-recurring-meta-rich > span {
+  min-height:0 !important;
+  padding:1px 12px !important;
+  border:0 !important;
+  border-left:1px solid #e7ebf0 !important;
+  border-radius:0 !important;
+  background:transparent !important;
+  font-size:11.75px !important;
+  line-height:1.35 !important;
+}
+
+html body .home-reference-recurring-meta.home-reference-recurring-meta-rich > span:first-child {
+  border-left:0 !important;
+}
+
+/* Medium sizes: retain readable text but let details wrap into natural rows. */
+@media (max-width:1200px) {
+  html body .home-reference-plans > article.home-plan-overview-card {
+    min-height:0 !important;
+  }
+
+  html body .home-reference-plan-manager {
+    padding-inline:19px !important;
+  }
+
+  html body .home-reference-recurring-item {
+    grid-template-columns:minmax(170px,.8fr) minmax(0,1.2fr) !important;
+  }
+}
+
+@media (max-width:900px) {
+  html body .home-reference-plans > article.home-plan-overview-card {
+    overflow:hidden !important;
+  }
+
+  html body .home-plan-overview-facts {
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+    row-gap:10px !important;
+  }
+
+  html body .home-plan-overview-facts > span {
+    padding:0 10px !important;
+  }
+
+  html body .home-plan-overview-facts > span:nth-child(2) {
+    border-right:0 !important;
+  }
+
+  html body .home-plan-overview-facts > span:nth-child(3) {
+    grid-column:1 / -1 !important;
+    padding:10px 0 0 !important;
+    border-top:1px solid #edf0f4 !important;
+    border-right:0 !important;
+  }
+
+  html body .home-reference-plan-manager {
+    margin:0 0 8px !important;
+    padding:0 16px 12px !important;
+    border:1px solid #e3e8ee !important;
+    border-top:0 !important;
+    border-radius:0 0 13px 13px !important;
+  }
+
+  html body .home-reference-recurring-item {
+    grid-template-columns:1fr !important;
+    gap:10px !important;
+  }
+
+  html body .home-reference-recurring-meta.home-reference-recurring-meta-rich {
+    grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+  }
+}
+
+@media (max-width:620px) {
+  html body .home-plan-overview-facts {
+    grid-template-columns:1fr !important;
+    gap:0 !important;
+  }
+
+  html body .home-plan-overview-facts > span,
+  html body .home-plan-overview-facts > span:nth-child(3) {
+    grid-column:auto !important;
+    padding:8px 0 !important;
+    border:0 !important;
+    border-top:1px solid #edf0f4 !important;
+    font-size:12px !important;
+  }
+
+  html body .home-plan-overview-facts > span:first-child {
+    padding-top:0 !important;
+    border-top:0 !important;
+  }
+
+  html body .home-plan-overview-next-item {
+    grid-template-columns:9px minmax(0,1fr) !important;
+    gap:8px 10px !important;
+  }
+
+  html body .home-plan-overview-next-item > span:not(.home-plan-overview-dot):not(.home-plan-overview-status) {
+    grid-column:2 !important;
+    padding:6px 0 0 !important;
+    border:0 !important;
+    border-top:1px solid #edf0f4 !important;
+  }
+
+  html body .home-reference-plan-manager {
+    padding-inline:14px !important;
+  }
+
+  html body .home-reference-recurring-manager-head {
+    align-items:stretch !important;
+  }
+
+  html body .home-reference-recurring-meta.home-reference-recurring-meta-rich {
+    grid-template-columns:1fr !important;
+  }
+
+  html body .home-reference-recurring-meta.home-reference-recurring-meta-rich > span {
+    padding:7px 0 !important;
+    border:0 !important;
+    border-top:1px solid #edf0f4 !important;
+    font-size:11.75px !important;
+  }
+
+  html body .home-reference-recurring-meta.home-reference-recurring-meta-rich > span:first-child {
+    border-top:0 !important;
+  }
+}
