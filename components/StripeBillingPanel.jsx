@@ -335,7 +335,18 @@ export default function StripeBillingPanel({ initialBalance = null, onBalanceCha
                 : t("billing.audienceProShort");
             return (
               <article key={plan.key} className={`stripe-reference-plan plan-${plan.key} ${activePlan ? "current" : ""}`}>
-                <header><div className="stripe-reference-plan-title"><span className="plan-icon">{plan.key === "starter" ? <Rocket /> : plan.key === "growth" ? <Leaf /> : <Crown />}</span><div><h2>{plan.name}</h2><small>{audienceText}</small></div></div>{activePlan ? <span>{t("billing.currentPlan")}</span> : null}</header>
+                <header>
+                  <div className="stripe-reference-plan-title">
+                    <span className="plan-icon">{plan.key === "starter" ? <Rocket /> : plan.key === "growth" ? <Leaf /> : <Crown />}</span>
+                    <div className="stripe-reference-plan-heading-copy">
+                      <div className="stripe-reference-plan-heading-line">
+                        <h2>{plan.name}</h2>
+                        {activePlan ? <span className="stripe-reference-current-badge">{t("billing.currentPlan")}</span> : null}
+                      </div>
+                      <small>{audienceText}</small>
+                    </div>
+                  </div>
+                </header>
                 <div className="price"><strong>{price.toLocaleString("sv-SE")} kr</strong><small>/{interval === "month" ? t("billing.monthShort") : t("billing.yearShort")}</small><em>{interval === "year" ? t("billing.priceBilledYearly") : t("billing.priceBilledMonthly")}</em></div>
                 <div className="stripe-reference-features">
                   <div className="plan-feature credits"><Check />{t("billing.creditsPerMonth", { count: plan.credits })}</div>
