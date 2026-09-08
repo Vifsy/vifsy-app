@@ -33516,13 +33516,15 @@ FOOTER BREATHING ROOM:
 `.trim();
   const exactCopyBlock = `
 VISIBLE COPY CONTRACT:
-${editorialCopy.headline ? `- Headline, exact spelling: "${editorialCopy.headline}"` : "- Headline: create exactly one short unique editorial headline in the same language as the post. It must be concise, premium and product-specific rather than generic."}
+- Headline: create exactly one short unique editorial headline in the same language as the post.
+- The headline must feel specific to this exact product and should not read like a generic slogan that could fit almost anything.
+- Prefer 2 to 5 words, at most 2 lines.
+- Do not reuse or paraphrase a generic opening line from the supplied post text when it feels broad, repetitive or storefront-like.
+- Avoid generic formulas such as "Built for...", "Made for...", "Ready to...", "Discover...", "Se och hitta...", "Klassisk stil..." or other vague all-purpose lines.
 - Product name/model, exact spelling: "${editorialCopy.productName || productTitle || "Featured product"}"
-- Use exactly two visible text roles only: one headline and the exact product/model name.
+- Use exactly two visible text roles only: one original editorial headline and the exact product/model name.
 - Do not add a supporting sentence, third line of copy, CTA, URL, microcopy or filler text.
-- If a headline is supplied above, preserve its spelling exactly.
-- If a headline is not pre-authored above, invent only that one headline and keep the rest restrained.
-- Do not invent alternate wording for any exact supplied text.
+- Do not invent alternate wording for any exact supplied product/model text.
 - Do not add extra slogans or spelling changes.
 `.trim();
 
@@ -33584,7 +33586,7 @@ AUTHORITATIVE PRODUCT-POST DESIGN CONTRACT:
 - Keep the product/model line clearly smaller than the headline and compact, ideally on one line when possible.
 - Avoid generic headline formulas like "Built for...", "Made for...", "Discover...", "Shop..." or storefront CTAs. When you need to create a headline, make it feel specific to this exact product.
 - Keep the visual copy concise and balanced: exactly 2 visible text roles total — headline + exact product/model name.
-- If a headline is supplied above, use that exact headline as written.
+- Create one original product-specific headline that feels tailored to this exact item rather than like a generic store slogan.
 - Show the exact verified product name/model clearly as its own readable element. Do not rename, abbreviate or translate the product name unless the verified website itself supplies that localized name.
 - Prefer fewer words over extra copy, but keep the overall text stack compact and slightly reduced in scale so the product stays dominant.
 - Keep the main text primarily in the lower portion of the 4:5 image so the product remains dominant and unobstructed.
@@ -33668,7 +33670,7 @@ AUTHORITATIVE PRODUCT-POST DESIGN CONTRACT:
 - Keep the product/model line clearly smaller than the headline and compact, ideally on one line when possible.
 - Avoid generic headline formulas like "Built for...", "Made for...", "Discover...", "Shop..." or storefront CTAs. When you need to create a headline, make it feel specific to this exact product.
 - Keep the visual copy concise and balanced: exactly 2 visible text roles total — headline + exact product/model name.
-- If a headline is supplied above, use that exact headline as written.
+- Create one original product-specific headline that feels tailored to this exact item rather than like a generic store slogan.
 - Show the exact verified product name/model clearly as its own readable element. Do not rename, abbreviate or translate the product name unless the verified website itself supplies that localized name.
 - Prefer fewer words over extra copy, but keep the overall text stack compact and slightly reduced in scale so the product stays dominant.
 - Keep the main text primarily in the lower portion of the 4:5 image so the product remains dominant and unobstructed.
@@ -33723,11 +33725,13 @@ Post context:
 ${postContent || "Not provided"}
 
 EXACT VISIBLE TYPOGRAPHY:
-${editorialCopy.headline ? `- Headline, exact spelling: "${editorialCopy.headline}"` : "- Create exactly one short, unique editorial headline in the same language as the post; normally 2–5 words and at most 2 lines."}
+- Create exactly one short, unique editorial headline in the same language as the post; normally 2–5 words and at most 2 lines.
+- Make the headline feel specific to this exact product, not like a broad store slogan.
+- Avoid generic formulas such as "Built for...", "Made for...", "Ready to...", "Discover...", "Se och hitta..." or "Klassisk stil...".
 - Product/model name, exact spelling: "${productTitle}"
 - There are exactly TWO text roles: headline + product/model name.
 - Do NOT add a supporting sentence, third copy line, CTA, website URL, hashtags, price, rating, offer, microcopy or filler.
-- Preserve exact supplied spelling. Do not rewrite or translate the exact product/model name.
+- Preserve exact supplied spelling for the product/model name. Do not rewrite or translate the exact product/model name.
 
 TRANSPARENT TYPOGRAPHY CONTRACT:
 - Output a square transparent RGBA typography asset.
@@ -37549,15 +37553,13 @@ export function shouldUseLogoForEditorialProductPost(rule, brandProfile) {
     return false;
   }
 
-  const imageSource = String(rule?.image_source || "").trim().toLowerCase();
-  if (["uploaded", "none"].includes(imageSource)) {
-    return false;
-  }
-
-  // Editorial Product posts follow the CURRENT brand-profile default. Older
-  // automation rows may contain include_logo=false simply because the logo did
-  // not exist when the rule was first created; that stale snapshot must not
-  // override the current brand setting.
+  // Editorial Product posts follow the CURRENT brand-profile default.
+  // Do not let stale rule-level image_source values like "none" or "uploaded"
+  // suppress the logo here, because the final editorial image is generated in
+  // this flow and the logo overlay is still valid.
+  // Older automation rows may also contain include_logo=false simply because
+  // the logo did not exist when the rule was first created; that stale snapshot
+  // must not override the current brand setting.
   return brandProfile.logo_enabled_by_default !== false;
 }
 
