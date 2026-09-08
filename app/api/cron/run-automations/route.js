@@ -13405,6 +13405,34 @@ async function getBrandProfileForRule(supabase, rule) {
   return data || null;
 }
 
+async function refreshEditorialBrandLogoConfig(supabase, rule, fallbackBrandProfile = null) {
+  if (!rule?.brand_profile_id || !rule?.user_id) {
+    return fallbackBrandProfile;
+  }
+
+  const { data, error } = await supabase
+    .from("brand_profiles")
+    .select("id, logo_url, logo_storage_path, logo_enabled_by_default")
+    .eq("id", rule.brand_profile_id)
+    .eq("user_id", rule.user_id)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("Could not refresh editorial brand logo settings; using loaded brand profile", {
+      ruleId: rule?.id || null,
+      brandProfileId: rule?.brand_profile_id || null,
+      message: error.message,
+    });
+    return fallbackBrandProfile;
+  }
+
+  if (!data) return fallbackBrandProfile;
+  return {
+    ...(fallbackBrandProfile || {}),
+    ...data,
+  };
+}
+
 function resolveAutomationPostLanguage(rule, brandProfile) {
   const requestedLanguage = String(rule?.language || "").trim();
   const analyzedLanguage = String(brandProfile?.content_language || "").trim();
@@ -33500,19 +33528,14 @@ function buildWebsiteItemEditorialPostImagePrompt(
       ""
   ).trim();
   const editorialCopy = deriveEditorialVisibleCopy(rule, postContent);
-  const footerSafeZoneInstruction = includeLogo
-    ? `
-BRAND LOGO FOOTER SAFE ZONE:
-- The brand logo will be added later as a small overlay after image generation.
-- Reserve a clean bottom footer safe zone for that logo.
-- Keep the full text stack above that footer safe zone.
-- Leave roughly the lowest 10–14% of the image as open breathing room / footer space with no visible copy.
-- Do not place the product, props or decorative elements so low that the future logo area feels crowded.
-`.trim()
-    : `
-FOOTER BREATHING ROOM:
-- Leave a visible footer margin below the text stack so the composition breathes.
-- Do not place copy flush to the bottom edge.
+  const footerSafeZoneInstruction = `
+BOTTOM SAFE ZONE — ALWAYS REQUIRED:
+- Always reserve roughly the lowest 9–10% of the image as calm visual breathing room beneath the final text line.
+- The entire headline + product/model text stack must end comfortably ABOVE this bottom safe zone.
+- Do not place headline, product/model name, CTA, microcopy, badges or decorative text inside this lowest 9–10%.
+- Continue the background naturally through this area; do NOT draw a divider, card, panel, band, frame, placeholder or marked logo box.
+- This safe zone is required whether or not a brand logo is enabled.
+${includeLogo ? "- A small brand logo will be overlaid later in the bottom-right of this safe zone, so keep that corner visually calm and free of major props or decorative elements." : "- No logo is enabled, but preserve the same 9–10% breathing room so the composition keeps the same balanced finish."}
 `.trim();
   const exactCopyBlock = `
 VISIBLE COPY CONTRACT:
@@ -33595,9 +33618,10 @@ AUTHORITATIVE PRODUCT-POST DESIGN CONTRACT:
 - Use a centered editorial text block with generous side margins, not a left-heavy or nearly full-width banner treatment.
 - Optically center the whole text stack on the full canvas with equal-feeling left and right margins; do not center within an off-balance local area or a shifted text box.
 - Keep the text stack inside a comfortable centered column rather than letting it drift left or right.
-- Leave extra breathing room below the final text line so the lowest line never feels cramped against the bottom edge.
-- When a logo footer safe zone is active, reserve a clearly visible empty band beneath the final text line for the future logo overlay; the text stack must end comfortably above that reserved footer area.
-- Even without a logo, keep a clearly visible footer margin under the text stack.
+- Leave a consistent bottom safe zone below the final text line: approximately the lowest 9–10% of the canvas must remain free of visible copy.
+- The full text stack must end above that safe zone whether or not a logo is enabled.
+- Keep the background continuous and natural through the safe zone; it is breathing room, not a separate footer panel.
+- When a logo is enabled, keep the bottom-right of the safe zone visually calm for the later logo overlay.
 - Do not add a supporting sentence, third text row, descriptive micro-line, CTA button, website URL, fake UI, price, star rating, invented discount, invented guarantee, invented material/specification or unsupported performance claim.
 - Exactly two visible text roles means exactly two: the headline and the product/model name, nothing else.
 - If an exact authorized customer-supplied campaign offer is explicitly present in the campaign context, it may be shown exactly as supplied and must not be altered.
@@ -33679,9 +33703,10 @@ AUTHORITATIVE PRODUCT-POST DESIGN CONTRACT:
 - Use a centered editorial text block with generous side margins, not a left-heavy or nearly full-width banner treatment.
 - Optically center the whole text stack on the full canvas with equal-feeling left and right margins; do not center within an off-balance local area or a shifted text box.
 - Keep the text stack inside a comfortable centered column rather than letting it drift left or right.
-- Leave extra breathing room below the final text line so the lowest line never feels cramped against the bottom edge.
-- When a logo footer safe zone is active, reserve a clearly visible empty band beneath the final text line for the future logo overlay; the text stack must end comfortably above that reserved footer area.
-- Even without a logo, keep a clearly visible footer margin under the text stack.
+- Leave a consistent bottom safe zone below the final text line: approximately the lowest 9–10% of the canvas must remain free of visible copy.
+- The full text stack must end above that safe zone whether or not a logo is enabled.
+- Keep the background continuous and natural through the safe zone; it is breathing room, not a separate footer panel.
+- When a logo is enabled, keep the bottom-right of the safe zone visually calm for the later logo overlay.
 - No CTA button, no "SHOP NOW", no fake UI, no price, no star rating, no invented discount, no invented guarantee, no invented material/specification and no unsupported performance claim.
 - Exactly two visible text roles means exactly two: the headline and the product/model name, nothing else.
 - Do not add a third tiny descriptive row under the product name.
@@ -38847,6 +38872,47 @@ async function persistTikTokCleanSingleImageOverride({
   }
 }
 
+async function fetchBrandLogoBufferForOverlay(supabase, brandProfile, resolvedLogoUrl = null) {
+  const storagePath = String(brandProfile?.logo_storage_path || "").trim();
+
+  if (storagePath && supabase?.storage) {
+    try {
+      const { data, error } = await supabase.storage
+        .from("brand-assets")
+        .download(storagePath);
+      if (!error && data) {
+        if (Buffer.isBuffer(data)) return data;
+        if (typeof data.arrayBuffer === "function") {
+          return Buffer.from(await data.arrayBuffer());
+        }
+      }
+      if (error) {
+        console.warn("Brand logo storage download failed; trying public URL fallback", {
+          brandProfileId: brandProfile?.id || null,
+          storagePath,
+          message: error.message,
+        });
+      }
+    } catch (error) {
+      console.warn("Brand logo storage download failed; trying public URL fallback", {
+        brandProfileId: brandProfile?.id || null,
+        storagePath,
+        message: error?.message || String(error),
+      });
+    }
+  }
+
+  const fallbackUrl = String(
+    resolvedLogoUrl ||
+      (await resolveBrandLogoPublicUrl(supabase, brandProfile)) ||
+      ""
+  ).trim();
+  if (!fallbackUrl) {
+    throw new Error("No usable brand logo storage path or public URL was available");
+  }
+  return fetchImageBufferForOverlay(fallbackUrl);
+}
+
 export async function applyLogoOverlayIfNeeded({
   supabase,
   userId,
@@ -38952,6 +39018,80 @@ export async function applyLogoOverlayIfNeeded({
 
     return null;
   }
+}
+
+async function applyEditorialProductLogoOverlayRequired({
+  supabase,
+  userId,
+  postId,
+  imageUrl,
+  imageStoragePath,
+  brandProfile,
+  includeLogo,
+}) {
+  if (!includeLogo) return null;
+  if (!imageUrl) {
+    throw new Error("Editorial brand logo overlay required but no base image URL was available");
+  }
+
+  const resolvedLogoUrl = await resolveBrandLogoPublicUrl(supabase, brandProfile);
+  const [baseImageBuffer, logoBuffer] = await Promise.all([
+    fetchImageBufferForOverlay(imageUrl),
+    fetchBrandLogoBufferForOverlay(supabase, brandProfile, resolvedLogoUrl),
+  ]);
+
+  const baseImage = sharp(baseImageBuffer).rotate();
+  const baseMetadata = await baseImage.metadata();
+  const baseWidth = Number(baseMetadata.width || 0);
+  const baseHeight = Number(baseMetadata.height || 0);
+  if (!baseWidth || !baseHeight) {
+    throw new Error("Could not read base image dimensions for required editorial logo overlay");
+  }
+
+  const logoTargetWidth = Math.max(72, Math.min(Math.round(baseWidth * 0.16), 220));
+  const margin = Math.max(24, Math.round(baseWidth * 0.035));
+  const logoPng = await sharp(logoBuffer)
+    .rotate()
+    .trim({ threshold: 10 })
+    .resize({ width: logoTargetWidth, withoutEnlargement: true })
+    .png()
+    .toBuffer();
+  const logoMetadata = await sharp(logoPng).metadata();
+  const logoWidth = Number(logoMetadata.width || logoTargetWidth);
+  const logoHeight = Number(logoMetadata.height || Math.round(logoTargetWidth * 0.4));
+  const left = Math.max(margin, baseWidth - logoWidth - margin);
+  const top = Math.max(margin, baseHeight - logoHeight - margin);
+
+  const outputBuffer = await baseImage
+    .composite([{ input: logoPng, left, top }])
+    .png()
+    .toBuffer();
+
+  const filePath = `${userId}/${postId}-with-logo.png`;
+  const { error: uploadError } = await supabase.storage
+    .from("post-images")
+    .upload(filePath, outputBuffer, { contentType: "image/png", upsert: true });
+  if (uploadError) {
+    throw new Error(uploadError.message || "Could not upload required editorial logo overlay image");
+  }
+
+  const { data: publicUrlData } = supabase.storage
+    .from("post-images")
+    .getPublicUrl(filePath);
+  const finalUrl = publicUrlData?.publicUrl || null;
+  if (!finalUrl) {
+    throw new Error("Could not create public URL for required editorial logo overlay image");
+  }
+
+  console.log("Editorial brand logo overlay applied", {
+    postId,
+    brandProfileId: brandProfile?.id || null,
+    sourceImageStoragePath: imageStoragePath || null,
+    overlayStoragePath: filePath,
+    logoSource: brandProfile?.logo_storage_path ? "brand-assets-storage" : "public-url",
+  });
+
+  return { imageUrl: finalUrl, imageStoragePath: filePath };
 }
 
 async function getUserAuthProfile(supabase, userId) {
@@ -44979,6 +45119,30 @@ product_research_model_used: websitePreparedRule.uses_website_content
           // locked and composited back unchanged. Non-transparent website
           // images skip cutout/background-removal completely and use the
           // high-fidelity recreation path inside the same image generation.
+          const editorialBrandProfile = await refreshEditorialBrandLogoConfig(
+            supabase,
+            rule,
+            brandProfile
+          );
+          const editorialRuleWithBrandProfile = {
+            ...ruleWithBrandProfile,
+            brand_profile: editorialBrandProfile || ruleWithBrandProfile?.brand_profile || null,
+          };
+          const editorialIncludeLogo = shouldUseLogoForEditorialProductPost(
+            rule,
+            editorialBrandProfile
+          );
+
+          console.info("Editorial product post logo settings resolved", {
+            ruleId: rule.id,
+            postId: post.id,
+            brandProfileId: editorialBrandProfile?.id || rule.brand_profile_id || null,
+            includeLogo: editorialIncludeLogo,
+            logoEnabledByDefault: editorialBrandProfile?.logo_enabled_by_default ?? null,
+            hasLogoUrl: Boolean(editorialBrandProfile?.logo_url),
+            hasLogoStoragePath: Boolean(editorialBrandProfile?.logo_storage_path),
+          });
+
           imageUrl = websiteItem.image_url;
           imageStoragePath = null;
           finalImagePrompt =
@@ -44987,7 +45151,7 @@ product_research_model_used: websitePreparedRule.uses_website_content
           try {
             const generatedProductPost = await generateWebsiteItemEditorialPostImage(
               openai,
-              ruleWithBrandProfile,
+              editorialRuleWithBrandProfile,
               generatedContent
             );
 
@@ -45040,20 +45204,16 @@ product_research_model_used: websitePreparedRule.uses_website_content
             imageStoragePath,
           });
 
-          const editorialIncludeLogo = shouldUseLogoForEditorialProductPost(
-            rule,
-            brandProfile
-          );
           const editorialLogoUrl = editorialIncludeLogo
-            ? await resolveBrandLogoPublicUrl(supabase, brandProfile)
+            ? await resolveBrandLogoPublicUrl(supabase, editorialBrandProfile)
             : null;
-          const logoOverlayResult = await applyLogoOverlayIfNeeded({
+          const logoOverlayResult = await applyEditorialProductLogoOverlayRequired({
             supabase,
             userId: rule.user_id,
             postId: post.id,
             imageUrl,
             imageStoragePath,
-            brandProfile,
+            brandProfile: editorialBrandProfile,
             includeLogo: editorialIncludeLogo,
           });
 
