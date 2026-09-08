@@ -33485,7 +33485,7 @@ function deriveEditorialVisibleCopy(rule, postContent) {
 function buildWebsiteItemEditorialPostImagePrompt(
   rule,
   postContent,
-  { nativeTransparent = false } = {}
+  { nativeTransparent = false, includeLogo = false } = {}
 ) {
   const brandProfileText = formatBrandProfileForPrompt(rule.brand_profile);
   const websiteItemText = formatWebsiteItemForPrompt(rule.website_item);
@@ -33500,6 +33500,20 @@ function buildWebsiteItemEditorialPostImagePrompt(
       ""
   ).trim();
   const editorialCopy = deriveEditorialVisibleCopy(rule, postContent);
+  const footerSafeZoneInstruction = includeLogo
+    ? `
+BRAND LOGO FOOTER SAFE ZONE:
+- The brand logo will be added later as a small overlay after image generation.
+- Reserve a clean bottom footer safe zone for that logo.
+- Keep the full text stack above that footer safe zone.
+- Leave roughly the lowest 10–14% of the image as open breathing room / footer space with no visible copy.
+- Do not place the product, props or decorative elements so low that the future logo area feels crowded.
+`.trim()
+    : `
+FOOTER BREATHING ROOM:
+- Leave a visible footer margin below the text stack so the composition breathes.
+- Do not place copy flush to the bottom edge.
+`.trim();
   const exactCopyBlock = `
 VISIBLE COPY CONTRACT:
 ${editorialCopy.headline ? `- Headline, exact spelling: "${editorialCopy.headline}"` : "- Headline: create exactly one short unique editorial headline in the same language as the post. It must be concise, premium and product-specific rather than generic."}
@@ -33542,6 +33556,8 @@ ${postContent || "Not provided"}
 
 ${exactCopyBlock}
 
+${footerSafeZoneInstruction}
+
 ${customVisualDirection ? `Additional visual direction:
 ${customVisualDirection}
 
@@ -33562,19 +33578,26 @@ AUTHORITATIVE PRODUCT-POST DESIGN CONTRACT:
 - Let the typography style adapt freely to the product and background: modern sans, condensed display, refined serif, editorial type or another professional choice that genuinely fits.
 - Mobile readability is mandatory. Do not use microtext.
 - Keep the main headline short and premium: ideally 2 to 5 words, at most 2 lines, and clearly narrower than the full image width.
+- Make the text treatment slightly smaller and more restrained than a typical loud ad poster so it supports the product instead of overpowering it.
+- Avoid oversized typography that spans almost the entire width or visually dominates the composition.
+- Keep the headline within a comfortable centered column, usually around half the image width rather than nearly edge to edge.
+- Keep the product/model line clearly smaller than the headline and compact, ideally on one line when possible.
 - Avoid generic headline formulas like "Built for...", "Made for...", "Discover...", "Shop..." or storefront CTAs. When you need to create a headline, make it feel specific to this exact product.
 - Keep the visual copy concise and balanced: exactly 2 visible text roles total — headline + exact product/model name.
 - If a headline is supplied above, use that exact headline as written.
 - Show the exact verified product name/model clearly as its own readable element. Do not rename, abbreviate or translate the product name unless the verified website itself supplies that localized name.
-- Prefer larger type and fewer words over extra copy.
+- Prefer fewer words over extra copy, but keep the overall text stack compact and slightly reduced in scale so the product stays dominant.
 - Keep the main text primarily in the lower portion of the 4:5 image so the product remains dominant and unobstructed.
 - Do not let the headline or product name sit behind the product, extend underneath the product, or get cut by the product silhouette.
 - Leave a clearly visible gap between the bottom of the product and the first line of text.
 - Use a centered editorial text block with generous side margins, not a left-heavy or nearly full-width banner treatment.
 - Optically center the whole text stack on the full canvas with equal-feeling left and right margins; do not center within an off-balance local area or a shifted text box.
 - Keep the text stack inside a comfortable centered column rather than letting it drift left or right.
-- Leave extra breathing room below the final text line so the lowest line never feels cramped against the bottom edge; a clearly visible footer margin must remain under the text stack.
-- Do not add a supporting sentence, third text row, CTA button, website URL, fake UI, price, star rating, invented discount, invented guarantee, invented material/specification or unsupported performance claim.
+- Leave extra breathing room below the final text line so the lowest line never feels cramped against the bottom edge.
+- When a logo footer safe zone is active, reserve a clearly visible empty band beneath the final text line for the future logo overlay; the text stack must end comfortably above that reserved footer area.
+- Even without a logo, keep a clearly visible footer margin under the text stack.
+- Do not add a supporting sentence, third text row, descriptive micro-line, CTA button, website URL, fake UI, price, star rating, invented discount, invented guarantee, invented material/specification or unsupported performance claim.
+- Exactly two visible text roles means exactly two: the headline and the product/model name, nothing else.
 - If an exact authorized customer-supplied campaign offer is explicitly present in the campaign context, it may be shown exactly as supplied and must not be altered.
 - Do not put text inside white cards, opaque panels, labels, capsules or large text boxes. Typography should feel integrated directly into the design.
 - Do not add unrelated sellable products or accessories that could be mistaken for items from the customer's catalog.
@@ -33616,6 +33639,8 @@ ${postContent || "Not provided"}
 
 ${exactCopyBlock}
 
+${footerSafeZoneInstruction}
+
 ${customVisualDirection ? `Additional visual direction:
 ${customVisualDirection}
 
@@ -33637,19 +33662,27 @@ AUTHORITATIVE PRODUCT-POST DESIGN CONTRACT:
 - Let the typography style adapt freely to the product and background: modern sans, condensed display, refined serif, editorial type or another professional choice that genuinely fits.
 - Mobile readability is mandatory. Do not use microtext.
 - Keep the main headline short and premium: ideally 2 to 5 words, at most 2 lines, and clearly narrower than the full image width.
+- Make the text treatment slightly smaller and more restrained than a typical loud ad poster so it supports the product instead of overpowering it.
+- Avoid oversized typography that spans almost the entire width or visually dominates the composition.
+- Keep the headline within a comfortable centered column, usually around half the image width rather than nearly edge to edge.
+- Keep the product/model line clearly smaller than the headline and compact, ideally on one line when possible.
 - Avoid generic headline formulas like "Built for...", "Made for...", "Discover...", "Shop..." or storefront CTAs. When you need to create a headline, make it feel specific to this exact product.
 - Keep the visual copy concise and balanced: exactly 2 visible text roles total — headline + exact product/model name.
 - If a headline is supplied above, use that exact headline as written.
 - Show the exact verified product name/model clearly as its own readable element. Do not rename, abbreviate or translate the product name unless the verified website itself supplies that localized name.
-- Prefer larger type and fewer words over extra copy.
+- Prefer fewer words over extra copy, but keep the overall text stack compact and slightly reduced in scale so the product stays dominant.
 - Keep the main text primarily in the lower portion of the 4:5 image so the product remains dominant and unobstructed.
 - Do not let the headline or product name sit behind the product, extend underneath the product, or get cut by the product silhouette.
 - Leave a clearly visible gap between the product and the first line of text.
 - Use a centered editorial text block with generous side margins, not a left-heavy or nearly full-width banner treatment.
 - Optically center the whole text stack on the full canvas with equal-feeling left and right margins; do not center within an off-balance local area or a shifted text box.
 - Keep the text stack inside a comfortable centered column rather than letting it drift left or right.
-- Leave extra breathing room below the final text line so the lowest line never feels cramped against the bottom edge; a clearly visible footer margin must remain under the text stack.
+- Leave extra breathing room below the final text line so the lowest line never feels cramped against the bottom edge.
+- When a logo footer safe zone is active, reserve a clearly visible empty band beneath the final text line for the future logo overlay; the text stack must end comfortably above that reserved footer area.
+- Even without a logo, keep a clearly visible footer margin under the text stack.
 - No CTA button, no "SHOP NOW", no fake UI, no price, no star rating, no invented discount, no invented guarantee, no invented material/specification and no unsupported performance claim.
+- Exactly two visible text roles means exactly two: the headline and the product/model name, nothing else.
+- Do not add a third tiny descriptive row under the product name.
 - If an exact authorized customer-supplied campaign offer is explicitly present in the campaign context, it may be shown exactly as supplied and must not be altered.
 - Do not put text inside white cards, opaque panels, labels, capsules or large text boxes. Typography should feel integrated directly into the design.
 - Do not add unrelated sellable products or accessories that could be mistaken for items from the customer's catalog.
@@ -33858,6 +33891,7 @@ export async function generateWebsiteItemEditorialPostImage(openai, rule, postCo
   if (nativeReference) {
     const prompt = buildWebsiteItemEditorialPostImagePrompt(rule, postContent, {
       nativeTransparent: true,
+      includeLogo: shouldUseLogoForEditorialProductPost(rule, rule?.brand_profile),
     });
 
     const canvasBuffer = await sharp({
@@ -33912,6 +33946,7 @@ export async function generateWebsiteItemEditorialPostImage(openai, rule, postCo
 
   const prompt = buildWebsiteItemEditorialPostImagePrompt(rule, postContent, {
     nativeTransparent: false,
+    includeLogo: shouldUseLogoForEditorialProductPost(rule, rule?.brand_profile),
   });
   const normalizedSourceImageBuffer = await sharp(sourceImageBuffer)
     .rotate()
