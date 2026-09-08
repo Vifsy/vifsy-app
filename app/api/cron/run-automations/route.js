@@ -33410,8 +33410,7 @@ function deriveEditorialVisibleCopy(rule, postContent) {
   );
 
   const lines = String(postContent || "")
-    .split("
-")
+    .split("\n")
     .map((line) => line.trim())
     .filter(Boolean)
     .filter((line) => !line.startsWith("#"));

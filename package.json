@@ -190,7 +190,8 @@
     "test:v144.113": "node scripts/test-v144-113-analysis-rescue-next-attempt-fix.mjs",
     "test:v144.114": "node scripts/test-v144-114-kling-ad-copy-placement-cta.mjs",
     "test:v144.116": "node scripts/test-v144-116-purpose-aware-kling-cta.mjs",
-    "test:v144.135": "node scripts/test-v144-135-editorial-product-posts.mjs"
+    "test:v144.135": "node scripts/test-v144-135-editorial-product-posts.mjs",
+    "test:v144.137": "node scripts/test-v144-137-editorial-product-posts.mjs"
   },
   "dependencies": {
     "@sparticuz/chromium": "141.0.0",
