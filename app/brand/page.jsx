@@ -721,12 +721,17 @@ export default function BrandProfile() {
         throw new Error(t("brand.logoErrorPublicUrl"));
       }
 
+      // Adding a first/new logo is an explicit customer choice, so enable it
+      // automatically. Replacing an existing logo preserves an intentional
+      // disabled state if the customer had switched logo usage off.
+      const shouldEnableUploadedLogo = logoUrl ? logoEnabledByDefault !== false : true;
+
       const { error: updateError } = await supabase
         .from("brand_profiles")
         .update({
           logo_url: publicUrl,
           logo_storage_path: storagePath,
-          logo_enabled_by_default: logoEnabledByDefault !== false,
+          logo_enabled_by_default: shouldEnableUploadedLogo,
           updated_at: new Date().toISOString(),
         })
         .eq("id", brandProfileId)
@@ -743,6 +748,7 @@ export default function BrandProfile() {
 
       setLogoUrl(publicUrl);
       setLogoStoragePath(storagePath);
+      setLogoEnabledByDefault(shouldEnableUploadedLogo);
       setLogoMessage(t("brand.logoUploaded"));
     } catch (error) {
       console.error("Could not upload brand logo:", error);
@@ -1687,13 +1693,11 @@ export default function BrandProfile() {
                       alt={locale === "sv" ? "Exempel på inlägg med träningsshorts" : "Example training shorts post"}
                       className="brand-v144124-preview-image"
                     />
-                    <span className={`brand-v144124-preview-logo-corner ${logoUrl ? "has-logo" : "is-example"}`}>
-                      {logoUrl ? (
+                    {logoUrl && logoEnabledByDefault ? (
+                      <span className="brand-v144124-preview-logo-corner has-logo">
                         <img src={logoUrl} alt={t("brand.logoPreviewAlt")} />
-                      ) : (
-                        <small>{businessName || t("brand.brandSetup")}</small>
-                      )}
-                    </span>
+                      </span>
+                    ) : null}
                   </div>
                 </div>
                 <div className="brand-v144118-preview-actions brand-v144124-preview-actions" aria-hidden="true">

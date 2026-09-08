@@ -13418,15 +13418,30 @@ async function refreshEditorialBrandLogoConfig(supabase, rule, fallbackBrandProf
     .maybeSingle();
 
   if (error) {
-    console.warn("Could not refresh editorial brand logo settings; using loaded brand profile", {
+    // Logo usage is fail-closed. Never reuse a possibly stale logo snapshot if
+    // the fresh brand-profile read fails; the customer may have just disabled
+    // or removed the logo.
+    console.warn("Could not refresh editorial brand logo settings; disabling logo for this run", {
       ruleId: rule?.id || null,
       brandProfileId: rule?.brand_profile_id || null,
       message: error.message,
     });
-    return fallbackBrandProfile;
+    return {
+      ...(fallbackBrandProfile || {}),
+      logo_url: null,
+      logo_storage_path: null,
+      logo_enabled_by_default: false,
+    };
   }
 
-  if (!data) return fallbackBrandProfile;
+  if (!data) {
+    return {
+      ...(fallbackBrandProfile || {}),
+      logo_url: null,
+      logo_storage_path: null,
+      logo_enabled_by_default: false,
+    };
+  }
   return {
     ...(fallbackBrandProfile || {}),
     ...data,
@@ -33535,7 +33550,7 @@ BOTTOM SAFE ZONE — ALWAYS REQUIRED:
 - Do not place headline, product/model name, CTA, microcopy, badges or decorative text inside this lowest 9–10%.
 - Continue the background naturally through this area; do NOT draw a divider, card, panel, band, frame, placeholder or marked logo box.
 - This safe zone is required whether or not a brand logo is enabled.
-${includeLogo ? "- A small brand logo will be overlaid later in the bottom-right of this safe zone, so keep that corner visually calm and free of major props or decorative elements." : "- No logo is enabled, but preserve the same 9–10% breathing room so the composition keeps the same balanced finish."}
+${includeLogo ? "- A small brand logo will be overlaid later in the TOP-LEFT corner. Keep that corner visually calm and free of important product details, headline text or busy props. The bottom safe zone remains pure breathing room and is NOT the logo area." : "- No logo is enabled, but preserve the same 9–10% breathing room so the composition keeps the same balanced finish."}
 `.trim();
   const exactCopyBlock = `
 VISIBLE COPY CONTRACT:
@@ -33621,7 +33636,7 @@ AUTHORITATIVE PRODUCT-POST DESIGN CONTRACT:
 - Leave a consistent bottom safe zone below the final text line: approximately the lowest 9–10% of the canvas must remain free of visible copy.
 - The full text stack must end above that safe zone whether or not a logo is enabled.
 - Keep the background continuous and natural through the safe zone; it is breathing room, not a separate footer panel.
-- When a logo is enabled, keep the bottom-right of the safe zone visually calm for the later logo overlay.
+- When a logo is enabled, keep a small calm TOP-LEFT corner for the later local logo overlay. Do not reserve the bottom safe zone for the logo.
 - Do not add a supporting sentence, third text row, descriptive micro-line, CTA button, website URL, fake UI, price, star rating, invented discount, invented guarantee, invented material/specification or unsupported performance claim.
 - Exactly two visible text roles means exactly two: the headline and the product/model name, nothing else.
 - If an exact authorized customer-supplied campaign offer is explicitly present in the campaign context, it may be shown exactly as supplied and must not be altered.
@@ -33706,7 +33721,7 @@ AUTHORITATIVE PRODUCT-POST DESIGN CONTRACT:
 - Leave a consistent bottom safe zone below the final text line: approximately the lowest 9–10% of the canvas must remain free of visible copy.
 - The full text stack must end above that safe zone whether or not a logo is enabled.
 - Keep the background continuous and natural through the safe zone; it is breathing room, not a separate footer panel.
-- When a logo is enabled, keep the bottom-right of the safe zone visually calm for the later logo overlay.
+- When a logo is enabled, keep a small calm TOP-LEFT corner for the later local logo overlay. Do not reserve the bottom safe zone for the logo.
 - No CTA button, no "SHOP NOW", no fake UI, no price, no star rating, no invented discount, no invented guarantee, no invented material/specification and no unsupported performance claim.
 - Exactly two visible text roles means exactly two: the headline and the product/model name, nothing else.
 - Do not add a third tiny descriptive row under the product name.
@@ -38921,6 +38936,7 @@ export async function applyLogoOverlayIfNeeded({
   imageStoragePath,
   brandProfile,
   includeLogo,
+  placement = "bottom-right",
 }) {
   if (!includeLogo || !imageUrl) {
     return null;
@@ -38951,11 +38967,11 @@ export async function applyLogoOverlayIfNeeded({
       throw new Error("Could not read base image dimensions for logo overlay");
     }
 
-    const logoTargetWidth = Math.max(
-      72,
-      Math.min(Math.round(baseWidth * 0.16), 220)
-    );
-    const margin = Math.max(24, Math.round(baseWidth * 0.035));
+    const useTopLeft = String(placement || "").toLowerCase() === "top-left";
+    const logoTargetWidth = useTopLeft
+      ? Math.max(68, Math.min(Math.round(baseWidth * 0.135), 170))
+      : Math.max(72, Math.min(Math.round(baseWidth * 0.16), 220));
+    const margin = Math.max(useTopLeft ? 28 : 24, Math.round(baseWidth * 0.035));
 
     const logoPng = await sharp(logoBuffer)
       .rotate()
@@ -38967,8 +38983,8 @@ export async function applyLogoOverlayIfNeeded({
     const logoWidth = Number(logoMetadata.width || logoTargetWidth);
     const logoHeight = Number(logoMetadata.height || Math.round(logoTargetWidth * 0.4));
 
-    const left = Math.max(margin, baseWidth - logoWidth - margin);
-    const top = Math.max(margin, baseHeight - logoHeight - margin);
+    const left = useTopLeft ? margin : Math.max(margin, baseWidth - logoWidth - margin);
+    const top = useTopLeft ? margin : Math.max(margin, baseHeight - logoHeight - margin);
 
     const outputBuffer = await baseImage
       .composite([
@@ -39003,6 +39019,7 @@ export async function applyLogoOverlayIfNeeded({
       brandProfileId: brandProfile.id || null,
       sourceImageStoragePath: imageStoragePath || null,
       overlayStoragePath: filePath,
+      placement: String(placement || "bottom-right"),
     });
 
     return {
@@ -39048,8 +39065,10 @@ async function applyEditorialProductLogoOverlayRequired({
     throw new Error("Could not read base image dimensions for required editorial logo overlay");
   }
 
-  const logoTargetWidth = Math.max(72, Math.min(Math.round(baseWidth * 0.16), 220));
-  const margin = Math.max(24, Math.round(baseWidth * 0.035));
+  // Editorial Product Posts use a small, consistent TOP-LEFT brand signature.
+  // The bottom 9–10% remains pure breathing room for every post, with or without a logo.
+  const logoTargetWidth = Math.max(68, Math.min(Math.round(baseWidth * 0.135), 170));
+  const margin = Math.max(28, Math.round(baseWidth * 0.035));
   const logoPng = await sharp(logoBuffer)
     .rotate()
     .trim({ threshold: 10 })
@@ -39059,8 +39078,8 @@ async function applyEditorialProductLogoOverlayRequired({
   const logoMetadata = await sharp(logoPng).metadata();
   const logoWidth = Number(logoMetadata.width || logoTargetWidth);
   const logoHeight = Number(logoMetadata.height || Math.round(logoTargetWidth * 0.4));
-  const left = Math.max(margin, baseWidth - logoWidth - margin);
-  const top = Math.max(margin, baseHeight - logoHeight - margin);
+  const left = margin;
+  const top = margin;
 
   const outputBuffer = await baseImage
     .composite([{ input: logoPng, left, top }])
@@ -39089,6 +39108,11 @@ async function applyEditorialProductLogoOverlayRequired({
     sourceImageStoragePath: imageStoragePath || null,
     overlayStoragePath: filePath,
     logoSource: brandProfile?.logo_storage_path ? "brand-assets-storage" : "public-url",
+    placement: "top-left",
+    left,
+    top,
+    logoWidth,
+    logoHeight,
   });
 
   return { imageUrl: finalUrl, imageStoragePath: filePath };

@@ -396,6 +396,7 @@ export async function POST(request) {
         imageStoragePath,
         brandProfile,
         includeLogo,
+        placement: "top-left",
       });
       if (logoResult?.imageUrl) {
         imageUrl = logoResult.imageUrl;
