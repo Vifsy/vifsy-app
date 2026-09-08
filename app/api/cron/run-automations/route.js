@@ -33485,7 +33485,7 @@ function deriveEditorialVisibleCopy(rule, postContent) {
 function buildWebsiteItemEditorialPostImagePrompt(
   rule,
   postContent,
-  { nativeTransparent = false } = {}
+  { nativeTransparent = false, lockedPlacement = null } = {}
 ) {
   const brandProfileText = formatBrandProfileForPrompt(rule.brand_profile);
   const websiteItemText = formatWebsiteItemForPrompt(rule.website_item);
@@ -33500,6 +33500,11 @@ function buildWebsiteItemEditorialPostImagePrompt(
       ""
   ).trim();
   const editorialCopy = deriveEditorialVisibleCopy(rule, postContent);
+  const lockedPlacementSummary = lockedPlacement
+    ? `- Locked product placement in the final 1024×1280 canvas: left ${lockedPlacement.left}px, top ${lockedPlacement.top}px, width ${lockedPlacement.width}px, height ${lockedPlacement.height}px.
+- Treat that placed product box as reserved. No visible letters, words or typographic decorations may sit behind it, touch it, or extend underneath it.
+- Reserve a clean dedicated text zone below the product footprint with a clearly visible gap between the product and the first line of text.`
+    : '- The final product will be added later and occupies the central upper/middle area. Reserve that whole area and keep all typography clearly below it.';
 
   const exactCopyBlock = `
 VISIBLE COPY CONTRACT:
@@ -33549,7 +33554,11 @@ TRANSPARENT-ORIGINAL COMPOSITION CONTRACT:
 - Generate one continuous full-bleed editorial background from edge to edge plus the visible typography.
 - Spreelo will add the exact original transparent product afterwards.
 - Use natural negative space through the upper and middle part of the background so the original product can sit there cleanly when added.
-- Place the visible typography as one balanced centered stack in the lower part of the composition with generous margins and a natural editorial hierarchy.
+- ${lockedPlacementSummary}
+- Treat the future product area as a hard no-text zone.
+- Typography must live as one balanced centered stack in the lower part of the composition, below the product area, with generous margins and a natural editorial hierarchy.
+- Leave real breathing room between the product footprint and the top line of typography so the product never appears to cover, cut through or sit on top of the text.
+- Keep the bottom text block contained to a comfortable central column; do not create a nearly full-width headline.
 - Treat the canvas as one uninterrupted finished background composition.
 - Choose a background that suits this exact product, its category, colors, brand and campaign context.
 - Let the typography style adapt freely to the product and background: modern sans, condensed display, refined serif, editorial type or another professional choice that genuinely fits.
@@ -33631,6 +33640,8 @@ AUTHORITATIVE PRODUCT-POST DESIGN CONTRACT:
 - If a supporting line is supplied above, use it once as written. If none is supplied, omit it rather than inventing a new one.
 - Prefer larger type and fewer words over extra copy.
 - Keep the main text primarily in the lower portion of the 4:5 image so the product remains dominant and unobstructed.
+- Do not let the headline, product name or supporting line sit behind the product, extend underneath the product, or get cut by the product silhouette.
+- Leave a clearly visible gap between the product and the first line of text.
 - Use a centered editorial text block with generous side margins, not a left-heavy or nearly full-width banner treatment.
 - No CTA button, no "SHOP NOW", no fake UI, no price, no star rating, no invented discount, no invented guarantee, no invented material/specification and no unsupported performance claim.
 - If an exact authorized customer-supplied campaign offer is explicitly present in the campaign context, it may be shown exactly as supplied and must not be altered.
@@ -33662,6 +33673,7 @@ export async function generateWebsiteItemEditorialPostImage(openai, rule, postCo
   if (nativeReference) {
     const prompt = buildWebsiteItemEditorialPostImagePrompt(rule, postContent, {
       nativeTransparent: true,
+      lockedPlacement: nativeReference.placement,
     });
 
     const response = await openai.images.generate({
