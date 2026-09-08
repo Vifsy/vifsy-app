@@ -33571,12 +33571,15 @@ TRANSPARENT-ORIGINAL COMPOSITION CONTRACT:
 - If a supporting line is supplied above, use it once as written. If none is supplied, omit it rather than inventing a new one.
 - Prefer larger type and fewer words over extra copy.
 - Center the headline, product name and optional supporting line horizontally so the text block feels calm and editorial rather than like a wide banner.
+- Optically center the whole text stack on the full canvas with equal-feeling left and right margins; do not center within an off-balance local area or a shifted text box.
+- Keep the text stack inside a comfortable centered column rather than letting it drift left or right.
 - Keep visible text comfortably inside the canvas; the headline should not stretch nearly edge to edge.
 - No CTA button, no "SHOP NOW", no fake UI, no price, no star rating, no invented discount, no invented guarantee, no invented material/specification and no unsupported performance claim.
 - If an exact authorized customer-supplied campaign offer is explicitly present in the campaign context, it may be shown exactly as supplied and must not be altered.
 - Do not put text inside white cards, opaque panels, labels, capsules or large text boxes. Typography should feel integrated directly into the design.
 - Preserve campaign identity when this is a calendar-campaign post; do not introduce a competing holiday, season, named campaign or occasion.
 - Keep all important text content inside safe social-media margins.
+- Leave extra breathing room below the final text line so the lowest line never feels cramped against the bottom edge; a clearly visible footer margin must remain under the text stack.
 - The finished background-and-typography layer should feel premium and intentionally designed for the exact product that will be composited into it.
 
 Return only the background-and-typography image layer.
@@ -33643,6 +33646,9 @@ AUTHORITATIVE PRODUCT-POST DESIGN CONTRACT:
 - Do not let the headline, product name or supporting line sit behind the product, extend underneath the product, or get cut by the product silhouette.
 - Leave a clearly visible gap between the product and the first line of text.
 - Use a centered editorial text block with generous side margins, not a left-heavy or nearly full-width banner treatment.
+- Optically center the whole text stack on the full canvas with equal-feeling left and right margins; do not center within an off-balance local area or a shifted text box.
+- Keep the text stack inside a comfortable centered column rather than letting it drift left or right.
+- Leave extra breathing room below the final text line so the lowest line never feels cramped against the bottom edge; a clearly visible footer margin must remain under the text stack.
 - No CTA button, no "SHOP NOW", no fake UI, no price, no star rating, no invented discount, no invented guarantee, no invented material/specification and no unsupported performance claim.
 - If an exact authorized customer-supplied campaign offer is explicitly present in the campaign context, it may be shown exactly as supplied and must not be altered.
 - Do not put text inside white cards, opaque panels, labels, capsules or large text boxes. Typography should feel integrated directly into the design.
@@ -37292,8 +37298,34 @@ export async function generateAnimatedProductVideo({
   };
 }
 
+async function resolveBrandLogoPublicUrl(supabase, brandProfile) {
+  const directUrl = String(brandProfile?.logo_url || "").trim();
+  if (directUrl) {
+    return directUrl;
+  }
+
+  const storagePath = String(brandProfile?.logo_storage_path || "").trim();
+  if (!storagePath || !supabase?.storage) {
+    return null;
+  }
+
+  try {
+    const { data } = supabase.storage
+      .from("brand-assets")
+      .getPublicUrl(storagePath);
+    return String(data?.publicUrl || "").trim() || null;
+  } catch (error) {
+    console.warn("Could not resolve brand logo public URL from storage path", {
+      brandProfileId: brandProfile?.id || null,
+      storagePath,
+      message: error?.message || String(error),
+    });
+    return null;
+  }
+}
+
 export function shouldUseLogoForRule(rule, brandProfile) {
-  if (!brandProfile?.logo_url) {
+  if (!brandProfile?.logo_url && !brandProfile?.logo_storage_path) {
     return false;
   }
 
@@ -38585,14 +38617,24 @@ export async function applyLogoOverlayIfNeeded({
   brandProfile,
   includeLogo,
 }) {
-  if (!includeLogo || !brandProfile?.logo_url || !imageUrl) {
+  if (!includeLogo || !imageUrl) {
+    return null;
+  }
+
+  const resolvedLogoUrl = await resolveBrandLogoPublicUrl(supabase, brandProfile);
+  if (!resolvedLogoUrl) {
+    console.info("Brand logo overlay skipped because no usable logo URL was available", {
+      postId,
+      brandProfileId: brandProfile?.id || null,
+      hasStoragePath: Boolean(brandProfile?.logo_storage_path),
+    });
     return null;
   }
 
   try {
     const [baseImageBuffer, logoBuffer] = await Promise.all([
       fetchImageBufferForOverlay(imageUrl),
-      fetchImageBufferForOverlay(brandProfile.logo_url),
+      fetchImageBufferForOverlay(resolvedLogoUrl),
     ]);
 
     const baseImage = sharp(baseImageBuffer).rotate();
